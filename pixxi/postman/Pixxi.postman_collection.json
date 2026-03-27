@@ -1,0 +1,2290 @@
+{
+	"info": {
+		"_postman_id": "02171171-ca66-4755-b787-7e4926eda520",
+		"name": "Pixxi",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "15513654"
+	},
+	"item": [
+		{
+			"name": "Settings",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/settings",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"settings"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "User Registration",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "fname",
+							"value": "Ton",
+							"type": "text"
+						},
+						{
+							"key": "lname",
+							"value": "Sen",
+							"type": "text"
+						},
+						{
+							"key": "email",
+							"value": "ton@gmail.com",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "123456",
+							"type": "text"
+						},
+						{
+							"key": "confirm_password",
+							"value": "123456",
+							"description": "ios/android",
+							"type": "text"
+						},
+						{
+							"key": "role_id",
+							"value": "2",
+							"type": "text"
+						},
+						{
+							"key": "phone_no",
+							"value": "9923651189",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/user_registration",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"user_registration"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "User Profile Update",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "fname",
+							"value": "Rana",
+							"type": "text"
+						},
+						{
+							"key": "lname",
+							"value": "Rao",
+							"type": "text"
+						},
+						{
+							"key": "phone",
+							"value": "9923564429",
+							"type": "text"
+						},
+						{
+							"key": "profile_image",
+							"value": "",
+							"type": "text"
+						},
+						{
+							"key": "profile_avatar",
+							"type": "file",
+							"src": "/C:/Users/Sayan/Pictures/box.png"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/user_profile_update",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"user_profile_update"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Login",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "login_id",
+							"value": "Rana.rao@demosoftware.com",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "123457",
+							"type": "text"
+						},
+						{
+							"key": "device_type",
+							"value": "ios",
+							"description": "ios/android",
+							"type": "text"
+						},
+						{
+							"key": "device_id",
+							"value": "ios123456",
+							"type": "text"
+						},
+						{
+							"key": "login_type",
+							"value": "",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/user_login",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"user_login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Forgot Password OTP Sent",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "email",
+							"value": "Rana.rao@demosoftware.com",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/forgot_password",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"forgot_password"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Otp Verification",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "otp",
+							"value": "3691",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/update_otp_verify",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"update_otp_verify"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Modify Password after Forgot Password",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "otp",
+							"value": "BWWU",
+							"type": "text"
+						},
+						{
+							"key": "new_password",
+							"value": "1234",
+							"type": "text"
+						},
+						{
+							"key": "verify_password",
+							"value": "1234",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/update_password",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"update_password"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Change Password",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "current_password",
+							"value": "1234",
+							"type": "text"
+						},
+						{
+							"key": "new_password",
+							"value": "123457",
+							"type": "text"
+						},
+						{
+							"key": "verify_password",
+							"value": "123457",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/change_password",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"change_password"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "City List",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "demos@12345"
+					},
+					{
+						"key": "Authorization",
+						"value": "Basic YWRtaW46MTIzNA=="
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "country_id",
+							"value": "48",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/cities",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"cities"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Home",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "demos@12345"
+					},
+					{
+						"key": "Authorization",
+						"value": "Basic YWRtaW46MTIzNA=="
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "location",
+							"value": "homepage",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/home",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"home"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Seller Details",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "6",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "4",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/seller_details",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"seller_details"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Products List",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "6",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "4",
+							"type": "text"
+						},
+						{
+							"key": "category_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "dine_in",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "take_out",
+							"value": "1",
+							"type": "text",
+							"disabled": true
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/products",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"products"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Product Details",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "demos@12345"
+					},
+					{
+						"key": "Authorization",
+						"value": "Basic YWRtaW46MTIzNA=="
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "product_id",
+							"value": "56",
+							"type": "text"
+						},
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/product_details",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"product_details"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Category List",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "39",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/category_list",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"category_list"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Item Search",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "6"
+						},
+						{
+							"key": "seller_id",
+							"value": "4",
+							"type": "text"
+						},
+						{
+							"key": "menu_name",
+							"value": "Noodles",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/menu_item_search",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"menu_item_search"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Sub Category",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "category_id",
+							"value": "2",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/seller_subcategory",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"seller_subcategory"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Seller List",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "search",
+							"value": "muqui",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "parent_id",
+							"value": "5",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "child_id",
+							"value": "7",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "city",
+							"value": "20488",
+							"type": "text",
+							"disabled": true
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/seller_list",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"seller_list"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add To Cart + Update Cart",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "product_id",
+							"value": "112",
+							"type": "text"
+						},
+						{
+							"key": "product_unit_price",
+							"value": "200",
+							"type": "text"
+						},
+						{
+							"key": "product_quantity",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "option_name",
+							"value": "Sugar Qty-1 spn, Temperature-110 deg c",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "category_id",
+							"value": "3",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "2",
+							"type": "text"
+						},
+						{
+							"key": "variation_id",
+							"value": "1",
+							"type": "text",
+							"disabled": true
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/add_to_cart",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"add_to_cart"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Remove From Cart",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "id",
+							"value": "20",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "4",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/remove_from_cart",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"remove_from_cart"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Cart List",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "2",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/cart_list",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"cart_list"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Checkout Details",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "4",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/checkout_details",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"checkout_details"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Placeorder",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "payment_status",
+							"value": "Paid",
+							"description": "Paid/Unpaid",
+							"type": "text"
+						},
+						{
+							"key": "payment_method",
+							"value": "cash",
+							"type": "text"
+						},
+						{
+							"key": "price_total",
+							"value": "200",
+							"description": "Grand Total",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "2",
+							"type": "text"
+						},
+						{
+							"key": "order_type",
+							"value": "Dine In",
+							"description": " Dine In / Take Out",
+							"type": "text"
+						},
+						{
+							"key": "sub_total",
+							"value": "200",
+							"type": "text"
+						},
+						{
+							"key": "coupon_id",
+							"value": "0",
+							"type": "text"
+						},
+						{
+							"key": "coupon_discount",
+							"value": "0",
+							"type": "text"
+						},
+						{
+							"key": "phone",
+							"value": "9903564428",
+							"type": "text"
+						},
+						{
+							"key": "remarks",
+							"value": "Testing",
+							"type": "text"
+						},
+						{
+							"key": "table_id",
+							"value": "",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/checkout",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"checkout"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Order List",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "6",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "history",
+							"description": "ongoing, history",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/order_list",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"order_list"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Cancel Order",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "order_id",
+							"value": "48",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "cancelled",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/order_cancel",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"order_cancel"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Order Again",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "11",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "order_id",
+							"value": "56",
+							"type": "text"
+						},
+						{
+							"key": "product_quantity",
+							"value": "1,1",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "category_id",
+							"value": "5,2",
+							"type": "text",
+							"disabled": true
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/order_again",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"order_again"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Order Refund",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "11",
+							"type": "text"
+						},
+						{
+							"key": "status",
+							"value": "completed",
+							"description": "ongoing,completed",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/refund_list",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"refund_list"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Cancel Refund",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "order_id",
+							"value": "48",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/cancel_refund",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"cancel_refund"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Feedback",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "2",
+							"type": "text"
+						},
+						{
+							"key": "experience",
+							"value": "Good",
+							"type": "text"
+						},
+						{
+							"key": "email",
+							"value": "rat@gmail.com",
+							"type": "text"
+						},
+						{
+							"key": "phone",
+							"value": "9999999999",
+							"type": "text"
+						},
+						{
+							"key": "message",
+							"value": "This is bad",
+							"type": "text"
+						},
+						{
+							"key": "image",
+							"value": "abc",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "feedback_image",
+							"value": "",
+							"type": "file",
+							"disabled": true
+						},
+						{
+							"key": "feedback_type",
+							"value": "bugs",
+							"type": "text"
+						},
+						{
+							"key": "images[0]",
+							"type": "file",
+							"src": "download (1).jpeg"
+						},
+						{
+							"key": "images[1]",
+							"type": "file",
+							"src": "download.jpeg"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/feedback",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"feedback"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add/Remove Product to Wishlist",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "seller_id",
+							"value": "4",
+							"type": "text"
+						},
+						{
+							"key": "user_id",
+							"value": "11",
+							"type": "text"
+						},
+						{
+							"key": "product_id",
+							"value": "56",
+							"type": "text"
+						},
+						{
+							"key": "variation_id",
+							"value": "2",
+							"type": "text"
+						},
+						{
+							"key": "option_name",
+							"value": "Size Larger, Cantidad de Azúcar  3 pc, Temperatura 50°C",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/add_remove_wishlist",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"add_remove_wishlist"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Wishlist Products",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "demos@12345"
+					},
+					{
+						"key": "Authorization",
+						"value": "Basic YWRtaW46MTIzNA=="
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "6",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/wishlist_products",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"wishlist_products"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Order Now From Wishlist",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "json_value",
+							"value": "[\n\n\t{\n\t\t\"user_id\": \"6\",\n\t\t\"seller_id\": \"4\",\n\t\t\"product_id\": \"56\",\n\t\t\"quantity\": \"2\",\n\t\t\"variation_id\": \"1\",\n\t\t\"option\": \"Temperature-110 deg c, Sugar Qty-1 spn\"\n\t}\n]",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/order_now_from_wishlist",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"order_now_from_wishlist"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Check Wishlist",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "product_id",
+							"value": "54",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/check_wishlist",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"check_wishlist"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Add Product Review",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "order_id",
+							"value": "205",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "39",
+							"type": "text"
+						},
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "rating",
+							"value": "2",
+							"type": "text"
+						},
+						{
+							"key": "comments",
+							"value": "Fresh food",
+							"type": "text"
+						},
+						{
+							"key": "like/dislike",
+							"value": "like",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/add_review",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"add_review"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Coupon List",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "6",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "2",
+							"type": "text",
+							"disabled": true
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/coupon_list",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"coupon_list"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Message List",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/message_list",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"message_list"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Message Seller Wise",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "2",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/message_seller_list",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"message_seller_list"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Message",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "17",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "flag",
+							"value": "all",
+							"type": "text",
+							"disabled": true
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/delete_message",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"delete_message"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Message Seen",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						},
+						{
+							"key": "seller_id",
+							"value": "4",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/messages_seen",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"messages_seen"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Content",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "slug",
+							"value": "terms-conditions",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/content",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"content"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Faq",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "5",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/faq",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"faq"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "User Details",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "7",
+							"type": "text"
+						},
+						{
+							"key": "follower_id",
+							"value": "1",
+							"type": "text",
+							"disabled": true
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/user_profile_details",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"user_profile_details"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Product Categories",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "demos@12345"
+					},
+					{
+						"key": "Authorization",
+						"value": "Basic YWRtaW46MTIzNA=="
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "parent_id",
+							"value": "0",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/product_categories",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"product_categories"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Products Reviewes",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "demos@12345"
+					},
+					{
+						"key": "Authorization",
+						"value": "Basic YWRtaW46MTIzNA=="
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "11",
+							"type": "text"
+						},
+						{
+							"key": "product_id",
+							"value": "57",
+							"type": "text"
+						},
+						{
+							"key": "offset",
+							"value": "0",
+							"type": "text"
+						},
+						{
+							"key": "per_page",
+							"value": "8",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/product_reviewes",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"product_reviewes"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Address Add/Update",
+			"request": {
+				"auth": {
+					"type": "basic",
+					"basic": [
+						{
+							"key": "username",
+							"value": "admin",
+							"type": "string"
+						},
+						{
+							"key": "password",
+							"value": "1234",
+							"type": "string"
+						},
+						{
+							"key": "showPassword",
+							"value": false,
+							"type": "boolean"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "demos@12345",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "full_name",
+							"value": "Test10",
+							"type": "text"
+						},
+						{
+							"key": "address",
+							"value": "Test10",
+							"description": "\n",
+							"type": "text"
+						},
+						{
+							"key": "phone_no",
+							"value": "8989898989",
+							"type": "text"
+						},
+						{
+							"key": "id",
+							"value": "",
+							"type": "text"
+						},
+						{
+							"key": "is_primary",
+							"value": "1",
+							"type": "text"
+						},
+						{
+							"key": "area",
+							"value": "test area",
+							"type": "text"
+						},
+						{
+							"key": "country_id",
+							"value": "",
+							"type": "text"
+						},
+						{
+							"key": "state_id",
+							"value": "",
+							"type": "text"
+						},
+						{
+							"key": "city_id",
+							"value": "",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/user_address_update",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"user_address_update"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Order Details",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "order_id",
+							"value": "10099",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/order_details",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"order_details"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Top 20 Seller List",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "6",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/top_20_seller_list",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"top_20_seller_list"
+					]
+				}
+			},
+			"response": [
+				{
+					"name": "Top 20 Seller List",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "user_id",
+									"value": "6",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "https://demostaging.com/ordering_app/Api/top_20_seller_list",
+							"protocol": "https",
+							"host": [
+								"demostaging",
+								"com"
+							],
+							"path": [
+								"ordering_app",
+								"Api",
+								"top_20_seller_list"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "cache-control",
+							"value": "no-store, no-cache, must-revalidate",
+							"name": "cache-control",
+							"description": "Tells all caching mechanisms from server to client whether they may cache this object. It is measured in seconds"
+						},
+						{
+							"key": "content-encoding",
+							"value": "gzip",
+							"name": "content-encoding",
+							"description": "The type of encoding used on the data."
+						},
+						{
+							"key": "content-length",
+							"value": "242",
+							"name": "content-length",
+							"description": "The length of the response body in octets (8-bit bytes)"
+						},
+						{
+							"key": "content-type",
+							"value": "application/json; charset=utf-8",
+							"name": "content-type",
+							"description": "The mime type of this content"
+						},
+						{
+							"key": "date",
+							"value": "Sat, 08 Oct 2022 06:42:53 GMT",
+							"name": "date",
+							"description": "The date and time that the message was sent"
+						},
+						{
+							"key": "expires",
+							"value": "Thu, 19 Nov 1981 08:52:00 GMT",
+							"name": "expires",
+							"description": "Gives the date/time after which the response is considered stale"
+						},
+						{
+							"key": "pragma",
+							"value": "no-cache",
+							"name": "pragma",
+							"description": "Implementation-specific headers that may have various effects anywhere along the request-response chain."
+						},
+						{
+							"key": "server",
+							"value": "Apache",
+							"name": "server",
+							"description": "A name for the server"
+						},
+						{
+							"key": "vary",
+							"value": "Accept-Encoding",
+							"name": "vary",
+							"description": "Tells downstream proxies how to match future request headers to decide whether the cached response can be used rather than requesting a fresh one from the origin server."
+						},
+						{
+							"key": "x-content-type-options",
+							"value": "nosniff",
+							"name": "x-content-type-options",
+							"description": "The only defined value, \"nosniff\", prevents Internet Explorer from MIME-sniffing a response away from the declared content-type"
+						},
+						{
+							"key": "x-frame-options",
+							"value": "SAMEORIGIN",
+							"name": "x-frame-options",
+							"description": "Clickjacking protection: \"deny\" - no rendering within a frame, \"sameorigin\" - no rendering if origin mismatch"
+						},
+						{
+							"key": "x-powered-by",
+							"value": "PHP/7.4.32",
+							"name": "x-powered-by",
+							"description": "Specifies the technology (ASP.NET, PHP, JBoss, e.g.) supporting the web application (version details are often in X-Runtime, X-Version, or X-AspNet-Version)"
+						},
+						{
+							"key": "x-ua-compatible",
+							"value": "IE=edge",
+							"name": "x-ua-compatible",
+							"description": "Custom header"
+						},
+						{
+							"key": "x-xss-protection",
+							"value": "1; mode=block",
+							"name": "x-xss-protection",
+							"description": "Cross-site scripting (XSS) filter"
+						}
+					],
+					"cookie": [],
+					"body": "{\"status\":\"1\",\"seller_image\":\"https:\\/\\/demostaging.com\\/ordering_app\\/assets\\/uploads\\/user_images\\/\",\"top_20_seller\":[{\"seller_name\":\"Muqui\",\"profile_image\":\"avatar__20220923051132.jpg\"},{\"seller_name\":\"Paris Cafe\",\"profile_image\":\"avatar__20220811054741.jpg\"},{\"seller_name\":\"Domino's Pizza\",\"profile_image\":\"avatar__20220609063908.png\"},{\"seller_name\":\"Pizza Hut\",\"profile_image\":\"avatar__20220811054850.png\"}],\"message\":\"Success\"}"
+				}
+			]
+		},
+		{
+			"name": "Sort Seller",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "user_id",
+							"value": "6",
+							"type": "text"
+						},
+						{
+							"key": "offset",
+							"value": "0",
+							"type": "text"
+						},
+						{
+							"key": "per_page",
+							"value": "8",
+							"type": "text"
+						},
+						{
+							"key": "sort_with_rating",
+							"value": "y",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "sort_with_discount",
+							"value": "y",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "category_id",
+							"value": "1,2,3",
+							"type": "text",
+							"disabled": true
+						},
+						{
+							"key": "over_4_and_5_star",
+							"value": "y",
+							"disabled": true
+						},
+						{
+							"key": "new_in_pixxi",
+							"value": "y",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/sort_seller",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"sort_seller"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Order",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "order_id",
+							"value": "126",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/delete_order",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"delete_order"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Refund",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "refund_id",
+							"value": "12",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://demostaging.com/ordering_app/Api/delete_refund",
+					"protocol": "https",
+					"host": [
+						"demostaging",
+						"com"
+					],
+					"path": [
+						"ordering_app",
+						"Api",
+						"delete_refund"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

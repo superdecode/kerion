@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -c apps/dispatch/app.js)",
+      "Bash(nslookup qsyniseyqxtzyoqsjkaw.supabase.co 8.8.8.8)",
+      "Bash(npm run:*)",
+      "Bash(git submodule:*)",
+      "Bash(git rm:*)",
+      "Bash(npm list:*)"
+    ]
+  }
+}
