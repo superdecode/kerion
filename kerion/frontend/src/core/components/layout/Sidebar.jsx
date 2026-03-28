@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../stores/authStore'
+import { useI18nStore } from '../../stores/i18nStore'
 import {
   LayoutDashboard, ScanBarcode, History, BarChart3,
   ChevronLeft, ChevronRight,
@@ -8,28 +9,29 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 
-const moduleNav = [
+const getModuleNav = (t) => [
   {
     id: 'dropscan',
     label: 'DropScan',
     icon: ScanBarcode,
     items: [
-      { path: '/dropscan', label: 'Dashboard', icon: LayoutDashboard, permission: 'dropscan.dashboard' },
-      { path: '/dropscan/escaneo', label: 'Escaneo', icon: ScanBarcode, permission: 'dropscan.escaneo' },
-      { path: '/dropscan/historial', label: 'Historial', icon: History, permission: 'dropscan.historial' },
-      { path: '/dropscan/reportes', label: 'Reportes', icon: BarChart3, permission: 'dropscan.reportes' },
-      { path: '/dropscan/configuracion', label: 'Configuración', icon: Settings, permission: 'dropscan.configuracion' },
+      { path: '/dropscan', label: t('nav.dashboard'), icon: LayoutDashboard, permission: 'dropscan.dashboard' },
+      { path: '/dropscan/escaneo', label: t('nav.scanning'), icon: ScanBarcode, permission: 'dropscan.escaneo' },
+      { path: '/dropscan/historial', label: t('nav.history'), icon: History, permission: 'dropscan.historial' },
+      { path: '/dropscan/reportes', label: t('nav.reports'), icon: BarChart3, permission: 'dropscan.reportes' },
+      { path: '/dropscan/configuracion', label: t('nav.configuration'), icon: Settings, permission: 'dropscan.configuracion' },
     ]
   },
 ]
 
-const adminNav = [
-  { path: '/admin', label: 'Administración', icon: Settings2, permission: 'global.administracion' },
+const getAdminNav = (t) => [
+  { path: '/admin', label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
 ]
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const { user, canView } = useAuthStore()
+  const { t } = useI18nStore()
 
   const initials = user?.nombre_completo
     ? user.nombre_completo.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -59,7 +61,7 @@ export default function Sidebar() {
                    text-primary-600 hover:text-primary-700
                    hover:shadow-2xl hover:border-primary-300 hover:bg-primary-50
                    transition-all duration-300"
-        title={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+        title={collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
         style={{ zIndex: 9999 }}
@@ -101,10 +103,10 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto scrollbar-thin py-4 px-2.5 relative z-10">
         {/* Global Dashboard */}
-        <NavItem to="/" icon={LayoutDashboard} label="Inicio" collapsed={collapsed} end />
+        <NavItem to="/" icon={LayoutDashboard} label={t('nav.home')} collapsed={collapsed} end />
 
         {/* Module sections */}
-        {moduleNav.map((mod) => {
+        {getModuleNav(t).map((mod) => {
           const visibleItems = mod.items.filter(item => canView(item.permission))
           if (visibleItems.length === 0) return null
 
@@ -142,7 +144,7 @@ export default function Sidebar() {
         })}
 
         {/* Admin */}
-        {adminNav.some(item => canView(item.permission)) && (
+        {getAdminNav(t).some(item => canView(item.permission)) && (
           <div className="mt-5">
             <AnimatePresence>
               {!collapsed ? (
@@ -152,7 +154,7 @@ export default function Sidebar() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                 >
-                  Sistema
+                  {t('nav.system')}
                 </motion.p>
               ) : (
                 <div className="flex justify-center mb-2">
@@ -160,7 +162,7 @@ export default function Sidebar() {
                 </div>
               )}
             </AnimatePresence>
-            {adminNav.filter(item => canView(item.permission)).map((item) => (
+            {getAdminNav(t).filter(item => canView(item.permission)).map((item) => (
               <NavItem key={item.path} to={item.path} icon={item.icon} label={item.label} collapsed={collapsed} />
             ))}
           </div>

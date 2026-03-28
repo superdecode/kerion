@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import * as ds from '../services/dropscanService'
 import {
   Package, CheckCircle, Clock, AlertTriangle, Activity,
@@ -13,15 +14,15 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 const COLORS = ['#ec4899', '#ef4444', '#f59e0b', '#a855f7', '#f472b6', '#db2777']
 
-const DATE_PRESETS = [
-  { key: 'today', label: 'Hoy' },
-  { key: 'yesterday', label: 'Ayer' },
-  { key: 'thisWeek', label: 'Esta semana' },
-  { key: 'lastWeek', label: 'Semana pasada' },
-  { key: 'thisMonth', label: 'Este mes' },
-  { key: 'lastMonth', label: 'Mes pasado' },
-  { key: 'last7', label: 'Últimos 7 días' },
-  { key: 'last30', label: 'Últimos 30 días' },
+const getDatePresets = (t) => [
+  { key: 'today', label: t('common.today') },
+  { key: 'yesterday', label: t('common.yesterday') },
+  { key: 'thisWeek', label: t('common.thisWeek') },
+  { key: 'lastWeek', label: t('common.lastWeek') },
+  { key: 'thisMonth', label: t('common.thisMonth') },
+  { key: 'lastMonth', label: t('common.lastMonth') },
+  { key: 'last7', label: t('common.last7Days') },
+  { key: 'last30', label: t('common.last30Days') },
 ]
 
 function getDateRange(preset) {
@@ -43,6 +44,8 @@ function getDateRange(preset) {
 }
 
 export default function DropScanDashboard() {
+  const { t } = useI18nStore()
+  const DATE_PRESETS = getDatePresets(t)
   const [activePreset, setActivePreset] = useState('today')
   const [showCustom, setShowCustom] = useState(false)
   const [customFrom, setCustomFrom] = useState('')
@@ -55,7 +58,7 @@ export default function DropScanDashboard() {
 
   const activeLabel = activePreset === 'custom'
     ? `${customFrom} — ${customTo}`
-    : DATE_PRESETS.find(p => p.key === activePreset)?.label || 'Hoy'
+    : DATE_PRESETS.find(p => p.key === activePreset)?.label || t('common.today')
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['dropscan-dashboard', dateRange],
@@ -66,8 +69,8 @@ export default function DropScanDashboard() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title="Dashboard" subtitle="DropScan" />
-        <LoadingSpinner text="Cargando métricas..." />
+        <Header title={t('dashboard.title')} subtitle="DropScan" />
+        <LoadingSpinner text={t('common.loading')} />
       </div>
     )
   }
@@ -80,7 +83,7 @@ export default function DropScanDashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Dashboard" subtitle={`DropScan · ${activeLabel}`} />
+      <Header title={t('dashboard.title')} subtitle={`DropScan · ${activeLabel}`} />
 
       <div className="flex-1 overflow-y-auto">
         {/* Date filter bar */}
@@ -108,7 +111,7 @@ export default function DropScanDashboard() {
                   : 'bg-warm-100 text-warm-600 hover:bg-warm-200'
                 }`}
             >
-              Personalizado <ChevronDown className={`w-3 h-3 transition-transform ${showCustom ? 'rotate-180' : ''}`} />
+              {t('common.customRange')} <ChevronDown className={`w-3 h-3 transition-transform ${showCustom ? 'rotate-180' : ''}`} />
             </button>
             {showCustom && (
               <div className="flex items-center gap-2 ml-2 animate-fade-in">
@@ -126,11 +129,11 @@ export default function DropScanDashboard() {
           <div className="max-w-full mx-auto space-y-4">
             {/* KPI Cards - Clickable, navigate to historial with filter */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-              <KPICard icon={Package} label="Total Guías" value={r.total_guias} gradient="from-primary-500 to-primary-700" iconBg="bg-primary-400/20" index={0} href="/dropscan/historial" />
-              <KPICard icon={Clock} label="En Proceso" value={r.tarimas_en_proceso} gradient="from-warning-400 to-warning-600" iconBg="bg-warning-400/20" index={1} href="/dropscan/historial?estado=EN_PROCESO" />
-              <KPICard icon={AlertTriangle} label="Duplicados" value={r.alertas_duplicados} gradient="from-danger-400 to-danger-600" iconBg="bg-danger-400/20" index={2} href="/dropscan/historial?search=duplicado" />
-              <KPICard icon={CheckCircle} label="Finalizadas" value={r.tarimas_completadas} gradient="from-success-500 to-accent-600" iconBg="bg-success-400/20" index={3} href="/dropscan/historial?estado=FINALIZADA" />
-              <KPICard icon={XCircle} label="Canceladas" value={r.tarimas_canceladas} gradient="from-warm-400 to-warm-600" iconBg="bg-warm-400/20" index={4} href="/dropscan/historial?estado=CANCELADA" />
+              <KPICard icon={Package} label={t('dashboard.totalGuides')} value={r.total_guias} gradient="from-primary-500 to-primary-700" iconBg="bg-primary-400/20" index={0} href="/dropscan/historial" />
+              <KPICard icon={Clock} label={t('dashboard.inProcess')} value={r.tarimas_en_proceso} gradient="from-warning-400 to-warning-600" iconBg="bg-warning-400/20" index={1} href="/dropscan/historial?estado=EN_PROCESO" />
+              <KPICard icon={AlertTriangle} label={t('dashboard.duplicates')} value={r.alertas_duplicados} gradient="from-danger-400 to-danger-600" iconBg="bg-danger-400/20" index={2} href="/dropscan/historial?search=duplicado" />
+              <KPICard icon={CheckCircle} label={t('dashboard.completedPallets')} value={r.tarimas_completadas} gradient="from-success-500 to-accent-600" iconBg="bg-success-400/20" index={3} href="/dropscan/historial?estado=FINALIZADA" />
+              <KPICard icon={XCircle} label={t('status.CANCELADA')} value={r.tarimas_canceladas} gradient="from-warm-400 to-warm-600" iconBg="bg-warm-400/20" index={4} href="/dropscan/historial?estado=CANCELADA" />
             </div>
 
             {/* Charts Row - Larger and better use of space */}
@@ -141,7 +144,7 @@ export default function DropScanDashboard() {
                   <div className="w-6 h-6 rounded-lg bg-primary-100 text-primary-600 flex items-center justify-center">
                     <BarChart3 className="w-3 h-3" />
                   </div>
-                  Guías por Hora
+                  {t('dashboard.guidesPerHour')}
                 </h3>
                 {hourlyData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
@@ -163,7 +166,7 @@ export default function DropScanDashboard() {
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-72 flex items-center justify-center text-sm text-warm-400">Sin datos</div>
+                  <div className="h-72 flex items-center justify-center text-sm text-warm-400">{t('common.noData')}</div>
                 )}
               </div>
 
@@ -173,7 +176,7 @@ export default function DropScanDashboard() {
                   <div className="w-6 h-6 rounded-lg bg-accent-100 text-accent-600 flex items-center justify-center">
                     <Activity className="w-3 h-3" />
                   </div>
-                  Por Empresa
+                  {t('dashboard.byCompany')}
                 </h3>
                 {empresaData.length > 0 ? (
                   <div className="flex items-center gap-4">
@@ -208,7 +211,7 @@ export default function DropScanDashboard() {
                   <div className="w-6 h-6 rounded-lg bg-success-100 text-success-600 flex items-center justify-center">
                     <Activity className="w-3 h-3" />
                   </div>
-                  Sesiones Activas
+                  {t('dashboard.activeSessions')}
                   <span className="ml-auto badge bg-success-100 text-success-700">{activeSessions.length}</span>
                 </h3>
                 {activeSessions.length > 0 ? (
@@ -222,13 +225,13 @@ export default function DropScanDashboard() {
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-bold text-warm-700">{s.total_guias}</p>
-                          <p className="text-[10px] text-warm-400">guías</p>
+                          <p className="text-[10px] text-warm-400">{t('dashboard.guides')}</p>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="py-8 text-center text-sm text-warm-400">Sin sesiones activas</div>
+                  <div className="py-8 text-center text-sm text-warm-400">{t('common.noData')}</div>
                 )}
               </div>
 
@@ -237,7 +240,7 @@ export default function DropScanDashboard() {
                   <div className="w-6 h-6 rounded-lg bg-primary-100 text-primary-600 flex items-center justify-center">
                     <Users className="w-3 h-3" />
                   </div>
-                  Top Operadores
+                  {t('dashboard.topOperators')}
                 </h3>
                 {operatorData.length > 0 ? (
                   <div className="space-y-2">
@@ -252,9 +255,9 @@ export default function DropScanDashboard() {
                         </span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-warm-700 truncate">{op.operador}</p>
-                          <p className="text-[10px] text-warm-400 font-medium">{op.tarimas} tarimas</p>
+                          <p className="text-[10px] text-warm-400 font-medium">{op.tarimas} {t('dashboard.pallets')}</p>
                         </div>
-                        <p className="text-sm font-bold text-primary-600">{op.guias} <span className="text-warm-400 font-normal text-xs">guías</span></p>
+                        <p className="text-sm font-bold text-primary-600">{op.guias} <span className="text-warm-400 font-normal text-xs">{t('dashboard.guides')}</span></p>
                       </div>
                     ))}
                   </div>

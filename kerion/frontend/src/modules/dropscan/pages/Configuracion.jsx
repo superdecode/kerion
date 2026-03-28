@@ -6,6 +6,7 @@ import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import api from '../../../core/services/api'
 import * as configService from '../services/configService'
 import {
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react'
 
 export default function Configuracion() {
+  const { t } = useI18nStore()
   const [tab, setTab] = useState('empresas')
   const { user, canWrite, canDelete } = useAuthStore()
   const canEdit = canWrite('dropscan.configuracion')
@@ -24,16 +26,16 @@ export default function Configuracion() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Configuracion" subtitle="DropScan - Gestion de empresas, canales y parametros" />
+      <Header title={t('config.title')} subtitle={t('config.subtitle')} />
 
       <div className="flex-1 overflow-y-auto">
         {/* Tab bar */}
         <div className="sticky top-0 z-[5] bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6">
           <div className="flex gap-1">
             {[
-              { key: 'empresas', label: 'Empresas de Paqueteria', icon: Package },
-              { key: 'canales', label: 'Canales de Escaneo', icon: Radio },
-              { key: 'parametros', label: 'Parametros Generales', icon: Sliders },
+              { key: 'empresas', label: t('config.companies'), icon: Package },
+              { key: 'canales', label: t('config.channels'), icon: Radio },
+              { key: 'parametros', label: t('config.parameters'), icon: Sliders },
             ].map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all duration-200

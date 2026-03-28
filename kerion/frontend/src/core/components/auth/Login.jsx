@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../stores/authStore'
+import { useI18nStore } from '../../stores/i18nStore'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 function FloatingShape({ className, delay = 0 }) {
@@ -29,6 +30,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const { login, isLoading } = useAuthStore()
+  const { t } = useI18nStore()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -66,7 +68,7 @@ export default function Login() {
           >
             <img src="/logo.png" alt="Kirion" className="w-16 h-16 rounded-2xl mb-4 object-contain" />
             <h1 className="text-2xl font-extrabold text-gradient-vibrant">Kirion</h1>
-            <p className="text-sm text-warm-400 mt-1">Sistema de Gestión de Almacén</p>
+            <p className="text-sm text-warm-400 mt-1">{t('app.subtitle')}</p>
           </motion.div>
 
           {/* Form */}
@@ -91,12 +93,12 @@ export default function Login() {
             </AnimatePresence>
 
             <div>
-              <label className="block text-sm font-semibold text-warm-700 mb-1.5">Email</label>
+              <label className="block text-sm font-semibold text-warm-700 mb-1.5">{t('auth.email')}</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
+                placeholder={t('auth.enterUsername') || t('auth.email')}
                 required
                 autoFocus
                 className="input-field py-3 bg-white/70 backdrop-blur-sm"
@@ -104,7 +106,7 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-warm-700 mb-1.5">Contraseña</label>
+              <label className="block text-sm font-semibold text-warm-700 mb-1.5">{t('auth.password')}</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -133,10 +135,10 @@ export default function Login() {
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Ingresando...
+                  {t('auth.loggingIn')}
                 </>
               ) : (
-                'Iniciar Sesión'
+                t('auth.loginBtn')
               )}
             </motion.button>
           </motion.form>

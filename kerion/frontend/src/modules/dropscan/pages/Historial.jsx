@@ -7,6 +7,7 @@ import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import * as ds from '../services/dropscanService'
 import {
   ChevronLeft, ChevronRight, Eye, Trash2, Search, Download,
@@ -29,6 +30,7 @@ export default function Historial() {
   const [detailTab, setDetailTab] = useState('guias')
   const { canDelete, user } = useAuthStore()
   const toast = useToastStore
+  const { t } = useI18nStore()
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -68,18 +70,18 @@ export default function Historial() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => ds.deleteTarima(id),
-    onSuccess: () => { toast.success('Tarima eliminada'); qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] }); setSelectedTarima(null) },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error eliminando tarima')
+    onSuccess: () => { toast.success(t('history.palletDeleted')); qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] }); setSelectedTarima(null) },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error'))
   })
 
   const reopenMutation = useMutation({
     mutationFn: (id) => ds.reopenTarima(id),
     onSuccess: () => {
-      toast.success('Tarima reabierta')
+      toast.success(t('history.palletReopened'))
       qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] })
       qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail'] })
     },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error reabriendo tarima')
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error'))
   })
 
   const estadoColors = {
@@ -88,11 +90,12 @@ export default function Historial() {
     'CANCELADA': 'bg-danger-100 text-danger-700',
   }
 
-  const estadoLabels = {
-    'EN_PROCESO': 'En Proceso',
-    'FINALIZADA': 'Finalizada',
-    'CANCELADA': 'Cancelada',
-  }
+  const getEstadoLabels = (t) => ({
+    'EN_PROCESO': t('status.EN_PROCESO'),
+    'FINALIZADA': t('status.FINALIZADA'),
+    'CANCELADA': t('status.CANCELADA'),
+  })
+  const estadoLabels = getEstadoLabels(t)
 
   const canReopen = user && ['Supervisor', 'Jefe', 'Administrador'].includes(user.rol_nombre)
 
@@ -113,13 +116,13 @@ export default function Historial() {
     try {
       const csv = [
         ['Codigo', 'Empresa', 'Canal', 'Operador', 'Guias', 'Estado', 'Fecha'].join(','),
-        ...tarimas.map(t => [t.codigo, t.empresa_nombre, t.canal_nombre, t.operador_nombre, t.cantidad_guias, t.estado, new Date(t.fecha_inicio).toLocaleString('es-MX')].join(','))
+        ...tarimas.map(t => [t.codigo, t.empresa_nombre, t.canal_nombre, t.operador_nombre, t.cantidad_guias, t.estado, new Date(t.fecha_inicio).toLocaleString('zh-CN')].join(','))
       ].join('\n')
       const blob = new Blob([csv], { type: 'text/csv' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = `historial_${new Date().toISOString().slice(0,10)}.csv`; a.click()
-      toast.success('Exportacion completada')
-    } catch { toast.error('Error exportando') }
+      toast.success(t('toast.success'))
+    } catch { toast.error(t('toast.error')) }
   }
 
   const handleOpenDetail = (id) => {
@@ -133,7 +136,7 @@ export default function Historial() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Historial" subtitle="DropScan · Tarimas y guias" />
+      <Header title={t('history.title')} subtitle={t('history.subtitle')} />
 
       <div className="flex-1 overflow-y-auto">
         {/* Filter bar */}
@@ -143,7 +146,7 @@ export default function Historial() {
             <div className="relative flex-1 min-w-[200px] max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
               <input value={filters.search} onChange={e => { setFilters(f => ({ ...f, search: e.target.value })); setPage(1) }}
-                placeholder="Buscar por guia, tarima, operador..."
+                placeholder={t('scan.searchPallet')}
                 className="w-full pl-10 pr-10 py-2 text-sm rounded-xl border border-warm-200 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 bg-white" />
               {filters.search && (
                 <button onClick={() => setFilters(f => ({ ...f, search: '' }))} className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -157,7 +160,7 @@ export default function Historial() {
               <button key={s} onClick={() => { setFilters(f => ({ ...f, estado: s })); setPage(1) }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
                   ${filters.estado === s ? 'bg-primary-600 text-white shadow-glow' : 'bg-warm-100 text-warm-600 hover:bg-warm-200'}`}>
-                {s === '' ? 'Todos' : estadoLabels[s]}
+                {s === '' ? t('common.all') : estadoLabels[s]}
               </button>
             ))}
 
@@ -170,12 +173,12 @@ export default function Historial() {
             </div>
 
             {hasActiveFilters && (
-              <button onClick={clearFilters} className="text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">Limpiar</button>
+              <button onClick={clearFilters} className="text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">{t('common.clear')}</button>
             )}
             <button onClick={handleExport} className="p-2 rounded-xl text-warm-400 hover:text-primary-600 hover:bg-primary-50 transition-all" title="Exportar CSV">
               <Download className="w-4 h-4" />
             </button>
-            <span className="badge bg-warm-100 text-warm-500">{pagination.total} tarimas</span>
+            <span className="badge bg-warm-100 text-warm-500">{pagination.total} {t('dashboard.pallets')}</span>
           </div>
         </div>
 
@@ -189,36 +192,36 @@ export default function Historial() {
               transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             >
               {isLoading ? (
-                <LoadingSpinner text="Cargando tarimas..." />
+                <LoadingSpinner text={t('common.loading')} />
               ) : tarimas.length === 0 ? (
-                <div className="p-16 text-center text-sm text-warm-400">No se encontraron tarimas</div>
+                <div className="p-16 text-center text-sm text-warm-400">{t('history.noPalletsFound')}</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-warm-50 border-b border-warm-100">
                         <th className="table-header" onClick={() => handleSort('codigo')}>
-                          <span className="flex items-center gap-1.5">Codigo <SortIcon col="codigo" /></span>
+                          <span className="flex items-center gap-1.5">{t('history.palletCode')} <SortIcon col="codigo" /></span>
                         </th>
                         <th className="table-header" onClick={() => handleSort('empresa_nombre')}>
-                          <span className="flex items-center gap-1.5">Empresa <SortIcon col="empresa_nombre" /></span>
+                          <span className="flex items-center gap-1.5">{t('history.company')} <SortIcon col="empresa_nombre" /></span>
                         </th>
                         <th className="table-header" onClick={() => handleSort('canal_nombre')}>
-                          <span className="flex items-center gap-1.5">Canal <SortIcon col="canal_nombre" /></span>
+                          <span className="flex items-center gap-1.5">{t('history.channel')} <SortIcon col="canal_nombre" /></span>
                         </th>
                         <th className="table-header" onClick={() => handleSort('operador_nombre')}>
-                          <span className="flex items-center gap-1.5">Operador <SortIcon col="operador_nombre" /></span>
+                          <span className="flex items-center gap-1.5">{t('history.operator')} <SortIcon col="operador_nombre" /></span>
                         </th>
                         <th className="table-header text-center" onClick={() => handleSort('cantidad_guias')}>
-                          <span className="flex items-center justify-center gap-1.5">Guias <SortIcon col="cantidad_guias" /></span>
+                          <span className="flex items-center justify-center gap-1.5">{t('history.guides')} <SortIcon col="cantidad_guias" /></span>
                         </th>
                         <th className="table-header text-center" onClick={() => handleSort('estado')}>
-                          <span className="flex items-center justify-center gap-1.5">Estado <SortIcon col="estado" /></span>
+                          <span className="flex items-center justify-center gap-1.5">{t('common.status')} <SortIcon col="estado" /></span>
                         </th>
                         <th className="table-header" onClick={() => handleSort('fecha_inicio')}>
-                          <span className="flex items-center gap-1.5">Fecha <SortIcon col="fecha_inicio" /></span>
+                          <span className="flex items-center gap-1.5">{t('history.date')} <SortIcon col="fecha_inicio" /></span>
                         </th>
-                        <th className="table-header text-center">Acciones</th>
+                        <th className="table-header text-center">{t('common.actions')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warm-50">
@@ -240,8 +243,8 @@ export default function Historial() {
                             </span>
                           </td>
                           <td className="table-cell text-warm-500 text-xs">
-                            {new Date(t.fecha_inicio).toLocaleDateString('es-MX')}
-                            <br /><span className="text-warm-400">{new Date(t.fecha_inicio).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
+                            {new Date(t.fecha_inicio).toLocaleDateString('zh-CN')}
+                            <br /><span className="text-warm-400">{new Date(t.fecha_inicio).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
                           </td>
                           <td className="table-cell">
                             <div className="flex items-center justify-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
@@ -267,7 +270,7 @@ export default function Historial() {
               {/* Pagination */}
               {pagination.pages > 1 && (
                 <div className="flex items-center justify-between px-5 py-3 border-t border-warm-100 bg-warm-50/30">
-                  <p className="text-xs text-warm-400 font-medium">Pagina {pagination.page} de {pagination.pages} · {pagination.total} registros</p>
+                  <p className="text-xs text-warm-400 font-medium">{t('common.page')} {pagination.page} / {pagination.pages} · {pagination.total} {t('common.records')}</p>
                   <div className="flex gap-1">
                     <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                       className="p-2 rounded-xl hover:bg-warm-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
@@ -287,34 +290,34 @@ export default function Historial() {
 
       {/* Detail Modal */}
       <Modal isOpen={!!selectedTarima} onClose={() => setSelectedTarima(null)} icon={Package}
-        title={detail ? `Tarima ${detail.codigo}` : 'Cargando...'} size="xl"
+        title={detail ? `${t('history.palletDetail')} ${detail.codigo}` : t('common.loading')} size="xl"
         footer={detail && (
           <>
             {detail.estado === 'FINALIZADA' && canReopen && (
               <button onClick={() => reopenMutation.mutate(detail.id)}
                 disabled={reopenMutation.isPending}
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 font-semibold transition-all disabled:opacity-50">
-                <RotateCcw className="w-4 h-4" /> Reabrir
+                <RotateCcw className="w-4 h-4" /> {t('history.reopen')}
               </button>
             )}
-            <button onClick={() => setSelectedTarima(null)} className="btn-ghost">Cerrar</button>
+            <button onClick={() => setSelectedTarima(null)} className="btn-ghost">{t('common.close')}</button>
           </>
         )}>
         {detailLoading ? (
-          <LoadingSpinner text="Cargando detalle..." />
+          <LoadingSpinner text={t('common.loading')} />
         ) : detail ? (
           <div className="space-y-5">
             {/* Info grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { icon: Package, l: 'Empresa', v: detail.empresa_nombre },
-                { icon: Package, l: 'Canal', v: detail.canal_nombre },
-                { icon: Package, l: 'Operador', v: detail.operador_nombre },
-                { icon: Package, l: 'Guias', v: `${detail.cantidad_guias}/100` },
-                { icon: CheckCircle, l: 'Estado', v: estadoLabels[detail.estado] || detail.estado },
-                { icon: Clock, l: 'Inicio', v: new Date(detail.fecha_inicio).toLocaleString('es-MX') },
-                { icon: Clock, l: 'Cierre', v: detail.fecha_cierre ? new Date(detail.fecha_cierre).toLocaleString('es-MX') : '--' },
-                { icon: Clock, l: 'Tiempo', v: detail.tiempo_armado_segundos ? `${Math.round(detail.tiempo_armado_segundos / 60)} min` : '--' },
+                { icon: Package, l: t('history.company'), v: detail.empresa_nombre },
+                { icon: Package, l: t('history.channel'), v: detail.canal_nombre },
+                { icon: Package, l: t('history.operator'), v: detail.operador_nombre },
+                { icon: Package, l: t('history.guides'), v: `${detail.cantidad_guias}/100` },
+                { icon: CheckCircle, l: t('common.status'), v: estadoLabels[detail.estado] || detail.estado },
+                { icon: Clock, l: t('history.startTime'), v: new Date(detail.fecha_inicio).toLocaleString('zh-CN') },
+                { icon: Clock, l: t('history.endTime'), v: detail.fecha_cierre ? new Date(detail.fecha_cierre).toLocaleString('zh-CN') : '--' },
+                { icon: Clock, l: t('history.duration'), v: detail.tiempo_armado_segundos ? `${Math.round(detail.tiempo_armado_segundos / 60)} min` : '--' },
               ].map(f => (
                 <div key={f.l} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
                   <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{f.l}</p>
@@ -328,7 +331,7 @@ export default function Historial() {
               <div className="bg-warning-50 border border-warning-200 rounded-xl p-4 flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-warning-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-bold text-warning-700">Tarima Cancelada</p>
+                  <p className="text-sm font-bold text-warning-700">{t('history.palletCancelled')}</p>
                   <p className="text-xs text-warning-600 mt-0.5">{detail.cancelada_razon}</p>
                 </div>
               </div>
@@ -343,7 +346,7 @@ export default function Historial() {
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-warm-400 hover:text-warm-600'}`}
               >
-                Guias Correctas ({detailGuias.length})
+                {t('history.correctGuides')} ({detailGuias.length})
               </button>
               <button
                 onClick={() => setDetailTab('duplicados')}
@@ -352,7 +355,7 @@ export default function Historial() {
                     ? 'border-primary-500 text-primary-600'
                     : 'border-transparent text-warm-400 hover:text-warm-600'}`}
               >
-                <Copy className="w-3.5 h-3.5" /> Duplicados
+                <Copy className="w-3.5 h-3.5" /> {t('scan.duplicates')}
               </button>
             </div>
 
@@ -360,16 +363,16 @@ export default function Historial() {
             {detailTab === 'guias' && (
               <div>
                 {detailGuias.length === 0 ? (
-                  <div className="p-8 text-center text-sm text-warm-400">No hay guias registradas</div>
+                  <div className="p-8 text-center text-sm text-warm-400">{t('history.noGuidesRegistered')}</div>
                 ) : (
                   <div className="max-h-64 overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
                     <table className="w-full text-xs">
                       <thead className="bg-warm-50 sticky top-0">
                         <tr>
                           <th className="text-left px-3 py-2.5 font-bold text-warm-500">#</th>
-                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">Codigo</th>
-                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">Operador</th>
-                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">Hora</th>
+                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.guideCode')}</th>
+                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.operator')}</th>
+                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.scanTime')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-warm-50">
@@ -378,7 +381,7 @@ export default function Historial() {
                             <td className="px-3 py-2 text-warm-400 font-bold">{g.posicion}</td>
                             <td className="px-3 py-2 font-mono font-semibold text-warm-700">{g.codigo_guia}</td>
                             <td className="px-3 py-2 text-warm-500">{g.operador_nombre}</td>
-                            <td className="px-3 py-2 text-warm-400">{new Date(g.timestamp_escaneo).toLocaleTimeString('es-MX')}</td>
+                            <td className="px-3 py-2 text-warm-400">{new Date(g.timestamp_escaneo).toLocaleTimeString('zh-CN')}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -392,21 +395,21 @@ export default function Historial() {
             {detailTab === 'duplicados' && (
               <div>
                 {duplicadosLoading ? (
-                  <LoadingSpinner text="Cargando duplicados..." />
+                  <LoadingSpinner text={t('common.loading')} />
                 ) : duplicados.length === 0 ? (
                   <div className="p-8 text-center text-sm text-warm-400">
                     <Copy className="w-8 h-8 text-warm-200 mx-auto mb-2" />
-                    No se encontraron guias duplicadas
+                    {t('history.noDuplicatesFound')}
                   </div>
                 ) : (
                   <div className="max-h-64 overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
                     <table className="w-full text-xs">
                       <thead className="bg-warm-50 sticky top-0">
                         <tr>
-                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">Guia Duplicada</th>
-                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">Guia Original</th>
-                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">Operador</th>
-                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">Hora</th>
+                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.duplicateGuide')}</th>
+                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.originalGuide')}</th>
+                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.operator')}</th>
+                          <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.scanTime')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-warm-50">
@@ -415,7 +418,7 @@ export default function Historial() {
                             <td className="px-3 py-2 font-mono font-semibold text-danger-600">{d.codigo_guia}</td>
                             <td className="px-3 py-2 font-mono text-warm-600">{d.guia_original || d.codigo_guia_original || '--'}</td>
                             <td className="px-3 py-2 text-warm-500">{d.operador_nombre}</td>
-                            <td className="px-3 py-2 text-warm-400">{d.timestamp ? new Date(d.timestamp).toLocaleTimeString('es-MX') : '--'}</td>
+                            <td className="px-3 py-2 text-warm-400">{d.timestamp ? new Date(d.timestamp).toLocaleTimeString('zh-CN') : '--'}</td>
                           </tr>
                         ))}
                       </tbody>

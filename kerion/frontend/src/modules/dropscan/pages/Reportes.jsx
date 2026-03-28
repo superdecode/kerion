@@ -3,12 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import * as ds from '../services/dropscanService'
 import { BarChart3, Download, Calendar, TrendingUp, Package, CheckCircle } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import * as XLSX from 'xlsx'
 
 export default function Reportes() {
+  const { t } = useI18nStore()
   const today = new Date().toISOString().slice(0, 10)
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
 
@@ -28,9 +30,9 @@ export default function Reportes() {
     if (!porDia.length) return
 
     const wsData = [
-      ['Fecha', 'Tarimas', 'Completadas', 'Guías', 'Tiempo Promedio (min)'],
+      [t('history.date'), t('dashboard.pallets'), t('dashboard.completedPallets'), t('dashboard.guides'), t('reports.avgTime')],
       ...porDia.map(d => [
-        new Date(d.fecha).toLocaleDateString('es-MX'),
+        new Date(d.fecha).toLocaleDateString('zh-CN'),
         d.tarimas,
         d.completadas,
         d.guias,
@@ -52,7 +54,7 @@ export default function Reportes() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Reportes" subtitle="DropScan · Métricas y exportación" />
+      <Header title={t('reports.title')} subtitle={t('reports.subtitle')} />
 
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-full mx-auto space-y-6">
@@ -64,7 +66,7 @@ export default function Reportes() {
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           >
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Fecha Inicio</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('history.startDate')}</label>
               <input
                 type="date"
                 value={fechaInicio}
@@ -73,7 +75,7 @@ export default function Reportes() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Fecha Fin</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">{t('history.endDate')}</label>
               <input
                 type="date"
                 value={fechaFin}
@@ -86,13 +88,13 @@ export default function Reportes() {
                 onClick={() => { setFechaInicio(today); setFechaFin(today) }}
                 className="px-3 py-2 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
               >
-                Hoy
+                {t('common.today')}
               </button>
               <button
                 onClick={() => { setFechaInicio(weekAgo); setFechaFin(today) }}
                 className="px-3 py-2 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
               >
-                7 días
+                {t('common.last7Days')}
               </button>
               <button
                 onClick={() => {
@@ -101,7 +103,7 @@ export default function Reportes() {
                 }}
                 className="px-3 py-2 text-xs bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
               >
-                30 días
+                {t('common.last30Days')}
               </button>
             </div>
             <div className="flex-1" />
@@ -112,20 +114,20 @@ export default function Reportes() {
                          hover:bg-success-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Download className="w-4 h-4" />
-              Exportar Excel
+              {t('reports.exportExcel')}
             </button>
           </motion.div>
 
           {isLoading ? (
-            <LoadingSpinner text="Cargando métricas..." />
+            <LoadingSpinner text={t('common.loading')} />
           ) : (
             <>
               {/* Totals */}
               <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {[
-                  { icon: Package, value: totales.guias || 0, label: 'Total Guías', gradient: 'from-primary-100 to-primary-50', iconColor: 'text-primary-600' },
-                  { icon: CheckCircle, value: totales.completadas || 0, label: 'Tarimas Completadas', gradient: 'from-success-100 to-success-50', iconColor: 'text-success-600' },
-                  { icon: TrendingUp, value: totales.tarimas || 0, label: 'Total Tarimas', gradient: 'from-warning-100 to-warning-50', iconColor: 'text-warning-600' },
+                  { icon: Package, value: totales.guias || 0, label: t('dashboard.totalGuides'), gradient: 'from-primary-100 to-primary-50', iconColor: 'text-primary-600' },
+                  { icon: CheckCircle, value: totales.completadas || 0, label: t('dashboard.completedPallets'), gradient: 'from-success-100 to-success-50', iconColor: 'text-success-600' },
+                  { icon: TrendingUp, value: totales.tarimas || 0, label: t('reports.totalPallets'), gradient: 'from-warning-100 to-warning-50', iconColor: 'text-warning-600' },
                 ].map((stat, i) => (
                   <motion.div
                     key={stat.label}
@@ -150,19 +152,19 @@ export default function Reportes() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                   {/* Daily guides */}
                   <div className="card p-5">
-                    <h3 className="text-sm font-semibold text-warm-700 mb-4">Guías por Día</h3>
+                    <h3 className="text-sm font-semibold text-warm-700 mb-4">{t('reports.dailyTrend')}</h3>
                     <ResponsiveContainer width="100%" height={320}>
                       <BarChart data={porDia}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                         <XAxis
                           dataKey="fecha"
                           tick={{ fontSize: 10 }}
-                          tickFormatter={(d) => new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' })}
+                          tickFormatter={(d) => new Date(d).toLocaleDateString('zh-CN', { day: '2-digit', month: '2-digit' })}
                         />
                         <YAxis tick={{ fontSize: 10 }} />
                         <Tooltip
                           contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                          labelFormatter={(d) => new Date(d).toLocaleDateString('es-MX')}
+                          labelFormatter={(d) => new Date(d).toLocaleDateString('zh-CN')}
                         />
                         <Bar dataKey="guias" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Guías" />
                       </BarChart>
@@ -171,19 +173,19 @@ export default function Reportes() {
 
                   {/* Avg time trend */}
                   <div className="card p-5">
-                    <h3 className="text-sm font-semibold text-warm-700 mb-4">Tiempo Promedio de Armado</h3>
+                    <h3 className="text-sm font-semibold text-warm-700 mb-4">{t('reports.avgTime')}</h3>
                     <ResponsiveContainer width="100%" height={320}>
                       <LineChart data={porDia}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                         <XAxis
                           dataKey="fecha"
                           tick={{ fontSize: 10 }}
-                          tickFormatter={(d) => new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' })}
+                          tickFormatter={(d) => new Date(d).toLocaleDateString('zh-CN', { day: '2-digit', month: '2-digit' })}
                         />
                         <YAxis tick={{ fontSize: 10 }} unit=" min" />
                         <Tooltip
                           contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                          labelFormatter={(d) => new Date(d).toLocaleDateString('es-MX')}
+                          labelFormatter={(d) => new Date(d).toLocaleDateString('zh-CN')}
                         />
                         <Line
                           type="monotone"
@@ -203,24 +205,24 @@ export default function Reportes() {
               {porDia.length > 0 && (
                 <div className="card overflow-hidden">
                   <div className="px-5 py-3 border-b border-warm-100/60 bg-gradient-to-r from-warm-50 to-primary-50/40">
-                    <h3 className="text-sm font-semibold text-warm-700">Detalle por Día</h3>
+                    <h3 className="text-sm font-semibold text-warm-700">{t('reports.dailyDetail')}</h3>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-gradient-to-r from-warm-50 to-primary-50/40 border-b border-warm-200">
-                          <th className="text-left px-4 py-3 font-bold text-warm-600">Fecha</th>
-                          <th className="text-center px-4 py-3 font-bold text-warm-600">Tarimas</th>
-                          <th className="text-center px-4 py-3 font-bold text-warm-600">Completadas</th>
-                          <th className="text-center px-4 py-3 font-bold text-warm-600">Guías</th>
-                          <th className="text-center px-4 py-3 font-bold text-warm-600">Tiempo Prom.</th>
+                          <th className="text-left px-4 py-3 font-bold text-warm-600">{t('history.date')}</th>
+                          <th className="text-center px-4 py-3 font-bold text-warm-600">{t('dashboard.pallets')}</th>
+                          <th className="text-center px-4 py-3 font-bold text-warm-600">{t('dashboard.completedPallets')}</th>
+                          <th className="text-center px-4 py-3 font-bold text-warm-600">{t('dashboard.guides')}</th>
+                          <th className="text-center px-4 py-3 font-bold text-warm-600">{t('reports.avgTime')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
                         {porDia.map(d => (
                           <tr key={d.fecha} className="hover:bg-primary-50/20 transition-colors">
                             <td className="px-4 py-3 text-warm-700">
-                              {new Date(d.fecha).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
+                              {new Date(d.fecha).toLocaleDateString('zh-CN', { weekday: 'short', day: 'numeric', month: 'short' })}
                             </td>
                             <td className="px-4 py-3 text-center text-warm-600">{d.tarimas}</td>
                             <td className="px-4 py-3 text-center text-success-600 font-semibold">{d.completadas}</td>
@@ -231,7 +233,7 @@ export default function Reportes() {
                       </tbody>
                       <tfoot>
                         <tr className="bg-gradient-to-r from-warm-50 to-primary-50/40 font-bold">
-                          <td className="px-4 py-3 text-warm-700">Total</td>
+                          <td className="px-4 py-3 text-warm-700">{t('common.total')}</td>
                           <td className="px-4 py-3 text-center text-warm-700">{totales.tarimas}</td>
                           <td className="px-4 py-3 text-center text-success-600">{totales.completadas}</td>
                           <td className="px-4 py-3 text-center text-warm-700">{totales.guias}</td>

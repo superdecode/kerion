@@ -6,6 +6,7 @@ import Modal from '../core/components/common/Modal'
 import LoadingSpinner from '../core/components/common/LoadingSpinner'
 import { useAuthStore } from '../core/stores/authStore'
 import { useToastStore } from '../core/stores/toastStore'
+import { useI18nStore } from '../core/stores/i18nStore'
 import api from '../core/services/api'
 import {
   Users, Shield, Plus, Search, Edit3, Trash2, ToggleLeft, ToggleRight,
@@ -60,6 +61,7 @@ const getRoles = async () => { const { data } = await api.get('/roles'); return 
 const isActive = (u) => u.estado !== 'INACTIVO' && u.activo !== false
 
 export default function Administracion() {
+  const { t } = useI18nStore()
   const [tab, setTab] = useState('usuarios')
   const { canWrite, canDelete } = useAuthStore()
   const canEditAdmin = canWrite('global.administracion')
@@ -67,15 +69,15 @@ export default function Administracion() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Administración" subtitle="Usuarios y Roles del sistema" />
+      <Header title={t('admin.title')} subtitle={t('admin.subtitle')} />
 
       <div className="flex-1 overflow-y-auto">
         {/* Tab bar */}
         <div className="sticky top-0 z-[5] bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6">
           <div className="flex gap-1">
             {[
-              { key: 'usuarios', label: 'Usuarios', icon: Users },
-              { key: 'roles', label: 'Roles', icon: Shield },
+              { key: 'usuarios', label: t('admin.users'), icon: Users },
+              { key: 'roles', label: t('admin.roles'), icon: Shield },
             ].map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
                 className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all duration-200
