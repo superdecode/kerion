@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import Header from '../core/components/layout/Header'
@@ -21,6 +21,7 @@ const MODULE_GROUPS = [
       { key: 'dropscan.escaneo', label: 'Escaneo' },
       { key: 'dropscan.historial', label: 'Historial' },
       { key: 'dropscan.reportes', label: 'Reportes' },
+      { key: 'dropscan.configuracion', label: 'Configuración' },
     ]
   },
   {
@@ -103,11 +104,55 @@ export default function Administracion() {
   )
 }
 
+// ═══════════ PASSWORD RESET MODAL ═══════════
+function PasswordResetModal({ isOpen, onClose, user }) {
+  const [password, setPassword] = useState('')
+  const toast = useToastStore
+  const qc = useQueryClient()
+
+  useEffect(() => {
+    if (isOpen) setPassword('')
+  }, [isOpen])
+
+  const mutation = useMutation({
+    mutationFn: (data) => api.post(`/users/${user.id}/reset-password`, data),
+    onSuccess: () => { toast.success('Contraseña restablecida exitosamente'); qc.invalidateQueries({ queryKey: ['admin-users'] }); onClose() },
+    onError: (e) => toast.error(e.response?.data?.error || 'Error restableciendo contraseña')
+  })
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (!password.trim()) { toast.warning('La contraseña es requerida'); return }
+    mutation.mutate({ password })
+  }
+
+  if (!user) return null
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Resetear contraseña: ${user.nombre_completo}`} icon={Key} size="sm"
+      footer={<>
+        <button onClick={onClose} className="btn-ghost">Cancelar</button>
+        <button onClick={handleSubmit} disabled={mutation.isPending} className="btn-primary">
+          {mutation.isPending ? 'Guardando...' : 'Resetear Contraseña'}
+        </button>
+      </>}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-semibold text-warm-700 mb-1.5">Nueva contraseña</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+            className="input-field" required autoFocus />
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 // ═══════════ USERS TAB ═══════════
 function UsersTab({ canEdit, canDel }) {
   const [search, setSearch] = useState('')
   const [editUser, setEditUser] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [resetUser, setResetUser] = useState(null)
   const toast = useToastStore
   const qc = useQueryClient()
 
@@ -121,7 +166,7 @@ function UsersTab({ canEdit, canDel }) {
     : users
 
   const toggleMutation = useMutation({
-    mutationFn: (user) => api.put(`/users/${user.id}`, { nombre_completo: user.nombre_completo, email: user.email, rol_id: user.rol_id, estado: isActive(user) ? 'INACTIVO' : 'ACTIVO' }),
+    mutationFn: (user) => api.put(`/users/${user.id}`, { estado: isActive(user) ? 'INACTIVO' : 'ACTIVO' }),
     onSuccess: () => { toast.success('Estado actualizado'); qc.invalidateQueries({ queryKey: ['admin-users'] }) },
     onError: () => toast.error('Error actualizando estado')
   })
@@ -198,7 +243,7 @@ function UsersTab({ canEdit, canDel }) {
                               className="p-2 rounded-lg hover:bg-warm-100 text-warm-400 hover:text-warm-600 transition-all" title={isActive(u) ? 'Desactivar' : 'Activar'}>
                               {isActive(u) ? <ToggleRight className="w-4 h-4 text-success-500" /> : <ToggleLeft className="w-4 h-4 text-warm-400" />}
                             </button>
-                            <button className="p-2 rounded-lg hover:bg-warning-50 text-warm-400 hover:text-warning-600 transition-all" title="Resetear contraseña">
+                            <button onClick={() => setResetUser(u)} className="p-2 rounded-lg hover:bg-warning-50 text-warm-400 hover:text-warning-600 transition-all" title="Resetear contraseña">
                               <Key className="w-4 h-4" />
                             </button>
                             {canDel && (
@@ -222,19 +267,32 @@ function UsersTab({ canEdit, canDel }) {
       {/* Create/Edit User Modal */}
       <UserFormModal isOpen={showCreate || !!editUser} onClose={() => { setShowCreate(false); setEditUser(null) }}
         user={editUser} roles={roles} />
+
+      {/* Password Reset Modal */}
+      <PasswordResetModal isOpen={!!resetUser} onClose={() => setResetUser(null)} user={resetUser} />
     </div>
   )
 }
 
 function UserFormModal({ isOpen, onClose, user, roles }) {
-  const [form, setForm] = useState({ nombre_completo: '', email: '', codigo: '', password: '', rol_id: '' })
+  const [form, setForm] = useState({ nombre_completo: '', email: '', codigo: '', password: '', rol_id: '', estado: 'ACTIVO' })
   const toast = useToastStore
   const qc = useQueryClient()
 
   // Populate on open
-  useState(() => {
-    if (user) setForm({ nombre_completo: user.nombre_completo || '', email: user.email || '', codigo: user.codigo || '', password: '', rol_id: user.rol_id || '' })
-    else setForm({ nombre_completo: '', email: '', codigo: '', password: '', rol_id: '' })
+  useEffect(() => {
+    if (user) {
+      setForm({
+        nombre_completo: user.nombre_completo || '',
+        email: user.email || '',
+        codigo: user.codigo || '',
+        password: '',
+        rol_id: user.rol_id || '',
+        estado: user.estado || (isActive(user) ? 'ACTIVO' : 'INACTIVO'),
+      })
+    } else {
+      setForm({ nombre_completo: '', email: '', codigo: '', password: '', rol_id: '', estado: 'ACTIVO' })
+    }
   }, [user])
 
   const mutation = useMutation({
@@ -278,7 +336,9 @@ function UserFormModal({ isOpen, onClose, user, roles }) {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-semibold text-warm-700 mb-1.5">{user ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña'}</label>
+          <label className="block text-sm font-semibold text-warm-700 mb-1.5">
+            {user ? 'Nueva contraseña (dejar vacío para mantener)' : 'Contraseña'}
+          </label>
           <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
             className="input-field" {...(!user ? { required: true } : {})} />
         </div>
@@ -288,6 +348,22 @@ function UserFormModal({ isOpen, onClose, user, roles }) {
             <option value="">Seleccionar rol...</option>
             {roles.map(r => <option key={r.id} value={r.id}>{r.nombre} — {r.descripcion}</option>)}
           </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-warm-700 mb-1.5">Estado</label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setForm(f => ({ ...f, estado: f.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO' }))}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                form.estado === 'ACTIVO'
+                  ? 'bg-success-100 text-success-700 ring-1 ring-success-200'
+                  : 'bg-danger-100 text-danger-700 ring-1 ring-danger-200'
+              }`}>
+              {form.estado === 'ACTIVO' ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+              {form.estado === 'ACTIVO' ? 'Activo' : 'Inactivo'}
+            </button>
+          </div>
         </div>
       </form>
     </Modal>
@@ -313,7 +389,7 @@ function RolesTab({ canEdit, canDel }) {
   })
 
   const duplicateMutation = useMutation({
-    mutationFn: (role) => api.post('/roles', { nombre: `${role.nombre} (copia)`, descripcion: role.descripcion, permisos: role.permisos }),
+    mutationFn: (role) => api.post(`/roles/${role.id}/duplicate`),
     onSuccess: () => { toast.success('Rol duplicado'); qc.invalidateQueries({ queryKey: ['admin-roles'] }) },
     onError: (e) => toast.error(e.response?.data?.error || 'Error duplicando')
   })
@@ -420,12 +496,15 @@ function RoleFormModal({ isOpen, onClose, role }) {
   const qc = useQueryClient()
 
   // Populate
-  useState(() => {
+  useEffect(() => {
     if (role) {
-      setNombre(role.nombre || ''); setDescripcion(role.descripcion || '')
+      setNombre(role.nombre || '')
+      setDescripcion(role.descripcion || '')
       setPermisos(role.permisos && typeof role.permisos === 'object' ? JSON.parse(JSON.stringify(role.permisos)) : {})
     } else {
-      setNombre(''); setDescripcion(''); setPermisos({})
+      setNombre('')
+      setDescripcion('')
+      setPermisos({})
     }
   }, [role])
 
