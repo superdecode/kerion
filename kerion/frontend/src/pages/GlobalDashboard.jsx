@@ -92,7 +92,7 @@ export default function GlobalDashboard() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.25 }}
             >
-              Sistema de Gestión de Almacén · {user?.rol_nombre}
+              Kerion · {user?.rol_nombre}
             </motion.p>
 
             <div className="grid grid-cols-3 gap-5 mt-8">

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '../../stores/authStore'
-import { Package, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 function FloatingShape({ className, delay = 0 }) {
   return (
@@ -64,10 +64,8 @@ export default function Login() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center mb-4 shadow-glow-lg">
-              <Package className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-extrabold text-gradient-vibrant">WMS System</h1>
+            <img src="/logo.png" alt="Kerion" className="w-16 h-16 rounded-2xl mb-4 object-contain" />
+            <h1 className="text-2xl font-extrabold text-gradient-vibrant">Kerion</h1>
             <p className="text-sm text-warm-400 mt-1">Sistema de Gestión de Almacén</p>
           </motion.div>
 
@@ -143,31 +141,6 @@ export default function Login() {
             </motion.button>
           </motion.form>
 
-          {/* Demo credentials */}
-          <motion.div
-            className="mt-6 pt-5 border-t border-warm-100/60"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.5 }}
-          >
-            <p className="text-xs text-warm-400 text-center mb-2">Credenciales de prueba</p>
-            <div className="space-y-1.5">
-              <button
-                type="button"
-                onClick={() => { setEmail('admin@wms.com'); setPassword('admin123') }}
-                className="w-full text-xs text-warm-500 hover:text-primary-600 hover:bg-primary-50/60 
-                           rounded-xl py-2.5 px-3 transition-all duration-200 text-left group">
-                <span className="font-semibold group-hover:text-primary-700">Admin:</span> admin@wms.com / admin123
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail('operador@wms.com'); setPassword('operador123') }}
-                className="w-full text-xs text-warm-500 hover:text-primary-600 hover:bg-primary-50/60 
-                           rounded-xl py-2.5 px-3 transition-all duration-200 text-left group">
-                <span className="font-semibold group-hover:text-primary-700">Operador:</span> operador@wms.com / operador123
-              </button>
-            </div>
-          </motion.div>
         </div>
 
         <motion.p
@@ -176,7 +149,7 @@ export default function Login() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.7 }}
         >
-          WMS Professional v1.0.0
+          Kerion WMS v1.0.0
         </motion.p>
       </motion.div>
     </div>

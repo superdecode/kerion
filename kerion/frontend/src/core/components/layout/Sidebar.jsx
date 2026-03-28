@@ -37,45 +37,49 @@ export default function Sidebar() {
 
   return (
     <motion.aside
-      className="h-screen bg-white/90 backdrop-blur-xl border-r border-warm-100/60
-                 flex flex-col shrink-0 relative overflow-hidden"
+      className="h-screen bg-gradient-to-b from-slate-900 via-blue-900 to-slate-800
+                 flex flex-col shrink-0 relative overflow-hidden border-r border-blue-800/30"
+      style={{ zIndex: 100, position: 'relative' }}
       animate={{ width: collapsed ? 68 : 260 }}
       transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
     >
-      {/* Background mesh gradient */}
-      <div className="absolute inset-0 bg-gradient-to-b from-primary-50/30 via-transparent to-accent-50/20 pointer-events-none" />
-      <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-primary-100/20 rounded-full blur-3xl pointer-events-none" />
+      {/* Dark gradient overlay effects */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-800/20 via-transparent to-slate-900/40 pointer-events-none" />
+      <div className="absolute -bottom-20 -left-20 w-64 h-64 bg-blue-700/30 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-20 -right-20 w-48 h-48 bg-slate-700/40 rounded-full blur-2xl pointer-events-none" />
 
       {/* Collapse toggle */}
       <motion.button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-20 z-20 w-6 h-6 rounded-full
-                   gradient-primary shadow-lg
+        className="absolute -right-4 top-24 z-[9999] w-8 h-8 rounded-full
+                   bg-white shadow-xl border-2 border-primary-200
                    flex items-center justify-center
-                   text-white hover:shadow-glow
-                   transition-shadow duration-300 group"
+                   text-primary-600 hover:text-primary-700 
+                   hover:shadow-2xl hover:border-primary-300 hover:bg-primary-50
+                   transition-all duration-300 group"
         title={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
-        whileHover={{ scale: 1.15 }}
-        whileTap={{ scale: 0.9 }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        style={{ zIndex: 9999 }}
       >
         <motion.div
           animate={{ rotate: collapsed ? 0 : 180 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
         >
-          <ChevronRight className="w-3 h-3" />
+          <ChevronRight className="w-4 h-4" />
         </motion.div>
       </motion.button>
 
       {/* Logo Header */}
-      <div className={`flex items-center gap-3 h-16 border-b border-warm-100/40 shrink-0 relative z-10
+      <div className={`flex items-center gap-3 h-16 border-b border-blue-700/40 shrink-0 relative z-10
                         ${collapsed ? 'px-3 justify-center' : 'px-5'}`}>
-        <motion.div
-          className="w-9 h-9 rounded-xl gradient-primary flex items-center justify-center shrink-0 shadow-glow"
+        <motion.img
+          src="/logo.png"
+          alt="Kerion"
+          className="w-9 h-9 rounded-xl shrink-0 object-contain"
           whileHover={{ scale: 1.08, rotate: 3 }}
           transition={{ type: 'spring', stiffness: 400 }}
-        >
-          <Package className="w-5 h-5 text-white" />
-        </motion.div>
+        />
         <AnimatePresence>
           {!collapsed && (
             <motion.div
@@ -85,8 +89,8 @@ export default function Sidebar() {
               exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <h1 className="text-sm font-bold text-gradient-vibrant tracking-tight">WMS System</h1>
-              <p className="text-[10px] text-warm-400 font-medium">Professional</p>
+              <h1 className="text-sm font-bold text-white tracking-tight">Kerion</h1>
+              <p className="text-[10px] text-blue-200 font-medium">WMS</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -107,7 +111,7 @@ export default function Sidebar() {
               <AnimatePresence>
                 {!collapsed ? (
                   <motion.p
-                    className="px-3 mb-2 text-[10px] font-bold text-warm-400 uppercase tracking-[0.08em]"
+                    className="px-3 mb-2 text-[10px] font-bold text-blue-300 uppercase tracking-[0.08em]"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -116,7 +120,7 @@ export default function Sidebar() {
                   </motion.p>
                 ) : (
                   <div className="flex justify-center mb-2">
-                    <div className="w-5 h-[2px] rounded-full bg-warm-200" />
+                    <div className="w-5 h-[2px] rounded-full bg-blue-600" />
                   </div>
                 )}
               </AnimatePresence>
@@ -162,7 +166,7 @@ export default function Sidebar() {
       </nav>
 
       {/* User footer */}
-      <div className="border-t border-warm-100/40 p-3 relative z-10">
+      <div className="border-t border-blue-700/40 p-3 relative z-10">
         <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
           <motion.div
             className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-400 to-accent-500
@@ -180,8 +184,8 @@ export default function Sidebar() {
                 exit={{ opacity: 0, x: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                <p className="text-sm font-semibold text-warm-700 truncate">{user?.nombre_completo}</p>
-                <p className="text-[10px] text-warm-400 font-medium truncate">{user?.rol_nombre}</p>
+                <p className="text-sm font-semibold text-white truncate">{user?.nombre_completo}</p>
+                <p className="text-[10px] text-blue-200 font-medium truncate">{user?.rol_nombre}</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -202,8 +206,8 @@ function NavItem({ to, icon: Icon, label, collapsed, end = false, index = 0 }) {
       className={({ isActive: active }) =>
         `group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 mb-0.5
          ${active
-          ? 'text-primary-700'
-          : 'text-warm-500 hover:text-warm-700'
+          ? 'text-white'
+          : 'text-blue-200 hover:text-white'
         }
          ${collapsed ? 'justify-center px-0' : ''}`
       }
@@ -213,17 +217,17 @@ function NavItem({ to, icon: Icon, label, collapsed, end = false, index = 0 }) {
       {isActive && (
         <motion.div
           layoutId="sidebar-active"
-          className="absolute inset-0 bg-gradient-to-r from-primary-50 to-primary-50/50 rounded-xl border border-primary-100/60 shadow-sm"
+          className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl border border-blue-400/40 shadow-lg shadow-blue-500/20"
           transition={{ type: 'spring', stiffness: 350, damping: 30 }}
         />
       )}
       {/* Hover background */}
       {!isActive && (
-        <div className="absolute inset-0 rounded-xl bg-transparent group-hover:bg-warm-100/60 transition-colors duration-200" />
+        <div className="absolute inset-0 rounded-xl bg-transparent group-hover:bg-blue-800/30 transition-colors duration-200" />
       )}
       <div className="relative z-10 flex items-center gap-3">
         <Icon className={`w-[18px] h-[18px] shrink-0 transition-all duration-200
-                         group-hover:scale-110 ${isActive ? 'text-primary-600' : ''}`} />
+                         group-hover:scale-110 ${isActive ? 'text-white' : ''}`} />
         <AnimatePresence>
           {!collapsed && (
             <motion.span
