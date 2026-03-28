@@ -120,15 +120,12 @@ CREATE TABLE IF NOT EXISTS tarimas (
   empresa_id INTEGER REFERENCES configuraciones(id) ON DELETE RESTRICT NOT NULL,
   canal_id INTEGER REFERENCES configuraciones(id) ON DELETE RESTRICT NOT NULL,
   operador_id INTEGER REFERENCES usuarios(id) ON DELETE RESTRICT NOT NULL,
-  estado VARCHAR(20) DEFAULT 'EN_PROCESO' CHECK (estado IN ('EN_PROCESO', 'COMPLETA', 'CANCELADA')),
+  estado VARCHAR(20) DEFAULT 'EN_PROCESO' CHECK (estado IN ('EN_PROCESO', 'FINALIZADA', 'CANCELADA')),
   cantidad_guias INTEGER DEFAULT 0 CHECK (cantidad_guias >= 0 AND cantidad_guias <= 100),
   fecha_inicio TIMESTAMP NOT NULL,
   fecha_cierre TIMESTAMP,
   tiempo_armado_segundos INTEGER,
-  bloqueada BOOLEAN DEFAULT false,
-  bloqueada_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-  bloqueada_fecha TIMESTAMP,
-  bloqueada_razon TEXT,
+  cancelada_razon TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -223,7 +220,7 @@ CREATE TRIGGER update_sesiones_ts BEFORE UPDATE ON sesiones_escaneo
 CREATE OR REPLACE FUNCTION calcular_tiempo_armado()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.estado = 'COMPLETA' AND OLD.estado != 'COMPLETA' AND NEW.fecha_cierre IS NOT NULL THEN
+  IF NEW.estado = 'FINALIZADA' AND OLD.estado != 'FINALIZADA' AND NEW.fecha_cierre IS NOT NULL THEN
     NEW.tiempo_armado_segundos = EXTRACT(EPOCH FROM (NEW.fecha_cierre - NEW.fecha_inicio))::INTEGER;
   END IF;
   RETURN NEW;
@@ -236,19 +233,17 @@ CREATE TRIGGER trigger_tiempo_armado BEFORE UPDATE ON tarimas
 
 -- Useful views
 CREATE OR REPLACE VIEW v_tarimas_completas AS
-SELECT 
+SELECT
   t.id, t.codigo, t.estado, t.cantidad_guias,
-  t.fecha_inicio, t.fecha_cierre, t.tiempo_armado_segundos, t.bloqueada,
-  t.bloqueada_razon,
+  t.fecha_inicio, t.fecha_cierre, t.tiempo_armado_segundos,
+  t.cancelada_razon,
   e.nombre as empresa_nombre, e.codigo as empresa_codigo,
   c.nombre as canal_nombre, c.codigo as canal_codigo,
-  u.nombre_completo as operador_nombre, u.codigo as operador_codigo,
-  ub.nombre_completo as bloqueada_por_nombre
+  u.nombre_completo as operador_nombre, u.codigo as operador_codigo
 FROM tarimas t
 JOIN configuraciones e ON t.empresa_id = e.id
 JOIN configuraciones c ON t.canal_id = c.id
-JOIN usuarios u ON t.operador_id = u.id
-LEFT JOIN usuarios ub ON t.bloqueada_por = ub.id;
+JOIN usuarios u ON t.operador_id = u.id;
 
 CREATE OR REPLACE VIEW v_guias_completas AS
 SELECT 
