@@ -322,4 +322,55 @@ router.delete('/canales/:id',
   }
 )
 
+// ==================== PARAMETROS ====================
+
+// GET /api/dropscan/config/parametros
+router.get('/parametros',
+  authenticateToken, loadFullUser,
+  requirePermission('dropscan.configuracion', 'ver'),
+  async (_req, res) => {
+    try {
+      const result = await query(
+        `SELECT config_json FROM configuraciones
+         WHERE modulo = 'dropscan' AND tipo = 'parametros' AND codigo = 'default'
+         LIMIT 1`
+      )
+      if (result.rows.length === 0) {
+        return res.json({ guias_por_tarima: 100 })
+      }
+      const cfg = result.rows[0].config_json || {}
+      res.json({ guias_por_tarima: cfg.guias_por_tarima ?? 100 })
+    } catch (error) {
+      console.error('Get parametros error:', error)
+      res.status(500).json({ error: 'Error obteniendo parametros' })
+    }
+  }
+)
+
+// PUT /api/dropscan/config/parametros
+router.put('/parametros',
+  authenticateToken, loadFullUser,
+  requirePermission('dropscan.configuracion', 'editar'),
+  async (req, res) => {
+    try {
+      const { guias_por_tarima } = req.body
+      const gpt = parseInt(guias_por_tarima)
+      if (!gpt || gpt < 1 || gpt > 9999) {
+        return res.status(400).json({ error: 'guias_por_tarima debe ser entre 1 y 9999' })
+      }
+      await query(
+        `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, config_json)
+         VALUES ('dropscan', 'parametros', 'default', 'Parametros', $1)
+         ON CONFLICT (modulo, tipo, codigo) DO UPDATE
+         SET config_json = $1, updated_at = NOW()`,
+        [JSON.stringify({ guias_por_tarima: gpt })]
+      )
+      res.json({ guias_por_tarima: gpt })
+    } catch (error) {
+      console.error('Update parametros error:', error)
+      res.status(500).json({ error: 'Error actualizando parametros' })
+    }
+  }
+)
+
 export default router

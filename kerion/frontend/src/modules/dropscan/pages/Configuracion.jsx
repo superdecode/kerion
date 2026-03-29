@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import Header from '../../../core/components/layout/Header'
@@ -832,18 +832,15 @@ function ParametrosTab({ canEdit }) {
       const { data } = await api.get('/dropscan/config/parametros')
       return data
     },
-    onSuccess: (data) => {
-      if (guiasPorTarima === null) {
-        setGuiasPorTarima(data?.guias_por_tarima ?? 100)
-      }
-    }
   })
 
-  // Sync guiasPorTarima when parametros data loads
+  useEffect(() => {
+    if (parametros && guiasPorTarima === null) {
+      setGuiasPorTarima(parametros.guias_por_tarima ?? 100)
+    }
+  }, [parametros])
+
   const currentValue = parametros?.guias_por_tarima ?? 100
-  if (guiasPorTarima === null && parametros) {
-    setGuiasPorTarima(currentValue)
-  }
 
   const handleSave = async () => {
     if (!canEdit) return
