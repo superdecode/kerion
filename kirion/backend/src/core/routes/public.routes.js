@@ -40,7 +40,7 @@ async function verifyTurnstile(token, ip) {
 // POST /api/public/signup-requests
 router.post('/signup-requests', signupLimiter, async (req, res) => {
   try {
-    const { organization_name, contact_name, contact_email, contact_phone, country, cf_turnstile_response } = req.body
+    const { organization_name, contact_name, contact_email, contact_phone, country, cf_turnstile_response, message, volume } = req.body
 
     if (!organization_name?.trim() || !contact_name?.trim() || !contact_email?.trim()) {
       return res.status(400).json({ error: 'Nombre de empresa, contacto y email son requeridos' })
@@ -67,16 +67,15 @@ router.post('/signup-requests', signupLimiter, async (req, res) => {
       return res.status(409).json({ error: 'Ya existe una solicitud pendiente para este email.' })
     }
 
-    const payload = { organization_name, contact_name, contact_email, contact_phone, country, ip }
-
     const insertRes = await query(
       `INSERT INTO tenant_signup_requests
-         (organization_name, contact_name, contact_email, contact_phone, country, raw_payload)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+         (organization_name, contact_name, contact_email, contact_phone, country, volume, raw_payload)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
       [
         organization_name.trim(), contact_name.trim(),
         contact_email.toLowerCase().trim(), contact_phone?.trim() || null,
-        country?.trim() || null, JSON.stringify(payload),
+        country?.trim() || null, volume?.trim() || null,
+        JSON.stringify({ organization_name, contact_name, contact_email, contact_phone, country, volume, message, ip }),
       ]
     )
     const requestId = insertRes.rows[0].id
@@ -93,7 +92,7 @@ router.post('/signup-requests', signupLimiter, async (req, res) => {
       await query(
         `INSERT INTO notifications_outbox (recipient_email, template_code, payload)
          VALUES ($1,'new_signup_request',$2)`,
-        [env.SUPER_ADMIN_EMAIL, JSON.stringify({ organization_name, contact_name, contact_email, country })]
+        [env.SUPER_ADMIN_EMAIL, JSON.stringify({ organization_name, contact_name, contact_email, country, volume, message })]
       )
     }
 
@@ -122,13 +121,23 @@ router.post('/track', trackLimiter, async (req, res) => {
 // POST /api/public/renewal-request — tenant subscription renewal request
 router.post('/renewal-request', async (req, res) => {
   try {
-    const { tenant_name, contact_name, contact_email, current_plan, message } = req.body
+    const { tenant_name, contact_name, contact_email, current_plan, message, tenant_id } = req.body
     if (!contact_email) return res.status(400).json({ error: 'Email requerido' })
 
+    // Store in signup_requests as renewal type so it appears in admin queue
+    await query(
+      `INSERT INTO tenant_signup_requests
+         (organization_name, contact_name, contact_email, request_type, tenant_id, raw_payload)
+       VALUES ($1,$2,$3,'renewal',$4,$5)`,
+      [tenant_name || 'Renovacion', contact_name || '', contact_email.toLowerCase().trim(),
+       tenant_id || null, JSON.stringify({ tenant_name, contact_name, contact_email, current_plan, message })]
+    ).catch(() => {})
+
+    // Alert super admin
     if (env.SUPER_ADMIN_EMAIL) {
       await query(
         `INSERT INTO notifications_outbox (recipient_email, template_code, payload)
-         VALUES ($1, 'renewal_request', $2)`,
+         VALUES ($1,'renewal_request',$2)`,
         [env.SUPER_ADMIN_EMAIL, JSON.stringify({ tenant_name, contact_name, contact_email, current_plan, message })]
       ).catch(() => {})
     }

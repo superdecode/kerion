@@ -1,10 +1,14 @@
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
+import { useAdminAuthStore } from '../../../modules/superadmin/stores/adminAuthStore'
 
 export default function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated: isAdminAuth } = useAdminAuthStore()
 
   if (!isAuthenticated) {
+    // Admin-only user navigating to tenant routes → redirect to admin panel
+    if (isAdminAuth) return <Navigate to="/super-admin" replace />
     return <Navigate to="/login" replace />
   }
 

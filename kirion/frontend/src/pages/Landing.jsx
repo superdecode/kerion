@@ -484,10 +484,10 @@ function ContactSection({ form, setForm, loading, success, error, onSubmit }) {
           <label className={labelCls}>Guias diarias estimadas</label>
           <select value={form.volume} onChange={set('volume')} className={inputCls}>
             <option value="">Seleccionar...</option>
-            <option value="100-500">100 – 500 guias/dia</option>
-            <option value="500-2000">500 – 2,000 guias/dia</option>
-            <option value="2000-5000">2,000 – 5,000 guias/dia</option>
+            <option value="lt500">Menos de 500 guias/dia</option>
+            <option value="gt1000">Mas de 1,000 guias/dia</option>
             <option value="gt5000">Mas de 5,000 guias/dia</option>
+            <option value="gt10000">Mas de 10,000 guias/dia</option>
           </select>
         </div>
       </div>

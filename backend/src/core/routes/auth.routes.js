@@ -270,6 +270,42 @@ router.put('/preferences', authenticateToken, async (req, res) => {
   }
 })
 
+// GET /api/auth/plan-info — plan details + guide usage for current tenant
+router.get('/plan-info', authenticateToken, async (req, res) => {
+  if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
+  try {
+    const [subRes, guideRes] = await Promise.all([
+      query(
+        `SELECT p.name, p.code, p.guide_limit, s.expires_at, s.started_at
+         FROM subscriptions s JOIN plans p ON s.plan_id = p.id
+         WHERE s.tenant_id = $1 AND s.status = 'active'
+         ORDER BY s.started_at DESC LIMIT 1`,
+        [req.user.tenant_id]
+      ),
+      query(
+        `SELECT COUNT(*)::int AS count FROM guias
+         WHERE tenant_id = $1
+           AND fecha_escaneo >= date_trunc('month', CURRENT_DATE)`,
+        [req.user.tenant_id]
+      ),
+    ])
+    const plan = subRes.rows[0] || null
+    const guidesThisMonth = guideRes.rows[0]?.count ?? 0
+    res.json({
+      plan_name: plan?.name || null,
+      plan_code: plan?.code || null,
+      guide_limit: plan?.guide_limit || null,
+      guides_this_month: guidesThisMonth,
+      expires_at: plan?.expires_at || null,
+      trial_expires_at: req.user.trial_expires_at || null,
+      tenant_status: req.user.tenant_status,
+    })
+  } catch (error) {
+    console.error('Plan info error:', error)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
 // POST /api/auth/logout
 router.post('/logout', authenticateToken, async (req, res) => {
   try {

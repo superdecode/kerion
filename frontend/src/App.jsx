@@ -19,6 +19,7 @@ import AdminTenants from './modules/superadmin/pages/AdminTenants'
 import AdminTenantDetalle from './modules/superadmin/pages/AdminTenantDetalle'
 import AdminNotificaciones from './modules/superadmin/pages/AdminNotificaciones'
 import AdminAnalytics from './modules/superadmin/pages/AdminAnalytics'
+import AdminSuscripciones from './modules/superadmin/pages/AdminSuscripciones'
 import { useAdminAuthStore } from './modules/superadmin/stores/adminAuthStore'
 
 // Landing page
@@ -83,8 +84,11 @@ function SmartRedirect() {
 }
 
 function AdminProtectedRoute({ children }) {
-  const { isAuthenticated } = useAdminAuthStore()
-  if (!isAuthenticated) return <Navigate to="/super-admin/login" replace />
+  const { isAuthenticated: isAdminAuth } = useAdminAuthStore()
+  const { isAuthenticated: isTenantAuth } = useAuthStore()
+  // Tenant user trying to access admin panel → back to tenant app
+  if (!isAdminAuth && isTenantAuth) return <Navigate to="/" replace />
+  if (!isAdminAuth) return <Navigate to="/super-admin/login" replace />
   return children
 }
 
@@ -118,6 +122,7 @@ function AppRoutes() {
         <Route path="tenants/:id" element={<AdminTenantDetalle />} />
         <Route path="notificaciones" element={<AdminNotificaciones />} />
         <Route path="analytics" element={<AdminAnalytics />} />
+        <Route path="suscripciones" element={<AdminSuscripciones />} />
       </Route>
 
       {/* TENANT APP — path="/" so this layout only activates for its own child routes,

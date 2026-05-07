@@ -3,13 +3,14 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAdminAuthStore } from '../stores/adminAuthStore'
 import {
   LayoutDashboard, Building2, FileText, Bell, LogOut,
-  ChevronLeft, ChevronRight, Settings, Shield, BarChart3
+  ChevronLeft, ChevronRight, Settings, Shield, BarChart3, CreditCard
 } from 'lucide-react'
 
 const NAV = [
   { to: '/super-admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/super-admin/tenants', label: 'Tenants', icon: Building2 },
   { to: '/super-admin/solicitudes', label: 'Solicitudes', icon: FileText },
+  { to: '/super-admin/suscripciones', label: 'Suscripciones', icon: CreditCard },
   { to: '/super-admin/notificaciones', label: 'Notificaciones', icon: Bell },
   { to: '/super-admin/analytics', label: 'Analiticas', icon: BarChart3 },
 ]

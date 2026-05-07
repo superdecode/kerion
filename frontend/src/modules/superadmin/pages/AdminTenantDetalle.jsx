@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft, RefreshCw, CheckCircle2, XCircle, PauseCircle, PlayCircle,
   Edit2, Save, X, Plus, Calendar, Users, CreditCard, Activity,
-  AlertCircle, Check, Clock, Building2, FileText, Package, Zap
+  AlertCircle, Check, Clock, Building2, FileText, Package, Zap,
+  Trash2, KeyRound, Copy
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
@@ -41,6 +42,7 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({
     legal_name: tenant.legal_name || '',
+    slug: tenant.slug || '',
     contact_email: tenant.contact_email || '',
     contact_phone: tenant.contact_phone || '',
     country: tenant.country || '',
@@ -114,8 +116,10 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
             ? <input value={form.legal_name} onChange={set('legal_name')} className={inputCls} />
             : <p className={disabledCls}>{tenant.legal_name || '—'}</p>}
         </Field>
-        <Field label="Slug (ID)">
-          <p className={disabledCls}>{tenant.slug}</p>
+        <Field label="Slug (subdominio)">
+          {editing
+            ? <input value={form.slug} onChange={set('slug')} className={inputCls} placeholder="acme" pattern="[a-z0-9-]+" title="Solo letras minusculas, numeros y guiones" />
+            : <p className={disabledCls}>{tenant.slug}</p>}
         </Field>
         <Field label="Email de contacto">
           {editing
@@ -312,6 +316,170 @@ function SubscriptionCard({ tenantId, subscriptions, plans, onSaved }) {
   )
 }
 
+function DeleteTenantModal({ tenant, onClose, onDeleted }) {
+  const [confirmName, setConfirmName] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
+  const matches = confirmName === tenant.legal_name
+
+  async function handleDelete() {
+    if (!matches) return
+    setDeleting(true)
+    setError('')
+    try {
+      await adminApi.delete(`/tenants/${tenant.id}`, { data: { confirm_name: confirmName } })
+      onDeleted()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al eliminar')
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 border border-red-800/50 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/25 flex items-center justify-center flex-shrink-0">
+            <Trash2 className="w-5 h-5 text-red-400" />
+          </div>
+          <div>
+            <h3 className="text-white font-semibold">Eliminar tenant permanentemente</h3>
+            <p className="text-gray-400 text-sm mt-0.5">Esta accion es irreversible. Se eliminaran todos los datos.</p>
+          </div>
+        </div>
+
+        <div className="p-3 bg-red-950/30 border border-red-800/30 rounded-lg mb-4 text-sm text-red-300">
+          Se eliminaran: usuarios, guias, tarimas, folios, suscripciones, roles y el tenant.
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-gray-400 mb-1.5">
+            Escribe <span className="text-white font-mono">{tenant.legal_name}</span> para confirmar
+          </label>
+          <input
+            value={confirmName}
+            onChange={e => setConfirmName(e.target.value)}
+            placeholder={tenant.legal_name}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+            autoFocus
+          />
+        </div>
+
+        {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
+
+        <div className="flex gap-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+            Cancelar
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!matches || deleting}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors font-medium"
+          >
+            {deleting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+            {deleting ? 'Eliminando...' : 'Eliminar permanentemente'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ResetPasswordModal({ tenant, onClose }) {
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  async function handleReset() {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await adminApi.post(`/tenants/${tenant.id}/reset-password`)
+      setResult(res.data)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al resetear contrasena')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function copyPassword() {
+    if (result?.temp_password) {
+      navigator.clipboard.writeText(result.temp_password).catch(() => {})
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-semibold flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-amber-400" />
+            Resetear contrasena admin
+          </h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {!result ? (
+          <>
+            <p className="text-gray-400 text-sm mb-5">
+              Se generara una contrasena temporal para el administrador de <span className="text-white">{tenant.legal_name}</span>.
+              El usuario debera cambiarla al iniciar sesion.
+            </p>
+            {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
+            <div className="flex gap-3 justify-end">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={loading}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-white text-sm rounded-lg transition-colors font-medium"
+              >
+                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                {loading ? 'Generando...' : 'Generar nueva contrasena'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-emerald-400 text-sm">
+              <CheckCircle2 className="w-4 h-4" />
+              Contrasena temporal generada
+            </div>
+            <div className="p-4 bg-gray-800 rounded-xl border border-gray-700">
+              <p className="text-gray-400 text-xs mb-1">Email admin</p>
+              <p className="text-white text-sm">{result.admin_email}</p>
+            </div>
+            <div className="p-4 bg-amber-950/30 border border-amber-800/40 rounded-xl">
+              <p className="text-amber-300 text-xs mb-2">Contrasena temporal (copiar y compartir)</p>
+              <div className="flex items-center gap-2">
+                <p className="text-white font-mono text-lg flex-1 select-all">{result.temp_password}</p>
+                <button
+                  onClick={copyPassword}
+                  className="p-2 text-gray-400 hover:text-white transition-colors"
+                  title="Copiar"
+                >
+                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <p className="text-gray-500 text-xs">El usuario debera cambiar esta contrasena al iniciar sesion.</p>
+            <button onClick={onClose} className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors">
+              Cerrar
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminTenantDetalle() {
   const { id } = useParams()
   const [data, setData] = useState(null)
@@ -321,6 +489,8 @@ export default function AdminTenantDetalle() {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState('')
   const [confirming, setConfirming] = useState(null)
+  const [showDelete, setShowDelete] = useState(false)
+  const [showResetPwd, setShowResetPwd] = useState(false)
 
   function showToast(msg) {
     setToast(msg)
@@ -392,6 +562,21 @@ export default function AdminTenantDetalle() {
     <div className="space-y-5">
       <Toast msg={toast} />
 
+      {showDelete && (
+        <DeleteTenantModal
+          tenant={tenant}
+          onClose={() => setShowDelete(false)}
+          onDeleted={() => window.history.back()}
+        />
+      )}
+
+      {showResetPwd && (
+        <ResetPasswordModal
+          tenant={tenant}
+          onClose={() => setShowResetPwd(false)}
+        />
+      )}
+
       {/* Confirm modal */}
       {confirming && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -432,7 +617,14 @@ export default function AdminTenantDetalle() {
             {statusCfg.label}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setShowResetPwd(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-amber-950/40 hover:bg-amber-950/70 border border-amber-800/40 text-amber-300 text-xs rounded-lg transition-colors"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            Reset contrasena
+          </button>
           {tenant.status !== 'suspended' ? (
             <button
               onClick={() => setConfirming('suspend')}
@@ -450,6 +642,13 @@ export default function AdminTenantDetalle() {
               Reactivar
             </button>
           )}
+          <button
+            onClick={() => setShowDelete(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-red-950/60 hover:bg-red-950/90 border border-red-700/60 text-red-400 text-xs rounded-lg transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Eliminar
+          </button>
           <button
             onClick={load}
             className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-400 hover:text-white text-xs rounded-lg transition-colors"

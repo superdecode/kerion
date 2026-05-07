@@ -2,6 +2,24 @@ import { useState, useEffect } from 'react'
 import { AlertTriangle, Clock, X, RefreshCw, CheckCircle2, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 
+const BANNER_DISMISS_KEY = 'sb_banner_dismiss'
+
+function getBannerDismissed(expiresAt) {
+  try {
+    const raw = localStorage.getItem(BANNER_DISMISS_KEY)
+    if (!raw) return false
+    const { ts, key } = JSON.parse(raw)
+    if (key !== expiresAt) return false
+    return Date.now() - ts < 24 * 60 * 60 * 1000
+  } catch { return false }
+}
+
+function setBannerDismissed(expiresAt) {
+  try {
+    localStorage.setItem(BANNER_DISMISS_KEY, JSON.stringify({ ts: Date.now(), key: expiresAt }))
+  } catch {}
+}
+
 function daysUntil(dateStr) {
   if (!dateStr) return null
   return Math.ceil((new Date(dateStr) - Date.now()) / 86400000)
@@ -183,15 +201,15 @@ function CountdownBanner({ state, onRenew, onDismiss }) {
   const isTrial = state.mode === 'trial'
 
   const colors = isUrgent
-    ? { bg: 'bg-red-950/60', border: 'border-red-800/50', text: 'text-red-300', badge: 'bg-red-500/20 border-red-500/30 text-red-300', dot: 'bg-red-400' }
+    ? { bg: 'bg-red-950/60', border: 'border-red-800/50', text: 'text-red-300', badge: 'bg-red-500/20 border-red-500/30 text-red-300', icon: 'text-red-400' }
     : state.days <= 14
-    ? { bg: 'bg-amber-950/60', border: 'border-amber-800/50', text: 'text-amber-300', badge: 'bg-amber-500/20 border-amber-500/30 text-amber-300', dot: 'bg-amber-400' }
-    : { bg: 'bg-blue-950/50', border: 'border-blue-800/40', text: 'text-blue-300', badge: 'bg-blue-500/15 border-blue-500/25 text-blue-300', dot: 'bg-blue-400' }
+    ? { bg: 'bg-amber-950/60', border: 'border-amber-800/50', text: 'text-amber-300', badge: 'bg-amber-500/20 border-amber-500/30 text-amber-300', icon: 'text-amber-400' }
+    : { bg: 'bg-blue-950/50', border: 'border-blue-800/40', text: 'text-blue-300', badge: 'bg-blue-500/15 border-blue-500/25 text-blue-300', icon: 'text-blue-400' }
 
   return (
     <div className={`w-full ${colors.bg} border-b ${colors.border} px-4 py-2.5 flex items-center justify-between gap-4 backdrop-blur-sm`}>
       <div className="flex items-center gap-3 min-w-0">
-        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${colors.dot} ${isUrgent ? 'animate-pulse' : ''}`} />
+        <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${colors.icon} ${isUrgent ? 'animate-pulse' : ''}`} />
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`text-sm font-medium ${colors.text}`}>
             {isTrial ? 'Trial' : 'Suscripcion'}: vence en
@@ -213,11 +231,9 @@ function CountdownBanner({ state, onRenew, onDismiss }) {
           Renovar
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
-        {!isUrgent && (
-          <button onClick={onDismiss} className="text-gray-600 hover:text-gray-400 transition-colors p-1">
-            <X className="w-4 h-4" />
-          </button>
-        )}
+        <button onClick={onDismiss} className="text-gray-600 hover:text-gray-400 transition-colors p-1" title="Ocultar por 24 horas">
+          <X className="w-4 h-4" />
+        </button>
       </div>
     </div>
   )
@@ -230,9 +246,19 @@ export default function SubscriptionGuard({ children }) {
   const [state, setState] = useState(null)
 
   useEffect(() => {
-    setState(getSubscriptionState(user))
-    setDismissed(false)
+    const s = getSubscriptionState(user)
+    setState(s)
+    if (s?.warning && s.expiresAt) {
+      setDismissed(getBannerDismissed(s.expiresAt))
+    } else {
+      setDismissed(false)
+    }
   }, [user?.subscription_expires_at, user?.trial_expires_at, user?.tenant_status])
+
+  function handleDismiss() {
+    if (state?.expiresAt) setBannerDismissed(state.expiresAt)
+    setDismissed(true)
+  }
 
   if (!state) return children
 
@@ -257,7 +283,7 @@ export default function SubscriptionGuard({ children }) {
         <CountdownBanner
           state={state}
           onRenew={() => setShowModal(true)}
-          onDismiss={() => setDismissed(true)}
+          onDismiss={handleDismiss}
         />
       )}
       {children}

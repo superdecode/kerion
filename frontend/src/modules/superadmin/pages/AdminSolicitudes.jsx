@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, ChevronDown, ChevronUp, Clock, Phone, Mail, Globe, Building2 } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, ChevronDown, ChevronUp, Clock, Phone, Mail, Globe, Building2, RotateCcw } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
 const STATUS_CFG = {
@@ -139,10 +139,27 @@ function ApproveModal({ request, onClose, onDone }) {
   )
 }
 
+function TypeBadge({ requestType }) {
+  if (requestType === 'renewal') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border bg-purple-500/15 text-purple-300 border-purple-500/25">
+        <RotateCcw className="w-3 h-3" />
+        Renovacion
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-blue-500/10 text-blue-400 border-blue-500/20">
+      Nuevo
+    </span>
+  )
+}
+
 function RequestCard({ r, onRefresh }) {
   const [expanded, setExpanded] = useState(false)
   const [modal, setModal] = useState(null)
   const age = Math.floor((Date.now() - new Date(r.created_at)) / 86400000)
+  const isRenewal = r.request_type === 'renewal'
 
   return (
     <>
@@ -153,17 +170,24 @@ function RequestCard({ r, onRefresh }) {
         <RejectModal request={r} onClose={() => setModal(null)} onDone={() => { setModal(null); onRefresh() }} />
       )}
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all">
+      <div className={`bg-gray-900 border rounded-xl overflow-hidden transition-all ${isRenewal ? 'border-purple-800/40' : 'border-gray-800'}`}>
         <div
           className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-gray-800/30 transition-colors"
           onClick={() => setExpanded(v => !v)}
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center flex-shrink-0 font-bold text-amber-400 text-sm">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm ${
+              isRenewal
+                ? 'bg-purple-500/15 border border-purple-500/25 text-purple-400'
+                : 'bg-amber-500/15 border border-amber-500/25 text-amber-400'
+            }`}>
               {r.organization_name?.[0]?.toUpperCase() ?? '?'}
             </div>
             <div className="min-w-0">
-              <p className="text-white font-medium truncate">{r.organization_name}</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-white font-medium truncate">{r.organization_name}</p>
+                <TypeBadge requestType={r.request_type} />
+              </div>
               <p className="text-gray-400 text-xs truncate">{r.contact_email} · {age === 0 ? 'hoy' : `hace ${age}d`}</p>
             </div>
           </div>
@@ -191,13 +215,26 @@ function RequestCard({ r, onRefresh }) {
                 </div>
               ))}
             </div>
+            {r.volume && (
+              <div className="mb-3 flex items-center gap-2 text-sm text-gray-400">
+                <Clock className="w-3.5 h-3.5 text-gray-500" />
+                <span className="text-gray-500">Volumen:</span>
+                <span className="text-gray-200">{r.volume}</span>
+              </div>
+            )}
             {r.message && (
               <div className="bg-gray-800/50 rounded-lg p-3 mb-4 text-sm text-gray-300 border border-gray-700/40">
                 <p className="text-gray-500 text-xs mb-1">Mensaje del solicitante</p>
                 {r.message}
               </div>
             )}
-            {r.status === 'pending' && (
+
+            {isRenewal ? (
+              <div className="flex items-center gap-2 p-3 bg-purple-950/30 border border-purple-800/30 rounded-lg text-sm text-purple-300">
+                <RotateCcw className="w-4 h-4 flex-shrink-0" />
+                Solicitud de renovacion — contactar al cliente para procesar el pago.
+              </div>
+            ) : r.status === 'pending' ? (
               <div className="flex gap-3">
                 <button
                   onClick={() => setModal('approve')}
@@ -214,7 +251,8 @@ function RequestCard({ r, onRefresh }) {
                   Rechazar
                 </button>
               </div>
-            )}
+            ) : null}
+
             {r.rejected_reason && (
               <div className="mt-3 p-3 bg-red-950/20 border border-red-800/30 rounded-lg text-sm text-red-300">
                 <p className="text-red-400 text-xs font-medium mb-1">Motivo de rechazo</p>

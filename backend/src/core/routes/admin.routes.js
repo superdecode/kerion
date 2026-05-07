@@ -268,7 +268,7 @@ router.get('/tenants/:id', authenticateAdmin, async (req, res) => {
 router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params
-    const { legal_name, contact_email, contact_phone, country, notes } = req.body
+    const { legal_name, contact_email, contact_phone, country, notes, slug } = req.body
     await query(
       `UPDATE tenants SET
          legal_name = COALESCE($1, legal_name),
@@ -276,15 +276,103 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
          contact_phone = COALESCE($3, contact_phone),
          country = COALESCE($4, country),
          notes = $5,
+         slug = COALESCE($6, slug),
          updated_at = now()
-       WHERE id = $6`,
-      [legal_name || null, contact_email || null, contact_phone || null, country || null, notes ?? null, id]
+       WHERE id = $7`,
+      [legal_name || null, contact_email || null, contact_phone || null, country || null, notes ?? null, slug || null, id]
     )
-    adminAudit(req.admin.id, 'UPDATE_TENANT', 'tenant', id, { legal_name, contact_email, contact_phone, country })
+    adminAudit(req.admin.id, 'UPDATE_TENANT', 'tenant', id, { legal_name, contact_email, contact_phone, country, slug })
     res.json({ success: true })
   } catch (err) {
     console.error('[admin/tenants/:id PATCH]', err)
     res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// POST /api/admin/tenants — create tenant directly without signup flow
+router.post('/tenants', authenticateAdmin, async (req, res) => {
+  try {
+    const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at } = req.body
+    if (!legal_name || !contact_name || !contact_email || !admin_password) {
+      return res.status(400).json({ error: 'legal_name, contact_name, contact_email y admin_password son requeridos' })
+    }
+
+    // Generate slug from legal_name if not provided
+    let tenantSlug = slug?.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || ''
+    if (!tenantSlug) {
+      tenantSlug = legal_name.toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+    }
+
+    // Ensure slug uniqueness
+    let finalSlug = tenantSlug
+    let suffix = 1
+    while (true) {
+      const existing = await query('SELECT id FROM tenants WHERE slug = $1', [finalSlug])
+      if (existing.rows.length === 0) break
+      finalSlug = `${tenantSlug}-${suffix++}`
+    }
+
+    // Create tenant
+    const tenantRes = await query(
+      `INSERT INTO tenants (slug, legal_name, contact_name, contact_email, contact_phone, country, status, current_plan_id)
+       VALUES ($1,$2,$3,$4,$5,$6,'active',$7) RETURNING *`,
+      [finalSlug, legal_name, contact_name, contact_email.toLowerCase().trim(), contact_phone || null, country || null, plan_id || null]
+    )
+    const tenant = tenantRes.rows[0]
+
+    // Create subscription if plan provided
+    if (plan_id) {
+      const planRes = await query('SELECT * FROM plans WHERE id = $1', [plan_id])
+      if (planRes.rows.length > 0) {
+        const plan = planRes.rows[0]
+        const start = started_at ? new Date(started_at) : new Date()
+        const durationDays = subscription_type === 'annual' ? 365 : (plan.duration_days || 30)
+        const expiresAt = new Date(start)
+        expiresAt.setDate(expiresAt.getDate() + durationDays)
+
+        await query(
+          `INSERT INTO subscriptions (tenant_id, plan_id, status, started_at, expires_at, recorded_by)
+           VALUES ($1,$2,'active',$3,$4,$5)`,
+          [tenant.id, plan_id, start, expiresAt, req.admin.id]
+        )
+        await query(
+          `UPDATE tenants SET subscription_expires_at = $1, updated_at = now() WHERE id = $2`,
+          [expiresAt, tenant.id]
+        )
+      }
+    }
+
+    // Create admin user with Administrador role
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash(admin_password, 12)
+
+    // Ensure Administrador role exists
+    let roleRes = await query(`SELECT id FROM roles WHERE tenant_id = $1 AND nombre = 'Administrador' LIMIT 1`, [tenant.id])
+    if (roleRes.rows.length === 0) {
+      roleRes = await query(
+        `INSERT INTO roles (tenant_id, nombre, permisos) VALUES ($1, 'Administrador', $2) RETURNING id`,
+        [tenant.id, JSON.stringify({
+          global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
+          dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
+          inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
+        })]
+      )
+    }
+    const roleId = roleRes.rows[0].id
+
+    const userRes = await query(
+      `INSERT INTO usuarios (tenant_id, email, password_hash, nombre_completo, rol_id, es_admin_tenant)
+       VALUES ($1,$2,$3,$4,$5,true) RETURNING id, email`,
+      [tenant.id, contact_email.toLowerCase().trim(), hash, contact_name, roleId]
+    )
+
+    adminAudit(req.admin.id, 'CREATE_TENANT_DIRECT', 'tenant', tenant.id, { legal_name, contact_email, plan_id })
+    res.status(201).json({ success: true, tenant_id: tenant.id, slug: finalSlug, admin_email: userRes.rows[0].email })
+  } catch (err) {
+    console.error('[admin/tenants POST]', err)
+    res.status(500).json({ error: err.code === '23505' ? 'El slug ya existe' : (err.message || 'Error interno') })
   }
 })
 
@@ -310,13 +398,161 @@ router.post('/tenants/:id/reactivate', authenticateAdmin, async (req, res) => {
   }
 })
 
+// POST /api/admin/tenants/:id/reset-password — reset tenant admin password
+router.post('/tenants/:id/reset-password', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$'
+    let pwd = ''
+    for (let i = 0; i < 12; i++) pwd += chars[Math.floor(Math.random() * chars.length)]
+
+    const bcrypt = await import('bcryptjs')
+    const hash = await bcrypt.default.hash(pwd, 12)
+
+    // Find tenant admin user (es_admin_tenant or first admin role user)
+    const userRes = await query(
+      `SELECT u.id, u.email, u.nombre_completo FROM usuarios u
+       WHERE u.tenant_id = $1 AND u.es_admin_tenant = true LIMIT 1`,
+      [id]
+    )
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'No se encontro usuario admin del tenant' })
+    const user = userRes.rows[0]
+
+    await query(
+      `UPDATE usuarios SET password_hash = $1, force_password_change = true, updated_at = now() WHERE id = $2`,
+      [hash, user.id]
+    )
+
+    // Notify via email
+    const tenantRes = await query('SELECT legal_name FROM tenants WHERE id = $1', [id])
+    await query(
+      `INSERT INTO notifications_outbox (tenant_id, recipient_email, template_code, payload)
+       VALUES ($1,$2,'password_reset',$3)`,
+      [id, user.email, JSON.stringify({ contact_name: user.nombre_completo, temp_password: pwd, tenant_name: tenantRes.rows[0]?.legal_name })]
+    )
+
+    adminAudit(req.admin.id, 'RESET_PASSWORD', 'usuario', user.id, { tenant_id: id })
+    res.json({ success: true, email: user.email, temp_password: pwd })
+  } catch (err) {
+    console.error('[admin/reset-password]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// DELETE /api/admin/tenants/:id — delete tenant and all data (requires confirm_name in body)
+router.delete('/tenants/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { confirm_name } = req.body
+    if (!confirm_name) return res.status(400).json({ error: 'confirm_name requerido' })
+
+    const tenantRes = await query('SELECT * FROM tenants WHERE id = $1', [id])
+    if (tenantRes.rows.length === 0) return res.status(404).json({ error: 'Tenant no encontrado' })
+    const tenant = tenantRes.rows[0]
+
+    if (confirm_name.trim() !== tenant.legal_name.trim()) {
+      return res.status(400).json({ error: 'El nombre de confirmacion no coincide' })
+    }
+
+    // Cascade delete in order (FK dependencies)
+    await query(`DELETE FROM folios_entrega WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM guias WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM tarimas WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM usuarios_internos WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM notifications_outbox WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM subscriptions WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM provisioning_log WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM roles WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM usuarios WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM tenants WHERE id = $1`, [id])
+
+    adminAudit(req.admin.id, 'DELETE_TENANT', 'tenant', id, { legal_name: tenant.legal_name, deleted_at: new Date().toISOString() })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[admin/tenants DELETE]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
 // ── Subscriptions ──────────────────────────────────────────────────────────────
 
-// GET /api/admin/plans
-router.get('/plans', authenticateAdmin, async (_req, res) => {
+// GET /api/admin/plans — all plans (active + inactive) for management
+router.get('/plans', authenticateAdmin, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM plans WHERE is_active = true ORDER BY price_amount ASC')
+    const activeOnly = req.query.active_only === 'true'
+    const sql = activeOnly
+      ? 'SELECT * FROM plans WHERE is_active = true ORDER BY display_order ASC, price_amount ASC'
+      : 'SELECT * FROM plans ORDER BY display_order ASC, price_amount ASC'
+    const result = await query(sql)
     res.json({ success: true, data: result.rows })
+  } catch (err) {
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// POST /api/admin/plans — create plan
+router.post('/plans', authenticateAdmin, async (req, res) => {
+  try {
+    const { code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order } = req.body
+    if (!name || price_amount === undefined) return res.status(400).json({ error: 'name y price_amount son requeridos' })
+    const safeCode = code || name.toLowerCase().replace(/[^a-z0-9]/g, '_')
+    const result = await query(
+      `INSERT INTO plans (code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [safeCode, name, description || null, guide_limit || null, warehouse_count || 1,
+       price_amount, price_annual || null, price_currency || 'USD',
+       JSON.stringify(modules || ['dropscan']), is_active !== false, is_visible !== false, display_order || 0]
+    )
+    adminAudit(req.admin.id, 'CREATE_PLAN', 'plan', result.rows[0].id, { name })
+    res.status(201).json({ success: true, data: result.rows[0] })
+  } catch (err) {
+    console.error('[admin/plans POST]', err)
+    res.status(500).json({ error: err.code === '23505' ? 'Ya existe un plan con ese codigo' : 'Error interno' })
+  }
+})
+
+// PUT /api/admin/plans/:id — update plan
+router.put('/plans/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order } = req.body
+    await query(
+      `UPDATE plans SET
+         name = COALESCE($1, name),
+         description = $2,
+         guide_limit = $3,
+         warehouse_count = COALESCE($4, warehouse_count),
+         price_amount = COALESCE($5, price_amount),
+         price_annual = $6,
+         price_currency = COALESCE($7, price_currency),
+         modules = COALESCE($8, modules),
+         is_active = COALESCE($9, is_active),
+         is_visible = COALESCE($10, is_visible),
+         display_order = COALESCE($11, display_order),
+         updated_at = now()
+       WHERE id = $12`,
+      [name, description ?? null, guide_limit ?? null, warehouse_count, price_amount, price_annual ?? null,
+       price_currency, modules ? JSON.stringify(modules) : null, is_active, is_visible, display_order, id]
+    )
+    adminAudit(req.admin.id, 'UPDATE_PLAN', 'plan', id, { name })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[admin/plans PUT]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// DELETE /api/admin/plans/:id — delete plan (only if no active subscriptions)
+router.delete('/plans/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const active = await query(`SELECT COUNT(*) AS n FROM subscriptions WHERE plan_id = $1 AND status = 'active'`, [id])
+    if (Number(active.rows[0].n) > 0) {
+      return res.status(409).json({ error: 'No se puede eliminar: el plan tiene suscripciones activas' })
+    }
+    await query('DELETE FROM plans WHERE id = $1', [id])
+    adminAudit(req.admin.id, 'DELETE_PLAN', 'plan', id, null)
+    res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: 'Error interno' })
   }
