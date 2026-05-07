@@ -133,6 +133,8 @@ export async function provisionTenant(requestId, approvedByAdminId) {
           [tenantId, JSON.stringify({
             global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
             dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
+            fep: { folios: 'eliminar' },
+            inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
           })]
         )
         const roleId = roleRes.rows[0].id

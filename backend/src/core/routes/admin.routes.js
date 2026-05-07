@@ -269,6 +269,16 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params
     const { legal_name, contact_email, contact_phone, country, notes, slug } = req.body
+
+    // Auto-generate slug from legal_name if slug field sent as empty and legal_name provided
+    let finalSlug = slug !== undefined ? (slug || null) : undefined
+    if (finalSlug === '' || (finalSlug === undefined && !slug)) finalSlug = null
+    if (slug === '' && legal_name) {
+      finalSlug = legal_name.toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+    }
+
     await query(
       `UPDATE tenants SET
          legal_name = COALESCE($1, legal_name),
@@ -279,9 +289,9 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
          slug = COALESCE($6, slug),
          updated_at = now()
        WHERE id = $7`,
-      [legal_name || null, contact_email || null, contact_phone || null, country || null, notes ?? null, slug || null, id]
+      [legal_name || null, contact_email || null, contact_phone || null, country || null, notes ?? null, finalSlug, id]
     )
-    adminAudit(req.admin.id, 'UPDATE_TENANT', 'tenant', id, { legal_name, contact_email, contact_phone, country, slug })
+    adminAudit(req.admin.id, 'UPDATE_TENANT', 'tenant', id, { legal_name, contact_email, contact_phone, country, slug: finalSlug })
     res.json({ success: true })
   } catch (err) {
     console.error('[admin/tenants/:id PATCH]', err)
@@ -355,7 +365,8 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
         `INSERT INTO roles (tenant_id, nombre, permisos) VALUES ($1, 'Administrador', $2) RETURNING id`,
         [tenant.id, JSON.stringify({
           global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
-          dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
+          dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
+          fep: { folios: 'eliminar' },
           inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
         })]
       )
@@ -480,12 +491,23 @@ router.delete('/tenants/:id', authenticateAdmin, async (req, res) => {
 router.get('/plans', authenticateAdmin, async (req, res) => {
   try {
     const activeOnly = req.query.active_only === 'true'
-    const sql = activeOnly
-      ? 'SELECT * FROM plans WHERE is_active = true ORDER BY display_order ASC, price_amount ASC'
-      : 'SELECT * FROM plans ORDER BY display_order ASC, price_amount ASC'
-    const result = await query(sql)
+    let result
+    try {
+      // Prefer ordering by display_order (added in migration 026)
+      const sql = activeOnly
+        ? 'SELECT * FROM plans WHERE is_active = true ORDER BY display_order ASC NULLS LAST, price_amount ASC'
+        : 'SELECT * FROM plans ORDER BY display_order ASC NULLS LAST, price_amount ASC'
+      result = await query(sql)
+    } catch {
+      // Fallback: display_order column may not exist yet (migration 026 pending)
+      const sql = activeOnly
+        ? 'SELECT * FROM plans WHERE is_active = true ORDER BY price_amount ASC'
+        : 'SELECT * FROM plans ORDER BY price_amount ASC'
+      result = await query(sql)
+    }
     res.json({ success: true, data: result.rows })
   } catch (err) {
+    console.error('[admin/plans GET]', err)
     res.status(500).json({ error: 'Error interno' })
   }
 })

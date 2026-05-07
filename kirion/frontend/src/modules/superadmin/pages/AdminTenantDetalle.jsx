@@ -40,9 +40,16 @@ const disabledCls = "w-full bg-gray-800/40 border border-gray-700/50 rounded-lg 
 
 function EditInfoCard({ tenant, activeSub, onSaved }) {
   const [editing, setEditing] = useState(false)
+
+  function makeSlug(name) {
+    return (name || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+  }
+
   const [form, setForm] = useState({
     legal_name: tenant.legal_name || '',
-    slug: tenant.slug || '',
+    slug: tenant.slug || makeSlug(tenant.legal_name),
     contact_email: tenant.contact_email || '',
     contact_phone: tenant.contact_phone || '',
     country: tenant.country || '',

@@ -42,7 +42,7 @@ function getSubscriptionState(user) {
   if (user.trial_expires_at) {
     const days = daysUntil(user.trial_expires_at)
     if (days !== null && days <= 0) return { blocked: true, reason: 'trial_expired', days }
-    if (days !== null && days <= 7) return { blocked: false, warning: true, days, mode: 'trial', expiresAt: user.trial_expires_at }
+    if (days !== null && days <= 2) return { blocked: false, warning: true, days, mode: 'trial', expiresAt: user.trial_expires_at }
     return null
   }
 

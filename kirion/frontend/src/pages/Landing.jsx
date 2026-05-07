@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import axios from 'axios'
 
 function track(eventType, payload) {
@@ -176,12 +177,20 @@ function NavBar() {
             <button key={id} onClick={() => scrollTo(id)} className="hover:text-white transition-colors">{label}</button>
           ))}
         </div>
-        <button
-          onClick={() => scrollTo('contacto')}
-          className="hidden sm:flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors font-medium"
-        >
-          Prueba gratis <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+        <div className="hidden sm:flex items-center gap-2">
+          <Link
+            to="/login"
+            className="px-4 py-2 text-gray-400 hover:text-white text-sm transition-colors font-medium"
+          >
+            Iniciar sesion
+          </Link>
+          <button
+            onClick={() => scrollTo('contacto')}
+            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors font-medium"
+          >
+            Prueba gratis <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </nav>
   )
