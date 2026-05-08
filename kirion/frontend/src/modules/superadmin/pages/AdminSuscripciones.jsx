@@ -312,99 +312,178 @@ function PlansTab() {
 // ── Subscriptions records ─────────────────────────────────────────────────────
 
 function SubscriptionsTab() {
-  const [tenants, setTenants] = useState([])
+  const [subscriptions, setSubscriptions] = useState([])
+  const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-
-  useEffect(() => {
-    adminApi.get('/tenants')
-      .then(r => setTenants(r.data.data || []))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  const filtered = tenants.filter(t => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return t.legal_name?.toLowerCase().includes(q) || t.slug?.toLowerCase().includes(q)
+  const [filters, setFilters] = useState({
+    status: '',
+    tenant: '',
+    plan: '',
+    dateFrom: '',
+    dateTo: '',
   })
 
-  function daysLabel(dateStr) {
-    if (!dateStr) return null
-    const d = Math.ceil((new Date(dateStr) - Date.now()) / 86400000)
-    return d
+  function load() {
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (filters.status) params.append('status', filters.status)
+    if (filters.plan) params.append('plan_id', filters.plan)
+    if (filters.dateFrom) params.append('date_from', filters.dateFrom)
+    if (filters.dateTo) params.append('date_to', filters.dateTo)
+
+    Promise.all([
+      adminApi.get(`/subscriptions?${params.toString()}`),
+      adminApi.get('/plans'),
+    ])
+      .then(([subRes, planRes]) => {
+        setSubscriptions(subRes.data.data || [])
+        setPlans(planRes.data.data || [])
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }
+
+  useEffect(() => { load() }, [filters])
+
+  const filtered = subscriptions.filter(s => {
+    if (!filters.tenant) return true
+    const q = filters.tenant.toLowerCase()
+    return s.legal_name?.toLowerCase().includes(q)
+  })
 
   function statusColor(status) {
     if (status === 'active') return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
-    if (status === 'trial') return 'bg-blue-500/15 text-blue-300 border-blue-500/25'
-    if (status === 'expired' || status === 'trial_expired') return 'bg-orange-500/15 text-orange-300 border-orange-500/25'
-    if (status === 'suspended') return 'bg-red-500/15 text-red-300 border-red-500/25'
-    return 'bg-gray-700/50 text-gray-400 border-gray-600/50'
+    if (status === 'expired') return 'bg-red-500/15 text-red-300 border-red-500/25'
+    if (status === 'cancelled') return 'bg-gray-700/50 text-gray-400 border-gray-600/50'
+    return 'bg-blue-500/15 text-blue-300 border-blue-500/25'
   }
 
-  const STATUS_LABELS = {
-    active: 'Activo', trial: 'Trial', expired: 'Vencido',
-    trial_expired: 'Trial vencido', suspended: 'Suspendido', pending: 'Pendiente',
+  function daysColor(dateStr) {
+    if (!dateStr) return ''
+    const days = Math.ceil((new Date(dateStr) - Date.now()) / 86400000)
+    if (days < 0) return 'text-red-400'
+    if (days <= 7) return 'text-amber-400'
+    if (days <= 30) return 'text-yellow-300'
+    return 'text-emerald-400'
   }
 
   return (
-    <div className="space-y-4">
-      <div className="relative max-w-sm">
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar tenant..."
-          className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-4 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
-        />
+    <div className="space-y-5">
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Estado</label>
+          <select
+            value={filters.status}
+            onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+          >
+            <option value="">Todos</option>
+            <option value="active">Activa</option>
+            <option value="expired">Vencida</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Empresa</label>
+          <input
+            value={filters.tenant}
+            onChange={e => setFilters(f => ({ ...f, tenant: e.target.value }))}
+            placeholder="Buscar..."
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Plan</label>
+          <select
+            value={filters.plan}
+            onChange={e => setFilters(f => ({ ...f, plan: e.target.value }))}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+          >
+            <option value="">Todos</option>
+            {plans.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Desde</label>
+          <input
+            type="date"
+            value={filters.dateFrom}
+            onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Hasta</label>
+          <input
+            type="date"
+            value={filters.dateTo}
+            onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+          />
+        </div>
       </div>
 
+      {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center h-32">
           <RefreshCw className="w-5 h-5 animate-spin text-gray-500" />
         </div>
       ) : (
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 bg-gray-800/40">
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Tenant</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Estado</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Plan activo</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Vencimiento</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Dias rest.</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {filtered.map(t => {
-                const expiresAt = t.subscription_expires_at || t.trial_expires_at
-                const days = daysLabel(expiresAt)
-                const dayColor = days === null ? '' : days < 0 ? 'text-red-400' : days <= 7 ? 'text-amber-400' : days <= 30 ? 'text-yellow-300' : 'text-emerald-400'
-                return (
-                  <tr key={t.id} className="hover:bg-gray-800/20 transition-colors">
-                    <td className="px-4 py-3">
-                      <p className="text-white font-medium">{t.legal_name}</p>
-                      <p className="text-gray-500 text-xs font-mono">{t.slug}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusColor(t.status)}`}>
-                        {STATUS_LABELS[t.status] || t.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-300">
-                      {t.current_plan_name || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">
-                      {expiresAt ? new Date(expiresAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                    </td>
-                    <td className={`px-4 py-3 font-bold text-sm ${dayColor}`}>
-                      {days === null ? '—' : days < 0 ? 'Vencido' : `${days}d`}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          {filtered.length === 0 ? (
+            <div className="px-6 py-8 text-center text-gray-500 text-sm">
+              No hay suscripciones que coincidan con los filtros
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-800 bg-gray-800/40">
+                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">ID</th>
+                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Empresa</th>
+                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Plan</th>
+                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Tipo</th>
+                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Inicio</th>
+                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Vencimiento</th>
+                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Estado</th>
+                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Precio</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {filtered.map(s => {
+                  const days = Math.ceil((new Date(s.expires_at) - Date.now()) / 86400000)
+                  const price = s.subscription_type === 'anual' && s.price_annual ? s.price_annual : s.price_amount
+                  return (
+                    <tr key={s.id} className="hover:bg-gray-800/20 transition-colors">
+                      <td className="px-4 py-3 text-gray-500 font-mono text-xs">{s.id.slice(0, 8)}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-white font-medium text-sm">{s.legal_name}</p>
+                        <p className="text-gray-500 text-xs">{s.slug}</p>
+                      </td>
+                      <td className="px-4 py-3 text-gray-300 text-sm">{s.plan_name}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{s.subscription_type === 'anual' ? 'Anual' : 'Mensual'}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.started_at).toLocaleDateString('es-MX')}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.expires_at).toLocaleDateString('es-MX')}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusColor(s.status)}`}>
+                          {s.status === 'active' ? 'Activa' : s.status === 'expired' ? 'Vencida' : 'Cancelada'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {price ? `$${Number(price).toFixed(2)} ${s.price_currency || 'USD'}` : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

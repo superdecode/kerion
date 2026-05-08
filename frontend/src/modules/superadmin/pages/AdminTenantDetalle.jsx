@@ -53,6 +53,7 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
     contact_email: tenant.contact_email || '',
     contact_phone: tenant.contact_phone || '',
     country: tenant.country || '',
+    zona_horaria: tenant.zona_horaria || 'America/Mexico_City',
     notes: tenant.notes || '',
   })
   const [saving, setSaving] = useState(false)
@@ -143,6 +144,33 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
             ? <input value={form.country} onChange={set('country')} className={inputCls} />
             : <p className={disabledCls}>{tenant.country || '—'}</p>}
         </Field>
+        <Field label="Zona horaria">
+          {editing
+            ? <select value={form.zona_horaria} onChange={set('zona_horaria')} className={inputCls}>
+                <optgroup label="Latinoamérica">
+                  <option value="America/Mexico_City">America/Mexico_City (México)</option>
+                  <option value="America/Bogota">America/Bogota (Colombia)</option>
+                  <option value="America/Lima">America/Lima (Perú)</option>
+                  <option value="America/Santiago">America/Santiago (Chile)</option>
+                  <option value="America/Argentina/Buenos_Aires">America/Argentina/Buenos_Aires (Argentina)</option>
+                  <option value="America/Caracas">America/Caracas (Venezuela)</option>
+                  <option value="America/Guayaquil">America/Guayaquil (Ecuador)</option>
+                  <option value="America/La_Paz">America/La_Paz (Bolivia)</option>
+                  <option value="America/Montevideo">America/Montevideo (Uruguay)</option>
+                  <option value="America/Asuncion">America/Asuncion (Paraguay)</option>
+                  <option value="America/Panama">America/Panama (Panamá)</option>
+                  <option value="America/Costa_Rica">America/Costa_Rica (Costa Rica)</option>
+                  <option value="America/El_Salvador">America/El_Salvador (El Salvador)</option>
+                  <option value="America/Guatemala">America/Guatemala (Guatemala)</option>
+                  <option value="America/Honduras">America/Honduras (Honduras)</option>
+                  <option value="America/Managua">America/Managua (Nicaragua)</option>
+                  <option value="America/Havana">America/Havana (Cuba)</option>
+                  <option value="America/Puerto_Rico">America/Puerto_Rico (Puerto Rico)</option>
+                  <option value="America/Dominican">America/Dominican (República Dominicana)</option>
+                </optgroup>
+              </select>
+            : <p className={disabledCls}>{form.zona_horaria}</p>}
+        </Field>
         <Field label="Creado el">
           <p className={disabledCls}>{new Date(tenant.created_at).toLocaleString('es-MX')}</p>
         </Field>
@@ -167,6 +195,16 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
             const d = new Date(expiresAt)
             const days = Math.ceil((d - Date.now()) / 86400000)
             const color = days < 0 ? 'text-red-400' : days <= 7 ? 'text-amber-400' : 'text-emerald-400'
+            const tz = form.zona_horaria || 'America/Mexico_City'
+            const formatter = new Intl.DateTimeFormat('es-MX', {
+              day: '2-digit',
+              month: 'long',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: tz
+            })
+            const formattedDate = formatter.format(d)
             return (
               <div className={`${disabledCls} ${color} space-y-0.5`}>
                 <div className="flex items-center gap-2">
@@ -177,7 +215,7 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
                   )}
                   <span className="text-xs">({days < 0 ? 'vencido' : `${days}d restantes`})</span>
                 </div>
-                <p className="text-xs text-gray-500">{d.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                <p className="text-xs text-gray-500">Vence el {formattedDate} ({tz})</p>
               </div>
             )
           })()}

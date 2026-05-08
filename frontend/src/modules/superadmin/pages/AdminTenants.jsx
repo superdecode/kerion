@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
-import { Search, RefreshCw, Building2, ChevronRight, AlertCircle, CheckCircle2, Clock, XCircle, PauseCircle, Users, Calendar, Database, Zap } from 'lucide-react'
+import { Search, RefreshCw, Building2, ChevronRight, AlertCircle, CheckCircle2, Clock, XCircle, PauseCircle, Users, Calendar, Database, Zap, Plus, Eye, EyeOff, X, Save } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
 const STATUS_CFG = {
@@ -35,6 +35,7 @@ export default function AdminTenants() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [dbSize, setDbSize] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   function load() {
     setLoading(true)
@@ -80,6 +81,13 @@ export default function AdminTenants() {
               <span className="text-white text-xs font-semibold">{dbSize}</span>
             </div>
           )}
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors border border-emerald-500"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Nuevo Tenant
+          </button>
           <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-sm rounded-lg transition-colors border border-gray-700">
             <RefreshCw className="w-3.5 h-3.5" />
             Actualizar
@@ -217,6 +225,232 @@ export default function AdminTenants() {
           </table>
         </div>
       )}
+
+      {showCreateModal && (
+        <CreateTenantModal
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => { setShowCreateModal(false); load() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function CreateTenantModal({ onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    legal_name: '',
+    contact_name: '',
+    contact_email: '',
+    admin_password: '',
+    slug: '',
+    plan_id: '',
+    subscription_type: 'monthly',
+    zona_horaria: 'America/Mexico_City',
+  })
+  const [plans, setPlans] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    adminApi.get('/plans')
+      .then(r => setPlans(r.data.data || []))
+      .catch(() => {})
+  }, [])
+
+  function makeSlug(name) {
+    return (name || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+  }
+
+  function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })) }
+
+  function autoSlug() {
+    setForm(f => ({ ...f, slug: makeSlug(f.legal_name) }))
+  }
+
+  function generatePassword() {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$'
+    let pwd = ''
+    for (let i = 0; i < 16; i++) pwd += chars[Math.floor(Math.random() * chars.length)]
+    setForm(f => ({ ...f, admin_password: pwd }))
+  }
+
+  async function submit() {
+    if (!form.legal_name || !form.contact_name || !form.contact_email || !form.admin_password) {
+      setError('legal_name, contact_name, contact_email y admin_password son requeridos')
+      return
+    }
+    setLoading(true)
+    setError('')
+    try {
+      await adminApi.post('/tenants', form)
+      onSuccess()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al crear tenant')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const LATAM_TIMEZONES = [
+    { value: 'America/Mexico_City', label: 'America/Mexico_City (México)' },
+    { value: 'America/Bogota', label: 'America/Bogota (Colombia)' },
+    { value: 'America/Lima', label: 'America/Lima (Perú)' },
+    { value: 'America/Santiago', label: 'America/Santiago (Chile)' },
+    { value: 'America/Argentina/Buenos_Aires', label: 'America/Argentina/Buenos_Aires (Argentina)' },
+    { value: 'America/Caracas', label: 'America/Caracas (Venezuela)' },
+    { value: 'America/Guayaquil', label: 'America/Guayaquil (Ecuador)' },
+    { value: 'America/La_Paz', label: 'America/La_Paz (Bolivia)' },
+    { value: 'America/Montevideo', label: 'America/Montevideo (Uruguay)' },
+    { value: 'America/Asuncion', label: 'America/Asuncion (Paraguay)' },
+    { value: 'America/Panama', label: 'America/Panama (Panamá)' },
+    { value: 'America/Costa_Rica', label: 'America/Costa_Rica (Costa Rica)' },
+    { value: 'America/El_Salvador', label: 'America/El_Salvador (El Salvador)' },
+    { value: 'America/Guatemala', label: 'America/Guatemala (Guatemala)' },
+    { value: 'America/Honduras', label: 'America/Honduras (Honduras)' },
+    { value: 'America/Managua', label: 'America/Managua (Nicaragua)' },
+    { value: 'America/Havana', label: 'America/Havana (Cuba)' },
+    { value: 'America/Puerto_Rico', label: 'America/Puerto_Rico (Puerto Rico)' },
+    { value: 'America/Dominican', label: 'America/Dominican (República Dominicana)' },
+  ]
+
+  const inputCls = 'w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors'
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 border border-gray-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-white font-semibold">Crear nuevo Tenant</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="flex items-center gap-2 bg-red-950/30 border border-red-800/40 rounded-lg p-3 text-sm text-red-300">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Nombre legal de la empresa *</label>
+            <input value={form.legal_name} onChange={set('legal_name')} onBlur={autoSlug} placeholder="ACME Inc" className={inputCls} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Nombre de contacto *</label>
+            <input value={form.contact_name} onChange={set('contact_name')} placeholder="Juan Pérez" className={inputCls} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Email del administrador *</label>
+            <input type="email" value={form.contact_email} onChange={set('contact_email')} placeholder="admin@example.com" className={inputCls} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Contraseña temporal *</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={form.admin_password}
+                onChange={set('admin_password')}
+                placeholder="••••••••"
+                className={inputCls}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={generatePassword}
+              className="text-xs text-blue-400 hover:text-blue-300 mt-1"
+            >
+              Generar contraseña aleatoria
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Slug (subdominio)</label>
+            <input value={form.slug} onChange={set('slug')} placeholder="acme" pattern="[a-z0-9-]+" className={inputCls} />
+            <p className="text-xs text-gray-500 mt-1">Se genera automáticamente del nombre si está vacío</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Plan</label>
+            <select value={form.plan_id} onChange={set('plan_id')} className={inputCls}>
+              <option value="">Sin plan (configurar después)</option>
+              {plans.map(p => (
+                <option key={p.id} value={p.id}>{p.name} {p.price_amount && `($${p.price_amount})`}</option>
+              ))}
+            </select>
+          </div>
+
+          {form.plan_id && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1">Tipo de suscripción</label>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="subscription_type"
+                    value="monthly"
+                    checked={form.subscription_type === 'monthly'}
+                    onChange={set('subscription_type')}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm text-gray-300">Mensual</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="subscription_type"
+                    value="annual"
+                    checked={form.subscription_type === 'annual'}
+                    onChange={set('subscription_type')}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm text-gray-300">Anual</span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Zona horaria</label>
+            <select value={form.zona_horaria} onChange={set('zona_horaria')} className={inputCls}>
+              {LATAM_TIMEZONES.map(tz => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 bg-gray-900 border-t border-gray-800 px-6 py-4 flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors text-sm"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={submit}
+            disabled={loading}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white rounded-lg transition-colors text-sm flex items-center gap-2"
+          >
+            <Save className="w-3.5 h-3.5" />
+            {loading ? 'Creando...' : 'Crear Tenant'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './core/stores/authStore'
@@ -93,7 +94,16 @@ function AdminProtectedRoute({ children }) {
 }
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, setTokenFromUrl } = useAuthStore()
+
+  // Bootstrap auth from ?token= URL param (from subdomain SSO redirect)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const urlToken = params.get('token')
+    if (urlToken && !isAuthenticated) {
+      setTokenFromUrl(urlToken)
+    }
+  }, [isAuthenticated, setTokenFromUrl])
 
   return (
     <Routes>

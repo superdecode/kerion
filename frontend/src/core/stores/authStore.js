@@ -89,6 +89,19 @@ export const useAuthStore = create(
             isAuthenticated: true,
             isLoading: false,
           })
+
+          // Subdomain redirect: if on main domain and slug available, redirect to tenant subdomain
+          const slug = data.user?.slug
+          const hostname = window.location.hostname
+          const mainDomains = ['kirion.vercel.app', 'kirion.app', 'localhost', '127.0.0.1']
+          const isMainDomain = mainDomains.some(h => hostname === h)
+
+          if (slug && isMainDomain && !hostname.includes('localhost')) {
+            // Redirect to subdomain with token in URL for bootstrap
+            window.location.href = `https://${slug}.kirion.app?token=${data.token}`
+            return { success: true, redirecting: true }
+          }
+
           return { success: true }
         } catch (error) {
           set({ isLoading: false })
@@ -100,6 +113,35 @@ export const useAuthStore = create(
             errorMsg = error.message
           }
           return { success: false, error: errorMsg }
+        }
+      },
+
+      // Bootstrap auth from token passed in URL (from subdomain redirect)
+      setTokenFromUrl: (token) => {
+        if (!token) return
+        try {
+          // Decode JWT to extract user info (basic decode without verification, since server validated it)
+          const parts = token.split('.')
+          if (parts.length !== 3) return
+          const decoded = JSON.parse(atob(parts[1]))
+          // Call me endpoint to get full user info
+          api.defaults.headers.authorization = `Bearer ${token}`
+          api.get('/auth/me').then(({ data }) => {
+            if (data.zona_horaria) setTimezone(data.zona_horaria)
+            set({
+              user: data,
+              token,
+              isAuthenticated: true,
+            })
+            // Remove token from URL
+            window.history.replaceState({}, '', window.location.pathname)
+          }).catch(() => {
+            // If me fails, just set the token and let the app handle it
+            set({ token, isAuthenticated: true })
+            window.history.replaceState({}, '', window.location.pathname)
+          })
+        } catch (e) {
+          console.error('Error setting token from URL:', e)
         }
       },
 

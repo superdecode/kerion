@@ -2,9 +2,10 @@ import { Router } from 'express'
 import { query, getClient } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
+import { dateInTZ, getToday, CDMX_TZ } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
-const TZ = 'America/Mexico_City'
+const TZ = CDMX_TZ
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ router.get('/stats/hoy',
   requirePermission('fep.folios', 'ver'),
   async (req, res) => {
     try {
+      const todayDate = getToday(TZ)
       const result = await query(
         `SELECT
            COUNT(*) FILTER (WHERE estado = 'ACTIVO')     AS activos,
@@ -49,7 +51,8 @@ router.get('/stats/hoy',
            COALESCE(SUM(total_tarimas),0) AS total_tarimas,
            COALESCE(SUM(total_guias),0)   AS total_guias
          FROM folios_entrega
-         WHERE (created_at AT TIME ZONE '${TZ}')::date = (now() AT TIME ZONE '${TZ}')::date`
+         WHERE ${dateInTZ('created_at', TZ)} = $1::date`,
+        [todayDate]
       )
       res.json({ stats: result.rows[0] })
     } catch (err) {
@@ -81,9 +84,8 @@ router.get('/preview-tarimas',
         if (ids.length) { pc++; where.push(`t.canal_id = ANY($${pc})`); params.push(ids) }
       }
 
-      const tzExpr = `(t.fecha_inicio AT TIME ZONE '${TZ}')::date`
-      if (fecha_desde) { pc++; where.push(`${tzExpr} >= $${pc}::date`); params.push(fecha_desde) }
-      if (fecha_hasta) { pc++; where.push(`${tzExpr} <= $${pc}::date`); params.push(fecha_hasta) }
+      if (fecha_desde) { pc++; where.push(`${dateInTZ('t.fecha_inicio', TZ)} >= $${pc}::date`); params.push(fecha_desde) }
+      if (fecha_hasta) { pc++; where.push(`${dateInTZ('t.fecha_inicio', TZ)} <= $${pc}::date`); params.push(fecha_hasta) }
 
       if (estatus_tarima === 'FINALIZADA') {
         where.push(`t.estado = 'FINALIZADA'`)
@@ -163,9 +165,8 @@ router.get('/',
       if (estado) { pc++; where.push(`fe.estado = $${pc}`); params.push(estado) }
       if (canal_id) { pc++; where.push(`$${pc} = ANY(fe.canales)`); params.push(Number(canal_id)) }
 
-      const tzExpr = `(fe.created_at AT TIME ZONE '${TZ}')::date`
-      if (fecha_desde) { pc++; where.push(`${tzExpr} >= $${pc}::date`); params.push(fecha_desde) }
-      if (fecha_hasta) { pc++; where.push(`${tzExpr} <= $${pc}::date`); params.push(fecha_hasta) }
+      if (fecha_desde) { pc++; where.push(`${dateInTZ('fe.created_at', TZ)} >= $${pc}::date`); params.push(fecha_desde) }
+      if (fecha_hasta) { pc++; where.push(`${dateInTZ('fe.created_at', TZ)} <= $${pc}::date`); params.push(fecha_hasta) }
 
       if (q?.trim()) {
         pc++

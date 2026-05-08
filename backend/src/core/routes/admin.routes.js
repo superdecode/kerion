@@ -268,7 +268,7 @@ router.get('/tenants/:id', authenticateAdmin, async (req, res) => {
 router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params
-    const { legal_name, contact_email, contact_phone, country, notes, slug } = req.body
+    const { legal_name, contact_email, contact_phone, country, notes, slug, zona_horaria } = req.body
 
     // Auto-generate slug from legal_name if slug field sent as empty and legal_name provided
     let finalSlug = slug !== undefined ? (slug || null) : undefined
@@ -287,11 +287,12 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
          country = COALESCE($4, country),
          notes = $5,
          slug = COALESCE($6, slug),
+         zona_horaria = COALESCE($7, zona_horaria),
          updated_at = now()
-       WHERE id = $7`,
-      [legal_name || null, contact_email || null, contact_phone || null, country || null, notes ?? null, finalSlug, id]
+       WHERE id = $8`,
+      [legal_name || null, contact_email || null, contact_phone || null, country || null, notes ?? null, finalSlug, zona_horaria || null, id]
     )
-    adminAudit(req.admin.id, 'UPDATE_TENANT', 'tenant', id, { legal_name, contact_email, contact_phone, country, slug: finalSlug })
+    adminAudit(req.admin.id, 'UPDATE_TENANT', 'tenant', id, { legal_name, contact_email, contact_phone, country, slug: finalSlug, zona_horaria })
     res.json({ success: true })
   } catch (err) {
     console.error('[admin/tenants/:id PATCH]', err)
@@ -302,7 +303,7 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
 // POST /api/admin/tenants — create tenant directly without signup flow
 router.post('/tenants', authenticateAdmin, async (req, res) => {
   try {
-    const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at } = req.body
+    const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at, zona_horaria } = req.body
     if (!legal_name || !contact_name || !contact_email || !admin_password) {
       return res.status(400).json({ error: 'legal_name, contact_name, contact_email y admin_password son requeridos' })
     }
@@ -326,9 +327,9 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
 
     // Create tenant
     const tenantRes = await query(
-      `INSERT INTO tenants (slug, legal_name, contact_name, contact_email, contact_phone, country, status, current_plan_id)
-       VALUES ($1,$2,$3,$4,$5,$6,'active',$7) RETURNING *`,
-      [finalSlug, legal_name, contact_name, contact_email.toLowerCase().trim(), contact_phone || null, country || null, plan_id || null]
+      `INSERT INTO tenants (slug, legal_name, contact_name, contact_email, contact_phone, country, status, current_plan_id, zona_horaria)
+       VALUES ($1,$2,$3,$4,$5,$6,'active',$7,$8) RETURNING *`,
+      [finalSlug, legal_name, contact_name, contact_email.toLowerCase().trim(), contact_phone || null, country || null, plan_id || null, zona_horaria || 'America/Mexico_City']
     )
     const tenant = tenantRes.rows[0]
 
@@ -377,6 +378,33 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       `INSERT INTO usuarios (tenant_id, email, password_hash, nombre_completo, rol_id, es_admin_tenant)
        VALUES ($1,$2,$3,$4,$5,true) RETURNING id, email`,
       [tenant.id, contact_email.toLowerCase().trim(), hash, contact_name, roleId]
+    )
+
+    // Seed dropscan config (empresas_paqueteria and canales_escaneo)
+    await query(
+      `INSERT INTO empresas_paqueteria (tenant_id, nombre, codigo, activa) VALUES
+       ($1,'FedEx','FEDEX',true), ($1,'DHL','DHL',true), ($1,'UPS','UPS',true)
+       ON CONFLICT (tenant_id, codigo) DO NOTHING`,
+      [tenant.id]
+    )
+    await query(
+      `INSERT INTO canales_escaneo (tenant_id, nombre, descripcion, activo)
+       VALUES ($1, 'Canal Principal', 'Canal por defecto', true)
+       ON CONFLICT (tenant_id, nombre) DO NOTHING`,
+      [tenant.id]
+    )
+
+    // Enqueue welcome email
+    await query(
+      `INSERT INTO notifications_outbox (tenant_id, type, payload, status, created_at)
+       VALUES ($1, 'welcome_email', $2, 'pending', now())`,
+      [tenant.id, JSON.stringify({
+        to: contact_email.toLowerCase().trim(),
+        tenant_name: legal_name,
+        admin_name: contact_name,
+        temp_password: admin_password,
+        login_url: `https://${finalSlug}.kirion.app/login`,
+      })]
     )
 
     adminAudit(req.admin.id, 'CREATE_TENANT_DIRECT', 'tenant', tenant.id, { legal_name, contact_email, plan_id })
@@ -576,6 +604,59 @@ router.delete('/plans/:id', authenticateAdmin, async (req, res) => {
     adminAudit(req.admin.id, 'DELETE_PLAN', 'plan', id, null)
     res.json({ success: true })
   } catch (err) {
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// GET /api/admin/subscriptions — list all subscriptions across all tenants
+router.get('/subscriptions', authenticateAdmin, async (req, res) => {
+  try {
+    const { status, tenant_id, plan_id, date_from, date_to } = req.query
+
+    const params = []
+    const where = []
+    let pc = 1
+
+    if (status) { where.push(`s.status = $${pc}`); params.push(status); pc++ }
+    if (tenant_id) { where.push(`s.tenant_id = $${pc}`); params.push(tenant_id); pc++ }
+    if (plan_id) { where.push(`s.plan_id = $${pc}`); params.push(plan_id); pc++ }
+    if (date_from) { where.push(`s.started_at >= $${pc}`); params.push(date_from); pc++ }
+    if (date_to) { where.push(`s.expires_at <= $${pc}`); params.push(date_to); pc++ }
+
+    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : ''
+
+    const result = await query(
+      `SELECT
+         s.id,
+         s.tenant_id,
+         t.legal_name,
+         t.slug,
+         p.id as plan_id,
+         p.name as plan_name,
+         p.price_amount,
+         p.price_currency,
+         p.price_annual,
+         s.status,
+         s.started_at,
+         s.expires_at,
+         s.payment_reference,
+         s.notes,
+         s.created_at,
+         CASE
+           WHEN (s.expires_at - s.started_at) > INTERVAL '180 days' THEN 'anual'
+           ELSE 'mensual'
+         END as subscription_type
+       FROM subscriptions s
+       JOIN tenants t ON s.tenant_id = t.id
+       JOIN plans p ON s.plan_id = p.id
+       ${whereClause}
+       ORDER BY s.created_at DESC`,
+      params
+    )
+
+    res.json({ success: true, data: result.rows })
+  } catch (err) {
+    console.error('[admin/subscriptions GET]', err)
     res.status(500).json({ error: 'Error interno' })
   }
 })
