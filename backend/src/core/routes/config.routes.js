@@ -12,16 +12,15 @@ router.get('/:modulo/:tipo',
   async (req, res) => {
     try {
       const { modulo, tipo } = req.params
+      const tenantId = req.user?.tenant_id
       const activeOnly = req.query.active !== 'false'
 
-      let sql = 'SELECT * FROM configuraciones WHERE modulo = $1 AND tipo = $2'
-      const params = [modulo, tipo]
+      let sql = 'SELECT * FROM configuraciones WHERE tenant_id = $1 AND modulo = $2 AND tipo = $3'
+      const params = [tenantId, modulo, tipo]
 
-      if (activeOnly) {
-        sql += ' AND activo = true'
-      }
-
+      if (activeOnly) sql += ' AND activo = true'
       sql += ' ORDER BY nombre'
+
       const result = await query(sql, params)
       res.json({ items: result.rows })
     } catch (error) {
@@ -38,15 +37,19 @@ router.post('/',
   async (req, res) => {
     try {
       const { modulo, tipo, codigo, nombre, descripcion, config_json } = req.body
+      const tenantId = req.user?.tenant_id
 
       if (!modulo || !tipo || !codigo || !nombre) {
         return res.status(400).json({ error: 'Campos requeridos: modulo, tipo, codigo, nombre' })
       }
+      if (!tenantId) {
+        return res.status(400).json({ error: 'tenant_id requerido' })
+      }
 
       const result = await query(
-        `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, descripcion, config_json)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-        [modulo, tipo, codigo.toUpperCase(), nombre, descripcion, config_json ? JSON.stringify(config_json) : null]
+        `INSERT INTO configuraciones (tenant_id, modulo, tipo, codigo, nombre, descripcion, config_json)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+        [tenantId, modulo, tipo, codigo.toUpperCase(), nombre, descripcion || null, config_json ? JSON.stringify(config_json) : null]
       )
 
       res.status(201).json({ item: result.rows[0] })
@@ -68,11 +71,12 @@ router.put('/:id',
     try {
       const { id } = req.params
       const { nombre, descripcion, activo, config_json } = req.body
+      const tenantId = req.user?.tenant_id
 
       const result = await query(
         `UPDATE configuraciones SET nombre = $1, descripcion = $2, activo = $3, config_json = $4
-         WHERE id = $5 RETURNING *`,
-        [nombre, descripcion, activo, config_json ? JSON.stringify(config_json) : null, id]
+         WHERE id = $5 AND tenant_id = $6 RETURNING *`,
+        [nombre, descripcion || null, activo, config_json ? JSON.stringify(config_json) : null, id, tenantId]
       )
 
       if (result.rows.length === 0) {

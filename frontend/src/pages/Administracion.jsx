@@ -22,7 +22,7 @@ const MODULE_GROUPS = [
     modules: [
       { key: 'dropscan.dashboard',    label: 'Dashboard',     labelKey: 'perm.sub.dashboard' },
       { key: 'dropscan.escaneo',      label: 'Escaneo',       labelKey: 'perm.sub.escaneo' },
-      { key: 'dropscan.historial',    label: 'Historial',     labelKey: 'perm.sub.historial' },
+      { key: 'dropscan.tarimas',       label: 'Tarimas',       labelKey: 'perm.sub.tarimas' },
       { key: 'fep.folios',            label: 'Folios',        labelKey: 'perm.sub.folios' },
       { key: 'dropscan.reportes',     label: 'Reportes',      labelKey: 'perm.sub.reportes' },
       { key: 'dropscan.configuracion',label: 'Configuración', labelKey: 'perm.sub.configuracion' },

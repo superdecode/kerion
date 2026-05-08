@@ -34,7 +34,7 @@ import Administracion from './pages/Administracion'
 // DropScan Module
 import DropScanDashboard from './modules/dropscan/pages/Dashboard'
 import Escaneo from './modules/dropscan/pages/Escaneo'
-import Historial from './modules/dropscan/pages/Historial'
+import Tarimas from './modules/dropscan/pages/Tarimas'
 import Reportes from './modules/dropscan/pages/Reportes'
 import Configuracion from './modules/dropscan/pages/Configuracion'
 
@@ -65,7 +65,7 @@ const MODULE_ROUTES = [
   { module: 'global.inicio', path: '/' },
   { module: 'dropscan.dashboard', path: '/dropscan' },
   { module: 'dropscan.escaneo', path: '/dropscan/escaneo' },
-  { module: 'dropscan.historial', path: '/dropscan/historial' },
+  { module: 'dropscan.tarimas', path: '/dropscan/tarimas' },
   { module: 'dropscan.reportes', path: '/dropscan/reportes' },
   { module: 'dropscan.configuracion', path: '/dropscan/configuracion' },
   { module: 'inventory.escaneo', path: '/inventory/escaneo' },
@@ -154,8 +154,8 @@ function AppRoutes() {
         <Route path="dropscan/escaneo" element={
           <PermissionRoute module="dropscan.escaneo"><ErrorBoundary><Escaneo /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="dropscan/historial" element={
-          <PermissionRoute module="dropscan.historial"><ErrorBoundary><Historial /></ErrorBoundary></PermissionRoute>
+        <Route path="dropscan/tarimas" element={
+          <PermissionRoute module="dropscan.tarimas"><ErrorBoundary><Tarimas /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="dropscan/reportes" element={
           <PermissionRoute module="dropscan.reportes"><ErrorBoundary><Reportes /></ErrorBoundary></PermissionRoute>

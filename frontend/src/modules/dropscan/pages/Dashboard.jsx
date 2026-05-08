@@ -155,11 +155,11 @@ export default function DropScanDashboard() {
           <div className="max-w-full mx-auto space-y-4">
             {/* KPI Cards - Clickable, navigate to historial with filter */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-              <KPICard icon={Package} label={t('dashboard.totalGuides')} value={r.total_guias} gradient="from-primary-500 to-primary-700" iconBg="bg-primary-400/20" index={0} href="/dropscan/historial" />
-              <KPICard icon={Clock} label={t('dashboard.inProcess')} value={r.tarimas_en_proceso} gradient="from-warning-400 to-warning-600" iconBg="bg-warning-400/20" index={1} href="/dropscan/historial?estado=EN_PROCESO" />
-              <KPICard icon={AlertTriangle} label={t('dashboard.duplicates')} value={r.alertas_duplicados} gradient="from-danger-400 to-danger-600" iconBg="bg-danger-400/20" index={2} href="/dropscan/historial?search=duplicado" />
-              <KPICard icon={CheckCircle} label={t('dashboard.completedPallets')} value={r.tarimas_completadas} gradient="from-success-500 to-accent-600" iconBg="bg-success-400/20" index={3} href="/dropscan/historial?estado=FINALIZADA" />
-              <KPICard icon={XCircle} label={t('status.CANCELADA')} value={r.tarimas_canceladas} gradient="from-warm-400 to-warm-600" iconBg="bg-warm-400/20" index={4} href="/dropscan/historial?estado=CANCELADA" />
+              <KPICard icon={Package} label={t('dashboard.totalGuides')} value={r.total_guias} gradient="from-primary-500 to-primary-700" iconBg="bg-primary-400/20" index={0} href="/dropscan/tarimas" />
+              <KPICard icon={Clock} label={t('dashboard.inProcess')} value={r.tarimas_en_proceso} gradient="from-warning-400 to-warning-600" iconBg="bg-warning-400/20" index={1} href="/dropscan/tarimas?estado=EN_PROCESO" />
+              <KPICard icon={AlertTriangle} label={t('dashboard.duplicates')} value={r.alertas_duplicados} gradient="from-danger-400 to-danger-600" iconBg="bg-danger-400/20" index={2} href="/dropscan/tarimas?search=duplicado" />
+              <KPICard icon={CheckCircle} label={t('dashboard.completedPallets')} value={r.tarimas_completadas} gradient="from-success-500 to-accent-600" iconBg="bg-success-400/20" index={3} href="/dropscan/tarimas?estado=FINALIZADA" />
+              <KPICard icon={XCircle} label={t('status.CANCELADA')} value={r.tarimas_canceladas} gradient="from-warm-400 to-warm-600" iconBg="bg-warm-400/20" index={4} href="/dropscan/tarimas?estado=CANCELADA" />
             </div>
 
             {/* Charts Row - Larger and better use of space */}

@@ -33,7 +33,7 @@ async function seedDatabase() {
         descripcion: 'Acceso total al sistema',
         permisos: {
           global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
-          dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
+          dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
           inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
         }
       },
@@ -42,7 +42,7 @@ async function seedDatabase() {
         descripcion: 'Supervisor de operaciones',
         permisos: {
           global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'ver' },
-          dropscan: { dashboard: 'ver', escaneo: 'actualizar', historial: 'actualizar', reportes: 'crear', configuracion: 'ver', folios: 'actualizar' },
+          dropscan: { dashboard: 'ver', escaneo: 'actualizar', tarimas: 'actualizar', reportes: 'crear', configuracion: 'ver', folios: 'actualizar' },
           inventory: { escaneo: 'actualizar', historial: 'actualizar', reportes: 'crear' },
         }
       },
@@ -51,7 +51,7 @@ async function seedDatabase() {
         descripcion: 'Operador de escaneo',
         permisos: {
           global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'sin_acceso' },
-          dropscan: { dashboard: 'ver', escaneo: 'crear', historial: 'ver', reportes: 'sin_acceso', configuracion: 'sin_acceso', folios: 'crear' },
+          dropscan: { dashboard: 'ver', escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso', configuracion: 'sin_acceso', folios: 'crear' },
           inventory: { escaneo: 'crear', historial: 'ver', reportes: 'sin_acceso' },
         }
       },
@@ -60,7 +60,7 @@ async function seedDatabase() {
         descripcion: 'Consulta operativa',
         permisos: {
           global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'sin_acceso' },
-          dropscan: { dashboard: 'ver', escaneo: 'sin_acceso', historial: 'ver', reportes: 'ver', configuracion: 'sin_acceso', folios: 'ver' },
+          dropscan: { dashboard: 'ver', escaneo: 'sin_acceso', tarimas: 'ver', reportes: 'ver', configuracion: 'sin_acceso', folios: 'ver' },
           inventory: { escaneo: 'sin_acceso', historial: 'ver', reportes: 'ver' },
         }
       }

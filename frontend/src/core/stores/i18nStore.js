@@ -80,6 +80,7 @@ const translations = {
     'nav.dropscan': 'DropScan',
     'nav.scanning': '扫描',
     'nav.history': '历史记录',
+    'nav.tarimas': '托盘',
     'nav.reports': '报表',
     'nav.configuration': '配置',
     'nav.admin': '系统管理',
@@ -193,7 +194,7 @@ const translations = {
     'scan.alreadyScannedInOtherPallet': '该面单已在托盘 {pallet} 中扫描',
 
     // History / 历史记录
-    'history.title': '历史记录',
+    'history.title': '托盘',
     'history.subtitle': 'DropScan · 托盘历史与详情',
     'history.filters': '筛选',
     'history.clearFilters': '清除筛选',
@@ -654,6 +655,7 @@ const translations = {
     'perm.sub.escaneo': '扫描',
     'perm.sub.reportes': '报表',
     'perm.sub.historial': '历史记录',
+    'perm.sub.tarimas': '托盘',
     'perm.sub.configuracion': '配置',
     'perm.sub.wms': 'WMS 连接',
 
@@ -877,6 +879,7 @@ const translations = {
     'nav.dropscan': 'DropScan',
     'nav.scanning': 'Escaneo',
     'nav.history': 'Historial',
+    'nav.tarimas': 'Tarimas',
     'nav.reports': 'Reportes',
     'nav.configuration': 'Configuración',
     'nav.admin': 'Administración',
@@ -942,7 +945,7 @@ const translations = {
     'scan.searchPallet': 'Buscar tarima o guía...',
 
     // History
-    'history.title': 'Historial',
+    'history.title': 'Tarimas',
     'history.subtitle': 'DropScan · Tarimas y guías',
     'history.filters': 'Filtros',
     'history.clearFilters': 'Limpiar filtros',
@@ -1452,6 +1455,7 @@ const translations = {
     'perm.sub.escaneo': 'Escaneo',
     'perm.sub.reportes': 'Reportes',
     'perm.sub.historial': 'Historial',
+    'perm.sub.tarimas': 'Tarimas',
     'perm.sub.configuracion': 'Configuración',
     'perm.sub.wms': 'Conexión WMS',
 

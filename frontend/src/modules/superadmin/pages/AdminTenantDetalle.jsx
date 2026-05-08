@@ -249,15 +249,24 @@ function StatCard({ icon: Icon, label, value, color, loading = false }) {
   )
 }
 
-function SubscriptionHistoryModal({ subscriptions, onClose }) {
+function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
+  const tz = zona_horaria || 'America/Mexico_City'
+  const fmt = (d) => d ? new Intl.DateTimeFormat('es-MX', {
+    timeZone: tz, day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  }).format(new Date(d)) : '—'
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-white font-semibold flex items-center gap-2 text-lg">
-            <Clock className="w-5 h-5 text-blue-400" />
-            Historial completo de suscripciones
-          </h3>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-white font-semibold flex items-center gap-2 text-lg">
+              <Clock className="w-5 h-5 text-blue-400" />
+              Historial completo de suscripciones
+            </h3>
+            <p className="text-gray-500 text-xs mt-0.5">Fechas en zona horaria: {tz}</p>
+          </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-6 h-6" />
           </button>
@@ -270,34 +279,30 @@ function SubscriptionHistoryModal({ subscriptions, onClose }) {
                 <th className="pb-3 px-2">Plan</th>
                 <th className="pb-3 px-2">Estado</th>
                 <th className="pb-3 px-2">Inicio</th>
-                <th className="pb-3 px-2">Vencimiento</th>
+                <th className="pb-3 px-2">Vence ({tz})</th>
                 <th className="pb-3 px-2">Referencia</th>
                 <th className="pb-3 px-2">Notas</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
-              {subscriptions.map(s => {
-                const start = s.started_at ? new Date(s.started_at).toLocaleDateString('es-MX') : '—'
-                const exp = s.expires_at ? new Date(s.expires_at).toLocaleDateString('es-MX') : '—'
-                return (
-                  <tr key={s.id} className="hover:bg-gray-800/30 transition-colors">
-                    <td className="py-3 px-2 text-white font-medium">{s.plan_name}</td>
-                    <td className="py-3 px-2">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        s.status === 'active' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25' :
-                        s.status === 'expired' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25' :
-                        'bg-gray-700 text-gray-400'
-                      }`}>
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-2 text-gray-300">{start}</td>
-                    <td className="py-3 px-2 text-gray-300 font-mono">{exp}</td>
-                    <td className="py-3 px-2 text-gray-400 italic">{s.payment_reference || '—'}</td>
-                    <td className="py-3 px-2 text-gray-400 text-xs max-w-xs truncate">{s.notes || '—'}</td>
-                  </tr>
-                )
-              })}
+              {subscriptions.map(s => (
+                <tr key={s.id} className="hover:bg-gray-800/30 transition-colors">
+                  <td className="py-3 px-2 text-white font-medium">{s.plan_name}</td>
+                  <td className="py-3 px-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      s.status === 'active' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25' :
+                      s.status === 'expired' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25' :
+                      'bg-gray-700 text-gray-400'
+                    }`}>
+                      {s.status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-2 text-gray-300">{fmt(s.started_at)}</td>
+                  <td className="py-3 px-2 text-gray-300">{fmt(s.expires_at)}</td>
+                  <td className="py-3 px-2 text-gray-400 italic">{s.payment_reference || '—'}</td>
+                  <td className="py-3 px-2 text-gray-400 text-xs max-w-xs truncate">{s.notes || '—'}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -312,7 +317,8 @@ function SubscriptionHistoryModal({ subscriptions, onClose }) {
   )
 }
 
-function SubscriptionCard({ tenantId, subscriptions, history, plans, onSaved }) {
+function SubscriptionCard({ tenantId, subscriptions, history, plans, onSaved, zona_horaria }) {
+  const tz = zona_horaria || 'America/Mexico_City'
   const [showForm, setShowForm] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [form, setForm] = useState({ plan_id: '', expires_at: '', payment_reference: '', notes: '' })
@@ -402,13 +408,18 @@ function SubscriptionCard({ tenantId, subscriptions, history, plans, onSaved }) 
       {subscriptions.length === 0 ? (
         <div className="flex items-center gap-2 text-gray-500 py-4">
           <CreditCard className="w-4 h-4" />
-          <span className="text-sm">Sin suscripciones registradas</span>
+          <span className="text-sm">Sin suscripciones vigentes</span>
         </div>
       ) : (
         <div className="space-y-2">
           {subscriptions.map(s => {
             const exp = s.expires_at ? new Date(s.expires_at) : null
             const days = exp ? Math.ceil((exp - Date.now()) / 86400000) : null
+            const expFormatted = exp ? new Intl.DateTimeFormat('es-MX', {
+              timeZone: tz,
+              day: '2-digit', month: 'short', year: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            }).format(exp) : null
             return (
               <div key={s.id} className="flex items-center justify-between p-3 bg-gray-800/40 rounded-lg border border-gray-700/40">
                 <div>
@@ -421,10 +432,13 @@ function SubscriptionCard({ tenantId, subscriptions, history, plans, onSaved }) 
                       ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
                       : 'bg-gray-700/50 text-gray-400 border border-gray-600/50'
                   }`}>{s.status}</span>
-                  {exp && (
-                    <p className={`text-xs mt-1 ${days !== null && days < 7 ? 'text-red-400' : 'text-gray-500'}`}>
-                      {days !== null && days > 0 ? `${days}d restantes` : 'Vencido'} · {exp.toLocaleDateString('es-MX')}
-                    </p>
+                  {expFormatted && (
+                    <div className="text-right mt-1">
+                      <p className={`text-xs ${days !== null && days < 7 ? 'text-red-400' : 'text-gray-400'}`}>
+                        {days !== null && days > 0 ? `${days}d restantes` : 'Vencido'} — {expFormatted}
+                      </p>
+                      <p className="text-[10px] text-gray-600">{tz}</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -803,6 +817,7 @@ export default function AdminTenantDetalle() {
           tenantId={id} 
           subscriptions={subscriptions} 
           history={data.subscription_history || []}
+          timeZone={tenant.zona_horaria}
           plans={plans} 
           onSaved={(msg) => { showToast(msg); load() }} 
         />

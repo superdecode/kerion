@@ -6,7 +6,7 @@ const MODULE_ROUTES = [
   { module: 'global.inicio', path: '/' },
   { module: 'dropscan.dashboard', path: '/dropscan' },
   { module: 'dropscan.escaneo', path: '/dropscan/escaneo' },
-  { module: 'dropscan.historial', path: '/dropscan/historial' },
+  { module: 'dropscan.tarimas', path: '/dropscan/tarimas' },
   { module: 'dropscan.reportes', path: '/dropscan/reportes' },
   { module: 'dropscan.configuracion', path: '/dropscan/configuracion' },
   { module: 'dropscan.folios', path: '/dropscan/folios' },

@@ -306,14 +306,16 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
 
 // POST /api/admin/tenants — create tenant directly without signup flow
 router.post('/tenants', authenticateAdmin, async (req, res) => {
-  const client = await getClient()
-  await client.query('BEGIN')
+  const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at, zona_horaria } = req.body
+  if (!legal_name || !contact_name || !contact_email || !admin_password) {
+    return res.status(400).json({ error: 'legal_name, contact_name, contact_email y admin_password son requeridos' })
+  }
+
+  let client
   try {
-    const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at, zona_horaria } = req.body
-    if (!legal_name || !contact_name || !contact_email || !admin_password) {
-      await client.query('ROLLBACK')
-      return res.status(400).json({ error: 'legal_name, contact_name, contact_email y admin_password son requeridos' })
-    }
+    client = await getClient()
+    await client.query('BEGIN')
+
     // Generate slug from legal_name if not provided
     let tenantSlug = slug?.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || ''
     if (!tenantSlug) {
@@ -322,16 +324,14 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
         .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
     }
 
-    // Ensure slug uniqueness (pre-check)
+    // Ensure slug uniqueness inside the transaction (prevents race conditions)
     let finalSlug = tenantSlug
     let suffix = 1
     while (true) {
-      const existing = await client.query('SELECT id FROM tenants WHERE slug = $1', [finalSlug])
+      const existing = await client.query('SELECT id FROM tenants WHERE slug = $1 FOR UPDATE', [finalSlug])
       if (existing.rows.length === 0) break
       finalSlug = `${tenantSlug}-${suffix++}`
     }
-
-    await client.query('BEGIN')
 
     // 1. Create tenant
     const tenantRes = await client.query(
@@ -346,28 +346,19 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       const planRes = await client.query('SELECT * FROM plans WHERE id = $1', [plan_id])
       if (planRes.rows.length > 0) {
         const plan = planRes.rows[0]
-        
-        // Calculate expires_at: 23:59:59 of the day in tenant's timezone
+
         const start = started_at ? new Date(started_at) : new Date()
         const durationDays = subscription_type === 'annual' ? 365 : (plan.duration_days || 30)
-        
-        // Calculate date in tenant's timezone
         const d = new Date(start)
         d.setDate(d.getDate() + durationDays)
-        
-        // Use Intl to get date components in tenant's timezone
-        const formatter = new Intl.DateTimeFormat('en-US', {
-          timeZone: zona_horaria || 'America/Mexico_City',
-          year: 'numeric',
-          month: 'numeric',
-          day: 'numeric'
-        })
-        const parts = formatter.formatToParts(d)
-        const year = parts.find(p => p.type === 'year').value
-        const month = parts.find(p => p.type === 'month').value
-        const day = parts.find(p => p.type === 'day').value
-        
-        const expiresAt = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999))
+
+        // expires_at = 23:59:59.999 of the calculated day in tenant's timezone
+        const tz = zona_horaria || 'America/Mexico_City'
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(d)
+        const yr = Number(parts.find(p => p.type === 'year').value)
+        const mo = Number(parts.find(p => p.type === 'month').value)
+        const dy = Number(parts.find(p => p.type === 'day').value)
+        const expiresAt = new Date(Date.UTC(yr, mo - 1, dy, 23, 59, 59, 999))
 
         await client.query(
           `INSERT INTO subscriptions (tenant_id, plan_id, status, started_at, expires_at, recorded_by)
@@ -381,27 +372,29 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       }
     }
 
-    // 3. Create Admin role (is_default: true)
+    // 3. Create Admin role (is_default = true, non-deletable from frontend)
+    const rolePermisos = {
+      global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
+      dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
+      fep: { folios: 'eliminar' },
+      inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
+    }
     const roleRes = await client.query(
       `INSERT INTO roles (tenant_id, nombre, permisos, is_default)
        VALUES ($1, 'Administrador', $2, true) RETURNING id`,
-      [tenant.id, JSON.stringify({
-        global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
-        dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
-        fep: { folios: 'eliminar' },
-        inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
-      })]
+      [tenant.id, JSON.stringify(rolePermisos)]
     )
     const roleId = roleRes.rows[0].id
 
-    // 4. Create admin user (is_default: true)
-    const bcrypt = await import('bcryptjs')
-    const hash = await bcrypt.default.hash(admin_password, 12)
+    // 4. Create admin user (is_default = true, non-deletable from frontend)
+    const bcryptMod = await import('bcryptjs')
+    const hash = await bcryptMod.default.hash(admin_password, 12)
+    const adminCodigo = `ADM-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
 
     const userRes = await client.query(
-      `INSERT INTO usuarios (tenant_id, email, password_hash, nombre_completo, rol_id, es_admin_tenant, is_default)
-       VALUES ($1,$2,$3,$4,$5,true,true) RETURNING id, email`,
-      [tenant.id, contact_email.toLowerCase().trim(), hash, contact_name, roleId]
+      `INSERT INTO usuarios (tenant_id, codigo, email, password_hash, nombre_completo, rol_id, estado, es_admin_tenant, is_default, must_change_password)
+       VALUES ($1,$2,$3,$4,$5,$6,'ACTIVO',true,true,false) RETURNING id, email`,
+      [tenant.id, adminCodigo, contact_email.toLowerCase().trim(), hash, contact_name, roleId]
     )
 
     // 5. Seed dropscan config
@@ -418,7 +411,7 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       [tenant.id]
     )
 
-    // 6. Log in provisioning_log
+    // 6. Log provisioning
     await client.query(
       `INSERT INTO provisioning_log (tenant_id, step, status, created_at)
        VALUES ($1, 'full_provisioning', 'ok', now())`,
@@ -442,19 +435,19 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
     adminAudit(req.admin.id, 'CREATE_TENANT_DIRECT', 'tenant', tenant.id, { legal_name, contact_email, plan_id })
     res.status(201).json({ success: true, tenant_id: tenant.id, slug: finalSlug, admin_email: userRes.rows[0].email })
   } catch (err) {
-    await client.query('ROLLBACK')
+    if (client) {
+      try { await client.query('ROLLBACK') } catch (_) {}
+    }
     console.error('[admin/tenants POST]', err)
-    let message = 'Error interno'
+    let message = err.message || 'Error al crear tenant'
     if (err.code === '23505') {
-      if (err.detail?.includes('slug')) message = 'El slug ya existe'
-      else if (err.detail?.includes('email')) message = 'El email del administrador ya esta en uso para este tenant'
-      else message = 'Error de duplicado: ' + err.detail
-    } else {
-      message = err.message || 'Error al crear tenant'
+      if (err.constraint?.includes('slug') || err.detail?.includes('slug')) message = 'El slug ya existe'
+      else if (err.detail?.includes('email')) message = 'El email del administrador ya esta en uso'
+      else message = 'Error de duplicado: ' + (err.detail || err.constraint || '')
     }
     res.status(500).json({ error: message })
   } finally {
-    client.release()
+    if (client) client.release()
   }
 })
 
@@ -708,11 +701,26 @@ router.get('/subscriptions', authenticateAdmin, async (req, res) => {
 router.post('/tenants/:id/subscriptions', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params
-    const { plan_id, started_at, expires_at, payment_reference, notes } = req.body
+    const { plan_id, expires_at, payment_reference, notes, started_at } = req.body
 
     if (!plan_id || !expires_at) {
       return res.status(400).json({ error: 'plan_id y expires_at son requeridos' })
     }
+
+    // Resolve tenant timezone
+    const tenantTzRes = await query('SELECT zona_horaria FROM tenants WHERE id = $1', [id])
+    const tz = tenantTzRes.rows[0]?.zona_horaria || 'America/Mexico_City'
+
+    // expires_at arrives as a date string (YYYY-MM-DD from <input type="date">).
+    // Convert to 23:59:59.999 in the tenant's local timezone so it expires at
+    // end-of-day local time, not at midnight UTC.
+    const [yr, mo, dy] = expires_at.split('-').map(Number)
+    const expiresLocal = new Date(Date.UTC(yr, mo - 1, dy, 23, 59, 59, 999))
+    // Shift to account for the timezone offset so that 23:59:59 lands correctly
+    const tzOffsetMs = new Date(
+      new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false, day: 'numeric', month: 'numeric', year: 'numeric' }).format(expiresLocal)
+    ).getTime() - expiresLocal.getTime()
+    const expiresAtUtc = new Date(expiresLocal.getTime() - tzOffsetMs)
 
     // Expire any current active subscriptions for this tenant
     await query(
@@ -723,31 +731,36 @@ router.post('/tenants/:id/subscriptions', authenticateAdmin, async (req, res) =>
     const subRes = await query(
       `INSERT INTO subscriptions (tenant_id, plan_id, status, started_at, expires_at, payment_reference, notes, recorded_by)
        VALUES ($1,$2,'active',$3,$4,$5,$6,$7) RETURNING id`,
-      [id, plan_id, started_at || new Date(), expires_at, payment_reference, notes, req.admin.id]
+      [id, plan_id, started_at || new Date(), expiresAtUtc, payment_reference || null, notes || null, req.admin.id]
     )
 
     await query(
       `UPDATE tenants SET status = 'active', subscription_expires_at = $1, current_plan_id = $2, updated_at = now()
        WHERE id = $3`,
-      [expires_at, plan_id, id]
+      [expiresAtUtc, plan_id, id]
     )
 
     // Notify tenant
     const tenantRes = await query('SELECT contact_name, contact_email FROM tenants WHERE id = $1', [id])
     if (tenantRes.rows.length > 0) {
       const t = tenantRes.rows[0]
+      const formattedExpiry = new Intl.DateTimeFormat('es-MX', {
+        timeZone: tz, day: '2-digit', month: 'long', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      }).format(expiresAtUtc)
       await query(
         `INSERT INTO notifications_outbox (tenant_id, recipient_email, template_code, payload)
          VALUES ($1,$2,'subscription_activated',$3)`,
         [id, t.contact_email, JSON.stringify({
           contact_name: t.contact_name,
-          expires_at: new Date(expires_at).toLocaleDateString('es-MX'),
+          expires_at: formattedExpiry,
+          timezone: tz,
         })]
       )
     }
 
-    adminAudit(req.admin.id, 'ADD_SUBSCRIPTION', 'tenant', id, { plan_id, expires_at, payment_reference })
-    res.json({ success: true, subscription_id: subRes.rows[0].id })
+    adminAudit(req.admin.id, 'ADD_SUBSCRIPTION', 'tenant', id, { plan_id, expires_at: expiresAtUtc, payment_reference })
+    res.json({ success: true, subscription_id: subRes.rows[0].id, expires_at: expiresAtUtc, timezone: tz })
   } catch (err) {
     console.error('[admin/subscriptions]', err)
     res.status(500).json({ error: 'Error interno' })

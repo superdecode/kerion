@@ -69,10 +69,10 @@ export default function Historial() {
   const [newGuiaCode, setNewGuiaCode] = useState('')
   const [showFilters, setShowFilters] = useState(true)
   const { canDelete, canView, hasPermission, user, getPermissionLevel } = useAuthStore()
-  const canViewDetails = canView('dropscan.historial')           // ver+
-  const historialLevel = getPermissionLevel('dropscan.historial')
+  const canViewDetails = canView('dropscan.tarimas')           // ver+
+  const historialLevel = getPermissionLevel('dropscan.tarimas')
   const canManageStatus = user.rol_nombre === 'Administrador' || historialLevel === 'actualizar'  // ONLY actualizar role
-  const canExportHistorial = hasPermission('dropscan.historial', 'exportar') // actualizar+
+  const canExportHistorial = hasPermission('dropscan.tarimas', 'exportar') // actualizar+
   const toast = useToastStore.getState()
   const { t } = useI18nStore()
   const qc = useQueryClient()
@@ -137,7 +137,7 @@ export default function Historial() {
     setPage(1)
     setDetailTab('guias')
     setSelectedTarima(guia.tarima_id)
-    navigate(`/dropscan/historial?tarima_id=${guia.tarima_id}&highlight_guia=${encodeURIComponent(guia.codigo_guia)}`, { replace: true })
+    navigate(`/dropscan/tarimas?tarima_id=${guia.tarima_id}&highlight_guia=${encodeURIComponent(guia.codigo_guia)}`, { replace: true })
   }
 
   const copyGuia = (code) => {
@@ -297,7 +297,7 @@ export default function Historial() {
       ].join('\n')
       const blob = new Blob([csv], { type: 'text/csv' })
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a'); a.href = url; a.download = `historial_${getToday()}.csv`; a.click()
+      const a = document.createElement('a'); a.href = url; a.download = `tarimas_${getToday()}.csv`; a.click()
       toast.success(t('toast.success'))
     } catch { toast.error(t('toast.error')) }
   }
@@ -370,7 +370,7 @@ export default function Historial() {
       const ws = XLSX.utils.aoa_to_sheet(rows)
       ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 20 }, { wch: 20 }]
       XLSX.utils.book_append_sheet(wb, ws, 'Tarimas')
-      XLSX.writeFile(wb, `historial_${getToday()}.xlsx`)
+      XLSX.writeFile(wb, `tarimas_${getToday()}.xlsx`)
       toast.success('Exportación completada')
       setSelectMode(false)
       setSelectedIds(new Set())
@@ -696,7 +696,7 @@ export default function Historial() {
                                   <Pencil className="w-4 h-4" />
                                 </button>
                               )}
-                              {canDelete('dropscan.historial') && (
+                              {canDelete('dropscan.tarimas') && (
                                 <button
                                   onClick={() => row.folio_asignado ? setBlockedDeleteTarima(row) : setDeletingTarima(row)}
                                   className="p-2 rounded-xl hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all"

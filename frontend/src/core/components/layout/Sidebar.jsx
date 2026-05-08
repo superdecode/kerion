@@ -17,7 +17,7 @@ const getModuleNav = (t) => [
     items: [
       { path: '/dropscan', label: t('nav.dashboard'), icon: LayoutDashboard, permission: 'dropscan.dashboard' },
       { path: '/dropscan/escaneo', label: t('nav.scanning'), icon: ScanBarcode, permission: 'dropscan.escaneo' },
-      { path: '/dropscan/historial', label: t('nav.history'), icon: History, permission: 'dropscan.historial' },
+      { path: '/dropscan/tarimas', label: t('nav.tarimas'), icon: History, permission: 'dropscan.tarimas' },
       { path: '/dropscan/folios', label: t('nav.fep'), icon: FileText, permission: 'fep.folios' },
       { path: '/dropscan/reportes', label: t('nav.reports'), icon: BarChart3, permission: 'dropscan.reportes' },
       { path: '/dropscan/configuracion', label: t('nav.configuration'), icon: Settings, permission: 'dropscan.configuracion' },
