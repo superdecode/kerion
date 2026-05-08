@@ -85,7 +85,7 @@ router.get('/',
       const whereClause = where.length > 0 ? 'WHERE ' + where.join(' AND ') : ''
 
       // Count total
-      const countRes = await query(
+      const countRes = await req.tQuery(
         `SELECT COUNT(*) FROM tarimas t ${whereClause}`,
         params
       )
@@ -97,7 +97,7 @@ router.get('/',
       paramCount++
       params.push(offset)
 
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT t.id, t.codigo, t.estado, t.cantidad_guias,
                 t.fecha_inicio, t.fecha_cierre, t.tiempo_armado_segundos,
                 e.nombre as empresa_nombre, e.codigo as empresa_codigo,
@@ -153,7 +153,7 @@ router.get('/:id',
     try {
       const { id } = req.params
 
-      const tarimaRes = await query(
+      const tarimaRes = await req.tQuery(
         `SELECT t.*, e.nombre as empresa_nombre, e.codigo as empresa_codigo,
                 c.nombre as canal_nombre, c.codigo as canal_codigo,
                 COALESCE(ui.nombre, s.usuario_operador, u.nombre_completo) as operador_nombre, u.codigo as operador_codigo,
@@ -185,7 +185,7 @@ router.get('/:id',
         return res.status(404).json({ error: 'Tarima no encontrada' })
       }
 
-      const guiasRes = await query(
+      const guiasRes = await req.tQuery(
         `SELECT g.id, g.codigo_guia, g.posicion, g.timestamp_escaneo,
                 COALESCE(ui.nombre, g.usuario_operador, u.nombre_completo) as operador_nombre
          FROM guias g
@@ -196,7 +196,7 @@ router.get('/:id',
         [id]
       )
 
-      const duplicadosRes = await query(
+      const duplicadosRes = await req.tQuery(
         `SELECT COUNT(*) FROM alertas_duplicados WHERE tarima_id = $1`,
         [id]
       )
@@ -220,7 +220,7 @@ router.post('/:id/finalize',
   async (req, res) => {
     try {
       const { id } = req.params
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE tarimas SET estado = 'FINALIZADA', fecha_cierre = CURRENT_TIMESTAMP,
            tiempo_armado_segundos = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - fecha_inicio))::INTEGER
          WHERE id = $1 AND estado = 'EN_PROCESO' RETURNING *`,
@@ -244,7 +244,7 @@ router.post('/:id/cancel',
       const { id } = req.params
       const { razon } = req.body
       if (!razon || !razon.trim()) return res.status(400).json({ error: 'La razón de cancelación es requerida' })
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE tarimas SET estado = 'CANCELADA', fecha_cierre = CURRENT_TIMESTAMP, cancelada_razon = $1 WHERE id = $2 AND estado = 'EN_PROCESO' RETURNING *`,
         [razon.trim(), id]
       )
@@ -264,7 +264,7 @@ router.post('/:id/reopen',
   async (req, res) => {
     try {
       const { id } = req.params
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE tarimas SET estado = 'EN_PROCESO', fecha_cierre = NULL WHERE id = $1 AND estado = 'FINALIZADA' RETURNING *`,
         [id]
       )
@@ -287,7 +287,7 @@ router.post('/:id/adopt',
       const { id } = req.params
       const userId = req.user.id
 
-      const tarimaRes = await query(
+      const tarimaRes = await req.tQuery(
         `SELECT * FROM tarimas WHERE id = $1 AND estado = 'EN_PROCESO'`,
         [id]
       )
@@ -296,7 +296,7 @@ router.post('/:id/adopt',
       }
       const tarima = tarimaRes.rows[0]
 
-      const activeCountRes = await query(
+      const activeCountRes = await req.tQuery(
         'SELECT COUNT(*) AS count FROM sesiones_escaneo WHERE operador_id = $1 AND activa = true',
         [userId]
       )
@@ -305,7 +305,7 @@ router.post('/:id/adopt',
         return res.status(409).json({ error: 'Máximo 3 sesiones activas permitidas' })
       }
 
-      const existingSessionRes = await query(
+      const existingSessionRes = await req.tQuery(
         `SELECT * FROM sesiones_escaneo
          WHERE operador_id = $1 AND activa = true AND tarima_actual_id = $2
          ORDER BY fecha_inicio DESC
@@ -316,15 +316,15 @@ router.post('/:id/adopt',
       let sesion = existingSessionRes.rows[0] || null
 
       if (!sesion) {
-        const insertRes = await query(
-          `INSERT INTO sesiones_escaneo (operador_id, empresa_id, canal_id, tarima_actual_id, activa)
-           VALUES ($1, $2, $3, $4, true)
+        const insertRes = await req.tQuery(
+          `INSERT INTO sesiones_escaneo (operador_id, empresa_id, canal_id, tarima_actual_id, activa, tenant_id)
+           VALUES ($1, $2, $3, $4, true, $5)
            RETURNING *`,
-          [userId, tarima.empresa_id, tarima.canal_id, tarima.id]
+          [userId, tarima.empresa_id, tarima.canal_id, tarima.id, req.tenantId]
         )
         sesion = insertRes.rows[0]
       } else {
-        await query(
+        await req.tQuery(
           `UPDATE sesiones_escaneo
            SET empresa_id = $1, canal_id = $2, tarima_actual_id = $3
            WHERE id = $4`,
@@ -332,7 +332,7 @@ router.post('/:id/adopt',
         )
       }
 
-      const guiasRes = await query(
+      const guiasRes = await req.tQuery(
         `SELECT id, codigo_guia, posicion, timestamp_escaneo
          FROM guias
          WHERE tarima_id = $1
@@ -361,7 +361,7 @@ router.get('/:id/duplicados',
   async (req, res) => {
     try {
       const { id } = req.params
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT ad.id, ad.codigo_guia, ad.timestamp_alerta,
                 g.codigo_guia as guia_original_codigo, g.posicion as guia_original_posicion,
                 COALESCE(g.usuario_operador, u.nombre_completo) as operador_nombre
@@ -394,7 +394,7 @@ router.post('/:tarimaId/guias',
       }
 
       // Verify tarima exists
-      const tarimaRes = await query(
+      const tarimaRes = await req.tQuery(
         'SELECT id, cantidad_guias FROM tarimas WHERE id = $1',
         [tarimaId]
       )
@@ -403,7 +403,7 @@ router.post('/:tarimaId/guias',
       }
 
       // Check for duplicates
-      const dupRes = await query(
+      const dupRes = await req.tQuery(
         'SELECT id FROM guias WHERE tarima_id = $1 AND codigo_guia = $2',
         [tarimaId, codigo_guia]
       )
@@ -412,27 +412,27 @@ router.post('/:tarimaId/guias',
       }
 
       // Get next position
-      const posRes = await query(
+      const posRes = await req.tQuery(
         'SELECT MAX(CAST(posicion AS INTEGER)) as max_pos FROM guias WHERE tarima_id = $1',
         [tarimaId]
       )
       const nextPos = (parseInt(posRes.rows[0]?.max_pos || 0) || 0) + 1
 
       // Insert new guide
-      const guiaRes = await query(
-        `INSERT INTO guias (tarima_id, codigo_guia, posicion, operador_id, timestamp_escaneo)
-         VALUES ($1, $2, $3, $4, NOW())
+      const guiaRes = await req.tQuery(
+        `INSERT INTO guias (tarima_id, codigo_guia, posicion, operador_id, timestamp_escaneo, tenant_id)
+         VALUES ($1, $2, $3, $4, NOW(), $5)
          RETURNING id, codigo_guia, posicion, timestamp_escaneo, operador_id`,
-        [tarimaId, codigo_guia, nextPos, req.fullUser.id]
+        [tarimaId, codigo_guia, nextPos, req.fullUser.id, req.tenantId]
       )
       const newGuia = guiaRes.rows[0]
 
       // Update guide count (but don't touch fecha_cierre or tiempo_armado)
       const newCount = (parseInt(tarimaRes.rows[0].cantidad_guias) || 0) + 1
-      await query('UPDATE tarimas SET cantidad_guias = $1 WHERE id = $2', [newCount, tarimaId])
+      await req.tQuery('UPDATE tarimas SET cantidad_guias = $1 WHERE id = $2', [newCount, tarimaId])
 
       // Return new guide with operator name
-      const operRes = await query('SELECT nombre_completo FROM usuarios WHERE id = $1', [req.fullUser.id])
+      const operRes = await req.tQuery('SELECT nombre_completo FROM usuarios WHERE id = $1', [req.fullUser.id])
       const operadorNombre = operRes.rows[0]?.nombre_completo || req.fullUser.nombre_completo || 'Desconocido'
 
       res.json({
@@ -461,7 +461,7 @@ router.delete('/:tarimaId/guias/:guiaId',
     try {
       const { tarimaId, guiaId } = req.params
 
-      const guiaRes = await query(
+      const guiaRes = await req.tQuery(
         'SELECT id FROM guias WHERE id = $1 AND tarima_id = $2',
         [guiaId, tarimaId]
       )
@@ -469,11 +469,11 @@ router.delete('/:tarimaId/guias/:guiaId',
         return res.status(404).json({ error: 'Guía no encontrada en esta tarima' })
       }
 
-      await query('DELETE FROM guias WHERE id = $1', [guiaId])
+      await req.tQuery('DELETE FROM guias WHERE id = $1', [guiaId])
 
-      const countRes = await query('SELECT COUNT(*) as cnt FROM guias WHERE tarima_id = $1', [tarimaId])
+      const countRes = await req.tQuery('SELECT COUNT(*) as cnt FROM guias WHERE tarima_id = $1', [tarimaId])
       const newCount = parseInt(countRes.rows[0].cnt)
-      await query('UPDATE tarimas SET cantidad_guias = $1 WHERE id = $2', [newCount, tarimaId])
+      await req.tQuery('UPDATE tarimas SET cantidad_guias = $1 WHERE id = $2', [newCount, tarimaId])
 
       res.json({ success: true, cantidad_guias: newCount })
     } catch (error) {
@@ -491,13 +491,13 @@ router.delete('/:id',
     try {
       const { id } = req.params
 
-      const tarimaRes = await query('SELECT * FROM tarimas WHERE id = $1', [id])
+      const tarimaRes = await req.tQuery('SELECT * FROM tarimas WHERE id = $1', [id])
       if (tarimaRes.rows.length === 0) {
         return res.status(404).json({ error: 'Tarima no encontrada' })
       }
 
       // Cascade deletes guias and alertas
-      await query('DELETE FROM tarimas WHERE id = $1', [id])
+      await req.tQuery('DELETE FROM tarimas WHERE id = $1', [id])
       res.json({ success: true, message: 'Tarima eliminada' })
     } catch (error) {
       console.error('Delete tarima error:', error)

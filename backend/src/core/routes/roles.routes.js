@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { query } from '../../config/database.js'
 import { authenticateToken, loadFullUser, auditLog } from '../../shared/middleware/auth.js'
 import { requirePermission } from '../../shared/middleware/permissions.js'
 
@@ -11,7 +10,7 @@ router.get('/',
   requirePermission('global.administracion', 'ver'),
   async (req, res) => {
     try {
-      const result = await query('SELECT * FROM roles WHERE activo = true ORDER BY id')
+      const result = await req.tQuery('SELECT * FROM roles WHERE activo = true ORDER BY id')
       res.json({ roles: result.rows })
     } catch (error) {
       console.error('Get roles error:', error)
@@ -31,10 +30,10 @@ router.post('/',
         return res.status(400).json({ error: 'Nombre y permisos son requeridos' })
       }
 
-      const result = await query(
-        `INSERT INTO roles (nombre, descripcion, permisos)
-         VALUES ($1, $2, $3) RETURNING *`,
-        [nombre, descripcion, JSON.stringify(permisos)]
+      const result = await req.tQuery(
+        `INSERT INTO roles (nombre, descripcion, permisos, tenant_id)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [nombre, descripcion, JSON.stringify(permisos), req.tenantId]
       )
 
       const created = result.rows[0]
@@ -59,7 +58,7 @@ router.put('/:id',
       const { id } = req.params
       const { nombre, descripcion, permisos } = req.body
 
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE roles SET nombre = $1, descripcion = $2, permisos = $3
          WHERE id = $4 RETURNING *`,
         [nombre, descripcion, JSON.stringify(permisos), id]
@@ -86,12 +85,12 @@ router.post('/:id/duplicate',
   async (req, res) => {
     try {
       const { id } = req.params
-      const sourceRole = await query('SELECT * FROM roles WHERE id = $1', [id])
+      const sourceRole = await req.tQuery('SELECT * FROM roles WHERE id = $1', [id])
       if (sourceRole.rows.length === 0) return res.status(404).json({ error: 'Rol no encontrado' })
       const source = sourceRole.rows[0]
-      const result = await query(
-        `INSERT INTO roles (nombre, descripcion, permisos) VALUES ($1, $2, $3) RETURNING *`,
-        [`${source.nombre} (copia)`, source.descripcion, JSON.stringify(source.permisos)]
+      const result = await req.tQuery(
+        `INSERT INTO roles (nombre, descripcion, permisos, tenant_id) VALUES ($1, $2, $3, $4) RETURNING *`,
+        [`${source.nombre} (copia)`, source.descripcion, JSON.stringify(source.permisos), req.tenantId]
       )
       const duplicated = result.rows[0]
       auditLog(req, 'ROLE_DUPLICATE', 'rol', duplicated.id, { source_id: parseInt(id), nombre: duplicated.nombre })
@@ -113,12 +112,12 @@ router.delete('/:id',
       const { id } = req.params
 
       // Check no users assigned
-      const usersRes = await query('SELECT COUNT(*) FROM usuarios WHERE rol_id = $1 AND estado = $2', [id, 'ACTIVO'])
+      const usersRes = await req.tQuery('SELECT COUNT(*) FROM usuarios WHERE rol_id = $1 AND estado = $2', [id, 'ACTIVO'])
       if (parseInt(usersRes.rows[0].count) > 0) {
         return res.status(409).json({ error: 'No se puede eliminar un rol con usuarios asignados' })
       }
 
-      await query('UPDATE roles SET activo = false WHERE id = $1', [id])
+      await req.tQuery('UPDATE roles SET activo = false WHERE id = $1', [id])
       auditLog(req, 'ROLE_DELETE', 'rol', parseInt(id), null)
       res.json({ success: true, message: 'Rol eliminado' })
     } catch (error) {

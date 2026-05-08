@@ -46,10 +46,10 @@ async function logEvent(evento, usuarioInternoId, usuarioInternoNombre, req, det
     const userId = req.user?.id || null
     const userEmail = req.user?.email || null
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || null
-    await query(
-      `INSERT INTO logs_usuarios_internos (evento, usuario_interno_id, usuario_interno_nombre, usuario_sistema_id, usuario_sistema_email, detalles, ip_address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [evento, usuarioInternoId, usuarioInternoNombre, userId, userEmail, detalles ? JSON.stringify(detalles) : null, ip]
+    await req.tQuery(
+      `INSERT INTO logs_usuarios_internos (evento, usuario_interno_id, usuario_interno_nombre, usuario_sistema_id, usuario_sistema_email, detalles, ip_address, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [evento, usuarioInternoId, usuarioInternoNombre, userId, userEmail, detalles ? JSON.stringify(detalles) : null, ip, req.tenantId]
     )
   } catch (err) {
     console.error('Log event error (non-blocking):', err.message)
@@ -62,7 +62,7 @@ router.get('/',
   requirePermission('dropscan.escaneo', 'ver'),
   async (req, res) => {
     try {
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT id, nombre, activo, created_at, updated_at
          FROM usuarios_internos
          WHERE eliminado = false
@@ -82,7 +82,7 @@ router.get('/activos',
   requirePermission('dropscan.escaneo', 'ver'),
   async (req, res) => {
     try {
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT id, nombre
          FROM usuarios_internos
          WHERE activo = true AND eliminado = false
@@ -118,7 +118,7 @@ router.post('/',
       }
 
       // Check unique nombre
-      const existingName = await query(
+      const existingName = await req.tQuery(
         'SELECT id FROM usuarios_internos WHERE LOWER(nombre) = LOWER($1) AND eliminado = false',
         [nombre.trim()]
       )
@@ -127,7 +127,7 @@ router.post('/',
       }
 
       // Check unique PIN (compare hashes — we need to check all active users)
-      const allUsers = await query(
+      const allUsers = await req.tQuery(
         'SELECT id, pin_hash FROM usuarios_internos WHERE eliminado = false'
       )
       for (const u of allUsers.rows) {
@@ -138,11 +138,11 @@ router.post('/',
 
       // Hash PIN and create
       const pin_hash = await bcrypt.hash(pin, SALT_ROUNDS)
-      const result = await query(
-        `INSERT INTO usuarios_internos (nombre, pin_hash, activo, created_by)
-         VALUES ($1, $2, $3, $4)
+      const result = await req.tQuery(
+        `INSERT INTO usuarios_internos (nombre, pin_hash, activo, created_by, tenant_id)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING id, nombre, activo, created_at, updated_at`,
-        [nombre.trim(), pin_hash, activo !== false, req.user.id]
+        [nombre.trim(), pin_hash, activo !== false, req.user.id, req.tenantId]
       )
 
       await logEvent('USUARIO_CREADO', result.rows[0].id, nombre.trim(), req)
@@ -171,7 +171,7 @@ router.put('/:id',
           return res.status(400).json({ error: 'El nombre debe tener entre 3 y 50 caracteres' })
         }
         // Check unique nombre (excluding self)
-        const existingName = await query(
+        const existingName = await req.tQuery(
           'SELECT id FROM usuarios_internos WHERE LOWER(nombre) = LOWER($1) AND eliminado = false AND id != $2',
           [nombre.trim(), id]
         )
@@ -193,7 +193,7 @@ router.put('/:id',
       }
 
       values.push(id)
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE usuarios_internos SET ${fields.join(', ')}
          WHERE id = $${idx} AND eliminado = false
          RETURNING id, nombre, activo, created_at, updated_at`,
@@ -231,7 +231,7 @@ router.put('/:id/pin',
       }
 
       // Get current user
-      const current = await query(
+      const current = await req.tQuery(
         'SELECT id, nombre, pin_hash FROM usuarios_internos WHERE id = $1 AND eliminado = false',
         [id]
       )
@@ -245,7 +245,7 @@ router.put('/:id/pin',
       }
 
       // Check unique PIN
-      const allUsers = await query(
+      const allUsers = await req.tQuery(
         'SELECT id, pin_hash FROM usuarios_internos WHERE eliminado = false AND id != $1',
         [id]
       )
@@ -256,7 +256,7 @@ router.put('/:id/pin',
       }
 
       const pin_hash = await bcrypt.hash(pin, SALT_ROUNDS)
-      await query(
+      await req.tQuery(
         'UPDATE usuarios_internos SET pin_hash = $1, updated_by = $2 WHERE id = $3',
         [pin_hash, req.user.id, id]
       )
@@ -278,7 +278,7 @@ router.delete('/:id',
     try {
       const { id } = req.params
 
-      const current = await query(
+      const current = await req.tQuery(
         'SELECT id, nombre FROM usuarios_internos WHERE id = $1 AND eliminado = false',
         [id]
       )
@@ -287,7 +287,7 @@ router.delete('/:id',
       }
 
       // Check if there are any scan records associated
-      const scanRecords = await query(
+      const scanRecords = await req.tQuery(
         'SELECT COUNT(*) FROM sesiones_escaneo WHERE usuario_interno_id = $1',
         [id]
       )
@@ -295,7 +295,7 @@ router.delete('/:id',
 
       if (hasScans) {
         // Soft delete: mark as eliminado + deactivate
-        await query(
+        await req.tQuery(
           'UPDATE usuarios_internos SET eliminado = true, activo = false, updated_by = $1 WHERE id = $2',
           [req.user.id, id]
         )
@@ -304,8 +304,8 @@ router.delete('/:id',
         // Hard delete: no scan records, safe to remove
         // Log before deleting to avoid FK issues, then clean up
         await logEvent('USUARIO_ELIMINADO', null, current.rows[0].nombre, req, { soft: false, original_id: parseInt(id) })
-        await query('DELETE FROM logs_usuarios_internos WHERE usuario_interno_id = $1', [id])
-        await query('DELETE FROM usuarios_internos WHERE id = $1', [id])
+        await req.tQuery('DELETE FROM logs_usuarios_internos WHERE usuario_interno_id = $1', [id])
+        await req.tQuery('DELETE FROM usuarios_internos WHERE id = $1', [id])
       }
 
       await auditLog(req, 'delete_operador_interno', 'usuarios_internos', parseInt(id), { nombre: current.rows[0].nombre })
@@ -344,7 +344,7 @@ router.post('/validar-pin',
       }
 
       // Get operator
-      const result = await query(
+      const result = await req.tQuery(
         'SELECT id, nombre, pin_hash, activo FROM usuarios_internos WHERE id = $1 AND eliminado = false',
         [usuario_interno_id]
       )

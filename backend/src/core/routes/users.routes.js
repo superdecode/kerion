@@ -1,6 +1,5 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
-import { query } from '../../config/database.js'
 import { authenticateToken, loadFullUser, auditLog } from '../../shared/middleware/auth.js'
 import { requirePermission } from '../../shared/middleware/permissions.js'
 
@@ -12,7 +11,7 @@ router.get('/',
   requirePermission('global.administracion', 'ver'),
   async (req, res) => {
     try {
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id, u.estado,
                 u.avatar_url, u.ultimo_acceso, u.created_at,
                 r.nombre as rol_nombre
@@ -46,11 +45,11 @@ router.post('/',
 
       const passwordHash = await bcrypt.hash(password, 10)
 
-      const result = await query(
-        `INSERT INTO usuarios (codigo, nombre_completo, email, password_hash, rol_id, estado)
-         VALUES ($1, $2, $3, $4, $5, $6)
+      const result = await req.tQuery(
+        `INSERT INTO usuarios (codigo, nombre_completo, email, password_hash, rol_id, estado, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, codigo, nombre_completo, email, rol_id, estado`,
-        [codigo, nombre_completo, email.toLowerCase().trim(), passwordHash, rol_id || null, estado || 'ACTIVO']
+        [codigo, nombre_completo, email.toLowerCase().trim(), passwordHash, rol_id || null, estado || 'ACTIVO', req.tenantId]
       )
 
       const created = result.rows[0]
@@ -87,7 +86,7 @@ router.put('/:id',
         params.push(id)
       }
 
-      const result = await query(updateQuery, params)
+      const result = await req.tQuery(updateQuery, params)
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Usuario no encontrado' })
@@ -115,7 +114,7 @@ router.post('/:id/reset-password',
         return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' })
       }
       const passwordHash = await bcrypt.hash(password, 10)
-      const result = await query(
+      const result = await req.tQuery(
         'UPDATE usuarios SET password_hash = $1 WHERE id = $2 RETURNING id, nombre_completo',
         [passwordHash, id]
       )
@@ -141,7 +140,7 @@ router.delete('/:id',
         return res.status(400).json({ error: 'No puedes desactivar tu propio usuario' })
       }
 
-      await query(`UPDATE usuarios SET estado = 'INACTIVO' WHERE id = $1`, [id])
+      await req.tQuery(`UPDATE usuarios SET estado = 'INACTIVO' WHERE id = $1`, [id])
       auditLog(req, 'USER_DEACTIVATE', 'usuario', parseInt(id), null)
       res.json({ success: true, message: 'Usuario desactivado' })
     } catch (error) {

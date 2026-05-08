@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
-import { query } from '../../config/database.js'
+import { query, tenantQuery } from '../../config/database.js'
 
 const ALGORITHM = 'aes-256-cbc'
 
@@ -27,8 +27,8 @@ export function decrypt(stored) {
   return decrypted.toString('utf8')
 }
 
-export async function loadCredentials() {
-  const res = await query(
+export async function loadCredentials(tenantId) {
+  const res = await tenantQuery(tenantId,
     'SELECT * FROM wms_credentials WHERE is_active = true ORDER BY id DESC LIMIT 1'
   )
   if (res.rows.length === 0) return null
@@ -41,22 +41,22 @@ export async function loadCredentials() {
   }
 }
 
-export async function saveCredentials({ app_key, app_secret, base_url }) {
+export async function saveCredentials(tenantId, { app_key, app_secret, base_url }) {
   const encrypted = encrypt(app_secret)
   const baseUrl = base_url || 'https://api.xlwms.com/openapi/v1'
-  const existing = await query('SELECT id FROM wms_credentials LIMIT 1')
+  const existing = await tenantQuery(tenantId, 'SELECT id FROM wms_credentials LIMIT 1')
   if (existing.rows.length > 0) {
-    await query(
+    await tenantQuery(tenantId,
       `UPDATE wms_credentials
        SET app_key = $1, app_secret_encrypted = $2, base_url = $3, updated_at = now()
        WHERE id = $4`,
       [app_key, encrypted, baseUrl, existing.rows[0].id]
     )
   } else {
-    await query(
-      `INSERT INTO wms_credentials (app_key, app_secret_encrypted, base_url)
-       VALUES ($1, $2, $3)`,
-      [app_key, encrypted, baseUrl]
+    await tenantQuery(tenantId,
+      `INSERT INTO wms_credentials (app_key, app_secret_encrypted, base_url, tenant_id)
+       VALUES ($1, $2, $3, $4)`,
+      [app_key, encrypted, baseUrl, tenantId]
     )
   }
 }

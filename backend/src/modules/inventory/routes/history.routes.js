@@ -50,7 +50,7 @@ router.get('/',
       const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
       const [dataRes, countRes] = await Promise.all([
-        query(
+        req.tQuery(
           `SELECT s.*, sess.origin_location, u.nombre_completo as user_name
            FROM inventory_scans s
            JOIN inventory_sessions sess ON s.session_id = sess.id
@@ -60,7 +60,7 @@ router.get('/',
            LIMIT $${idx++} OFFSET $${idx++}`,
           [...params, parseInt(limit), offset]
         ),
-        query(
+        req.tQuery(
           `SELECT COUNT(*) as total FROM inventory_scans s ${where}`,
           params
         ),
@@ -102,7 +102,7 @@ router.get('/reports',
       const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
       const [kpiRes, byStatusRes, byDayRes, topScannedRes] = await Promise.all([
-        query(
+        req.tQuery(
           `SELECT
              COUNT(*) as total_scans,
              COUNT(CASE WHEN status = 'OK' THEN 1 END) as ok_count,
@@ -113,20 +113,20 @@ router.get('/reports',
            FROM inventory_scans ${where}`,
           params
         ),
-        query(
+        req.tQuery(
           `SELECT status, COUNT(*) as count
            FROM inventory_scans ${where}
            GROUP BY status`,
           params
         ),
-        query(
+        req.tQuery(
           `SELECT DATE(created_at) as day, status, COUNT(*) as count
            FROM inventory_scans ${where}
            GROUP BY DATE(created_at), status
            ORDER BY day`,
           params
         ),
-        query(
+        req.tQuery(
           `SELECT barcode, product_name, sku, COUNT(*) as scan_count, MAX(status) as last_status
            FROM inventory_scans ${where}
            GROUP BY barcode, product_name, sku

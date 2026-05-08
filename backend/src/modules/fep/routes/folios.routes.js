@@ -29,10 +29,10 @@ async function recalcTotals(client, folioId) {
   )
 }
 
-async function logAction(client, folioId, accion, detalle, usuarioId) {
+async function logAction(client, folioId, accion, detalle, usuarioId, tenantId) {
   await client.query(
-    `INSERT INTO folios_entrega_log (folio_id, accion, detalle, usuario_id) VALUES ($1,$2,$3,$4)`,
-    [folioId, accion, JSON.stringify(detalle), usuarioId]
+    `INSERT INTO folios_entrega_log (folio_id, accion, detalle, usuario_id, tenant_id) VALUES ($1,$2,$3,$4,$5)`,
+    [folioId, accion, JSON.stringify(detalle), usuarioId, tenantId]
   )
 }
 
@@ -43,7 +43,7 @@ router.get('/stats/hoy',
   async (req, res) => {
     try {
       const todayDate = getToday(TZ)
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT
            COUNT(*) FILTER (WHERE estado = 'ACTIVO')     AS activos,
            COUNT(*) FILTER (WHERE estado = 'CANCELADO')  AS cancelados,
@@ -103,13 +103,13 @@ router.get('/preview-tarimas',
           WHERE fet.tarima_id = t.id AND fet.eliminado_en IS NULL AND fe.estado = 'ACTIVO'
         )`
 
-      const countRes = await query(`SELECT COUNT(*) FROM tarimas t ${whereClause}`, params)
+      const countRes = await req.tQuery(`SELECT COUNT(*) FROM tarimas t ${whereClause}`, params)
       const total = parseInt(countRes.rows[0].count)
 
       pc++; params.push(safeLimit)
       pc++; params.push(offset)
 
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT t.id, t.codigo, t.estado, t.cantidad_guias,
                 t.fecha_inicio, t.fecha_cierre,
                 e.nombre AS empresa_nombre, e.codigo AS empresa_codigo,
@@ -184,7 +184,7 @@ router.get('/',
 
       const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : ''
 
-      const countRes = await query(
+      const countRes = await req.tQuery(
         `SELECT COUNT(*) FROM folios_entrega fe JOIN configuraciones e ON e.id = fe.empresa_id ${whereClause}`,
         params
       )
@@ -193,7 +193,7 @@ router.get('/',
       pc++; params.push(safeLimit)
       pc++; params.push(offset)
 
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT fe.id, fe.folio_numero, fe.estado, fe.canales,
                 fe.total_tarimas, fe.total_guias, fe.created_at, fe.hora_fin,
                 fe.fecha_tarimas_desde, fe.fecha_tarimas_hasta, fe.estatus_tarima_filtro,
@@ -229,10 +229,8 @@ router.post('/',
     if (!empresa_id) return res.status(400).json({ error: 'empresa_id requerido' })
     if (!tarima_ids?.length) return res.status(400).json({ error: 'Se requiere al menos una tarima' })
 
-    const client = await getClient()
+    const client = await req.tGetClient()
     try {
-      await client.query('BEGIN')
-
       // Atomic folio number generation
       const seqRes = await client.query(`SELECT nextval('fep_folio_seq') AS n`)
       const n = seqRes.rows[0].n
@@ -270,18 +268,18 @@ router.post('/',
       // Insert tarima associations
       for (const tid of tarima_ids) {
         await client.query(
-          `INSERT INTO folios_entrega_tarimas (folio_id, tarima_id, agregado_por) VALUES ($1,$2,$3)`,
-          [folio.id, tid, req.fullUser.id]
+          `INSERT INTO folios_entrega_tarimas (folio_id, tarima_id, agregado_por, tenant_id) VALUES ($1,$2,$3,$4)`,
+          [folio.id, tid, req.fullUser.id, req.tenantId]
         )
       }
 
       await recalcTotals(client, folio.id)
-      await logAction(client, folio.id, 'CREACION', { tarima_ids }, req.fullUser.id)
+      await logAction(client, folio.id, 'CREACION', { tarima_ids }, req.fullUser.id, req.tenantId)
 
       await client.query('COMMIT')
 
       // Return full folio with updated totals
-      const fullRes = await query(
+      const fullRes = await req.tQuery(
         `SELECT fe.*, e.nombre AS empresa_nombre, u.nombre_completo AS creado_por_nombre
          FROM folios_entrega fe
          JOIN configuraciones e ON e.id = fe.empresa_id
@@ -308,7 +306,7 @@ router.get('/:id',
     try {
       const { id } = req.params
 
-      const folioRes = await query(
+      const folioRes = await req.tQuery(
         `SELECT fe.*, e.nombre AS empresa_nombre, e.codigo AS empresa_codigo,
                 u.nombre_completo AS creado_por_nombre
          FROM folios_entrega fe
@@ -320,7 +318,7 @@ router.get('/:id',
       if (!folioRes.rows.length) return res.status(404).json({ error: 'Folio no encontrado' })
       const folio = folioRes.rows[0]
 
-      const tarimasRes = await query(
+      const tarimasRes = await req.tQuery(
         `SELECT t.id, t.codigo, t.estado, t.cantidad_guias, t.fecha_inicio, t.fecha_cierre,
                 c.nombre AS canal_nombre, c.id AS canal_id,
                 fet.agregado_en, fet.eliminado_en
@@ -332,7 +330,7 @@ router.get('/:id',
         [id]
       )
 
-      const guiasRes = await query(
+      const guiasRes = await req.tQuery(
         `SELECT g.codigo_guia, g.posicion, g.timestamp_escaneo, t.codigo AS tarima_codigo,
                 c.nombre AS canal_nombre
          FROM folios_entrega_tarimas fet
@@ -360,9 +358,9 @@ router.patch('/:id',
     const { id } = req.params
     const { agregar_tarimas = [], eliminar_tarimas = [] } = req.body
 
-    const client = await getClient()
+    const client = await req.tGetClient()
     try {
-      await client.query('BEGIN')
+      // BEGIN is already active via tGetClient
 
       const folioRes = await client.query(`SELECT * FROM folios_entrega WHERE id = $1 FOR UPDATE`, [id])
       if (!folioRes.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Folio no encontrado' }) }
@@ -401,22 +399,22 @@ router.patch('/:id',
 
         for (const tid of agregar_tarimas) {
           await client.query(
-            `INSERT INTO folios_entrega_tarimas (folio_id, tarima_id, agregado_por)
-             VALUES ($1,$2,$3)
+            `INSERT INTO folios_entrega_tarimas (folio_id, tarima_id, agregado_por, tenant_id)
+             VALUES ($1,$2,$3,$4)
              ON CONFLICT (folio_id, tarima_id) DO UPDATE
                SET eliminado_en = NULL, eliminado_por = NULL, agregado_en = now(), agregado_por = $3`,
-            [id, tid, req.fullUser.id]
+            [id, tid, req.fullUser.id, req.tenantId]
           )
         }
       }
 
       await recalcTotals(client, id)
       await logAction(client, id, 'EDICION',
-        { agregar_tarimas, eliminar_tarimas }, req.fullUser.id)
+        { agregar_tarimas, eliminar_tarimas }, req.fullUser.id, req.tenantId)
 
       await client.query('COMMIT')
 
-      const fullRes = await query(
+      const fullRes = await req.tQuery(
         `SELECT fe.*, e.nombre AS empresa_nombre FROM folios_entrega fe
          JOIN configuraciones e ON e.id = fe.empresa_id WHERE fe.id = $1`,
         [id]
@@ -440,10 +438,8 @@ router.post('/:id/cancelar',
     const { id } = req.params
     const { motivo } = req.body
 
-    const client = await getClient()
+    const client = await req.tGetClient()
     try {
-      await client.query('BEGIN')
-
       const folioRes = await client.query(`SELECT * FROM folios_entrega WHERE id = $1 FOR UPDATE`, [id])
       if (!folioRes.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Folio no encontrado' }) }
       const folio = folioRes.rows[0]
@@ -455,7 +451,7 @@ router.post('/:id/cancelar',
         `UPDATE folios_entrega SET estado = 'CANCELADO', motivo_cancelacion = $1, hora_fin = now(), updated_at = now() WHERE id = $2`,
         [motivo || null, id]
       )
-      await logAction(client, id, 'CANCELACION', { motivo }, req.fullUser.id)
+      await logAction(client, id, 'CANCELACION', { motivo }, req.fullUser.id, req.tenantId)
 
       await client.query('COMMIT')
       res.json({ success: true })
@@ -475,10 +471,8 @@ router.delete('/:id',
   requirePermission('fep.folios', 'eliminar'),
   async (req, res) => {
     const { id } = req.params
-    const client = await getClient()
+    const client = await req.tGetClient()
     try {
-      await client.query('BEGIN')
-
       const folioRes = await client.query(`SELECT * FROM folios_entrega WHERE id = $1 FOR UPDATE`, [id])
       if (!folioRes.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Folio no encontrado' }) }
       const folio = folioRes.rows[0]
@@ -494,7 +488,7 @@ router.delete('/:id',
         return res.status(403).json({ error: 'Estado no permite eliminación' })
       }
 
-      await logAction(client, id, 'ELIMINACION', { folio_numero: folio.folio_numero }, req.fullUser.id)
+      await logAction(client, id, 'ELIMINACION', { folio_numero: folio.folio_numero }, req.fullUser.id, req.tenantId)
       await client.query(`DELETE FROM folios_entrega WHERE id = $1`, [id])
 
       await client.query('COMMIT')
@@ -515,7 +509,7 @@ router.get('/:id/log',
   requirePermission('fep.folios', 'ver'),
   async (req, res) => {
     try {
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT l.id, l.accion, l.detalle, l.timestamp, u.nombre_completo AS usuario_nombre
          FROM folios_entrega_log l
          LEFT JOIN usuarios u ON u.id = l.usuario_id
@@ -539,7 +533,7 @@ router.get('/:id/pdf',
     try {
       const { id } = req.params
 
-      const folioRes = await query(
+      const folioRes = await req.tQuery(
         `SELECT fe.*, e.nombre AS empresa_nombre, e.codigo AS empresa_codigo,
                 u.nombre_completo AS creado_por_nombre
          FROM folios_entrega fe
@@ -551,7 +545,7 @@ router.get('/:id/pdf',
       if (!folioRes.rows.length) return res.status(404).json({ error: 'Folio no encontrado' })
       const folio = folioRes.rows[0]
 
-      const guiasRes = await query(
+      const guiasRes = await req.tQuery(
         `SELECT g.codigo_guia, g.posicion, g.timestamp_escaneo,
                 t.codigo AS tarima_codigo, c.nombre AS canal_nombre
          FROM folios_entrega_tarimas fet
@@ -563,7 +557,7 @@ router.get('/:id/pdf',
         [id]
       )
 
-      const tarimasRes = await query(
+      const tarimasRes = await req.tQuery(
         `SELECT COUNT(*) AS total FROM folios_entrega_tarimas WHERE folio_id = $1 AND eliminado_en IS NULL`,
         [id]
       )

@@ -3,7 +3,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import env from './config/env.js'
-import { query } from './config/database.js'
+import { query, tenantDB } from './config/database.js'
 
 // Core routes
 import authRoutes from './core/routes/auth.routes.js'
@@ -81,31 +81,32 @@ app.use('/api/auth/login', loginLimiter)
 app.use('/api/auth', authRoutes)
 
 // All tenant-scoped routes — apply tenantContext first
-app.use('/api/users', tenantContext, usersRoutes)
-app.use('/api/roles', tenantContext, rolesRoutes)
-app.use('/api/config', tenantContext, configRoutes)
-app.use('/api/setup', tenantContext, setupRoutes)
-app.use('/api/wms', tenantContext, wmsRoutes)
+app.use('/api/users', tenantContext, tenantDB, usersRoutes)
+app.use('/api/roles', tenantContext, tenantDB, rolesRoutes)
+app.use('/api/config', tenantContext, tenantDB, configRoutes)
+app.use('/api/setup', tenantContext, tenantDB, setupRoutes)
+app.use('/api/wms', tenantContext, tenantDB, wmsRoutes)
 
 // DropScan — require dropscan module access
-app.use('/api/dropscan', tenantContext, moduleGuard('dropscan'), scanRoutes)
-app.use('/api/dropscan/tarimas', tenantContext, moduleGuard('dropscan'), tarimasRoutes)
-app.use('/api/dropscan/dashboard', tenantContext, moduleGuard('dropscan'), dashboardRoutes)
-app.use('/api/dropscan/config', tenantContext, moduleGuard('dropscan'), dropscanConfigRoutes)
-app.use('/api/dropscan/operadores', tenantContext, moduleGuard('dropscan'), operadoresRoutes)
+app.use('/api/dropscan', tenantContext, tenantDB, moduleGuard('dropscan'), scanRoutes)
+app.use('/api/dropscan/tarimas', tenantContext, tenantDB, moduleGuard('dropscan'), tarimasRoutes)
+app.use('/api/dropscan/dashboard', tenantContext, tenantDB, moduleGuard('dropscan'), dashboardRoutes)
+app.use('/api/dropscan/config', tenantContext, tenantDB, moduleGuard('dropscan'), dropscanConfigRoutes)
+app.use('/api/dropscan/operadores', tenantContext, tenantDB, moduleGuard('dropscan'), operadoresRoutes)
 
 // Inventory — require inventory module (not in MVP plans, returns 403 for trial/basic)
-app.use('/api/inventory', tenantContext, moduleGuard('inventory'), invScanRoutes)
-app.use('/api/inventory', tenantContext, moduleGuard('inventory'), invHistoryRoutes)
+app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventory'), invScanRoutes)
+app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventory'), invHistoryRoutes)
 
 // FEP — require dropscan module (FEP is part of dropscan)
-app.use('/api/fep/folios', tenantContext, moduleGuard('dropscan'), fepFoliosRoutes)
+app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)
 
 // Auto-apply pending migrations (idempotent — each step is independent)
 async function runMigrations() {
   const steps = [
     `CREATE TABLE IF NOT EXISTS usuarios_internos (
        id SERIAL PRIMARY KEY,
+       tenant_id UUID REFERENCES tenants(id),
        nombre VARCHAR(50) NOT NULL,
        pin_hash VARCHAR(255) NOT NULL,
        activo BOOLEAN DEFAULT true,
@@ -115,12 +116,13 @@ async function runMigrations() {
        created_by INTEGER REFERENCES usuarios(id),
        updated_by INTEGER REFERENCES usuarios(id)
      )`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_internos_nombre
-       ON usuarios_internos(nombre) WHERE eliminado = false`,
-    `CREATE INDEX IF NOT EXISTS idx_usuarios_internos_activo
-       ON usuarios_internos(activo) WHERE eliminado = false`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_internos_nombre_tenant
+       ON usuarios_internos(tenant_id, nombre) WHERE eliminado = false`,
+    `CREATE INDEX IF NOT EXISTS idx_usuarios_internos_activo ON usuarios_internos(activo) WHERE eliminado = false`,
+    `CREATE INDEX IF NOT EXISTS idx_usuarios_internos_tenant ON usuarios_internos(tenant_id)`,
     `CREATE TABLE IF NOT EXISTS logs_usuarios_internos (
        id SERIAL PRIMARY KEY,
+       tenant_id UUID REFERENCES tenants(id),
        evento VARCHAR(50) NOT NULL,
        usuario_interno_id INTEGER REFERENCES usuarios_internos(id) ON DELETE SET NULL,
        usuario_interno_nombre VARCHAR(50),
@@ -133,6 +135,7 @@ async function runMigrations() {
     `CREATE INDEX IF NOT EXISTS idx_logs_ui_evento ON logs_usuarios_internos(evento)`,
     `CREATE INDEX IF NOT EXISTS idx_logs_ui_usuario ON logs_usuarios_internos(usuario_interno_id)`,
     `CREATE INDEX IF NOT EXISTS idx_logs_ui_created ON logs_usuarios_internos(created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_logs_ui_tenant ON logs_usuarios_internos(tenant_id)`,
     `ALTER TABLE sesiones_escaneo ADD COLUMN IF NOT EXISTS usuario_operador VARCHAR(100)`,
     `ALTER TABLE sesiones_escaneo ADD COLUMN IF NOT EXISTS usuario_interno_id INTEGER REFERENCES usuarios_internos(id)`,
     `ALTER TABLE sesiones_escaneo ADD COLUMN IF NOT EXISTS nivel_usuario VARCHAR(30)`,

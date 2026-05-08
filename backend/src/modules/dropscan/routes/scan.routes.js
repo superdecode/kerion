@@ -81,10 +81,10 @@ router.post('/sessions/start',
         const tarimaCodigo = await generateTarimaCodigo(client)
         try {
           const tarimaRes = await client.query(
-            `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio)
-             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
+             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5)
              RETURNING *`,
-            [tarimaCodigo, empId, canId, userId]
+            [tarimaCodigo, empId, canId, userId, req.tenantId]
           )
           tarima = tarimaRes.rows[0]
           break
@@ -96,10 +96,10 @@ router.post('/sessions/start',
 
       // Create session
       const sesionRes = await client.query(
-        `INSERT INTO sesiones_escaneo (operador_id, empresa_id, canal_id, tarima_actual_id)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO sesiones_escaneo (operador_id, empresa_id, canal_id, tarima_actual_id, tenant_id)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [userId, empId, canId, tarima.id]
+        [userId, empId, canId, tarima.id, req.tenantId]
       )
       const sesion = sesionRes.rows[0]
 
@@ -307,9 +307,9 @@ router.post('/sessions/:id/scan',
       if (dupInTarima.rows.length > 0) {
         const origLocal = dupInTarima.rows[0]
         await client.query(
-          `INSERT INTO alertas_duplicados (codigo_guia, tarima_id, operador_id, guia_original_id, tarima_original_id)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [code, tarima.id, userId, origLocal.id, tarima.id]
+          `INSERT INTO alertas_duplicados (codigo_guia, tarima_id, operador_id, guia_original_id, tarima_original_id, tenant_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [code, tarima.id, userId, dupId, dupTarimaId, req.tenantId]
         )
         await client.query(
           'UPDATE sesiones_escaneo SET alertas_duplicados = alertas_duplicados + 1 WHERE id = $1',
@@ -337,9 +337,9 @@ router.post('/sessions/:id/scan',
       if (dupGlobal.rows.length > 0) {
         const orig = dupGlobal.rows[0]
         await client.query(
-          `INSERT INTO alertas_duplicados (codigo_guia, tarima_id, operador_id, guia_original_id, tarima_original_id)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [code, tarima.id, userId, orig.id, orig.tarima_id]
+          `INSERT INTO alertas_duplicados (codigo_guia, tarima_id, operador_id, guia_original_id, tarima_original_id, tenant_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [code, tarima.id, userId, dupId, dupTarimaId, req.tenantId]
         )
         await client.query(
           'UPDATE sesiones_escaneo SET alertas_duplicados = alertas_duplicados + 1 WHERE id = $1',
@@ -365,9 +365,9 @@ router.post('/sessions/:id/scan',
       const guiaNivel = sesion.nivel_usuario || null
       const guiaInternoId = sesion.usuario_interno_id || null
       const guiaRes = await client.query(
-        `INSERT INTO guias (codigo_guia, tarima_id, posicion, operador_id, usuario_operador, nivel_usuario, usuario_interno_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [code, tarima.id, newPos, userId, guiaOperador, guiaNivel, guiaInternoId]
+        `INSERT INTO guias (codigo_guia, tarima_id, posicion, operador_id, usuario_operador, nivel_usuario, usuario_interno_id, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [code, tarima.id, newPos, userId, guiaOperador, guiaNivel, guiaInternoId, req.tenantId]
       )
       const guia = guiaRes.rows[0]
 
@@ -417,9 +417,10 @@ router.post('/sessions/:id/scan',
           const newCodigo = await generateTarimaCodigo(client)
           try {
             const newTarimaRes = await client.query(
-              `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio)
-               VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) RETURNING *`,
-              [newCodigo, sesion.empresa_id, sesion.canal_id, userId]
+              `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
+               VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5)
+               RETURNING id`,
+              [newCodigo, empresa_id, canal_id, userId, req.tenantId]
             )
             nueva_tarima = newTarimaRes.rows[0]
             break
@@ -508,10 +509,10 @@ router.post('/sessions/:id/add-tarima',
         const tarimaCodigo = await generateTarimaCodigo(client)
         try {
           tarimaRes = await client.query(
-            `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio)
-             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-             RETURNING *`,
-            [tarimaCodigo, sesion.empresa_id, sesion.canal_id, userId]
+            `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
+             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5)
+             RETURNING id`,
+            [tarimaCodigo, empresa_id, canal_id, userId, req.tenantId]
           )
           break
         } catch (e) {

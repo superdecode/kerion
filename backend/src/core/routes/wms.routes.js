@@ -12,7 +12,7 @@ router.get('/credentials',
   requirePermission('global.wms', 'ver'),
   async (req, res) => {
     try {
-      const creds = await loadCredentials()
+      const creds = await loadCredentials(req.tenantId)
       if (!creds) return res.json({ configured: false })
       res.json({
         configured: true,
@@ -36,8 +36,8 @@ router.put('/credentials',
       if (!app_key || !app_secret) {
         return res.status(400).json({ error: 'app_key y app_secret son requeridos' })
       }
-      await saveCredentials({ app_key, app_secret, base_url })
-      invalidateCredCache()
+      await saveCredentials(req.tenantId, { app_key, app_secret, base_url })
+      invalidateCredCache(req.tenantId)
       await auditLog(req, 'WMS_CREDENTIALS_UPDATED', 'wms_credentials', null, { app_key })
       res.json({ ok: true })
     } catch (err) {
@@ -53,7 +53,7 @@ router.post('/test',
   requirePermission('global.wms', 'ver'),
   async (req, res) => {
     try {
-      const result = await wmsPost('/integratedInventory/pageOpen', [{ page: 1, pageSize: 1 }])
+      const result = await wmsPost(req.tenantId, '/integratedInventory/pageOpen', [{ page: 1, pageSize: 1 }])
       const ok = result?.code === '0' || result?.success === true || Array.isArray(result?.data) || result?.data != null
       if (ok) {
         res.json({ ok: true, message: 'Conexión WMS exitosa' })

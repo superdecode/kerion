@@ -42,7 +42,7 @@ router.get('/empresas',
   authenticateToken,
   async (_req, res) => {
     try {
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT * FROM configuraciones
          WHERE modulo = 'dropscan' AND tipo = 'empresa'
          ORDER BY nombre ASC`
@@ -71,11 +71,11 @@ router.post('/empresas',
         return res.status(400).json({ error: 'El color debe ser hexadecimal válido (ej: #FF0000)' })
       }
 
-      const result = await query(
-        `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, activo, config_json)
-         VALUES ('dropscan', 'empresa', $1, $2, $3, $4)
+      const result = await req.tQuery(
+        `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, activo, config_json, tenant_id)
+         VALUES ('dropscan', 'empresa', $1, $2, $3, $4, $5)
          RETURNING *`,
-        [codigo.trim().toUpperCase(), nombre.trim(), activo !== false, JSON.stringify({ color: colorVal })]
+        [codigo.trim().toUpperCase(), nombre.trim(), activo !== false, JSON.stringify({ color: colorVal }), req.tenantId]
       )
       res.status(201).json(toEmpresa(result.rows[0]))
     } catch (error) {
@@ -103,7 +103,7 @@ router.put('/empresas/:id',
         return res.status(400).json({ error: 'El color debe ser hexadecimal válido (ej: #FF0000)' })
       }
 
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE configuraciones
          SET nombre = $1, codigo = $2, activo = $3, config_json = $4, updated_at = NOW()
          WHERE id = $5 AND modulo = 'dropscan' AND tipo = 'empresa'
@@ -126,7 +126,7 @@ router.patch('/empresas/:id/toggle',
   requirePermission('dropscan.configuracion', 'editar'),
   async (req, res) => {
     try {
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE configuraciones SET activo = NOT activo, updated_at = NOW()
          WHERE id = $1 AND modulo = 'dropscan' AND tipo = 'empresa'
          RETURNING *`,
@@ -147,11 +147,11 @@ router.delete('/empresas/:id',
   requirePermission('dropscan.configuracion', 'editar'),
   async (req, res) => {
     try {
-      const inUse = await query('SELECT COUNT(*) FROM tarimas WHERE empresa_id = $1', [req.params.id])
+      const inUse = await req.tQuery('SELECT COUNT(*) FROM tarimas WHERE empresa_id = $1', [req.params.id])
       if (parseInt(inUse.rows[0].count) > 0) {
         return res.status(409).json({ error: 'No se puede eliminar: la empresa está siendo utilizada en tarimas' })
       }
-      const result = await query(
+      const result = await req.tQuery(
         `DELETE FROM configuraciones WHERE id = $1 AND modulo = 'dropscan' AND tipo = 'empresa' RETURNING id`,
         [req.params.id]
       )
@@ -202,23 +202,23 @@ router.post('/canales',
         empresa_ids: empresa_ids || []
       }
 
-      const result = await query(
-        `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, descripcion, activo, config_json)
-         VALUES ('dropscan', 'canal', $1, $2, $3, $4, $5)
+      const result = await req.tQuery(
+        `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, descripcion, activo, config_json, tenant_id)
+         VALUES ('dropscan', 'canal', $1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [codigo, nombre.trim(), descripcion || null, activo !== false, JSON.stringify(configJson)]
+        [codigo, nombre.trim(), descripcion || null, activo !== false, JSON.stringify(configJson), req.tenantId]
       )
 
       // If setting as default, unset others
       if (es_default) {
-        await query(
+        await req.tQuery(
           `UPDATE configuraciones SET config_json = config_json || '{"es_default": false}'
            WHERE modulo = 'dropscan' AND tipo = 'canal' AND id != $1`,
           [result.rows[0].id]
         )
       }
 
-      const empresasRes = await query(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa'`)
+      const empresasRes = await req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa'`)
       const empresasMap = Object.fromEntries(empresasRes.rows.map(e => [e.id, toEmpresa(e)]))
       res.status(201).json(toCanal(result.rows[0], empresasMap))
     } catch (error) {
@@ -245,7 +245,7 @@ router.put('/canales/:id',
         empresa_ids: empresa_ids || []
       }
 
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE configuraciones
          SET nombre = $1, descripcion = $2, activo = $3, config_json = $4, updated_at = NOW()
          WHERE id = $5 AND modulo = 'dropscan' AND tipo = 'canal'
@@ -255,14 +255,14 @@ router.put('/canales/:id',
       if (result.rows.length === 0) return res.status(404).json({ error: 'Canal no encontrado' })
 
       if (es_default) {
-        await query(
+        await req.tQuery(
           `UPDATE configuraciones SET config_json = config_json || '{"es_default": false}'
            WHERE modulo = 'dropscan' AND tipo = 'canal' AND id != $1`,
           [id]
         )
       }
 
-      const empresasRes = await query(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa'`)
+      const empresasRes = await req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa'`)
       const empresasMap = Object.fromEntries(empresasRes.rows.map(e => [e.id, toEmpresa(e)]))
       res.json(toCanal(result.rows[0], empresasMap))
     } catch (error) {
@@ -279,7 +279,7 @@ router.patch('/canales/:id/toggle',
   requirePermission('dropscan.configuracion', 'editar'),
   async (req, res) => {
     try {
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE configuraciones SET activo = NOT activo, updated_at = NOW()
          WHERE id = $1 AND modulo = 'dropscan' AND tipo = 'canal'
          RETURNING *`,
@@ -287,7 +287,7 @@ router.patch('/canales/:id/toggle',
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Canal no encontrado' })
 
-      const empresasRes = await query(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa'`)
+      const empresasRes = await req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa'`)
       const empresasMap = Object.fromEntries(empresasRes.rows.map(e => [e.id, toEmpresa(e)]))
       res.json(toCanal(result.rows[0], empresasMap))
     } catch (error) {
@@ -303,11 +303,11 @@ router.delete('/canales/:id',
   requirePermission('dropscan.configuracion', 'editar'),
   async (req, res) => {
     try {
-      const inUse = await query('SELECT COUNT(*) FROM tarimas WHERE canal_id = $1', [req.params.id])
+      const inUse = await req.tQuery('SELECT COUNT(*) FROM tarimas WHERE canal_id = $1', [req.params.id])
       if (parseInt(inUse.rows[0].count) > 0) {
         return res.status(409).json({ error: 'No se puede eliminar: el canal está siendo utilizado en tarimas' })
       }
-      const result = await query(
+      const result = await req.tQuery(
         `DELETE FROM configuraciones WHERE id = $1 AND modulo = 'dropscan' AND tipo = 'canal' RETURNING id`,
         [req.params.id]
       )
@@ -327,7 +327,7 @@ router.get('/parametros',
   authenticateToken,
   async (_req, res) => {
     try {
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT config_json FROM configuraciones
          WHERE modulo = 'dropscan' AND tipo = 'parametros' AND codigo = 'default'
          LIMIT 1`
@@ -355,12 +355,12 @@ router.put('/parametros',
       if (!gpt || gpt < 1 || gpt > 9999) {
         return res.status(400).json({ error: 'guias_por_tarima debe ser entre 1 y 9999' })
       }
-      await query(
-        `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, config_json)
-         VALUES ('dropscan', 'parametros', 'default', 'Parametros', $1)
-         ON CONFLICT (modulo, tipo, codigo) DO UPDATE
+      await req.tQuery(
+        `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, config_json, tenant_id)
+         VALUES ('dropscan', 'parametros', 'default', 'Parametros', $1, $2)
+         ON CONFLICT (tenant_id, modulo, tipo, codigo) DO UPDATE
          SET config_json = $1, updated_at = NOW()`,
-        [JSON.stringify({ guias_por_tarima: gpt })]
+        [JSON.stringify({ guias_por_tarima: gpt }), req.tenantId]
       )
       res.json({ guias_por_tarima: gpt })
     } catch (error) {

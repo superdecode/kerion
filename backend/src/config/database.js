@@ -59,4 +59,38 @@ export async function tenantTransaction(tenantId, cb) {
   }
 }
 
+/**
+ * Middleware that provides tenant-scoped DB helpers on `req`:
+ *   - req.tQuery(sql, params)  — single query with RLS context
+ *   - req.tTransaction(cb)     — multi-statement transaction with RLS context
+ *     cb receives a pg Client with app.tenant_id already SET LOCAL'd
+ *   - req.tGetClient()         — manual client with RLS, must release yourself
+ *
+ * Must be mounted AFTER tenantContext (which sets req.tenantId).
+ */
+export function tenantDB(req, res, next) {
+  const tid = req.tenantId
+
+  req.tQuery = async (text, params) => {
+    return tenantQuery(tid, text, params)
+  }
+
+  req.tTransaction = async (cb) => {
+    return tenantTransaction(tid, cb)
+  }
+
+  // Acquire a client with RLS context for manual transaction control.
+  // Caller MUST call client.release() in a finally block.
+  // The client has BEGIN + SET LOCAL already executed.
+  // Caller does COMMIT/ROLLBACK themselves.
+  req.tGetClient = async () => {
+    const client = await pool.connect()
+    await client.query('BEGIN')
+    await client.query(`SET LOCAL app.tenant_id = '${tid}'`)
+    return client
+  }
+
+  next()
+}
+
 export default pool

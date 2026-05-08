@@ -16,16 +16,16 @@ router.post('/sessions/start',
       const userId = req.user.id
 
       // Auto-close any stale active sessions for this user
-      await query(
+      await req.tQuery(
         `UPDATE inventory_sessions SET status = 'closed', ended_at = now()
          WHERE user_id = $1 AND status = 'active' AND started_at < now() - INTERVAL '24 hours'`,
         [userId]
       )
 
-      const result = await query(
-        `INSERT INTO inventory_sessions (user_id, origin_location)
-         VALUES ($1, $2) RETURNING *`,
-        [userId, origin_location || null]
+      const result = await req.tQuery(
+        `INSERT INTO inventory_sessions (user_id, origin_location, tenant_id)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [userId, origin_location || null, req.tenantId]
       )
       res.status(201).json({ session: result.rows[0] })
     } catch (err) {
@@ -43,7 +43,7 @@ router.post('/sessions/:sessionId/close',
     try {
       const { sessionId } = req.params
       const userId = req.user.id
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE inventory_sessions
          SET status = 'closed', ended_at = now()
          WHERE id = $1 AND user_id = $2 AND status = 'active'
@@ -67,7 +67,7 @@ router.get('/sessions/active',
   requirePermission('inventory.escaneo', 'ver'),
   async (req, res) => {
     try {
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT * FROM inventory_sessions
          WHERE user_id = $1 AND status = 'active'
          ORDER BY started_at DESC LIMIT 1`,
@@ -93,7 +93,7 @@ router.post('/scans',
       }
 
       // Verify session belongs to caller and is active
-      const sessionRes = await query(
+      const sessionRes = await req.tQuery(
         `SELECT id FROM inventory_sessions WHERE id = $1 AND user_id = $2 AND status = 'active'`,
         [session_id, req.user.id]
       )
@@ -104,7 +104,7 @@ router.post('/scans',
       // Look up barcode in WMS inventory map
       let wmsItem = null
       try {
-        const invMap = await getInventoryMap()
+        const invMap = await getInventoryMap(req.tenantId)
         wmsItem = invMap[barcode.trim()] || null
       } catch (wmsErr) {
         if (wmsErr.code !== 'WMS_NOT_CONFIGURED') {
@@ -121,10 +121,10 @@ router.post('/scans',
         status = 'Bloqueado'
       }
 
-      const result = await query(
+      const result = await req.tQuery(
         `INSERT INTO inventory_scans
-           (session_id, user_id, barcode, sku, product_name, cell_no, available_stock, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (session_id, user_id, barcode, sku, product_name, cell_no, available_stock, status, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
         [
           session_id,
@@ -135,6 +135,7 @@ router.post('/scans',
           wmsItem?.cellNo || null,
           wmsItem?.availableStock ?? null,
           status,
+          req.tenantId
         ]
       )
 
@@ -153,7 +154,7 @@ router.get('/scans/:sessionId',
   async (req, res) => {
     try {
       const { sessionId } = req.params
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT s.*, u.nombre_completo as user_name
          FROM inventory_scans s
          JOIN usuarios u ON s.user_id = u.id

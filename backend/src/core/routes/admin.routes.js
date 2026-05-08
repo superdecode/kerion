@@ -249,14 +249,18 @@ router.get('/tenants/:id', authenticateAdmin, async (req, res) => {
     ])
     if (tenantRes.rows.length === 0) return res.status(404).json({ error: 'Tenant no encontrado' })
 
-    const activeSub = subRes.rows.find(s => s.status === 'active') || null
+    const allSubscriptions = subRes.rows
+    const activeSubscriptions = allSubscriptions.filter(s => 
+      s.status === 'active' && (s.expires_at === null || new Date(s.expires_at) >= new Date())
+    )
 
     res.json({
       success: true,
       tenant: tenantRes.rows[0],
       provisioning_log: logRes.rows,
-      subscriptions: subRes.rows,
-      active_subscription: activeSub,
+      subscriptions: activeSubscriptions,
+      subscription_history: allSubscriptions,
+      active_subscription: activeSubscriptions[0] || null,
     })
   } catch (err) {
     console.error('[admin/tenants/:id]', err)
@@ -302,6 +306,7 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
 
 // POST /api/admin/tenants — create tenant directly without signup flow
 router.post('/tenants', authenticateAdmin, async (req, res) => {
+  const client = await getClient()
   try {
     const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at, zona_horaria } = req.body
     if (!legal_name || !contact_name || !contact_email || !admin_password) {
@@ -316,89 +321,101 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
         .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
     }
 
-    // Ensure slug uniqueness
+    // Ensure slug uniqueness (pre-check)
     let finalSlug = tenantSlug
     let suffix = 1
     while (true) {
-      const existing = await query('SELECT id FROM tenants WHERE slug = $1', [finalSlug])
+      const existing = await client.query('SELECT id FROM tenants WHERE slug = $1', [finalSlug])
       if (existing.rows.length === 0) break
       finalSlug = `${tenantSlug}-${suffix++}`
     }
 
-    // Create tenant
-    const tenantRes = await query(
+    await client.query('BEGIN')
+
+    // 1. Create tenant
+    const tenantRes = await client.query(
       `INSERT INTO tenants (slug, legal_name, contact_name, contact_email, contact_phone, country, status, current_plan_id, zona_horaria)
        VALUES ($1,$2,$3,$4,$5,$6,'active',$7,$8) RETURNING *`,
       [finalSlug, legal_name, contact_name, contact_email.toLowerCase().trim(), contact_phone || null, country || null, plan_id || null, zona_horaria || 'America/Mexico_City']
     )
     const tenant = tenantRes.rows[0]
 
-    // Create subscription if plan provided
+    // 2. Create subscription if plan provided
     if (plan_id) {
-      const planRes = await query('SELECT * FROM plans WHERE id = $1', [plan_id])
+      const planRes = await client.query('SELECT * FROM plans WHERE id = $1', [plan_id])
       if (planRes.rows.length > 0) {
         const plan = planRes.rows[0]
+        
+        // Calculate expires_at: 23:59:59 of the day in tenant's timezone
         const start = started_at ? new Date(started_at) : new Date()
         const durationDays = subscription_type === 'annual' ? 365 : (plan.duration_days || 30)
+        
+        // Use luxon or simple Date manipulation to get 23:59:59
         const expiresAt = new Date(start)
         expiresAt.setDate(expiresAt.getDate() + durationDays)
+        expiresAt.setHours(23, 59, 59, 999)
 
-        await query(
+        await client.query(
           `INSERT INTO subscriptions (tenant_id, plan_id, status, started_at, expires_at, recorded_by)
            VALUES ($1,$2,'active',$3,$4,$5)`,
           [tenant.id, plan_id, start, expiresAt, req.admin.id]
         )
-        await query(
+        await client.query(
           `UPDATE tenants SET subscription_expires_at = $1, updated_at = now() WHERE id = $2`,
           [expiresAt, tenant.id]
         )
       }
     }
 
-    // Create admin user with Administrador role
+    // 3. Create Admin role (is_default: true)
+    const roleRes = await client.query(
+      `INSERT INTO roles (tenant_id, nombre, permisos, is_default)
+       VALUES ($1, 'Administrador', $2, true) RETURNING id`,
+      [tenant.id, JSON.stringify({
+        global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
+        dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
+        fep: { folios: 'eliminar' },
+        inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
+      })]
+    )
+    const roleId = roleRes.rows[0].id
+
+    // 4. Create admin user (is_default: true)
     const bcrypt = await import('bcryptjs')
     const hash = await bcrypt.default.hash(admin_password, 12)
 
-    // Ensure Administrador role exists
-    let roleRes = await query(`SELECT id FROM roles WHERE tenant_id = $1 AND nombre = 'Administrador' LIMIT 1`, [tenant.id])
-    if (roleRes.rows.length === 0) {
-      roleRes = await query(
-        `INSERT INTO roles (tenant_id, nombre, permisos) VALUES ($1, 'Administrador', $2) RETURNING id`,
-        [tenant.id, JSON.stringify({
-          global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
-          dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
-          fep: { folios: 'eliminar' },
-          inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
-        })]
-      )
-    }
-    const roleId = roleRes.rows[0].id
-
-    const userRes = await query(
-      `INSERT INTO usuarios (tenant_id, email, password_hash, nombre_completo, rol_id, es_admin_tenant)
-       VALUES ($1,$2,$3,$4,$5,true) RETURNING id, email`,
+    const userRes = await client.query(
+      `INSERT INTO usuarios (tenant_id, email, password_hash, nombre_completo, rol_id, es_admin_tenant, is_default)
+       VALUES ($1,$2,$3,$4,$5,true,true) RETURNING id, email`,
       [tenant.id, contact_email.toLowerCase().trim(), hash, contact_name, roleId]
     )
 
-    // Seed dropscan config (empresas_paqueteria and canales_escaneo)
-    await query(
+    // 5. Seed dropscan config
+    await client.query(
       `INSERT INTO empresas_paqueteria (tenant_id, nombre, codigo, activa) VALUES
        ($1,'FedEx','FEDEX',true), ($1,'DHL','DHL',true), ($1,'UPS','UPS',true)
        ON CONFLICT (tenant_id, codigo) DO NOTHING`,
       [tenant.id]
     )
-    await query(
+    await client.query(
       `INSERT INTO canales_escaneo (tenant_id, nombre, descripcion, activo)
        VALUES ($1, 'Canal Principal', 'Canal por defecto', true)
        ON CONFLICT (tenant_id, nombre) DO NOTHING`,
       [tenant.id]
     )
 
-    // Enqueue welcome email
-    await query(
-      `INSERT INTO notifications_outbox (tenant_id, type, payload, status, created_at)
-       VALUES ($1, 'welcome_email', $2, 'pending', now())`,
-      [tenant.id, JSON.stringify({
+    // 6. Log in provisioning_log
+    await client.query(
+      `INSERT INTO provisioning_log (tenant_id, step, status, created_at)
+       VALUES ($1, 'full_provisioning', 'ok', now())`,
+      [tenant.id]
+    )
+
+    // 7. Enqueue welcome email
+    await client.query(
+      `INSERT INTO notifications_outbox (tenant_id, recipient_email, template_code, payload, status, created_at)
+       VALUES ($1, $2, 'welcome_email', $3, 'pending', now())`,
+      [tenant.id, contact_email.toLowerCase().trim(), JSON.stringify({
         to: contact_email.toLowerCase().trim(),
         tenant_name: legal_name,
         admin_name: contact_name,
@@ -407,11 +424,23 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       })]
     )
 
+    await client.query('COMMIT')
     adminAudit(req.admin.id, 'CREATE_TENANT_DIRECT', 'tenant', tenant.id, { legal_name, contact_email, plan_id })
     res.status(201).json({ success: true, tenant_id: tenant.id, slug: finalSlug, admin_email: userRes.rows[0].email })
   } catch (err) {
+    await client.query('ROLLBACK')
     console.error('[admin/tenants POST]', err)
-    res.status(500).json({ error: err.code === '23505' ? 'El slug ya existe' : (err.message || 'Error interno') })
+    let message = 'Error interno'
+    if (err.code === '23505') {
+      if (err.detail?.includes('slug')) message = 'El slug ya existe'
+      else if (err.detail?.includes('email')) message = 'El email del administrador ya esta en uso para este tenant'
+      else message = 'Error de duplicado: ' + err.detail
+    } else {
+      message = err.message || 'Error al crear tenant'
+    }
+    res.status(500).json({ error: message })
+  } finally {
+    client.release()
   }
 })
 

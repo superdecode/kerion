@@ -452,7 +452,7 @@ function UsersTab({ canEdit, canDel }) {
                             <button onClick={() => setResetUser(u)} className="p-2 rounded-lg hover:bg-warning-50 text-warm-400 hover:text-warning-600 transition-all" title={t('admin.resetPassword')}>
                               <Key className="w-4 h-4" />
                             </button>
-                            {canDel && (
+                            {canDel && !u.is_default && (
                               <button onClick={() => { if (confirm(`${t('admin.confirmDeleteUser')}`)) deleteMutation.mutate(u.id) }}
                                 className="p-2 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all" title={t('common.delete')}>
                                 <Trash2 className="w-4 h-4" />
@@ -684,7 +684,7 @@ function RolesTab({ canEdit, canDel }) {
                             <button onClick={() => duplicateMutation.mutate(r)} className="p-2 rounded-lg hover:bg-warm-100 text-warm-400 hover:text-warm-600 transition-all" title={t('admin.duplicateRole')}>
                               <Copy className="w-4 h-4" />
                             </button>
-                            {canDel && userCount === 0 && (
+                            {canDel && !r.is_default && userCount === 0 && (
                               <button onClick={() => { if (confirm(`${t('admin.confirmDeleteRole')}`)) deleteMutation.mutate(r.id) }}
                                 className="p-2 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all" title={t('common.delete')}>
                                 <Trash2 className="w-4 h-4" />
