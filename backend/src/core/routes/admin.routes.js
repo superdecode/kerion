@@ -307,12 +307,13 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
 // POST /api/admin/tenants — create tenant directly without signup flow
 router.post('/tenants', authenticateAdmin, async (req, res) => {
   const client = await getClient()
+  await client.query('BEGIN')
   try {
     const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at, zona_horaria } = req.body
     if (!legal_name || !contact_name || !contact_email || !admin_password) {
+      await client.query('ROLLBACK')
       return res.status(400).json({ error: 'legal_name, contact_name, contact_email y admin_password son requeridos' })
     }
-
     // Generate slug from legal_name if not provided
     let tenantSlug = slug?.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || ''
     if (!tenantSlug) {
