@@ -351,10 +351,23 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
         const start = started_at ? new Date(started_at) : new Date()
         const durationDays = subscription_type === 'annual' ? 365 : (plan.duration_days || 30)
         
-        // Use luxon or simple Date manipulation to get 23:59:59
-        const expiresAt = new Date(start)
-        expiresAt.setDate(expiresAt.getDate() + durationDays)
-        expiresAt.setHours(23, 59, 59, 999)
+        // Calculate date in tenant's timezone
+        const d = new Date(start)
+        d.setDate(d.getDate() + durationDays)
+        
+        // Use Intl to get date components in tenant's timezone
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: zona_horaria || 'America/Mexico_City',
+          year: 'numeric',
+          month: 'numeric',
+          day: 'numeric'
+        })
+        const parts = formatter.formatToParts(d)
+        const year = parts.find(p => p.type === 'year').value
+        const month = parts.find(p => p.type === 'month').value
+        const day = parts.find(p => p.type === 'day').value
+        
+        const expiresAt = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999))
 
         await client.query(
           `INSERT INTO subscriptions (tenant_id, plan_id, status, started_at, expires_at, recorded_by)
