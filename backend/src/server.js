@@ -36,9 +36,30 @@ import fepFoliosRoutes from './modules/fep/routes/folios.routes.js'
 
 const app = express()
 
+function isAllowedDevOrigin(origin) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+}
+
 // Security
 app.use(helmet())
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }))
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true)
+
+    const allowedOrigins = new Set(
+      String(env.CORS_ORIGIN || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean)
+    )
+
+    if (allowedOrigins.has(origin)) return callback(null, true)
+    if (env.NODE_ENV !== 'production' && isAllowedDevOrigin(origin)) return callback(null, true)
+
+    return callback(new Error(`CORS blocked for origin: ${origin}`))
+  },
+  credentials: true,
+}))
 
 // Rate limiting — global (all /api routes)
 const generalLimiter = rateLimit({
