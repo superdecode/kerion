@@ -111,6 +111,14 @@ router.delete('/:id',
     try {
       const { id } = req.params
 
+      const roleRes = await req.tQuery('SELECT id, is_default FROM roles WHERE id = $1', [id])
+      if (roleRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Rol no encontrado' })
+      }
+      if (roleRes.rows[0].is_default) {
+        return res.status(409).json({ error: 'No se puede eliminar un rol protegido' })
+      }
+
       // Check no users assigned
       const usersRes = await req.tQuery('SELECT COUNT(*) FROM usuarios WHERE rol_id = $1 AND estado = $2', [id, 'ACTIVO'])
       if (parseInt(usersRes.rows[0].count) > 0) {

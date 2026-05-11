@@ -12,7 +12,7 @@ const STATUS_META = {
   NoWMS:     { label: 'No en WMS', color: 'text-red-600',     bg: 'bg-red-50 border-red-200' },
 }
 
-export default function InvHistorial() {
+export default function Tarimas() {
   const { t } = useI18nStore()
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState({ status: '', barcode: '', date_from: '', date_to: '' })
@@ -20,7 +20,7 @@ export default function InvHistorial() {
   const limit = 50
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['inv-history', applied, page],
+    queryKey: ['inv-tarimas', applied, page],
     queryFn: () => getHistory({ ...applied, page, limit }),
     keepPreviousData: true,
   })
@@ -38,8 +38,8 @@ export default function InvHistorial() {
   return (
     <div className="flex flex-col h-full">
       <Header
-        title={t('inventory.historial.title') || 'Historial de Escaneos'}
-        subtitle={t('inventory.historial.subtitle') || 'Registro de todos los escaneos'}
+        title={t('inventory.tarimas.title') || 'Tarimas'}
+        subtitle={t('inventory.tarimas.subtitle') || 'Registro de todos los escaneos'}
       />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-5">

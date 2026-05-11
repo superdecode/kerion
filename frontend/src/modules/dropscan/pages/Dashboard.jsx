@@ -153,7 +153,7 @@ export default function DropScanDashboard() {
 
         <div className="p-4">
           <div className="max-w-full mx-auto space-y-4">
-            {/* KPI Cards - Clickable, navigate to historial with filter */}
+            {/* KPI Cards - Clickable, navigate to tarimas with filter */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               <KPICard icon={Package} label={t('dashboard.totalGuides')} value={r.total_guias} gradient="from-primary-500 to-primary-700" iconBg="bg-primary-400/20" index={0} href="/dropscan/tarimas" />
               <KPICard icon={Clock} label={t('dashboard.inProcess')} value={r.tarimas_en_proceso} gradient="from-warning-400 to-warning-600" iconBg="bg-warning-400/20" index={1} href="/dropscan/tarimas?estado=EN_PROCESO" />

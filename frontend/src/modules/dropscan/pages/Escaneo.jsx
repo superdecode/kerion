@@ -268,7 +268,7 @@ export default function Escaneo() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresasData, canalesData])
 
-  /* resume scan from Historial navigation */
+  /* resume scan from Tarimas navigation */
   useEffect(() => {
     const resume = location.state?.resumeScan
     if (resume) {

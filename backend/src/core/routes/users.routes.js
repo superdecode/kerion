@@ -13,7 +13,7 @@ router.get('/',
     try {
       const result = await req.tQuery(
         `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id, u.estado,
-                u.avatar_url, u.ultimo_acceso, u.created_at,
+                u.avatar_url, u.ultimo_acceso, u.created_at, u.is_default, u.es_admin_tenant,
                 r.nombre as rol_nombre
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id
@@ -138,6 +138,14 @@ router.delete('/:id',
 
       if (parseInt(id) === req.user.id) {
         return res.status(400).json({ error: 'No puedes desactivar tu propio usuario' })
+      }
+
+      const targetRes = await req.tQuery('SELECT id, is_default, es_admin_tenant FROM usuarios WHERE id = $1', [id])
+      if (targetRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Usuario no encontrado' })
+      }
+      if (targetRes.rows[0].is_default || targetRes.rows[0].es_admin_tenant) {
+        return res.status(409).json({ error: 'No se puede desactivar un usuario protegido' })
       }
 
       await req.tQuery(`UPDATE usuarios SET estado = 'INACTIVO' WHERE id = $1`, [id])

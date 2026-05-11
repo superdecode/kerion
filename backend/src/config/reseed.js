@@ -30,7 +30,7 @@ async function reseedDatabase() {
         permisos: {
           global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
           dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
-          inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
+          inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
         }
       },
       {
@@ -39,7 +39,7 @@ async function reseedDatabase() {
         permisos: {
           global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'ver' },
           dropscan: { dashboard: 'ver', escaneo: 'actualizar', tarimas: 'actualizar', reportes: 'crear', configuracion: 'ver', folios: 'actualizar' },
-          inventory: { escaneo: 'actualizar', historial: 'actualizar', reportes: 'crear' },
+          inventory: { escaneo: 'actualizar', tarimas: 'actualizar', reportes: 'crear' },
         }
       },
       {
@@ -48,7 +48,7 @@ async function reseedDatabase() {
         permisos: {
           global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'sin_acceso' },
           dropscan: { dashboard: 'ver', escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso', configuracion: 'sin_acceso', folios: 'crear' },
-          inventory: { escaneo: 'crear', historial: 'ver', reportes: 'sin_acceso' },
+          inventory: { escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso' },
         }
       },
       {
@@ -57,7 +57,7 @@ async function reseedDatabase() {
         permisos: {
           global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'sin_acceso' },
           dropscan: { dashboard: 'ver', escaneo: 'sin_acceso', tarimas: 'ver', reportes: 'ver', configuracion: 'sin_acceso', folios: 'ver' },
-          inventory: { escaneo: 'sin_acceso', historial: 'ver', reportes: 'ver' },
+          inventory: { escaneo: 'sin_acceso', tarimas: 'ver', reportes: 'ver' },
         }
       }
     ]

@@ -11,7 +11,7 @@ const MODULE_ROUTES = [
   { module: 'dropscan.configuracion', path: '/dropscan/configuracion' },
   { module: 'dropscan.folios', path: '/dropscan/folios' },
   { module: 'inventory.escaneo', path: '/inventory/escaneo' },
-  { module: 'inventory.historial', path: '/inventory/historial' },
+  { module: 'inventory.tarimas', path: '/inventory/tarimas' },
   { module: 'inventory.reportes', path: '/inventory/reportes' },
   { module: 'global.wms', path: '/wms' },
   { module: 'global.administracion', path: '/admin' },

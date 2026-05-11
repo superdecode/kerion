@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken'
 import env from '../../config/env.js'
 import { query } from '../../config/database.js'
 import { provisionTenant } from '../../services/provisioningService.js'
+import { endOfDayInTimezone } from '../../shared/utils/timezone.js'
 
 const router = Router()
 
@@ -32,6 +33,27 @@ async function adminAudit(adminId, action, entityType, entityId, details) {
       [adminId, action, entityType, entityId ? String(entityId) : null, details ? JSON.stringify(details) : null]
     )
   } catch (_) { /* non-blocking */ }
+}
+
+function normalizeSlug(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function buildSubscriptionTypeAndPrice(plan, subscriptionType) {
+  const type = subscriptionType === 'annual' ? 'annual' : 'monthly'
+  const price_amount = type === 'annual'
+    ? (plan.price_annual ?? (plan.price_amount != null ? Number(plan.price_amount) * 12 : null))
+    : (plan.price_amount ?? null)
+  return {
+    subscription_type: type,
+    price_amount,
+    price_currency: plan.price_currency || 'USD',
+  }
 }
 
 // POST /api/admin/auth/login
@@ -187,10 +209,12 @@ router.get('/tenants', authenticateAdmin, async (req, res) => {
              (SELECT COUNT(*) FROM guias g WHERE g.tenant_id = t.id) as guias_count,
              (SELECT s2.expires_at FROM subscriptions s2
               WHERE s2.tenant_id = t.id AND s2.status = 'active'
+                AND (s2.expires_at IS NULL OR s2.expires_at >= now())
               ORDER BY s2.expires_at DESC LIMIT 1) as active_sub_expires_at,
              (SELECT p2.name FROM subscriptions s2
               JOIN plans p2 ON p2.id = s2.plan_id
               WHERE s2.tenant_id = t.id AND s2.status = 'active'
+                AND (s2.expires_at IS NULL OR s2.expires_at >= now())
               ORDER BY s2.expires_at DESC LIMIT 1) as active_plan_name
       FROM tenants t
       LEFT JOIN plans p ON t.current_plan_id = p.id
@@ -245,7 +269,16 @@ router.get('/tenants/:id', authenticateAdmin, async (req, res) => {
     const [tenantRes, logRes, subRes] = await Promise.all([
       query('SELECT t.*, p.name as plan_name FROM tenants t LEFT JOIN plans p ON t.current_plan_id = p.id WHERE t.id = $1', [id]),
       query('SELECT * FROM provisioning_log WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 50', [id]),
-      query('SELECT s.*, p.name as plan_name, p.duration_days FROM subscriptions s JOIN plans p ON s.plan_id = p.id WHERE s.tenant_id = $1 ORDER BY s.expires_at DESC', [id]),
+      query(
+        `SELECT s.id, s.code, s.tenant_id, s.plan_id, s.subscription_type, s.price_amount, s.price_currency,
+                s.status, s.started_at, s.expires_at, s.payment_reference, s.notes, s.created_at,
+                p.name as plan_name, p.code as plan_code, p.duration_days
+         FROM subscriptions s
+         JOIN plans p ON s.plan_id = p.id
+         WHERE s.tenant_id = $1
+         ORDER BY s.expires_at DESC NULLS LAST, s.created_at DESC`,
+        [id]
+      ),
     ])
     if (tenantRes.rows.length === 0) return res.status(404).json({ error: 'Tenant no encontrado' })
 
@@ -316,30 +349,38 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
     client = await getClient()
     await client.query('BEGIN')
 
-    // Generate slug from legal_name if not provided
-    let tenantSlug = slug?.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || ''
-    if (!tenantSlug) {
-      tenantSlug = legal_name.toLowerCase()
-        .normalize('NFD').replace(/[̀-ͯ]/g, '')
-        .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+    // Generate a stable slug from the provided value or the legal name.
+    const baseSlug = normalizeSlug(slug || legal_name)
+    if (!baseSlug) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'No se pudo generar un slug valido' })
     }
 
-    // Ensure slug uniqueness inside the transaction (prevents race conditions)
-    let finalSlug = tenantSlug
+    // 1. Create tenant. If a concurrent request wins the same slug race, retry with a suffix.
+    let tenant = null
+    let finalSlug = baseSlug
     let suffix = 1
-    while (true) {
-      const existing = await client.query('SELECT id FROM tenants WHERE slug = $1 FOR UPDATE', [finalSlug])
-      if (existing.rows.length === 0) break
-      finalSlug = `${tenantSlug}-${suffix++}`
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
+        const tenantRes = await client.query(
+          `INSERT INTO tenants (slug, legal_name, contact_name, contact_email, contact_phone, country, status, current_plan_id, zona_horaria)
+           VALUES ($1,$2,$3,$4,$5,$6,'active',$7,$8)
+           RETURNING *`,
+          [finalSlug, legal_name, contact_name, contact_email.toLowerCase().trim(), contact_phone || null, country || null, plan_id || null, zona_horaria || 'America/Mexico_City']
+        )
+        tenant = tenantRes.rows[0]
+        break
+      } catch (err) {
+        if (err.code === '23505' && String(err.constraint || '').includes('slug')) {
+          finalSlug = `${baseSlug}-${suffix++}`
+          continue
+        }
+        throw err
+      }
     }
-
-    // 1. Create tenant
-    const tenantRes = await client.query(
-      `INSERT INTO tenants (slug, legal_name, contact_name, contact_email, contact_phone, country, status, current_plan_id, zona_horaria)
-       VALUES ($1,$2,$3,$4,$5,$6,'active',$7,$8) RETURNING *`,
-      [finalSlug, legal_name, contact_name, contact_email.toLowerCase().trim(), contact_phone || null, country || null, plan_id || null, zona_horaria || 'America/Mexico_City']
-    )
-    const tenant = tenantRes.rows[0]
+    if (!tenant) {
+      throw new Error('No se pudo reservar un slug unico para el tenant')
+    }
 
     // 2. Create subscription if plan provided
     if (plan_id) {
@@ -349,21 +390,17 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
 
         const start = started_at ? new Date(started_at) : new Date()
         const durationDays = subscription_type === 'annual' ? 365 : (plan.duration_days || 30)
-        const d = new Date(start)
-        d.setDate(d.getDate() + durationDays)
-
-        // expires_at = 23:59:59.999 of the calculated day in tenant's timezone
+        const rawExpiry = new Date(start)
+        rawExpiry.setDate(rawExpiry.getDate() + durationDays)
         const tz = zona_horaria || 'America/Mexico_City'
-        const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(d)
-        const yr = Number(parts.find(p => p.type === 'year').value)
-        const mo = Number(parts.find(p => p.type === 'month').value)
-        const dy = Number(parts.find(p => p.type === 'day').value)
-        const expiresAt = new Date(Date.UTC(yr, mo - 1, dy, 23, 59, 59, 999))
+        const expiresAt = endOfDayInTimezone(rawExpiry, tz)
+        const subscriptionMeta = buildSubscriptionTypeAndPrice(plan, subscription_type)
+        const subscriptionCode = `SUB-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
 
         await client.query(
-          `INSERT INTO subscriptions (tenant_id, plan_id, status, started_at, expires_at, recorded_by)
-           VALUES ($1,$2,'active',$3,$4,$5)`,
-          [tenant.id, plan_id, start, expiresAt, req.admin.id]
+          `INSERT INTO subscriptions (tenant_id, code, plan_id, subscription_type, price_amount, price_currency, status, started_at, expires_at, recorded_by)
+           VALUES ($1,$2,$3,$4,$5,$6,'active',$7,$8,$9)`,
+          [tenant.id, subscriptionCode, plan_id, subscriptionMeta.subscription_type, subscriptionMeta.price_amount, subscriptionMeta.price_currency, start, expiresAt, req.admin.id]
         )
         await client.query(
           `UPDATE tenants SET subscription_expires_at = $1, updated_at = now() WHERE id = $2`,
@@ -377,7 +414,7 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
       dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
       fep: { folios: 'eliminar' },
-      inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
+      inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
     }
     const roleRes = await client.query(
       `INSERT INTO roles (tenant_id, nombre, permisos, is_default)
@@ -441,9 +478,17 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
     console.error('[admin/tenants POST]', err)
     let message = err.message || 'Error al crear tenant'
     if (err.code === '23505') {
-      if (err.constraint?.includes('slug') || err.detail?.includes('slug')) message = 'El slug ya existe'
-      else if (err.detail?.includes('email')) message = 'El email del administrador ya esta en uso'
-      else message = 'Error de duplicado: ' + (err.detail || err.constraint || '')
+      if (err.constraint === 'tenants_slug_key' || err.constraint?.includes('tenants_slug')) {
+        message = 'El slug ya existe'
+      } else if (err.constraint === 'usuarios_tenant_id_email_key' || err.constraint?.includes('usuarios_tenant_email')) {
+        message = 'El email del administrador ya esta en uso'
+      } else if (err.constraint === 'usuarios_tenant_id_codigo_key' || err.constraint?.includes('usuarios_tenant_codigo')) {
+        message = 'El codigo del administrador ya esta en uso'
+      } else if (err.constraint === 'roles_tenant_id_nombre_key' || err.constraint?.includes('roles_tenant_nombre')) {
+        message = 'El rol Administrador ya existe para este tenant'
+      } else {
+        message = 'Error de duplicado: ' + (err.constraint || err.detail || 'violacion de unicidad')
+      }
     }
     res.status(500).json({ error: message })
   } finally {
@@ -664,6 +709,7 @@ router.get('/subscriptions', authenticateAdmin, async (req, res) => {
     const result = await query(
       `SELECT
          s.id,
+         s.code,
          s.tenant_id,
          t.legal_name,
          t.slug,
@@ -672,6 +718,9 @@ router.get('/subscriptions', authenticateAdmin, async (req, res) => {
          p.price_amount,
          p.price_currency,
          p.price_annual,
+         s.subscription_type,
+         s.price_amount as subscription_price_amount,
+         s.price_currency as subscription_price_currency,
          s.status,
          s.started_at,
          s.expires_at,
@@ -679,9 +728,11 @@ router.get('/subscriptions', authenticateAdmin, async (req, res) => {
          s.notes,
          s.created_at,
          CASE
+           WHEN s.subscription_type = 'annual' THEN 'anual'
+           WHEN s.subscription_type = 'monthly' THEN 'mensual'
            WHEN (s.expires_at - s.started_at) > INTERVAL '180 days' THEN 'anual'
            ELSE 'mensual'
-         END as subscription_type
+         END as subscription_kind
        FROM subscriptions s
        JOIN tenants t ON s.tenant_id = t.id
        JOIN plans p ON s.plan_id = p.id
@@ -710,17 +761,15 @@ router.post('/tenants/:id/subscriptions', authenticateAdmin, async (req, res) =>
     // Resolve tenant timezone
     const tenantTzRes = await query('SELECT zona_horaria FROM tenants WHERE id = $1', [id])
     const tz = tenantTzRes.rows[0]?.zona_horaria || 'America/Mexico_City'
-
-    // expires_at arrives as a date string (YYYY-MM-DD from <input type="date">).
-    // Convert to 23:59:59.999 in the tenant's local timezone so it expires at
-    // end-of-day local time, not at midnight UTC.
-    const [yr, mo, dy] = expires_at.split('-').map(Number)
-    const expiresLocal = new Date(Date.UTC(yr, mo - 1, dy, 23, 59, 59, 999))
-    // Shift to account for the timezone offset so that 23:59:59 lands correctly
-    const tzOffsetMs = new Date(
-      new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false, day: 'numeric', month: 'numeric', year: 'numeric' }).format(expiresLocal)
-    ).getTime() - expiresLocal.getTime()
-    const expiresAtUtc = new Date(expiresLocal.getTime() - tzOffsetMs)
+    const planRes = await query('SELECT * FROM plans WHERE id = $1', [plan_id])
+    if (planRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Plan no encontrado' })
+    }
+    const plan = planRes.rows[0]
+    const subscriptionType = plan.duration_days && plan.duration_days >= 180 ? 'annual' : 'monthly'
+    const subscriptionMeta = buildSubscriptionTypeAndPrice(plan, subscriptionType)
+    const expiresAtUtc = endOfDayInTimezone(expires_at, tz)
+    const subscriptionCode = `SUB-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
 
     // Expire any current active subscriptions for this tenant
     await query(
@@ -729,9 +778,21 @@ router.post('/tenants/:id/subscriptions', authenticateAdmin, async (req, res) =>
     )
 
     const subRes = await query(
-      `INSERT INTO subscriptions (tenant_id, plan_id, status, started_at, expires_at, payment_reference, notes, recorded_by)
-       VALUES ($1,$2,'active',$3,$4,$5,$6,$7) RETURNING id`,
-      [id, plan_id, started_at || new Date(), expiresAtUtc, payment_reference || null, notes || null, req.admin.id]
+      `INSERT INTO subscriptions (tenant_id, code, plan_id, subscription_type, price_amount, price_currency, status, started_at, expires_at, payment_reference, notes, recorded_by)
+       VALUES ($1,$2,$3,$4,$5,$6,'active',$7,$8,$9,$10,$11) RETURNING id, code`,
+      [
+        id,
+        subscriptionCode,
+        plan_id,
+        subscriptionMeta.subscription_type,
+        subscriptionMeta.price_amount,
+        subscriptionMeta.price_currency,
+        started_at || new Date(),
+        expiresAtUtc,
+        payment_reference || null,
+        notes || null,
+        req.admin.id,
+      ]
     )
 
     await query(
@@ -760,7 +821,7 @@ router.post('/tenants/:id/subscriptions', authenticateAdmin, async (req, res) =>
     }
 
     adminAudit(req.admin.id, 'ADD_SUBSCRIPTION', 'tenant', id, { plan_id, expires_at: expiresAtUtc, payment_reference })
-    res.json({ success: true, subscription_id: subRes.rows[0].id, expires_at: expiresAtUtc, timezone: tz })
+    res.json({ success: true, subscription_id: subRes.rows[0].id, subscription_code: subRes.rows[0].code, expires_at: expiresAtUtc, timezone: tz })
   } catch (err) {
     console.error('[admin/subscriptions]', err)
     res.status(500).json({ error: 'Error interno' })

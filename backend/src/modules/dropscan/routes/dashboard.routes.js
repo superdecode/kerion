@@ -314,7 +314,7 @@ router.get('/export',
 // GET /api/dropscan/guias/search?q=
 router.get('/guias/search',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'ver'),
+  requirePermission('dropscan.tarimas', 'ver'),
   async (req, res) => {
     try {
       const { q } = req.query
@@ -357,7 +357,7 @@ router.get('/guias/search',
 // GET /api/dropscan/dashboard/escaneadores?fecha_inicio=&fecha_fin=
 router.get('/escaneadores',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'ver'),
+  requirePermission('dropscan.tarimas', 'ver'),
   async (req, res) => {
     try {
       const { fecha_inicio, fecha_fin, empresa_id, canal_id } = req.query

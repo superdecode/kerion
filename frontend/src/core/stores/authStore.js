@@ -12,6 +12,10 @@ const LEVEL_HIERARCHY = { sin_acceso: 0, ver: 1, crear: 2, actualizar: 3, elimin
 
 // Legacy level mapping (for data that wasn't fully migrated)
 const LEGACY_MAP = { total: 'eliminar', gestion: 'actualizar', escritura: 'crear', lectura: 'ver' }
+const MODULE_ALIASES = {
+  'dropscan.historial': 'dropscan.tarimas',
+  'inventory.historial': 'inventory.tarimas',
+}
 
 function normalizeLevel(level) {
   if (!level) return 'sin_acceso'
@@ -42,7 +46,7 @@ function resolvePermission(level, action) {
 
 function getModuleLevel(permisos, modulePath) {
   if (!permisos || !modulePath) return 'sin_acceso'
-  const parts = modulePath.split('.')
+  const parts = (MODULE_ALIASES[modulePath] || modulePath).split('.')
   let current = permisos
   for (const part of parts) {
     if (current && typeof current === 'object' && part in current) {

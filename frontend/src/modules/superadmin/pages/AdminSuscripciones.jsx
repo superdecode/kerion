@@ -367,6 +367,14 @@ function SubscriptionsTab() {
     return 'text-emerald-400'
   }
 
+  function getTypeLabel(type) {
+    return ['annual', 'anual'].includes(type) ? 'Anual' : 'Mensual'
+  }
+
+  function isAnnual(type) {
+    return ['annual', 'anual'].includes(type)
+  }
+
   return (
     <div className="space-y-5">
       {/* Filters */}
@@ -456,9 +464,11 @@ function SubscriptionsTab() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {filtered.map(s => {
-                  const days = Math.ceil((new Date(s.expires_at) - Date.now()) / 86400000)
-                  const price = s.subscription_type === 'anual' && s.price_annual ? s.price_annual : s.price_amount
+              {filtered.map(s => {
+                const days = Math.ceil((new Date(s.expires_at) - Date.now()) / 86400000)
+                  const price = isAnnual(s.subscription_type)
+                    ? (s.subscription_price_amount ?? s.price_annual ?? s.price_amount)
+                    : (s.subscription_price_amount ?? s.price_amount)
                   return (
                     <tr key={s.id} className="hover:bg-gray-800/20 transition-colors">
                       <td className="px-4 py-3 text-gray-500 font-mono text-xs">{s.id.slice(0, 8)}</td>
@@ -467,7 +477,7 @@ function SubscriptionsTab() {
                         <p className="text-gray-500 text-xs">{s.slug}</p>
                       </td>
                       <td className="px-4 py-3 text-gray-300 text-sm">{s.plan_name}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">{s.subscription_type === 'anual' ? 'Anual' : 'Mensual'}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{getTypeLabel(s.subscription_type)}</td>
                       <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.started_at).toLocaleDateString('es-MX')}</td>
                       <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.expires_at).toLocaleDateString('es-MX')}</td>
                       <td className="px-4 py-3">

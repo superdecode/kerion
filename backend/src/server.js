@@ -29,7 +29,7 @@ import operadoresRoutes from './modules/dropscan/routes/operadores.routes.js'
 
 // Inventory module routes
 import invScanRoutes from './modules/inventory/routes/scan.routes.js'
-import invHistoryRoutes from './modules/inventory/routes/history.routes.js'
+import invTarimasRoutes from './modules/inventory/routes/tarimas.routes.js'
 
 // FEP module routes
 import fepFoliosRoutes from './modules/fep/routes/folios.routes.js'
@@ -96,7 +96,7 @@ app.use('/api/dropscan/operadores', tenantContext, tenantDB, moduleGuard('dropsc
 
 // Inventory — require inventory module (not in MVP plans, returns 403 for trial/basic)
 app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventory'), invScanRoutes)
-app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventory'), invHistoryRoutes)
+app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventory'), invTarimasRoutes)
 
 // FEP — require dropscan module (FEP is part of dropscan)
 app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)
@@ -203,16 +203,16 @@ async function runMigrations() {
     `UPDATE roles SET permisos = jsonb_set(permisos, '{global,wms}', '"sin_acceso"', true)
      WHERE nombre NOT IN ('Administrador','Jefe') AND NOT (permisos -> 'global' ? 'wms')`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{inventory}',
-       '{"escaneo":"eliminar","historial":"eliminar","reportes":"eliminar"}'::jsonb, true)
+       '{"escaneo":"eliminar","tarimas":"eliminar","reportes":"eliminar"}'::jsonb, true)
      WHERE nombre = 'Administrador' AND NOT (permisos ? 'inventory')`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{inventory}',
-       '{"escaneo":"actualizar","historial":"actualizar","reportes":"crear"}'::jsonb, true)
+       '{"escaneo":"actualizar","tarimas":"actualizar","reportes":"crear"}'::jsonb, true)
      WHERE nombre = 'Jefe' AND NOT (permisos ? 'inventory')`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{inventory}',
-       '{"escaneo":"crear","historial":"ver","reportes":"sin_acceso"}'::jsonb, true)
+       '{"escaneo":"crear","tarimas":"ver","reportes":"sin_acceso"}'::jsonb, true)
      WHERE nombre = 'Operador' AND NOT (permisos ? 'inventory')`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{inventory}',
-       '{"escaneo":"sin_acceso","historial":"ver","reportes":"ver"}'::jsonb, true)
+       '{"escaneo":"sin_acceso","tarimas":"ver","reportes":"ver"}'::jsonb, true)
      WHERE nombre = 'Usuario' AND NOT (permisos ? 'inventory')`,
 
     // ── FEP — Folios de Entrega Paqueteria ────────────────────────────────

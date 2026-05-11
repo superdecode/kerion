@@ -9,7 +9,7 @@ const router = Router()
 // GET /api/dropscan/tarimas
 router.get('/',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'ver'),
+  requirePermission('dropscan.tarimas', 'ver'),
   async (req, res) => {
     try {
       const { fecha_inicio, fecha_fin, empresa_id, canal_id, estado, operador_id, escaneador, codigo_guia, page = 1, limit = 20 } = req.query
@@ -148,7 +148,7 @@ router.get('/',
 // GET /api/dropscan/tarimas/:id
 router.get('/:id',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'ver'),
+  requirePermission('dropscan.tarimas', 'ver'),
   async (req, res) => {
     try {
       const { id } = req.params
@@ -216,7 +216,7 @@ router.get('/:id',
 // POST /api/dropscan/tarimas/:id/finalize
 router.post('/:id/finalize',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'actualizar'),
+  requirePermission('dropscan.tarimas', 'actualizar'),
   async (req, res) => {
     try {
       const { id } = req.params
@@ -260,7 +260,7 @@ router.post('/:id/cancel',
 // POST /api/dropscan/tarimas/:id/reopen
 router.post('/:id/reopen',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'desbloquear'),
+  requirePermission('dropscan.tarimas', 'desbloquear'),
   async (req, res) => {
     try {
       const { id } = req.params
@@ -281,7 +281,7 @@ router.post('/:id/reopen',
 // Reopen an EN_PROCESO tarima into a new active scan session so operator can continue scanning.
 router.post('/:id/adopt',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'desbloquear'),
+  requirePermission('dropscan.tarimas', 'desbloquear'),
   async (req, res) => {
     try {
       const { id } = req.params
@@ -357,7 +357,7 @@ router.post('/:id/adopt',
 // GET /api/dropscan/tarimas/:id/duplicados
 router.get('/:id/duplicados',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'ver'),
+  requirePermission('dropscan.tarimas', 'ver'),
   async (req, res) => {
     try {
       const { id } = req.params
@@ -383,7 +383,7 @@ router.get('/:id/duplicados',
 // POST /api/dropscan/tarimas/:tarimaId/guias (add a guide to existing tarima)
 router.post('/:tarimaId/guias',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'editar'),
+  requirePermission('dropscan.tarimas', 'editar'),
   async (req, res) => {
     try {
       const { tarimaId } = req.params
@@ -456,7 +456,7 @@ router.post('/:tarimaId/guias',
 // DELETE /api/dropscan/tarimas/:tarimaId/guias/:guiaId
 router.delete('/:tarimaId/guias/:guiaId',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'actualizar'),
+  requirePermission('dropscan.tarimas', 'actualizar'),
   async (req, res) => {
     try {
       const { tarimaId, guiaId } = req.params
@@ -486,7 +486,7 @@ router.delete('/:tarimaId/guias/:guiaId',
 // DELETE /api/dropscan/tarimas/:id
 router.delete('/:id',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'eliminar'),
+  requirePermission('dropscan.tarimas', 'eliminar'),
   async (req, res) => {
     try {
       const { id } = req.params

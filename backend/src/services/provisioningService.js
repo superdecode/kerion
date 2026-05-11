@@ -126,15 +126,15 @@ export async function provisionTenant(requestId, approvedByAdminId) {
       await tenantTransaction(tenantId, async (client) => {
         // Seed default admin role for this tenant
         const roleRes = await client.query(
-          `INSERT INTO roles (tenant_id, nombre, descripcion, permisos)
-           VALUES ($1, 'Administrador', 'Acceso total', $2)
+          `INSERT INTO roles (tenant_id, nombre, descripcion, permisos, is_default)
+           VALUES ($1, 'Administrador', 'Acceso total', $2, true)
            ON CONFLICT (tenant_id, nombre) DO UPDATE SET nombre = EXCLUDED.nombre
            RETURNING id`,
           [tenantId, JSON.stringify({
             global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
-            dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
+            dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
             fep: { folios: 'eliminar' },
-            inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
+            inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
           })]
         )
         const roleId = roleRes.rows[0].id
@@ -142,9 +142,16 @@ export async function provisionTenant(requestId, approvedByAdminId) {
         const codigo = `ADM-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
         await client.query(
           `INSERT INTO usuarios
-             (tenant_id, codigo, nombre_completo, email, password_hash, rol_id, estado, must_change_password)
-           VALUES ($1,$2,$3,$4,$5,$6,'ACTIVO',true)
-           ON CONFLICT (tenant_id, email) DO NOTHING`,
+             (tenant_id, codigo, nombre_completo, email, password_hash, rol_id, estado, must_change_password, es_admin_tenant, is_default)
+           VALUES ($1,$2,$3,$4,$5,$6,'ACTIVO',true,true,true)
+           ON CONFLICT (tenant_id, email) DO UPDATE
+             SET nombre_completo = EXCLUDED.nombre_completo,
+                 password_hash = EXCLUDED.password_hash,
+                 rol_id = EXCLUDED.rol_id,
+                 estado = 'ACTIVO',
+                 must_change_password = true,
+                 es_admin_tenant = true,
+                 is_default = true`,
           [tenantId, codigo, request.contact_name, adminEmail, hash, roleId]
         )
       })
@@ -193,10 +200,11 @@ export async function provisionTenant(requestId, approvedByAdminId) {
     try {
       const now = new Date()
       const expiresAt = new Date(now.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000)
+      const subscriptionCode = `SUB-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
       await query(
-        `INSERT INTO subscriptions (tenant_id, plan_id, status, started_at, expires_at, notes)
-         VALUES ($1,$2,'active',$3,$4,'Trial automatico')`,
-        [tenantId, trialPlan.id, now, expiresAt]
+        `INSERT INTO subscriptions (tenant_id, code, plan_id, subscription_type, price_amount, price_currency, status, started_at, expires_at, notes)
+         VALUES ($1,$2,$3,'monthly',$4,$5,'active',$6,$7,'Trial automatico')`,
+        [tenantId, subscriptionCode, trialPlan.id, trialPlan.price_amount || 0, trialPlan.price_currency || 'USD', now, expiresAt]
       )
       await logStep(tenantId, requestId, 'assign_trial_plan', 'ok', null, { expires_at: expiresAt })
     } catch (err) {

@@ -58,6 +58,13 @@ async function migratePermissions() {
         delete permisos.global.dashboard
       }
 
+      if (permisos?.dropscan?.historial !== undefined && permisos?.dropscan?.tarimas === undefined) {
+        permisos.dropscan.tarimas = permisos.dropscan.historial
+      }
+      if (permisos?.inventory?.historial !== undefined && permisos?.inventory?.tarimas === undefined) {
+        permisos.inventory.tarimas = permisos.inventory.historial
+      }
+
       // Normalize all level values
       permisos = normalizePermisos(permisos)
 

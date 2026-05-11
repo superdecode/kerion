@@ -40,7 +40,7 @@ import Configuracion from './modules/dropscan/pages/Configuracion'
 
 // Inventory Module
 import InvEscaneo from './modules/inventory/pages/Escaneo'
-import InvHistorial from './modules/inventory/pages/Historial'
+import InvTarimas from './modules/inventory/pages/Tarimas'
 import InvReportes from './modules/inventory/pages/Reportes'
 
 // WMS Hub
@@ -69,7 +69,7 @@ const MODULE_ROUTES = [
   { module: 'dropscan.reportes', path: '/dropscan/reportes' },
   { module: 'dropscan.configuracion', path: '/dropscan/configuracion' },
   { module: 'inventory.escaneo', path: '/inventory/escaneo' },
-  { module: 'inventory.historial', path: '/inventory/historial' },
+  { module: 'inventory.tarimas', path: '/inventory/tarimas' },
   { module: 'inventory.reportes', path: '/inventory/reportes' },
   { module: 'fep.folios', path: '/dropscan/folios' },
   { module: 'global.wms', path: '/wms' },
@@ -168,8 +168,11 @@ function AppRoutes() {
         <Route path="inventory/escaneo" element={
           <PermissionRoute module="inventory.escaneo"><ErrorBoundary><InvEscaneo /></ErrorBoundary></PermissionRoute>
         } />
+        <Route path="inventory/tarimas" element={
+          <PermissionRoute module="inventory.tarimas"><ErrorBoundary><InvTarimas /></ErrorBoundary></PermissionRoute>
+        } />
         <Route path="inventory/historial" element={
-          <PermissionRoute module="inventory.historial"><ErrorBoundary><InvHistorial /></ErrorBoundary></PermissionRoute>
+          <Navigate to="/inventory/tarimas" replace />
         } />
         <Route path="inventory/reportes" element={
           <PermissionRoute module="inventory.reportes"><ErrorBoundary><InvReportes /></ErrorBoundary></PermissionRoute>

@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { query } from '../../config/database.js'
+import env from '../../config/env.js'
 
 const router = Router()
 
@@ -11,7 +12,7 @@ const DEFAULT_ROLES = [
     permisos: {
       global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
       dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
-      inventory: { escaneo: 'eliminar', historial: 'eliminar', reportes: 'eliminar' },
+      inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
     }
   },
   {
@@ -20,7 +21,7 @@ const DEFAULT_ROLES = [
     permisos: {
       global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'ver' },
       dropscan: { dashboard: 'ver', escaneo: 'actualizar', tarimas: 'actualizar', reportes: 'crear', configuracion: 'ver', folios: 'actualizar' },
-      inventory: { escaneo: 'actualizar', historial: 'actualizar', reportes: 'crear' },
+      inventory: { escaneo: 'actualizar', tarimas: 'actualizar', reportes: 'crear' },
     }
   },
   {
@@ -29,7 +30,7 @@ const DEFAULT_ROLES = [
     permisos: {
       global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'sin_acceso' },
       dropscan: { dashboard: 'ver', escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso', configuracion: 'sin_acceso', folios: 'crear' },
-      inventory: { escaneo: 'crear', historial: 'ver', reportes: 'sin_acceso' },
+      inventory: { escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso' },
     }
   },
   {
@@ -38,7 +39,7 @@ const DEFAULT_ROLES = [
     permisos: {
       global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'sin_acceso' },
       dropscan: { dashboard: 'ver', escaneo: 'sin_acceso', tarimas: 'ver', reportes: 'ver', configuracion: 'sin_acceso', folios: 'ver' },
-      inventory: { escaneo: 'sin_acceso', historial: 'ver', reportes: 'ver' },
+      inventory: { escaneo: 'sin_acceso', tarimas: 'ver', reportes: 'ver' },
     }
   }
 ]
@@ -55,12 +56,17 @@ router.post('/', async (_req, res) => {
       })
     }
 
+    const tenantId = env.LEGACY_TENANT_ID
+    if (!tenantId) {
+      return res.status(500).json({ error: 'LEGACY_TENANT_ID no configurado para setup inicial' })
+    }
+
     // Create roles
     const roleIds = {}
     for (const role of DEFAULT_ROLES) {
       const r = await query(
-        `INSERT INTO roles (nombre, descripcion, permisos) VALUES ($1, $2, $3) RETURNING id`,
-        [role.nombre, role.descripcion, JSON.stringify(role.permisos)]
+        `INSERT INTO roles (tenant_id, nombre, descripcion, permisos, is_default) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [tenantId, role.nombre, role.descripcion, JSON.stringify(role.permisos), role.nombre === 'Administrador']
       )
       roleIds[role.nombre] = r.rows[0].id
     }
@@ -69,9 +75,9 @@ router.post('/', async (_req, res) => {
     const adminPassword = 'Admin2024!'
     const passwordHash = await bcrypt.hash(adminPassword, 10)
     await query(
-      `INSERT INTO usuarios (codigo, nombre_completo, email, password_hash, rol_id, estado)
-       VALUES ($1, $2, $3, $4, $5, 'ACTIVO')`,
-      ['ADM001', 'Administrador', 'admin@kirion.com', passwordHash, roleIds['Administrador']]
+      `INSERT INTO usuarios (tenant_id, codigo, nombre_completo, email, password_hash, rol_id, estado, es_admin_tenant, is_default, must_change_password)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVO', true, true, false)`,
+      [tenantId, 'ADM001', 'Administrador', 'admin@kirion.com', passwordHash, roleIds['Administrador']]
     )
 
     // Default DropScan configs
@@ -87,10 +93,10 @@ router.post('/', async (_req, res) => {
         ? { es_default: cfg.es_default || false, empresa_ids: [] }
         : null
       await query(
-        `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, config_json)
-         VALUES ('dropscan', $1, $2, $3, $4)
-         ON CONFLICT (modulo, tipo, codigo) DO NOTHING`,
-        [cfg.tipo, cfg.codigo, cfg.nombre, configJson ? JSON.stringify(configJson) : null]
+        `INSERT INTO configuraciones (tenant_id, modulo, tipo, codigo, nombre, config_json)
+         VALUES ($1, 'dropscan', $2, $3, $4, $5)
+         ON CONFLICT (tenant_id, modulo, tipo, codigo) DO NOTHING`,
+        [tenantId, cfg.tipo, cfg.codigo, cfg.nombre, configJson ? JSON.stringify(configJson) : null]
       )
     }
 

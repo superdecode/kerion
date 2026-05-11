@@ -33,7 +33,7 @@ const MODULE_GROUPS = [
     groupKey: 'admin.group.inventory',
     modules: [
       { key: 'inventory.escaneo',  label: 'Escaneo',  labelKey: 'perm.sub.escaneo' },
-      { key: 'inventory.historial',label: 'Historial',labelKey: 'perm.sub.historial' },
+      { key: 'inventory.tarimas',label: 'Tarimas',labelKey: 'perm.sub.tarimas' },
       { key: 'inventory.reportes', label: 'Reportes', labelKey: 'perm.sub.reportes' },
     ]
   },

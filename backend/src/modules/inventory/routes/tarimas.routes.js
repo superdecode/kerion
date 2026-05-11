@@ -5,10 +5,10 @@ import { requirePermission } from '../../../shared/middleware/permissions.js'
 
 const router = Router()
 
-// GET /api/inventory/history — paginated scan history with filters
+// GET /api/inventory/tarimas — paginated scan history with filters
 router.get('/',
   authenticateToken, loadFullUser,
-  requirePermission('inventory.historial', 'ver'),
+  requirePermission('inventory.tarimas', 'ver'),
   async (req, res) => {
     try {
       const {
@@ -74,7 +74,7 @@ router.get('/',
       })
     } catch (err) {
       console.error('Inventory history error:', err)
-      res.status(500).json({ error: 'Error obteniendo historial' })
+      res.status(500).json({ error: 'Error obteniendo tarimas' })
     }
   }
 )

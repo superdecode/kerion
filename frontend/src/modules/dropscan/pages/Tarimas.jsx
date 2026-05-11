@@ -30,7 +30,7 @@ const calcDuration = (tarima) => {
   return '--'
 }
 
-export default function Historial() {
+export default function Tarimas() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
@@ -70,9 +70,9 @@ export default function Historial() {
   const [showFilters, setShowFilters] = useState(true)
   const { canDelete, canView, hasPermission, user, getPermissionLevel } = useAuthStore()
   const canViewDetails = canView('dropscan.tarimas')           // ver+
-  const historialLevel = getPermissionLevel('dropscan.tarimas')
-  const canManageStatus = user.rol_nombre === 'Administrador' || historialLevel === 'actualizar'  // ONLY actualizar role
-  const canExportHistorial = hasPermission('dropscan.tarimas', 'exportar') // actualizar+
+  const tarimasLevel = getPermissionLevel('dropscan.tarimas')
+  const canManageStatus = user.rol_nombre === 'Administrador' || tarimasLevel === 'actualizar'  // ONLY actualizar role
+  const canExportTarimas = hasPermission('dropscan.tarimas', 'exportar') // actualizar+
   const toast = useToastStore.getState()
   const { t } = useI18nStore()
   const qc = useQueryClient()
@@ -513,7 +513,7 @@ export default function Historial() {
                   <X className="w-3 h-3" />{t('common.clear')}
                 </button>
               )}
-              {canExportHistorial && !selectMode && (
+              {canExportTarimas && !selectMode && (
                 <button onClick={() => { setSelectMode(true); setSelectedIds(new Set()) }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold bg-success-600 text-white hover:bg-success-700 rounded-xl transition-all duration-200 hover:shadow-glow hover:-translate-y-[1px] active:scale-[0.97]">
                   <Download className="w-4 h-4" /> {t('common.export')}
@@ -786,7 +786,7 @@ export default function Historial() {
           ) : t('common.loading')
         }
         size="xl"
-        headerAction={detail && canExportHistorial && (
+        headerAction={detail && canExportTarimas && (
           <button onClick={handleExportTarimaExcel}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-success-50 text-success-700 rounded-lg hover:bg-success-100 font-semibold transition-all border border-success-200">
             <Download className="w-3.5 h-3.5" /> {t('common.export')}

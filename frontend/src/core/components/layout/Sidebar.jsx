@@ -23,16 +23,16 @@ const getModuleNav = (t) => [
       { path: '/dropscan/configuracion', label: t('nav.configuration'), icon: Settings, permission: 'dropscan.configuracion' },
     ]
   },
-  {
-    id: 'inventory',
-    label: t('nav.inventory') || 'Inventario',
-    icon: Boxes,
-    items: [
-      { path: '/inventory/escaneo', label: t('nav.scanning'), icon: ScanBarcode, permission: 'inventory.escaneo' },
-      { path: '/inventory/historial', label: t('nav.history'), icon: History, permission: 'inventory.historial' },
-      { path: '/inventory/reportes', label: t('nav.reports'), icon: BarChart3, permission: 'inventory.reportes' },
-    ]
-  },
+      {
+        id: 'inventory',
+        label: t('nav.inventory') || 'Inventario',
+        icon: Boxes,
+        items: [
+          { path: '/inventory/escaneo', label: t('nav.scanning'), icon: ScanBarcode, permission: 'inventory.escaneo' },
+          { path: '/inventory/tarimas', label: t('nav.tarimas'), icon: History, permission: 'inventory.tarimas' },
+          { path: '/inventory/reportes', label: t('nav.reports'), icon: BarChart3, permission: 'inventory.reportes' },
+        ]
+      },
 ]
 
 const getAdminNav = (t) => [

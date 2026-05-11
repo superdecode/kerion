@@ -252,9 +252,22 @@ function StatCard({ icon: Icon, label, value, color, loading = false }) {
 function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
   const tz = zona_horaria || 'America/Mexico_City'
   const fmt = (d) => d ? new Intl.DateTimeFormat('es-MX', {
-    timeZone: tz, day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    timeZone: tz,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZoneName: 'short',
   }).format(new Date(d)) : '—'
+
+  const getTypeLabel = (s) => s.subscription_type === 'annual'
+    ? 'Anual'
+    : s.subscription_type === 'monthly'
+      ? 'Mensual'
+      : (s.duration_days && Number(s.duration_days) >= 180 ? 'Anual' : 'Mensual')
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -276,18 +289,23 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
           <table className="w-full text-left text-sm">
             <thead className="text-gray-400 font-medium border-b border-gray-800">
               <tr>
-                <th className="pb-3 px-2">Plan</th>
+                <th className="pb-3 px-2">Código</th>
+                <th className="pb-3 px-2">Tipo</th>
                 <th className="pb-3 px-2">Estado</th>
                 <th className="pb-3 px-2">Inicio</th>
                 <th className="pb-3 px-2">Vence ({tz})</th>
-                <th className="pb-3 px-2">Referencia</th>
-                <th className="pb-3 px-2">Notas</th>
+                <th className="pb-3 px-2">Precio</th>
+                <th className="pb-3 px-2">Referencia / Notas</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/50">
               {subscriptions.map(s => (
                 <tr key={s.id} className="hover:bg-gray-800/30 transition-colors">
-                  <td className="py-3 px-2 text-white font-medium">{s.plan_name}</td>
+                  <td className="py-3 px-2 text-white font-medium">
+                    <div>{s.code || s.id}</div>
+                    <div className="text-xs text-gray-500">{s.plan_name}</div>
+                  </td>
+                  <td className="py-3 px-2 text-gray-300">{getTypeLabel(s)}</td>
                   <td className="py-3 px-2">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                       s.status === 'active' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25' :
@@ -299,8 +317,13 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
                   </td>
                   <td className="py-3 px-2 text-gray-300">{fmt(s.started_at)}</td>
                   <td className="py-3 px-2 text-gray-300">{fmt(s.expires_at)}</td>
-                  <td className="py-3 px-2 text-gray-400 italic">{s.payment_reference || '—'}</td>
-                  <td className="py-3 px-2 text-gray-400 text-xs max-w-xs truncate">{s.notes || '—'}</td>
+                  <td className="py-3 px-2 text-gray-300">
+                    {s.price_amount != null ? `$${Number(s.price_amount).toFixed(2)} ${s.price_currency || 'USD'}` : '—'}
+                  </td>
+                  <td className="py-3 px-2 text-gray-400 text-xs max-w-xs truncate">
+                    <div>{s.payment_reference || '—'}</div>
+                    <div className="italic">{s.notes || '—'}</div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -346,7 +369,13 @@ function SubscriptionCard({ tenantId, subscriptions, history, plans, onSaved, zo
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-      {showHistory && <SubscriptionHistoryModal subscriptions={history} onClose={() => setShowHistory(false)} />}
+      {showHistory && (
+        <SubscriptionHistoryModal
+          subscriptions={history}
+          zona_horaria={tz}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
       
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-white font-semibold flex items-center gap-2">
@@ -359,7 +388,7 @@ function SubscriptionCard({ tenantId, subscriptions, history, plans, onSaved, zo
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg border border-gray-700 transition-colors"
           >
             <Clock className="w-3 h-3" />
-            Ver historial
+            Ver historial completo
           </button>
           <button
             onClick={() => setShowForm(v => !v)}
@@ -417,13 +446,20 @@ function SubscriptionCard({ tenantId, subscriptions, history, plans, onSaved, zo
             const days = exp ? Math.ceil((exp - Date.now()) / 86400000) : null
             const expFormatted = exp ? new Intl.DateTimeFormat('es-MX', {
               timeZone: tz,
-              day: '2-digit', month: 'short', year: 'numeric',
-              hour: '2-digit', minute: '2-digit',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false,
+              timeZoneName: 'short',
             }).format(exp) : null
             return (
               <div key={s.id} className="flex items-center justify-between p-3 bg-gray-800/40 rounded-lg border border-gray-700/40">
                 <div>
                   <p className="text-white text-sm font-medium">{s.plan_name}</p>
+                  <p className="text-gray-500 text-xs mt-0.5">{s.code || s.id}</p>
                   <p className="text-gray-500 text-xs mt-0.5">{s.payment_reference || 'Sin referencia'}{s.notes ? ` · ${s.notes}` : ''}</p>
                 </div>
                 <div className="text-right">
@@ -817,7 +853,7 @@ export default function AdminTenantDetalle() {
           tenantId={id} 
           subscriptions={subscriptions} 
           history={data.subscription_history || []}
-          timeZone={tenant.zona_horaria}
+          zona_horaria={tenant.zona_horaria}
           plans={plans} 
           onSaved={(msg) => { showToast(msg); load() }} 
         />

@@ -94,7 +94,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
           </div>
         )}
 
-        {/* Collapsible search - only shown on historial/escaneo */}
+        {/* Collapsible search - only shown on tarimas/escaneo */}
         {showSearch && (
           <div className="relative">
             {searchOpen ? (
