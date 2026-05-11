@@ -22,7 +22,7 @@ export default function AdminLayout() {
 
   function handleLogout() {
     logout()
-    navigate('/super-admin/login')
+    navigate('/super-admin/login', { replace: true })
   }
 
   const initials = admin?.name

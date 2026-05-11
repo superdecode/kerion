@@ -47,7 +47,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/login', { replace: true })
   }
 
   const resetChangePass = () => {

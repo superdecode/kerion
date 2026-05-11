@@ -9,7 +9,7 @@ export default function ProtectedRoute({ children }) {
   if (!isAuthenticated) {
     // Admin-only user navigating to tenant routes → redirect to admin panel
     if (isAdminAuth) return <Navigate to="/super-admin" replace />
-    return <Navigate to="/landing" replace />
+    return <Navigate to="/login" replace />
   }
 
   return children
