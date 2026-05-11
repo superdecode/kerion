@@ -4,7 +4,7 @@ import {
   ArrowLeft, RefreshCw, CheckCircle2, XCircle, PauseCircle, PlayCircle,
   Edit2, Save, X, Plus, Calendar, Users, CreditCard, Activity,
   AlertCircle, Check, Clock, Building2, FileText, Package, Zap,
-  Trash2, KeyRound, Copy
+  Trash2, KeyRound, Copy, Search, Filter, ChevronLeft, ChevronRight, SlidersHorizontal
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
@@ -249,6 +249,66 @@ function StatCard({ icon: Icon, label, value, color, loading = false }) {
   )
 }
 
+const HISTORY_PAGE_SIZES = [10, 20, 50]
+const HISTORY_STATUS_FILTERS = [
+  { value: '', label: 'Todos' },
+  { value: 'active', label: 'Activas' },
+  { value: 'expired', label: 'Vencidas' },
+  { value: 'trial', label: 'Trial' },
+  { value: 'trial_expired', label: 'Trial vencidas' },
+  { value: 'suspended', label: 'Suspendidas' },
+]
+const HISTORY_TYPE_FILTERS = [
+  { value: '', label: 'Todos los tipos' },
+  { value: 'monthly', label: 'Mensual' },
+  { value: 'annual', label: 'Anual' },
+  { value: 'other', label: 'Otro' },
+]
+const HISTORY_SORT_OPTIONS = [
+  { value: 'recent', label: 'Más recientes' },
+  { value: 'oldest', label: 'Más antiguas' },
+  { value: 'expires_desc', label: 'Vencimiento más lejano' },
+  { value: 'expires_asc', label: 'Vencimiento más próximo' },
+]
+
+function normalizeText(value) {
+  return (value ?? '')
+    .toString()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+}
+
+function getSubscriptionTypeLabel(s) {
+  if (s.subscription_type === 'annual') return 'Anual'
+  if (s.subscription_type === 'monthly') return 'Mensual'
+  return s.duration_days && Number(s.duration_days) >= 180 ? 'Anual' : 'Mensual'
+}
+
+function getSubscriptionStatusLabel(status) {
+  if (status === 'active') return 'Activa'
+  if (status === 'expired') return 'Vencida'
+  if (status === 'trial') return 'Trial'
+  if (status === 'trial_expired') return 'Trial vencida'
+  if (status === 'suspended') return 'Suspendida'
+  return status || '—'
+}
+
+function getSubscriptionStatusClasses(status) {
+  if (status === 'active') return 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
+  if (status === 'expired') return 'bg-amber-500/15 text-amber-300 border border-amber-500/25'
+  if (status === 'trial') return 'bg-blue-500/15 text-blue-300 border border-blue-500/25'
+  if (status === 'trial_expired') return 'bg-orange-500/15 text-orange-300 border border-orange-500/25'
+  if (status === 'suspended') return 'bg-red-500/15 text-red-300 border border-red-500/25'
+  return 'bg-gray-700 text-gray-300 border border-gray-600'
+}
+
+function safeDateValue(value) {
+  const time = value ? new Date(value).getTime() : NaN
+  return Number.isFinite(time) ? time : 0
+}
+
 function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
   const tz = zona_horaria || 'America/Mexico_City'
   const fmt = (d) => d ? new Intl.DateTimeFormat('es-MX', {
@@ -263,74 +323,272 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
     timeZoneName: 'short',
   }).format(new Date(d)) : '—'
 
-  const getTypeLabel = (s) => s.subscription_type === 'annual'
-    ? 'Anual'
-    : s.subscription_type === 'monthly'
-      ? 'Mensual'
-      : (s.duration_days && Number(s.duration_days) >= 180 ? 'Anual' : 'Mensual')
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
+  const [planFilter, setPlanFilter] = useState('')
+  const [sortBy, setSortBy] = useState('recent')
+  const [pageSize, setPageSize] = useState(10)
+  const [page, setPage] = useState(1)
+
+  const planOptions = Array.from(
+    new Map(
+      subscriptions
+        .map((s) => [s.plan_name || s.plan_code || s.code || s.id, s.plan_name || s.plan_code || s.code || s.id])
+        .filter(([value]) => value)
+    ).entries()
+  ).map(([, label]) => label)
+
+  useEffect(() => {
+    setPage(1)
+  }, [query, statusFilter, typeFilter, planFilter, sortBy, pageSize, subscriptions])
+
+  const filtered = subscriptions
+    .slice()
+    .sort((a, b) => {
+      const aStart = safeDateValue(a.started_at || a.created_at || a.expires_at)
+      const bStart = safeDateValue(b.started_at || b.created_at || b.expires_at)
+      const aExpiry = safeDateValue(a.expires_at || a.started_at || a.created_at)
+      const bExpiry = safeDateValue(b.expires_at || b.started_at || b.created_at)
+
+      if (sortBy === 'oldest') return aStart - bStart
+      if (sortBy === 'expires_desc') return bExpiry - aExpiry
+      if (sortBy === 'expires_asc') return aExpiry - bExpiry
+      return bStart - aStart
+    })
+    .filter((s) => {
+      if (statusFilter && s.status !== statusFilter) return false
+      if (typeFilter && typeFilter !== 'other' && s.subscription_type !== typeFilter) return false
+      if (typeFilter === 'other' && (s.subscription_type === 'annual' || s.subscription_type === 'monthly')) return false
+      if (planFilter) {
+        const value = s.plan_name || s.plan_code || s.code || s.id
+        if (value !== planFilter) return false
+      }
+      if (!query) return true
+      const haystack = normalizeText([
+        s.code,
+        s.plan_name,
+        s.plan_code,
+        s.subscription_type,
+        s.status,
+        s.payment_reference,
+        s.notes,
+        s.price_currency,
+        s.price_amount,
+      ].join(' '))
+      return haystack.includes(normalizeText(query))
+    })
+
+  const totalResults = filtered.length
+  const totalPages = Math.max(1, Math.ceil(totalResults / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const startIndex = (safePage - 1) * pageSize
+  const paged = filtered.slice(startIndex, startIndex + pageSize)
+  const visibleStart = totalResults === 0 ? 0 : startIndex + 1
+  const visibleEnd = startIndex + paged.length
+  const activeFiltersCount = [query, statusFilter, typeFilter, planFilter].filter(Boolean).length
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-4xl shadow-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between mb-4">
-          <div>
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-6xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+        <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b border-gray-800">
+          <div className="min-w-0">
             <h3 className="text-white font-semibold flex items-center gap-2 text-lg">
               <Clock className="w-5 h-5 text-blue-400" />
               Historial completo de suscripciones
             </h3>
-            <p className="text-gray-500 text-xs mt-0.5">Fechas en zona horaria: {tz}</p>
+            <p className="text-gray-500 text-xs mt-0.5">Fechas en zona horaria: {tz}. El vencimiento se muestra siempre con zona horaria explícita.</p>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="overflow-x-auto flex-1">
-          <table className="w-full text-left text-sm">
-            <thead className="text-gray-400 font-medium border-b border-gray-800">
-              <tr>
-                <th className="pb-3 px-2">Código</th>
-                <th className="pb-3 px-2">Tipo</th>
-                <th className="pb-3 px-2">Estado</th>
-                <th className="pb-3 px-2">Inicio</th>
-                <th className="pb-3 px-2">Vence ({tz})</th>
-                <th className="pb-3 px-2">Precio</th>
-                <th className="pb-3 px-2">Referencia / Notas</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800/50">
-              {subscriptions.map(s => (
-                <tr key={s.id} className="hover:bg-gray-800/30 transition-colors">
-                  <td className="py-3 px-2 text-white font-medium">
-                    <div>{s.code || s.id}</div>
-                    <div className="text-xs text-gray-500">{s.plan_name}</div>
-                  </td>
-                  <td className="py-3 px-2 text-gray-300">{getTypeLabel(s)}</td>
-                  <td className="py-3 px-2">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                      s.status === 'active' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25' :
-                      s.status === 'expired' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25' :
-                      'bg-gray-700 text-gray-400'
-                    }`}>
-                      {s.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-2 text-gray-300">{fmt(s.started_at)}</td>
-                  <td className="py-3 px-2 text-gray-300">{fmt(s.expires_at)}</td>
-                  <td className="py-3 px-2 text-gray-300">
-                    {s.price_amount != null ? `$${Number(s.price_amount).toFixed(2)} ${s.price_currency || 'USD'}` : '—'}
-                  </td>
-                  <td className="py-3 px-2 text-gray-400 text-xs max-w-xs truncate">
-                    <div>{s.payment_reference || '—'}</div>
-                    <div className="italic">{s.notes || '—'}</div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="px-6 pt-5 pb-4 border-b border-gray-800/80 space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_0.7fr] gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar por código, plan, referencia, notas, estado..."
+                className="w-full bg-gray-950 border border-gray-700 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+            <div>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+              >
+                {HISTORY_STATUS_FILTERS.map((option) => (
+                  <option key={option.value || 'all-status'} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+              >
+                {HISTORY_TYPE_FILTERS.map((option) => (
+                  <option key={option.value || 'all-types'} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <select
+                value={planFilter}
+                onChange={(e) => setPlanFilter(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+              >
+                <option value="">Todos los planes</option>
+                {planOptions.map((plan) => (
+                  <option key={plan} value={plan}>{plan}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
+              <div>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  {HISTORY_SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value) || 10)}
+                  className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  {HISTORY_PAGE_SIZES.map((size) => (
+                    <option key={size} value={size}>{size} por página</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/25">
+              <SlidersHorizontal className="w-3 h-3" />
+              {totalResults} resultados
+            </span>
+            {query && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Buscar: {query}</span>}
+            {statusFilter && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Estado: {getSubscriptionStatusLabel(statusFilter)}</span>}
+            {typeFilter && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Tipo: {HISTORY_TYPE_FILTERS.find((opt) => opt.value === typeFilter)?.label || typeFilter}</span>}
+            {planFilter && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Plan: {planFilter}</span>}
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={() => {
+                  setQuery('')
+                  setStatusFilter('')
+                  setTypeFilter('')
+                  setPlanFilter('')
+                  setSortBy('recent')
+                  setPageSize(10)
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition-colors"
+              >
+                <X className="w-3 h-3" />
+                Limpiar filtros
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="mt-6 flex justify-end">
+        <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-gray-400 font-medium border-b border-gray-800 sticky top-0 bg-gray-900 z-10">
+                <tr>
+                  <th className="py-3 px-4">Código</th>
+                  <th className="py-3 px-4">Tipo</th>
+                  <th className="py-3 px-4">Estado</th>
+                  <th className="py-3 px-4">Inicio ({tz})</th>
+                  <th className="py-3 px-4">Vence ({tz})</th>
+                  <th className="py-3 px-4">Precio</th>
+                  <th className="py-3 px-4">Referencia / Notas</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800/50">
+                {paged.map((s) => (
+                  <tr key={s.id} className="hover:bg-gray-800/30 transition-colors align-top">
+                    <td className="py-4 px-4 text-white font-medium">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">{s.code || s.id}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">{s.plan_name || s.plan_code || 'Sin plan'}</div>
+                    </td>
+                    <td className="py-4 px-4 text-gray-300 whitespace-nowrap">{getSubscriptionTypeLabel(s)}</td>
+                    <td className="py-4 px-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getSubscriptionStatusClasses(s.status)}`}>
+                        {getSubscriptionStatusLabel(s.status)}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-gray-300 whitespace-nowrap">{fmt(s.started_at || s.created_at)}</td>
+                    <td className="py-4 px-4 text-gray-300 whitespace-nowrap">{fmt(s.expires_at)}</td>
+                    <td className="py-4 px-4 text-gray-300 whitespace-nowrap">
+                      {s.price_amount != null ? `$${Number(s.price_amount).toFixed(2)} ${s.price_currency || 'USD'}` : '—'}
+                    </td>
+                    <td className="py-4 px-4 text-gray-400 text-xs max-w-md">
+                      <div className="space-y-1">
+                        <div className="truncate">{s.payment_reference || '—'}</div>
+                        <div className="italic break-words whitespace-pre-wrap">{s.notes || '—'}</div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {paged.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-16 px-4 text-center">
+                      <div className="flex flex-col items-center gap-2 text-gray-500">
+                        <Filter className="w-5 h-5" />
+                        <p className="text-sm">No hay suscripciones que coincidan con los filtros actuales.</p>
+                        <p className="text-xs text-gray-600">Prueba limpiando la búsqueda o ajustando los filtros.</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="border-t border-gray-800 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-xs text-gray-500">
+              Mostrando {visibleStart} a {visibleEnd} de {totalResults} suscripciones
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
+              </button>
+              <div className="px-3 py-2 rounded-lg border border-gray-700 bg-gray-950 text-gray-300 text-sm">
+                Página {safePage} de {totalPages}
+              </div>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm"
+              >
+                Siguiente
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 pb-6 pt-4 flex justify-end border-t border-gray-800/60">
           <button onClick={onClose} className="px-6 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors">
             Cerrar
           </button>
