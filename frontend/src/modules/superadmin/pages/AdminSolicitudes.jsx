@@ -408,70 +408,71 @@ export default function AdminSolicitudes() {
         </button>
       </div>
 
-      {/* Row 1: status pills */}
-      <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5 w-fit">
-        {STATUS_FILTERS.map(s => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`relative px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              statusFilter === s ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-            }`}
+      {/* Filters: search + date card + type dropdown + status pills on right */}
+      <div className="flex flex-wrap items-center gap-3 justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar por nombre o email..."
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 bg-gray-800/50 border border-gray-700 rounded-xl px-3 py-2 shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-gray-500" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => setDateFrom(e.target.value)}
+              className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
+            />
+            <span className="text-gray-600 text-xs">→</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => setDateTo(e.target.value)}
+              className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
+            />
+          </div>
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
           >
-            {STATUS_LABELS[s]}
-            {s === 'pending' && statusFilter !== 'pending' && pendingCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-black text-[10px] font-bold rounded-full flex items-center justify-center">
-                {pendingCount}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+            <option value="">Todos los tipos</option>
+            <option value="new">Nuevos</option>
+            <option value="renewal">Renovaciones</option>
+          </select>
+          {(typeFilter || dateFrom || dateTo) && (
+            <button
+              onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo('') }}
+              className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
 
-      {/* Row 2: search + date card + type dropdown */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por nombre o email..."
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
-          />
+        <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5 w-fit">
+          {STATUS_FILTERS.map(s => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`relative px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                statusFilter === s ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+              }`}
+            >
+              {STATUS_LABELS[s]}
+              {s === 'pending' && statusFilter !== 'pending' && pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-black text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-        <div className="flex items-center gap-1.5 bg-gray-800/50 border border-gray-700 rounded-xl px-3 py-2 shrink-0">
-          <Calendar className="w-3.5 h-3.5 text-gray-500" />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
-            className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
-          />
-          <span className="text-gray-600 text-xs">→</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={e => setDateTo(e.target.value)}
-            className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
-          />
-        </div>
-        <select
-          value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value)}
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
-        >
-          <option value="">Todos los tipos</option>
-          <option value="new">Nuevos</option>
-          <option value="renewal">Renovaciones</option>
-        </select>
-        {(typeFilter || dateFrom || dateTo) && (
-          <button
-            onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo('') }}
-            className="text-xs text-gray-400 hover:text-red-400 transition-colors"
-          >
-            Limpiar filtros
-          </button>
-        )}
       </div>
 
       {error && (

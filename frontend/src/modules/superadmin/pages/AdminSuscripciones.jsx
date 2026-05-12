@@ -423,66 +423,67 @@ function SubscriptionsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Row 1: status pills */}
-      <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5 w-fit">
-        {SUB_STATUS_FILTERS.map(s => (
-          <button
-            key={s}
-            onClick={() => setFilters(f => ({ ...f, status: s }))}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              filters.status === s ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-            }`}
+      {/* Filters: search + date card + plan dropdown + status pills on right */}
+      <div className="flex flex-wrap items-center gap-3 justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar empresa..."
+              className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 bg-gray-800/50 border border-gray-700 rounded-xl px-3 py-2 shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-gray-500" />
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+              className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
+            />
+            <span className="text-gray-600 text-xs">→</span>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+              className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
+            />
+          </div>
+          <select
+            value={filters.plan}
+            onChange={e => setFilters(f => ({ ...f, plan: e.target.value }))}
+            className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
           >
-            {SUB_STATUS_LABELS[s]}
-          </button>
-        ))}
-      </div>
+            <option value="">Plan</option>
+            {plans.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {(filters.dateFrom || filters.dateTo || filters.plan) && (
+            <button
+              onClick={() => setFilters(f => ({ ...f, dateFrom: '', dateTo: '', plan: '' }))}
+              className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
 
-      {/* Row 2: search + date card + plan dropdown */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar empresa..."
-            className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
-          />
-        </div>
-        <div className="flex items-center gap-1.5 bg-gray-800/50 border border-gray-700 rounded-xl px-3 py-2 shrink-0">
-          <Calendar className="w-3.5 h-3.5 text-gray-500" />
-          <input
-            type="date"
-            value={filters.dateFrom}
-            onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-            className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
-          />
-          <span className="text-gray-600 text-xs">→</span>
-          <input
-            type="date"
-            value={filters.dateTo}
-            onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-            className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
-          />
-        </div>
-        <select
-          value={filters.plan}
-          onChange={e => setFilters(f => ({ ...f, plan: e.target.value }))}
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
-        >
-          <option value="">Plan</option>
-          {plans.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+        <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5 w-fit">
+          {SUB_STATUS_FILTERS.map(s => (
+            <button
+              key={s}
+              onClick={() => setFilters(f => ({ ...f, status: s }))}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                filters.status === s ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+              }`}
+            >
+              {SUB_STATUS_LABELS[s]}
+            </button>
           ))}
-        </select>
-        {(filters.dateFrom || filters.dateTo || filters.plan) && (
-          <button
-            onClick={() => setFilters(f => ({ ...f, dateFrom: '', dateTo: '', plan: '' }))}
-            className="text-xs text-gray-400 hover:text-red-400 transition-colors"
-          >
-            Limpiar filtros
-          </button>
-        )}
+        </div>
       </div>
 
       {/* Table */}

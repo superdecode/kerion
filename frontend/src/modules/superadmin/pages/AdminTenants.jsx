@@ -95,33 +95,34 @@ export default function AdminTenants() {
         </div>
       </div>
 
-      {/* Row 1: status pills */}
-      <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5 flex-wrap w-fit">
-        {STATUSES.map(s => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              statusFilter === s
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-            }`}
-          >
-            {STATUS_LABELS[s]}
-          </button>
-        ))}
-      </div>
+      {/* Filters: search + status pills on right */}
+      <div className="flex items-center gap-3 justify-between">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por nombre, slug o email..."
+            className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+          />
+        </div>
 
-      {/* Row 2: search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por nombre, slug o email..."
-          className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
-        />
+        <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5 flex-wrap w-fit">
+          {STATUSES.map(s => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                statusFilter === s
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+              }`}
+            >
+              {STATUS_LABELS[s]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Error */}
