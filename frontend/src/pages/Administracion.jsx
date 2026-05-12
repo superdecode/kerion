@@ -270,7 +270,7 @@ export default function Administracion() {
             {[
               { key: 'usuarios', label: t('admin.users'), icon: Users },
               { key: 'roles', label: t('admin.roles'), icon: Shield },
-              { key: 'plan', label: 'Plan', icon: CreditCard },
+              { key: 'plan', label: '套餐', icon: CreditCard },
             ].map(item => (
               <button key={item.key} onClick={() => setTab(item.key)}
                 className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all duration-200

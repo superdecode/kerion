@@ -486,17 +486,6 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
                 ))}
               </select>
             </div>
-            <div>
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value) || 10)}
-                className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
-              >
-                {HISTORY_PAGE_SIZES.map((size) => (
-                  <option key={size} value={size}>{size} por página</option>
-                ))}
-              </select>
-            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -606,6 +595,15 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
               Mostrando {visibleStart} a {visibleEnd} de {totalResults} suscripciones
             </p>
             <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value) || 10)}
+                className="bg-gray-950 border border-gray-700 rounded-lg px-2.5 py-2 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+              >
+                {HISTORY_PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>{size} / pág</option>
+                ))}
+              </select>
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={safePage <= 1}

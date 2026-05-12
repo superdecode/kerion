@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import {
   LayoutDashboard,
@@ -11,6 +11,7 @@ import {
   ChevronRight,
   BarChart3,
   FileText,
+  Settings,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 
@@ -18,16 +19,15 @@ const getNavItems = (t) => [
   {
     id: 'dropscan',
     label: 'DropScan',
-    icon: ScanBarcode,
     items: [
-      { path: '/dropscan', label: t('nav.dashboard'), icon: LayoutDashboard, permission: 'dropscan.dashboard' },
-      { path: '/dropscan/escaneo', label: t('nav.scanning'), icon: ScanBarcode, permission: 'dropscan.escaneo' },
-      { path: '/dropscan/historial', label: t('nav.history'), icon: History, permission: 'dropscan.historial' },
-      { path: '/dropscan/folios', label: t('nav.fep'), icon: FileText, permission: 'fep.folios' },
-      { path: '/dropscan/reportes', label: t('nav.reports'), icon: BarChart3, permission: 'dropscan.reportes' },
-    ]
+      { path: '/dropscan',              label: t('nav.dashboard'),     icon: LayoutDashboard, permission: 'dropscan.dashboard' },
+      { path: '/dropscan/escaneo',      label: t('nav.scanning'),      icon: ScanBarcode,     permission: 'dropscan.escaneo' },
+      { path: '/dropscan/historial',    label: t('nav.history'),       icon: History,         permission: 'dropscan.historial' },
+      { path: '/dropscan/folios',       label: t('nav.fep'),           icon: FileText,        permission: 'fep.folios' },
+      { path: '/dropscan/reportes',     label: t('nav.reports'),       icon: BarChart3,       permission: 'dropscan.reportes' },
+      { path: '/dropscan/configuracion',label: t('nav.configuration'), icon: Settings,        permission: 'dropscan.configuracion' },
+    ],
   },
-  // Inventory and WMS Hub are future modules — hidden from nav until released
 ]
 
 const getAdminNav = (t) => [
@@ -38,7 +38,6 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const { user, canView } = useAuthStore()
   const { t } = useI18nStore()
-  const location = useLocation()
   const navigate = useNavigate()
 
   const navItems = getNavItems(t)
@@ -49,82 +48,118 @@ export default function Sidebar() {
     navigate('/login')
   }
 
+  const initials = user?.nombre_completo
+    ? user.nombre_completo.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    : 'U'
+
+  const roleName = user?.rol_nombre || user?.rol || ''
+
   const renderLink = (item) => {
     if (!canView(item.permission)) return null
-
     const Icon = item.icon
     return (
       <NavLink
         key={item.path}
         to={item.path}
+        end={item.path === '/dropscan'}
         className={({ isActive }) =>
-          `flex items-center px-4 py-2 text-sm font-medium transition-colors ${
+          `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
             isActive
-              ? 'bg-primary-50 text-primary-600'
-              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+              ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
+              : 'text-blue-200/70 hover:text-white hover:bg-white/10'
           }`
         }
       >
-        <Icon className={`h-5 w-5 ${collapsed ? 'mx-auto' : 'mr-3'}`} />
-        {!collapsed && <span>{item.label}</span>}
+        {({ isActive }) => (
+          <>
+            <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-400' : ''}`} />
+            {!collapsed && <span className="truncate">{item.label}</span>}
+          </>
+        )}
       </NavLink>
     )
   }
 
   return (
     <aside
-      className={`fixed left-0 top-16 z-40 h-[calc(100vh-4rem)] bg-white border-r border-gray-200 transition-all duration-300 ${
-        collapsed ? 'w-16' : 'w-64'
-      }`}
+      className={`relative ${collapsed ? 'w-16' : 'w-60'} bg-[#0b1437] border-r border-blue-900/40 flex flex-col transition-all duration-200 flex-shrink-0`}
     >
-      <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto py-4">
-          {navItems.map((group) => {
-            const visibleItems = group.items.filter(item => canView(item.permission))
-            if (visibleItems.length === 0) return null
+      {/* Collapse toggle — attached to sidebar right edge */}
+      <button
+        onClick={() => setCollapsed(v => !v)}
+        className="absolute -right-3.5 top-[4.5rem] z-20 w-7 h-7 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-colors shadow-md"
+        title={collapsed ? 'Expandir' : 'Colapsar'}
+      >
+        {collapsed
+          ? <ChevronRight className="w-3.5 h-3.5 text-blue-600" />
+          : <ChevronLeft className="w-3.5 h-3.5 text-blue-600" />}
+      </button>
 
-            return (
-              <div key={group.id} className="mb-4">
-                {!collapsed && (
-                  <h3 className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                    {group.label}
-                  </h3>
-                )}
-                <div className="space-y-1">
-                  {visibleItems.map(renderLink)}
-                </div>
+      {/* Logo */}
+      <div className={`h-16 flex items-center border-b border-blue-900/40 flex-shrink-0 ${collapsed ? 'justify-center px-3' : 'px-4 gap-3'}`}>
+        <img src="/logo.png" alt="Kirion" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+        {!collapsed && (
+          <div className="min-w-0">
+            <p className="text-white font-bold text-sm leading-none">Kirion</p>
+            <p className="text-blue-400 text-[10px] font-semibold uppercase tracking-widest mt-0.5">WMS</p>
+          </div>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+        {navItems.map((group) => {
+          const visibleItems = group.items.filter(item => canView(item.permission))
+          if (visibleItems.length === 0) return null
+          return (
+            <div key={group.id} className="mb-3">
+              {!collapsed && (
+                <p className="px-3 text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest mb-1.5">
+                  {group.label}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {visibleItems.map(renderLink)}
               </div>
-            )
-          })}
+            </div>
+          )
+        })}
 
-          <div className="mt-4 pt-4 border-t border-gray-200">
+        {/* Admin section */}
+        {adminNav.some(item => canView(item.permission)) && (
+          <div className="mt-3 pt-3 border-t border-blue-900/30">
             {!collapsed && (
-              <h3 className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              <p className="px-3 text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest mb-1.5">
                 {t('nav.administration')}
-              </h3>
+              </p>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {adminNav.map(renderLink)}
             </div>
           </div>
-        </div>
+        )}
+      </nav>
 
-        <div className="p-4 border-t border-gray-200">
-          <button
-            onClick={handleLogout}
-            className="flex items-center w-full px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors"
-          >
-            <LogOut className={`h-5 w-5 ${collapsed ? 'mx-auto' : 'mr-3'}`} />
-            {!collapsed && <span>{t('auth.logout')}</span>}
-          </button>
-          
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="mt-4 flex items-center justify-center w-full p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-          >
-            {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-          </button>
-        </div>
+      {/* Bottom — user info + logout */}
+      <div className="p-2 border-t border-blue-900/40 space-y-0.5">
+        {!collapsed && (
+          <div className="flex items-center gap-2.5 px-3 py-2 mb-1">
+            <div className="w-7 h-7 rounded-full bg-blue-700 flex items-center justify-center flex-shrink-0">
+              <span className="text-white text-xs font-bold">{initials}</span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-white text-xs font-medium truncate">{user?.nombre_completo}</p>
+              <p className="text-blue-400/60 text-[10px] truncate">{roleName}</p>
+            </div>
+          </div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-blue-200/60 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+        >
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          {!collapsed && t('auth.logout')}
+        </button>
       </div>
     </aside>
   )

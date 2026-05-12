@@ -292,6 +292,15 @@ async function runMigrations() {
     `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`,
     // force_password_change alias for must_change_password (reset-password endpoint)
     `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS force_password_change BOOLEAN DEFAULT false`,
+    // Fix roles unique constraint: must be per-tenant not global
+    `ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_nombre_key`,
+    `DROP INDEX IF EXISTS roles_nombre_key`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_roles_tenant_nombre ON roles(tenant_id, nombre)`,
+    // tenant_id column on folios_entrega_log (required for RLS and audit)
+    `ALTER TABLE folios_entrega_log ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id)`,
+    // tenant_id on folios tables for full RLS coverage
+    `ALTER TABLE folios_entrega ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id)`,
+    `ALTER TABLE folios_entrega_tarimas ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id)`,
   ]
   for (const sql of steps) {
     try {

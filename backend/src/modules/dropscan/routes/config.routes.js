@@ -40,7 +40,7 @@ function toCanal(row, empresasMap = {}) {
 // GET /api/dropscan/config/empresas — accessible to all authenticated users
 router.get('/empresas',
   authenticateToken,
-  async (_req, res) => {
+  async (req, res) => {
     try {
       const result = await req.tQuery(
         `SELECT * FROM configuraciones
@@ -169,11 +169,11 @@ router.delete('/empresas/:id',
 // GET /api/dropscan/config/canales — accessible to all authenticated users
 router.get('/canales',
   authenticateToken,
-  async (_req, res) => {
+  async (req, res) => {
     try {
       const [canalesRes, empresasRes] = await Promise.all([
-        query(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'canal' ORDER BY nombre ASC`),
-        query(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa' ORDER BY nombre ASC`)
+        req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'canal' ORDER BY nombre ASC`),
+        req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa' ORDER BY nombre ASC`)
       ])
       const empresasMap = Object.fromEntries(empresasRes.rows.map(e => [e.id, toEmpresa(e)]))
       res.json(canalesRes.rows.map(r => toCanal(r, empresasMap)))
@@ -325,7 +325,7 @@ router.delete('/canales/:id',
 // GET /api/dropscan/config/parametros — accessible to all authenticated users
 router.get('/parametros',
   authenticateToken,
-  async (_req, res) => {
+  async (req, res) => {
     try {
       const result = await req.tQuery(
         `SELECT config_json FROM configuraciones

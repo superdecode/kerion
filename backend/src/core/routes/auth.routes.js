@@ -287,7 +287,7 @@ router.get('/plan-info', authenticateToken, async (req, res) => {
       query(
         `SELECT COUNT(*)::int AS count FROM guias
          WHERE tenant_id = $1
-           AND fecha_escaneo >= date_trunc('month', CURRENT_DATE)`,
+           AND timestamp_escaneo >= date_trunc('month', CURRENT_DATE)`,
         [req.user.tenant_id]
       ),
     ])
