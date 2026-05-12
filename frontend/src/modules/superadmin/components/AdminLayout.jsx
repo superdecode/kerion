@@ -30,25 +30,23 @@ export default function AdminLayout() {
     : 'SA'
 
   return (
-    <div className="min-h-screen bg-gray-950 flex relative">
-      {/* Collapse toggle — floating between sidebar and content */}
-      <button
-        onClick={() => setCollapsed(v => !v)}
-        className="absolute left-auto right-auto top-24 z-50 w-8 h-8 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-all duration-300 hover:shadow-lg shadow-md"
-        style={{ left: collapsed ? 'calc(4rem - 16px)' : 'calc(15rem - 16px)' }}
-        title={collapsed ? 'Expandir' : 'Colapsar'}
-      >
-        <div className={`transition-transform duration-300 ${collapsed ? '' : 'rotate-180'}`}>
-          <ChevronRight className="w-4 h-4 text-blue-600" />
-        </div>
-      </button>
-
+    <div className="min-h-screen bg-gray-950 flex">
       {/* Sidebar */}
       <aside
-        className={`${collapsed ? 'w-16' : 'w-60'} bg-gray-900 border-r border-gray-800 flex flex-col transition-all duration-200 flex-shrink-0`}
+        className={`relative ${collapsed ? 'w-16' : 'w-60'} bg-[#0b1437] border-r border-blue-900/40 flex flex-col transition-all duration-200 flex-shrink-0`}
       >
+        {/* Collapse toggle — mounted on sidebar right edge */}
+        <button
+          onClick={() => setCollapsed(v => !v)}
+          className="absolute -right-3.5 top-[4.5rem] z-20 w-7 h-7 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-colors shadow-md"
+          title={collapsed ? 'Expandir' : 'Colapsar'}
+        >
+          {collapsed
+            ? <ChevronRight className="w-3.5 h-3.5 text-blue-600" />
+            : <ChevronLeft className="w-3.5 h-3.5 text-blue-600" />}
+        </button>
         {/* Logo */}
-        <div className={`h-16 flex items-center border-b border-gray-800 ${collapsed ? 'justify-center px-3' : 'px-5 gap-3'}`}>
+        <div className={`h-16 flex items-center border-b border-blue-900/40 ${collapsed ? 'justify-center px-3' : 'px-5 gap-3'}`}>
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
             <Shield className="w-4 h-4 text-white" />
           </div>
@@ -70,8 +68,8 @@ export default function AdminLayout() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors group ${
                   isActive
-                    ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
+                    : 'text-blue-200/70 hover:text-white hover:bg-white/10'
                 }`
               }
             >
@@ -86,7 +84,7 @@ export default function AdminLayout() {
         </nav>
 
         {/* Bottom */}
-        <div className="p-2 border-t border-gray-800 space-y-0.5">
+        <div className="p-2 border-t border-blue-900/40 space-y-0.5">
           {/* Admin info */}
           {!collapsed && (
             <div className="flex items-center gap-2.5 px-3 py-2 mb-1">
@@ -101,7 +99,7 @@ export default function AdminLayout() {
           )}
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-blue-200/60 hover:text-red-400 hover:bg-red-950/30 transition-colors"
           >
             <LogOut className="w-4 h-4 flex-shrink-0" />
             {!collapsed && 'Cerrar sesion'}

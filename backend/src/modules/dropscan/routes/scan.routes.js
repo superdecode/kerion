@@ -6,11 +6,12 @@ import { getTodayMX } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
 
-// Helper: generate a unique tarima code using MAX sequence number (not COUNT)
-async function generateTarimaCodigo(dbClient) {
+// Helper: generate a unique tarima code using global MAX (not tenant-scoped)
+// so the sequence is globally unique and the UNIQUE constraint never conflicts across tenants.
+async function generateTarimaCodigo() {
   const today = getTodayMX().replace(/-/g, '')
   const prefix = `TAR-${today}-`
-  const maxRes = await dbClient.query(
+  const maxRes = await query(
     `SELECT MAX(CAST(SPLIT_PART(codigo, '-', 3) AS INTEGER)) AS max_seq
      FROM tarimas WHERE codigo LIKE $1`,
     [`${prefix}%`]
@@ -24,9 +25,9 @@ router.post('/sessions/start',
   authenticateToken, loadFullUser,
   requirePermission('dropscan.escaneo', 'crear'),
   async (req, res) => {
-    const client = await getClient()
+    if (!req.tenantId) return res.status(400).json({ error: 'Contexto de tenant no disponible' })
+    const client = await req.tGetClient()
     try {
-      await client.query('BEGIN')
       const { empresa_id, canal_id, usuario_operador, usuario_interno_id, nivel_usuario } = req.body
       const userId = req.user.id
       const empId = parseInt(empresa_id)
@@ -37,9 +38,9 @@ router.post('/sessions/start',
         return res.status(400).json({ error: 'empresa_id y canal_id son requeridos' })
       }
 
-      // Verify empresa and canal exist in configuraciones
-      const empCheck = await client.query('SELECT id FROM configuraciones WHERE id = $1', [empId])
-      const canCheck = await client.query('SELECT id FROM configuraciones WHERE id = $1', [canId])
+      // Verify empresa and canal exist in configuraciones for this tenant
+      const empCheck = await client.query('SELECT id FROM configuraciones WHERE id = $1 AND tenant_id = $2', [empId, req.tenantId])
+      const canCheck = await client.query('SELECT id FROM configuraciones WHERE id = $1 AND tenant_id = $2', [canId, req.tenantId])
       if (empCheck.rows.length === 0 || canCheck.rows.length === 0) {
         await client.query('ROLLBACK')
         return res.status(400).json({ error: 'Empresa o canal no encontrado' })
@@ -48,8 +49,8 @@ router.post('/sessions/start',
       // Auto-close stale sessions older than 24h to prevent orphans
       await client.query(
         `UPDATE sesiones_escaneo SET activa = false, fecha_fin = CURRENT_TIMESTAMP
-         WHERE operador_id = $1 AND activa = true AND fecha_inicio < NOW() - INTERVAL '24 hours'`,
-        [userId]
+         WHERE operador_id = $1 AND tenant_id = $2 AND activa = true AND fecha_inicio < NOW() - INTERVAL '24 hours'`,
+        [userId, req.tenantId]
       )
 
       // Auto-close zombie sessions whose active tarima is no longer EN_PROCESO.
@@ -59,16 +60,17 @@ router.post('/sessions/start',
          SET activa = false, fecha_fin = CURRENT_TIMESTAMP
          FROM tarimas t
          WHERE s.operador_id = $1
+           AND s.tenant_id = $2
            AND s.activa = true
            AND s.tarima_actual_id = t.id
            AND t.estado <> 'EN_PROCESO'`,
-        [userId]
+        [userId, req.tenantId]
       )
 
       // Check for existing active sessions (max 3 allowed)
       const existing = await client.query(
-        'SELECT id FROM sesiones_escaneo WHERE operador_id = $1 AND activa = true',
-        [userId]
+        'SELECT id FROM sesiones_escaneo WHERE operador_id = $1 AND tenant_id = $2 AND activa = true',
+        [userId, req.tenantId]
       )
       if (existing.rows.length >= 3) {
         await client.query('ROLLBACK')
@@ -78,7 +80,7 @@ router.post('/sessions/start',
       // Generate tarima code and create tarima (retry on unique collision)
       let tarima
       for (let attempt = 0; attempt < 5; attempt++) {
-        const tarimaCodigo = await generateTarimaCodigo(client)
+        const tarimaCodigo = await generateTarimaCodigo()
         try {
           const tarimaRes = await client.query(
             `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
@@ -138,11 +140,11 @@ router.get('/sessions/active',
   requirePermission('dropscan.escaneo', 'ver'),
   async (req, res) => {
     try {
-      const sesionRes = await query(
+      const sesionRes = await req.tQuery(
         `SELECT s.*, e.nombre as empresa_nombre, c.nombre as canal_nombre
          FROM sesiones_escaneo s
-         LEFT JOIN configuraciones e ON s.empresa_id = e.id
-         LEFT JOIN configuraciones c ON s.canal_id = c.id
+         LEFT JOIN configuraciones e ON s.empresa_id = e.id AND e.tenant_id = s.tenant_id
+         LEFT JOIN configuraciones c ON s.canal_id = c.id AND c.tenant_id = s.tenant_id
          WHERE s.operador_id = $1 AND s.activa = true
          ORDER BY s.fecha_inicio DESC`,
         [req.user.id]
@@ -157,17 +159,17 @@ router.get('/sessions/active',
       // Get current tarima for this session
       let tarima = null
       if (sesion.tarima_actual_id) {
-        const tarimaRes = await query(
+        const tarimaRes = await req.tQuery(
           `SELECT * FROM tarimas WHERE id = $1`,
           [sesion.tarima_actual_id]
         )
         tarima = tarimaRes.rows[0] || null
       }
 
-      // Get all scanned guides for current tarima (max 100 — no artificial limit)
+      // Get all scanned guides for current tarima
       let ultimas_guias = []
       if (tarima) {
-        const guiasRes = await query(
+        const guiasRes = await req.tQuery(
           `SELECT id, codigo_guia, posicion, timestamp_escaneo
            FROM guias WHERE tarima_id = $1
            ORDER BY posicion DESC`,
@@ -191,11 +193,11 @@ router.get('/sessions/all-active',
   requirePermission('dropscan.escaneo', 'ver'),
   async (req, res) => {
     try {
-      const sesionRes = await query(
+      const sesionRes = await req.tQuery(
         `SELECT s.*, e.nombre as empresa_nombre, c.nombre as canal_nombre
          FROM sesiones_escaneo s
-         LEFT JOIN configuraciones e ON s.empresa_id = e.id
-         LEFT JOIN configuraciones c ON s.canal_id = c.id
+         LEFT JOIN configuraciones e ON s.empresa_id = e.id AND e.tenant_id = s.tenant_id
+         LEFT JOIN configuraciones c ON s.canal_id = c.id AND c.tenant_id = s.tenant_id
          WHERE s.operador_id = $1 AND s.activa = true
          ORDER BY s.fecha_inicio ASC`,
         [req.user.id]
@@ -208,7 +210,7 @@ router.get('/sessions/all-active',
       const sesiones = await Promise.all(sesionRes.rows.map(async (sesion) => {
         let tarima = null
         if (sesion.tarima_actual_id) {
-          const tarimaRes = await query(
+          const tarimaRes = await req.tQuery(
             `SELECT * FROM tarimas WHERE id = $1 AND estado = 'EN_PROCESO'`,
             [sesion.tarima_actual_id]
           )
@@ -218,7 +220,7 @@ router.get('/sessions/all-active',
         // Skip sessions that point to invalid/non-active tarimas.
         if (!tarima) return null
 
-        const guiasRes = await query(
+        const guiasRes = await req.tQuery(
           `SELECT id, codigo_guia, posicion, timestamp_escaneo
            FROM guias WHERE tarima_id = $1
            ORDER BY posicion DESC`,
@@ -246,9 +248,9 @@ router.post('/sessions/:id/scan',
   authenticateToken, loadFullUser,
   requirePermission('dropscan.escaneo', 'crear'),
   async (req, res) => {
-    const client = await getClient()
+    if (!req.tenantId) return res.status(400).json({ error: 'Contexto de tenant no disponible' })
+    const client = await req.tGetClient()
     try {
-      await client.query('BEGIN')
       const sessionId = req.params.id
       const { codigo_guia, tarima_id } = req.body // tarima_id is optional for multi-tarima support
       const userId = req.user.id
@@ -309,7 +311,7 @@ router.post('/sessions/:id/scan',
         await client.query(
           `INSERT INTO alertas_duplicados (codigo_guia, tarima_id, operador_id, guia_original_id, tarima_original_id, tenant_id)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [code, tarima.id, userId, dupId, dupTarimaId, req.tenantId]
+          [code, tarima.id, userId, origLocal.id, tarima.id, req.tenantId]
         )
         await client.query(
           'UPDATE sesiones_escaneo SET alertas_duplicados = alertas_duplicados + 1 WHERE id = $1',
@@ -339,7 +341,7 @@ router.post('/sessions/:id/scan',
         await client.query(
           `INSERT INTO alertas_duplicados (codigo_guia, tarima_id, operador_id, guia_original_id, tarima_original_id, tenant_id)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [code, tarima.id, userId, dupId, dupTarimaId, req.tenantId]
+          [code, tarima.id, userId, orig.id, orig.tarima_id, req.tenantId]
         )
         await client.query(
           'UPDATE sesiones_escaneo SET alertas_duplicados = alertas_duplicados + 1 WHERE id = $1',
@@ -414,7 +416,7 @@ router.post('/sessions/:id/scan',
 
         // Auto-create new tarima (retry on unique collision)
         for (let attempt = 0; attempt < 5; attempt++) {
-          const newCodigo = await generateTarimaCodigo(client)
+          const newCodigo = await generateTarimaCodigo()
           try {
             const newTarimaRes = await client.query(
               `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
@@ -467,17 +469,17 @@ router.post('/sessions/:id/add-tarima',
   authenticateToken, loadFullUser,
   requirePermission('dropscan.escaneo', 'crear'),
   async (req, res) => {
-    const client = await getClient()
+    if (!req.tenantId) return res.status(400).json({ error: 'Contexto de tenant no disponible' })
+    const client = await req.tGetClient()
     try {
-      await client.query('BEGIN')
       const sessionId = req.params.id
       const userId = req.user.id
       const maxTarimas = 3 // Maximum simultaneous tarimas
 
       // Get active session
       const sesionRes = await client.query(
-        'SELECT * FROM sesiones_escaneo WHERE id = $1 AND operador_id = $2 AND activa = true',
-        [sessionId, userId]
+        'SELECT * FROM sesiones_escaneo WHERE id = $1 AND operador_id = $2 AND tenant_id = $3 AND activa = true',
+        [sessionId, userId, req.tenantId]
       )
       if (sesionRes.rows.length === 0) {
         await client.query('ROLLBACK')
@@ -485,18 +487,18 @@ router.post('/sessions/:id/add-tarima',
       }
       const sesion = sesionRes.rows[0]
 
-      // Count current active tarimas for this session
+      // Count current active tarimas for this tenant session
       const countRes = await client.query(
-        `SELECT COUNT(*) FROM tarimas 
-         WHERE operador_id = $1 AND estado = 'EN_PROCESO' 
-         AND fecha_inicio >= $2`,
-        [userId, sesion.fecha_inicio]
+        `SELECT COUNT(*) FROM tarimas
+         WHERE operador_id = $1 AND tenant_id = $2 AND estado = 'EN_PROCESO'
+         AND fecha_inicio >= $3`,
+        [userId, req.tenantId, sesion.fecha_inicio]
       )
       const currentCount = parseInt(countRes.rows[0].count)
 
       if (currentCount >= maxTarimas) {
         await client.query('ROLLBACK')
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: `Máximo ${maxTarimas} tarimas simultáneas permitidas`,
           current_count: currentCount,
           max_allowed: maxTarimas
@@ -504,9 +506,10 @@ router.post('/sessions/:id/add-tarima',
       }
 
       // Generate tarima code and create (retry on unique collision)
+      const { empresa_id, canal_id } = sesion
       let tarimaRes
       for (let attempt = 0; attempt < 5; attempt++) {
-        const tarimaCodigo = await generateTarimaCodigo(client)
+        const tarimaCodigo = await generateTarimaCodigo()
         try {
           tarimaRes = await client.query(
             `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
@@ -531,11 +534,11 @@ router.post('/sessions/:id/add-tarima',
 
       // Get all active tarimas
       const allTarimasRes = await client.query(
-        `SELECT * FROM tarimas 
-         WHERE operador_id = $1 AND estado = 'EN_PROCESO' 
-         AND fecha_inicio >= $2
+        `SELECT * FROM tarimas
+         WHERE operador_id = $1 AND tenant_id = $2 AND estado = 'EN_PROCESO'
+         AND fecha_inicio >= $3
          ORDER BY fecha_inicio ASC`,
-        [userId, sesion.fecha_inicio]
+        [userId, req.tenantId, sesion.fecha_inicio]
       )
 
       await client.query('COMMIT')
@@ -570,8 +573,8 @@ router.post('/sessions/:id/switch-tarima',
         return res.status(400).json({ error: 'tarima_id es requerido' })
       }
 
-      // Verify session and tarima belong to user
-      const sesionRes = await query(
+      // Verify session and tarima belong to user and tenant
+      const sesionRes = await req.tQuery(
         'SELECT * FROM sesiones_escaneo WHERE id = $1 AND operador_id = $2 AND activa = true',
         [sessionId, userId]
       )
@@ -579,7 +582,7 @@ router.post('/sessions/:id/switch-tarima',
         return res.status(404).json({ error: 'Sesión no encontrada' })
       }
 
-      const tarimaRes = await query(
+      const tarimaRes = await req.tQuery(
         `SELECT * FROM tarimas WHERE id = $1 AND operador_id = $2 AND estado = 'EN_PROCESO'`,
         [tarima_id, userId]
       )
@@ -587,14 +590,12 @@ router.post('/sessions/:id/switch-tarima',
         return res.status(404).json({ error: 'Tarima no encontrada o no activa' })
       }
 
-      // Update session to point to selected tarima
-      await query(
+      await req.tQuery(
         'UPDATE sesiones_escaneo SET tarima_actual_id = $1 WHERE id = $2',
         [tarima_id, sessionId]
       )
 
-      // Get guides for the switched tarima
-      const guiasRes = await query(
+      const guiasRes = await req.tQuery(
         `SELECT id, codigo_guia, posicion, timestamp_escaneo
          FROM guias WHERE tarima_id = $1
          ORDER BY posicion DESC LIMIT 10`,
@@ -622,7 +623,7 @@ router.post('/sessions/:id/end',
       const sessionId = req.params.id
       const userId = req.user.id
 
-      const result = await query(
+      const result = await req.tQuery(
         `UPDATE sesiones_escaneo SET activa = false, fecha_fin = CURRENT_TIMESTAMP
          WHERE id = $1 AND operador_id = $2 AND activa = true
          RETURNING *`,
@@ -637,21 +638,21 @@ router.post('/sessions/:id/end',
 
       // Only finalize/delete the tarima linked to THIS session (not all operator tarimas)
       if (sesion.tarima_actual_id) {
-        const tarimaCheck = await query(
+        const tarimaCheck = await req.tQuery(
           'SELECT id, cantidad_guias, estado FROM tarimas WHERE id = $1 AND estado = $2',
           [sesion.tarima_actual_id, 'EN_PROCESO']
         )
         if (tarimaCheck.rows.length > 0) {
           const t = tarimaCheck.rows[0]
           if (t.cantidad_guias > 0) {
-            await query(
+            await req.tQuery(
               `UPDATE tarimas SET estado = 'FINALIZADA', fecha_cierre = CURRENT_TIMESTAMP,
                    tiempo_armado_segundos = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - fecha_inicio))::INTEGER
                WHERE id = $1`,
               [t.id]
             )
           } else {
-            await query('DELETE FROM tarimas WHERE id = $1', [t.id])
+            await req.tQuery('DELETE FROM tarimas WHERE id = $1', [t.id])
           }
         }
       }
@@ -669,9 +670,9 @@ router.delete('/sessions/:sessionId/guia/:guiaId',
   authenticateToken, loadFullUser,
   requirePermission('dropscan.escaneo', 'eliminar'),
   async (req, res) => {
-    const client = await getClient()
+    if (!req.tenantId) return res.status(400).json({ error: 'Contexto de tenant no disponible' })
+    const client = await req.tGetClient()
     try {
-      await client.query('BEGIN')
       const { sessionId, guiaId } = req.params
 
       const guiaRes = await client.query('SELECT * FROM guias WHERE id = $1', [guiaId])

@@ -1,19 +1,16 @@
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
-import { 
-  LayoutDashboard, 
-  ScanBarcode, 
-  History, 
-  Settings2, 
-  LogOut, 
-  ChevronLeft, 
+import {
+  LayoutDashboard,
+  ScanBarcode,
+  History,
+  Settings2,
+  LogOut,
+  ChevronLeft,
   ChevronRight,
-  Boxes,
   BarChart3,
   FileText,
-  Wifi,
-  Package
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 
@@ -30,20 +27,10 @@ const getNavItems = (t) => [
       { path: '/dropscan/reportes', label: t('nav.reports'), icon: BarChart3, permission: 'dropscan.reportes' },
     ]
   },
-  {
-    id: 'inventory',
-    label: t('nav.inventory') || 'Inventario',
-    icon: Boxes,
-    items: [
-      { path: '/inventory/escaneo', label: t('nav.scanning'), icon: ScanBarcode, permission: 'inventory.escaneo' },
-      { path: '/inventory/historial', label: t('nav.history'), icon: History, permission: 'inventory.historial' },
-      { path: '/inventory/reportes', label: t('nav.reports'), icon: BarChart3, permission: 'inventory.reportes' },
-    ]
-  },
+  // Inventory and WMS Hub are future modules — hidden from nav until released
 ]
 
 const getAdminNav = (t) => [
-  { path: '/wms', label: 'WMS Hub', icon: Wifi, permission: 'global.wms' },
   { path: '/admin', label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
 ]
 

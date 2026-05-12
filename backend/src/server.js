@@ -287,6 +287,11 @@ async function runMigrations() {
     `UPDATE roles SET permisos = jsonb_set(permisos, '{dropscan,folios}', '"actualizar"', true) WHERE nombre IN ('Jefe', 'Supervisor') AND NOT (permisos -> 'dropscan' ? 'folios')`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{dropscan,folios}', '"crear"', true) WHERE nombre = 'Operador' AND NOT (permisos -> 'dropscan' ? 'folios')`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{dropscan,folios}', '"ver"', true) WHERE nombre = 'Usuario' AND NOT (permisos -> 'dropscan' ? 'folios')`,
+    // is_default columns required by provisioning service and users query
+    `ALTER TABLE roles ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`,
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`,
+    // force_password_change alias for must_change_password (reset-password endpoint)
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS force_password_change BOOLEAN DEFAULT false`,
   ]
   for (const sql of steps) {
     try {

@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   RefreshCw, Plus, Edit2, Trash2, X, AlertCircle, Check,
-  CreditCard, Package, Eye, EyeOff, Save
+  CreditCard, Package, Eye, EyeOff, Save, ChevronUp, ChevronDown
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
@@ -311,17 +311,36 @@ function PlansTab() {
 
 // ── Subscriptions records ─────────────────────────────────────────────────────
 
+const SUB_PAGE_SIZE = 20
+
+function SortTh({ col, label, sortKey, sortDir, onSort, cls = '' }) {
+  const active = sortKey === col
+  return (
+    <th
+      onClick={() => onSort(col)}
+      className={`text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase cursor-pointer select-none hover:text-white transition-colors ${cls}`}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        {active ? (
+          sortDir === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-400" /> : <ChevronDown className="w-3 h-3 text-blue-400" />
+        ) : (
+          <span className="w-3 h-3 opacity-30 text-gray-500 inline-flex items-center justify-center text-[10px]">⇅</span>
+        )}
+      </div>
+    </th>
+  )
+}
+
 function SubscriptionsTab() {
   const [subscriptions, setSubscriptions] = useState([])
   const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({
-    status: '',
-    tenant: '',
-    plan: '',
-    dateFrom: '',
-    dateTo: '',
-  })
+  const [search, setSearch] = useState('')
+  const [filters, setFilters] = useState({ status: '', plan: '', dateFrom: '', dateTo: '' })
+  const [sortKey, setSortKey] = useState('started_at')
+  const [sortDir, setSortDir] = useState('desc')
+  const [page, setPage] = useState(1)
 
   function load() {
     setLoading(true)
@@ -344,27 +363,49 @@ function SubscriptionsTab() {
   }
 
   useEffect(() => { load() }, [filters])
+  useEffect(() => { setPage(1) }, [search, filters, sortKey, sortDir])
 
-  const filtered = subscriptions.filter(s => {
-    if (!filters.tenant) return true
-    const q = filters.tenant.toLowerCase()
-    return s.legal_name?.toLowerCase().includes(q)
-  })
+  function toggleSort(col) {
+    if (sortKey === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(col); setSortDir('desc') }
+  }
+
+  function getSortVal(s, key) {
+    if (key === 'started_at') return new Date(s.started_at || s.created_at).getTime()
+    if (key === 'expires_at') return new Date(s.expires_at || 0).getTime()
+    if (key === 'legal_name') return (s.legal_name || '').toLowerCase()
+    if (key === 'plan_name') return (s.plan_name || '').toLowerCase()
+    if (key === 'status') return s.status || ''
+    if (key === 'price') return Number(s.subscription_price_amount ?? s.price_amount ?? 0)
+    return ''
+  }
+
+  const filtered = subscriptions
+    .filter(s => {
+      if (search) {
+        const q = search.toLowerCase()
+        if (!s.legal_name?.toLowerCase().includes(q) && !s.slug?.toLowerCase().includes(q)) return false
+      }
+      return true
+    })
+    .slice()
+    .sort((a, b) => {
+      const av = getSortVal(a, sortKey)
+      const bv = getSortVal(b, sortKey)
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / SUB_PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paginated = filtered.slice((safePage - 1) * SUB_PAGE_SIZE, safePage * SUB_PAGE_SIZE)
 
   function statusColor(status) {
     if (status === 'active') return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
     if (status === 'expired') return 'bg-red-500/15 text-red-300 border-red-500/25'
     if (status === 'cancelled') return 'bg-gray-700/50 text-gray-400 border-gray-600/50'
     return 'bg-blue-500/15 text-blue-300 border-blue-500/25'
-  }
-
-  function daysColor(dateStr) {
-    if (!dateStr) return ''
-    const days = Math.ceil((new Date(dateStr) - Date.now()) / 86400000)
-    if (days < 0) return 'text-red-400'
-    if (days <= 7) return 'text-amber-400'
-    if (days <= 30) return 'text-yellow-300'
-    return 'text-emerald-400'
   }
 
   function getTypeLabel(type) {
@@ -376,49 +417,18 @@ function SubscriptionsTab() {
   }
 
   return (
-    <div className="space-y-5">
-      {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Estado</label>
-          <select
-            value={filters.status}
-            onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
-          >
-            <option value="">Todos</option>
-            <option value="active">Activa</option>
-            <option value="expired">Vencida</option>
-            <option value="cancelled">Cancelada</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Empresa</label>
+    <div className="space-y-4">
+      {/* Filters: search → dates → dropdowns */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-3">
+        <div className="relative">
           <input
-            value={filters.tenant}
-            onChange={e => setFilters(f => ({ ...f, tenant: e.target.value }))}
-            placeholder="Buscar..."
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar empresa..."
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-3 pr-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
-
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Plan</label>
-          <select
-            value={filters.plan}
-            onChange={e => setFilters(f => ({ ...f, plan: e.target.value }))}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
-          >
-            <option value="">Todos</option>
-            {plans.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Desde</label>
           <input
             type="date"
             value={filters.dateFrom}
@@ -426,15 +436,37 @@ function SubscriptionsTab() {
             className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
-
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Hasta</label>
           <input
             type="date"
             value={filters.dateTo}
             onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
             className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
           />
+        </div>
+        <div>
+          <select
+            value={filters.status}
+            onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+          >
+            <option value="">Estado</option>
+            <option value="active">Activa</option>
+            <option value="expired">Vencida</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
+        </div>
+        <div>
+          <select
+            value={filters.plan}
+            onChange={e => setFilters(f => ({ ...f, plan: e.target.value }))}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+          >
+            <option value="">Plan</option>
+            {plans.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -444,57 +476,82 @@ function SubscriptionsTab() {
           <RefreshCw className="w-5 h-5 animate-spin text-gray-500" />
         </div>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          {filtered.length === 0 ? (
-            <div className="px-6 py-8 text-center text-gray-500 text-sm">
-              No hay suscripciones que coincidan con los filtros
+        <>
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            {filtered.length === 0 ? (
+              <div className="px-6 py-8 text-center text-gray-500 text-sm">
+                No hay suscripciones que coincidan con los filtros
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-800 bg-gray-800/40">
+                    <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">ID</th>
+                    <SortTh col="legal_name" label="Empresa" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortTh col="plan_name" label="Plan" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Tipo</th>
+                    <SortTh col="started_at" label="Inicio" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortTh col="expires_at" label="Vencimiento" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortTh col="status" label="Estado" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <SortTh col="price" label="Precio" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {paginated.map(s => {
+                    const price = isAnnual(s.subscription_type)
+                      ? (s.subscription_price_amount ?? s.price_annual ?? s.price_amount)
+                      : (s.subscription_price_amount ?? s.price_amount)
+                    return (
+                      <tr key={s.id} className="hover:bg-gray-800/20 transition-colors">
+                        <td className="px-4 py-3 text-gray-500 font-mono text-xs">{s.id.slice(0, 8)}</td>
+                        <td className="px-4 py-3">
+                          <p className="text-white font-medium text-sm">{s.legal_name}</p>
+                          <p className="text-gray-500 text-xs">{s.slug}</p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-300 text-sm">{s.plan_name}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{getTypeLabel(s.subscription_type)}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.started_at).toLocaleDateString('es-MX')}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.expires_at).toLocaleDateString('es-MX')}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusColor(s.status)}`}>
+                            {s.status === 'active' ? 'Activa' : s.status === 'expired' ? 'Vencida' : 'Cancelada'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {price ? `$${Number(price).toFixed(2)} ${s.price_currency || 'USD'}` : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500">
+                {filtered.length === 0 ? '0' : `${(safePage - 1) * SUB_PAGE_SIZE + 1}–${Math.min(safePage * SUB_PAGE_SIZE, filtered.length)}`} de {filtered.length} suscripciones
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+                >
+                  Anterior
+                </button>
+                <span className="text-gray-500 text-xs">Pág. {safePage} / {totalPages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-800 bg-gray-800/40">
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">ID</th>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Empresa</th>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Plan</th>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Tipo</th>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Inicio</th>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Vencimiento</th>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Estado</th>
-                  <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Precio</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-              {filtered.map(s => {
-                const days = Math.ceil((new Date(s.expires_at) - Date.now()) / 86400000)
-                  const price = isAnnual(s.subscription_type)
-                    ? (s.subscription_price_amount ?? s.price_annual ?? s.price_amount)
-                    : (s.subscription_price_amount ?? s.price_amount)
-                  return (
-                    <tr key={s.id} className="hover:bg-gray-800/20 transition-colors">
-                      <td className="px-4 py-3 text-gray-500 font-mono text-xs">{s.id.slice(0, 8)}</td>
-                      <td className="px-4 py-3">
-                        <p className="text-white font-medium text-sm">{s.legal_name}</p>
-                        <p className="text-gray-500 text-xs">{s.slug}</p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-300 text-sm">{s.plan_name}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">{getTypeLabel(s.subscription_type)}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.started_at).toLocaleDateString('es-MX')}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.expires_at).toLocaleDateString('es-MX')}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusColor(s.status)}`}>
-                          {s.status === 'active' ? 'Activa' : s.status === 'expired' ? 'Vencida' : 'Cancelada'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {price ? `$${Number(price).toFixed(2)} ${s.price_currency || 'USD'}` : '—'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
           )}
-        </div>
+        </>
       )}
     </div>
   )

@@ -152,4 +152,32 @@ router.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// GET /api/public/plans — active visible plans for landing page (no auth)
+router.get('/plans', async (_req, res) => {
+  try {
+    let result
+    try {
+      result = await query(
+        `SELECT id, code, name, description, price_amount, price_annual, price_currency,
+                guide_limit, warehouse_count, modules, display_order
+         FROM plans
+         WHERE is_active = true AND is_visible = true
+         ORDER BY display_order ASC NULLS LAST, price_amount ASC`
+      )
+    } catch {
+      result = await query(
+        `SELECT id, code, name, description, price_amount, price_currency,
+                guide_limit, warehouse_count, modules
+         FROM plans
+         WHERE is_active = true AND is_visible = true
+         ORDER BY price_amount ASC`
+      )
+    }
+    res.json({ success: true, data: result.rows })
+  } catch (err) {
+    console.error('[public/plans]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
 export default router

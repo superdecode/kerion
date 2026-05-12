@@ -38,14 +38,6 @@ import Historial from './modules/dropscan/pages/Historial'
 import Reportes from './modules/dropscan/pages/Reportes'
 import Configuracion from './modules/dropscan/pages/Configuracion'
 
-// Inventory Module
-import InvEscaneo from './modules/inventory/pages/Escaneo'
-import InvHistorial from './modules/inventory/pages/Historial'
-import InvReportes from './modules/inventory/pages/Reportes'
-
-// WMS Hub
-import WmsHub from './pages/WmsHub'
-
 // FEP Module
 import Folios from './modules/fep/pages/Folios'
 import FolioDetalle from './modules/fep/pages/FolioDetalle'
@@ -68,11 +60,7 @@ const MODULE_ROUTES = [
   { module: 'dropscan.historial', path: '/dropscan/historial' },
   { module: 'dropscan.reportes', path: '/dropscan/reportes' },
   { module: 'dropscan.configuracion', path: '/dropscan/configuracion' },
-  { module: 'inventory.escaneo', path: '/inventory/escaneo' },
-  { module: 'inventory.historial', path: '/inventory/historial' },
-  { module: 'inventory.reportes', path: '/inventory/reportes' },
   { module: 'fep.folios', path: '/dropscan/folios' },
-  { module: 'global.wms', path: '/wms' },
   { module: 'global.administracion', path: '/admin' },
 ]
 
@@ -167,19 +155,8 @@ function AppRoutes() {
           <PermissionRoute module="dropscan.configuracion"><ErrorBoundary><Configuracion /></ErrorBoundary></PermissionRoute>
         } />
 
-        {/* Inventory Module */}
-        <Route path="inventory/escaneo" element={
-          <PermissionRoute module="inventory.escaneo"><ErrorBoundary><InvEscaneo /></ErrorBoundary></PermissionRoute>
-        } />
-        <Route path="inventory/historial" element={
-          <PermissionRoute module="inventory.historial"><ErrorBoundary><InvHistorial /></ErrorBoundary></PermissionRoute>
-        } />
-        <Route path="inventory/tarimas" element={
-          <Navigate to="/inventory/historial" replace />
-        } />
-        <Route path="inventory/reportes" element={
-          <PermissionRoute module="inventory.reportes"><ErrorBoundary><InvReportes /></ErrorBoundary></PermissionRoute>
-        } />
+        {/* Inventory — future module, redirect to main for now */}
+        <Route path="inventory/*" element={<Navigate to="/dropscan" replace />} />
 
         {/* FEP — embedded inside DropScan */}
         <Route path="dropscan/folios" element={
@@ -189,10 +166,8 @@ function AppRoutes() {
           <PermissionRoute module="fep.folios"><ErrorBoundary><FolioDetalle /></ErrorBoundary></PermissionRoute>
         } />
 
-        {/* WMS Hub */}
-        <Route path="wms" element={
-          <PermissionRoute module="global.wms"><ErrorBoundary><WmsHub /></ErrorBoundary></PermissionRoute>
-        } />
+        {/* WMS Hub — future module, redirect to main */}
+        <Route path="wms" element={<Navigate to="/" replace />} />
 
         {/* Administration */}
         <Route path="admin" element={

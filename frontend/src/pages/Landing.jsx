@@ -339,12 +339,32 @@ function FeaturesSection() {
 
 function PricingSection() {
   const [annual, setAnnual] = useState(false)
+  const [liveMonthly, setLiveMonthly] = useState({ ...MONTHLY_PRICES })
+  const [liveAnnual, setLiveAnnual] = useState({ ...ANNUAL_PRICES })
+
+  useEffect(() => {
+    axios.get('/api/public/plans').then(r => {
+      const rows = r.data?.data || []
+      const monthly = { ...MONTHLY_PRICES }
+      const annual = { ...ANNUAL_PRICES }
+      rows.forEach(p => {
+        const key = p.code === 'basic' || p.code?.startsWith('basic') ? 'basic'
+          : p.code === 'pro' || p.code?.startsWith('pro') ? 'pro' : null
+        if (!key) return
+        if (p.price_amount != null) monthly[key] = Number(p.price_amount)
+        if (p.price_annual != null) annual[key] = Math.round(Number(p.price_annual) / 12)
+        else if (p.price_amount != null) annual[key] = Math.round(Number(p.price_amount) * 0.8)
+      })
+      setLiveMonthly(monthly)
+      setLiveAnnual(annual)
+    }).catch(() => {})
+  }, [])
 
   function scrollTo(id) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const prices = annual ? ANNUAL_PRICES : MONTHLY_PRICES
+  const prices = annual ? liveAnnual : liveMonthly
 
   return (
     <section id="precios" className="py-20 bg-gray-950">
@@ -404,7 +424,7 @@ function PricingSection() {
                     </div>
                     {annual && (
                       <p className="text-emerald-400 text-xs mt-1">
-                        Facturado anualmente — ahorra ${(MONTHLY_PRICES[plan.id] - ANNUAL_PRICES[plan.id]) * 12} USD/ano
+                        Facturado anualmente — ahorra ${((liveMonthly[plan.id] || 0) - (liveAnnual[plan.id] || 0)) * 12} USD/ano
                       </p>
                     )}
                   </>

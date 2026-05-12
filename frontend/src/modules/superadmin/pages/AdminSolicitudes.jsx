@@ -268,11 +268,13 @@ function RequestCard({ r, onRefresh }) {
 
 const FILTERS = ['', 'pending', 'approved', 'rejected']
 const FILTER_LABELS = { '': 'Todas', pending: 'Pendientes', approved: 'Aprobadas', rejected: 'Rechazadas' }
+const PAGE_SIZE = 15
 
 export default function AdminSolicitudes() {
   const [requests, setRequests] = useState([])
   const [statusFilter, setStatusFilter] = useState('pending')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -287,6 +289,7 @@ export default function AdminSolicitudes() {
   }
 
   useEffect(() => { load() }, [statusFilter])
+  useEffect(() => { setPage(1) }, [search, statusFilter])
 
   const filtered = requests.filter(r => {
     if (!search) return true
@@ -295,6 +298,9 @@ export default function AdminSolicitudes() {
   })
 
   const pendingCount = requests.filter(r => r.status === 'pending').length
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -360,9 +366,35 @@ export default function AdminSolicitudes() {
           <p className="text-gray-600 text-sm mt-1">No hay solicitudes con ese filtro</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map(r => <RequestCard key={r.id} r={r} onRefresh={load} />)}
-        </div>
+        <>
+          <div className="space-y-3">
+            {paginated.map(r => <RequestCard key={r.id} r={r} onRefresh={load} />)}
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-xs text-gray-500">
+                {filtered.length === 0 ? '0' : `${(safePage - 1) * PAGE_SIZE + 1}–${Math.min(safePage * PAGE_SIZE, filtered.length)}`} de {filtered.length} solicitudes
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+                >
+                  Anterior
+                </button>
+                <span className="text-gray-500 text-xs">Pág. {safePage} / {totalPages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

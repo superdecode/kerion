@@ -4,7 +4,8 @@ import {
   ArrowLeft, RefreshCw, CheckCircle2, XCircle, PauseCircle, PlayCircle,
   Edit2, Save, X, Plus, Calendar, Users, CreditCard, Activity,
   AlertCircle, Check, Clock, Building2, FileText, Package, Zap,
-  Trash2, KeyRound, Copy, Search, Filter, ChevronLeft, ChevronRight, SlidersHorizontal
+  Trash2, KeyRound, Copy, Search, Filter, ChevronLeft, ChevronRight, SlidersHorizontal,
+  ChevronUp, ChevronDown
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
@@ -264,12 +265,7 @@ const HISTORY_TYPE_FILTERS = [
   { value: 'annual', label: 'Anual' },
   { value: 'other', label: 'Otro' },
 ]
-const HISTORY_SORT_OPTIONS = [
-  { value: 'recent', label: 'Más recientes' },
-  { value: 'oldest', label: 'Más antiguas' },
-  { value: 'expires_desc', label: 'Vencimiento más lejano' },
-  { value: 'expires_asc', label: 'Vencimiento más próximo' },
-]
+
 
 function normalizeText(value) {
   return (value ?? '')
@@ -324,12 +320,20 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
   }).format(new Date(d)) : '—'
 
   const [query, setQuery] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [planFilter, setPlanFilter] = useState('')
-  const [sortBy, setSortBy] = useState('recent')
+  const [sortKey, setSortKey] = useState('started_at')
+  const [sortDir, setSortDir] = useState('desc')
   const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
+
+  function toggleSort(col) {
+    if (sortKey === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(col); setSortDir('desc') }
+  }
 
   const planOptions = Array.from(
     new Map(
@@ -341,20 +345,24 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
 
   useEffect(() => {
     setPage(1)
-  }, [query, statusFilter, typeFilter, planFilter, sortBy, pageSize, subscriptions])
+  }, [query, dateFrom, dateTo, statusFilter, typeFilter, planFilter, sortKey, sortDir, pageSize, subscriptions])
 
   const filtered = subscriptions
     .slice()
     .sort((a, b) => {
-      const aStart = safeDateValue(a.started_at || a.created_at || a.expires_at)
-      const bStart = safeDateValue(b.started_at || b.created_at || b.expires_at)
-      const aExpiry = safeDateValue(a.expires_at || a.started_at || a.created_at)
-      const bExpiry = safeDateValue(b.expires_at || b.started_at || b.created_at)
-
-      if (sortBy === 'oldest') return aStart - bStart
-      if (sortBy === 'expires_desc') return bExpiry - aExpiry
-      if (sortBy === 'expires_asc') return aExpiry - bExpiry
-      return bStart - aStart
+      let av, bv
+      if (sortKey === 'expires_at') {
+        av = safeDateValue(a.expires_at || a.started_at || a.created_at)
+        bv = safeDateValue(b.expires_at || b.started_at || b.created_at)
+      } else {
+        av = safeDateValue(a.started_at || a.created_at || a.expires_at)
+        bv = safeDateValue(b.started_at || b.created_at || b.expires_at)
+      }
+      if (sortKey === 'status') { av = a.status || ''; bv = b.status || '' }
+      if (sortKey === 'price') { av = Number(a.price_amount ?? 0); bv = Number(b.price_amount ?? 0) }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
     })
     .filter((s) => {
       if (statusFilter && s.status !== statusFilter) return false
@@ -363,6 +371,16 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
       if (planFilter) {
         const value = s.plan_name || s.plan_code || s.code || s.id
         if (value !== planFilter) return false
+      }
+      if (dateFrom) {
+        const from = new Date(dateFrom).getTime()
+        const start = safeDateValue(s.started_at || s.created_at)
+        if (start < from) return false
+      }
+      if (dateTo) {
+        const to = new Date(dateTo).getTime() + 86400000
+        const start = safeDateValue(s.started_at || s.created_at)
+        if (start >= to) return false
       }
       if (!query) return true
       const haystack = normalizeText([
@@ -386,7 +404,7 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
   const paged = filtered.slice(startIndex, startIndex + pageSize)
   const visibleStart = totalResults === 0 ? 0 : startIndex + 1
   const visibleEnd = startIndex + paged.length
-  const activeFiltersCount = [query, statusFilter, typeFilter, planFilter].filter(Boolean).length
+  const activeFiltersCount = [query, dateFrom, dateTo, statusFilter, typeFilter, planFilter].filter(Boolean).length
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -395,17 +413,17 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
           <div className="min-w-0">
             <h3 className="text-white font-semibold flex items-center gap-2 text-lg">
               <Clock className="w-5 h-5 text-blue-400" />
-              Historial completo de suscripciones
+              Historial de suscripciones
             </h3>
-            <p className="text-gray-500 text-xs mt-0.5">Fechas en zona horaria: {tz}. El vencimiento se muestra siempre con zona horaria explícita.</p>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="px-6 pt-5 pb-4 border-b border-gray-800/80 space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_0.7fr] gap-3">
+        <div className="px-6 pt-5 pb-4 border-b border-gray-800/80 space-y-3">
+          {/* Row 1: search + date range */}
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr_1fr] gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
@@ -415,6 +433,25 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
                 className="w-full bg-gray-950 border border-gray-700 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
+            <div>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+            <div>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </div>
+          {/* Row 2: dropdowns + page size */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <select
                 value={statusFilter}
@@ -449,29 +486,16 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-              <div>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
-                >
-                  {HISTORY_SORT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <select
-                  value={pageSize}
-                  onChange={(e) => setPageSize(Number(e.target.value) || 10)}
-                  className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
-                >
-                  {HISTORY_PAGE_SIZES.map((size) => (
-                    <option key={size} value={size}>{size} por página</option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value) || 10)}
+                className="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+              >
+                {HISTORY_PAGE_SIZES.map((size) => (
+                  <option key={size} value={size}>{size} por página</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -481,6 +505,8 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
               {totalResults} resultados
             </span>
             {query && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Buscar: {query}</span>}
+            {dateFrom && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Desde: {dateFrom}</span>}
+            {dateTo && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Hasta: {dateTo}</span>}
             {statusFilter && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Estado: {getSubscriptionStatusLabel(statusFilter)}</span>}
             {typeFilter && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Tipo: {HISTORY_TYPE_FILTERS.find((opt) => opt.value === typeFilter)?.label || typeFilter}</span>}
             {planFilter && <span className="px-2.5 py-1 rounded-full bg-gray-800 text-gray-300 border border-gray-700">Plan: {planFilter}</span>}
@@ -488,10 +514,13 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
               <button
                 onClick={() => {
                   setQuery('')
+                  setDateFrom('')
+                  setDateTo('')
                   setStatusFilter('')
                   setTypeFilter('')
                   setPlanFilter('')
-                  setSortBy('recent')
+                  setSortKey('started_at')
+                  setSortDir('desc')
                   setPageSize(10)
                 }}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition-colors"
@@ -508,13 +537,25 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
             <table className="w-full text-left text-sm">
               <thead className="text-gray-400 font-medium border-b border-gray-800 sticky top-0 bg-gray-900 z-10">
                 <tr>
-                  <th className="py-3 px-4">Código</th>
-                  <th className="py-3 px-4">Tipo</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4">Inicio ({tz})</th>
-                  <th className="py-3 px-4">Vence ({tz})</th>
-                  <th className="py-3 px-4">Precio</th>
-                  <th className="py-3 px-4">Referencia / Notas</th>
+                  <th className="py-3 px-4 text-xs uppercase font-medium">Código</th>
+                  <th className="py-3 px-4 text-xs uppercase font-medium">Tipo</th>
+                  {['status', 'started_at', 'expires_at', 'price'].map((col, i) => {
+                    const labels = { status: 'Estado', started_at: `Inicio (${tz})`, expires_at: `Vence (${tz})`, price: 'Precio' }
+                    const active = sortKey === col
+                    return (
+                      <th key={col} onClick={() => toggleSort(col)}
+                        className="py-3 px-4 text-xs uppercase font-medium cursor-pointer select-none hover:text-white transition-colors"
+                      >
+                        <div className="flex items-center gap-1">
+                          {labels[col]}
+                          {active ? (
+                            sortDir === 'asc' ? <ChevronUp className="w-3 h-3 text-blue-400" /> : <ChevronDown className="w-3 h-3 text-blue-400" />
+                          ) : <span className="opacity-30 text-[10px]">⇅</span>}
+                        </div>
+                      </th>
+                    )
+                  })}
+                  <th className="py-3 px-4 text-xs uppercase font-medium">Referencia / Notas</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/50">

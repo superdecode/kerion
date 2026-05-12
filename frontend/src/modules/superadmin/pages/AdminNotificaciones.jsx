@@ -32,11 +32,13 @@ const TEMPLATE_LABELS = {
 
 const FILTERS = ['', 'pending', 'sent', 'failed']
 const FILTER_LABELS = { '': 'Todas', pending: 'Pendientes', sent: 'Enviadas', failed: 'Fallidas' }
+const PAGE_SIZE = 20
 
 export default function AdminNotificaciones() {
   const [notifs, setNotifs] = useState([])
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [retryingId, setRetryingId] = useState(null)
 
@@ -54,6 +56,7 @@ export default function AdminNotificaciones() {
   }
 
   useEffect(() => { load() }, [statusFilter])
+  useEffect(() => { setPage(1) }, [search, statusFilter])
 
   async function retry(id) {
     setRetryingId(id)
@@ -75,6 +78,9 @@ export default function AdminNotificaciones() {
   })
 
   const failedCount = notifs.filter(n => n.status === 'failed').length
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   return (
     <div className="space-y-5">
@@ -149,6 +155,7 @@ export default function AdminNotificaciones() {
           <p className="text-gray-600 text-sm mt-1">No hay registros con ese filtro</p>
         </div>
       ) : (
+        <>
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -162,7 +169,7 @@ export default function AdminNotificaciones() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/60">
-              {filtered.map(n => (
+              {paginated.map(n => (
                 <tr key={n.id} className="hover:bg-gray-800/30 transition-colors">
                   <td className="px-5 py-3.5">
                     <p className="text-white text-sm">{n.recipient_email}</p>
@@ -205,6 +212,31 @@ export default function AdminNotificaciones() {
             </tbody>
           </table>
         </div>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-3">
+            <p className="text-xs text-gray-500">
+              {filtered.length === 0 ? '0' : `${(safePage - 1) * PAGE_SIZE + 1}–${Math.min(safePage * PAGE_SIZE, filtered.length)}`} de {filtered.length} notificaciones
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+              >
+                Anterior
+              </button>
+              <span className="text-gray-500 text-xs">Pág. {safePage} / {totalPages}</span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+                className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
+        </>
       )}
     </div>
   )
