@@ -179,9 +179,29 @@ export default function AdminNotificaciones() {
         ))}
       </div>
 
-      {/* Filters + search */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      {/* Row 1: status pills */}
+      <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5 w-fit">
+        {FILTERS.map(s => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className={`relative px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              statusFilter === s ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+            }`}
+          >
+            {FILTER_LABELS[s]}
+            {s === 'failed' && statusFilter !== 'failed' && failedCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {failedCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Row 2: search */}
+      <div className="flex gap-3">
+        <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             value={search}
@@ -189,24 +209,6 @@ export default function AdminNotificaciones() {
             placeholder="Buscar por email o plantilla..."
             className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
           />
-        </div>
-        <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5">
-          {FILTERS.map(s => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={`relative px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                statusFilter === s ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-              }`}
-            >
-              {FILTER_LABELS[s]}
-              {s === 'failed' && statusFilter !== 'failed' && failedCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                  {failedCount}
-                </span>
-              )}
-            </button>
-          ))}
         </div>
       </div>
 
@@ -249,7 +251,7 @@ export default function AdminNotificaciones() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800">
+              <tr className="border-b border-gray-800 bg-gray-800/40">
                 <th className="px-4 py-3 w-10">
                   <input
                     type="checkbox"
@@ -258,12 +260,12 @@ export default function AdminNotificaciones() {
                     className="rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-0 cursor-pointer"
                   />
                 </th>
-                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Destinatario</th>
-                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3 hidden md:table-cell">Plantilla</th>
-                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Estado</th>
-                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3 hidden lg:table-cell">Fecha</th>
-                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3 hidden xl:table-cell">Intentos</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Acciones</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Destinatario</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden md:table-cell">Plantilla</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Estado</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden lg:table-cell">Fecha</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden xl:table-cell">Intentos</th>
+                <th className="text-right px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/60">

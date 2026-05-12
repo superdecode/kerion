@@ -11,7 +11,7 @@ import api from '../core/services/api'
 import {
   Users, Shield, Plus, Search, Edit3, Trash2, ToggleLeft, ToggleRight,
   Key, Copy, ChevronDown, CheckCircle, XCircle, Settings2, Check,
-  CreditCard, Clock, AlertTriangle, RefreshCw, ChevronRight
+  CreditCard, Clock, AlertTriangle, RefreshCw, ChevronRight, Zap
 } from 'lucide-react'
 
 // Module definitions for scalable permission system
@@ -156,98 +156,123 @@ function PlanTab() {
   }
 
   return (
-    <div className="max-w-xl space-y-4 pt-2">
-      {/* Plan card */}
-      <div className="card p-5 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
-            <CreditCard className="w-5 h-5 text-primary-600" />
-          </div>
-          <div>
-            <p className="text-xs text-warm-400 font-medium uppercase tracking-wider">{t('plan.current_plan')}</p>
-            <p className="text-warm-800 font-bold text-lg leading-none mt-0.5">
-              {info?.plan_name || (info?.tenant_status === 'trial' ? t('plan.trial') : t('plan.no_plan'))}
-            </p>
-          </div>
-          <span className={`ml-auto text-xs font-semibold px-2.5 py-1 rounded-full border ${
-            info?.tenant_status === 'active' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-            info?.tenant_status === 'trial' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-            'bg-orange-100 text-orange-700 border-orange-200'
-          }`}>
-            {info?.tenant_status === 'active' ? t('plan.status_active') : info?.tenant_status === 'trial' ? t('plan.status_trial') : t('plan.status_expired')}
-          </span>
-        </div>
-
-        <div className="border-t border-warm-100 pt-4 space-y-3">
-          {/* Expiry */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-warm-600 text-sm">
-              <Clock className="w-4 h-4 text-warm-400" />
-              {t('plan.expiry')}
+    <div className="pt-2 w-full">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Left column: plan info */}
+        <div className="card p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
+              <CreditCard className="w-5 h-5 text-primary-600" />
             </div>
-            <div className="text-right">
-              {expiresAt ? (
-                <>
-                  <p className="text-warm-800 text-sm font-medium">
-                    {new Date(expiresAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: user?.zona_horaria || 'America/Mexico_City' })}
-                  </p>
-                  <p className={`text-xs font-bold ${daysColor}`}>
-                    {days === null ? '' : days < 0 ? t('plan.expired') : days === 0 ? t('plan.expires_today') : `${days} ${t('plan.days_remaining')}`}
-                  </p>
-                </>
-              ) : (
-                <p className="text-warm-400 text-sm">{t('plan.no_expiry')}</p>
-              )}
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-warm-400 font-medium uppercase tracking-wider">{t('plan.current_plan')}</p>
+              <p className="text-warm-800 font-bold text-lg leading-none mt-0.5 truncate">
+                {info?.plan_name || (info?.tenant_status === 'trial' ? t('plan.trial') : t('plan.no_plan'))}
+              </p>
             </div>
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border flex-shrink-0 ${
+              info?.tenant_status === 'active' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+              info?.tenant_status === 'trial' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+              'bg-orange-100 text-orange-700 border-orange-200'
+            }`}>
+              {info?.tenant_status === 'active' ? t('plan.status_active') : info?.tenant_status === 'trial' ? t('plan.status_trial') : t('plan.status_expired')}
+            </span>
           </div>
 
-          {/* Guide usage */}
-          {guideLimit != null && (
-            <div>
-              <div className="flex items-center justify-between text-sm mb-1.5">
-                <span className="text-warm-600">{t('plan.guides_this_month')}</span>
+          <div className="border-t border-warm-100 pt-4 space-y-2.5">
+            {guideLimit != null && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-warm-600 flex items-center gap-1.5">
+                  <Zap className="w-4 h-4 text-warm-400" />
+                  {t('plan.guides_this_month')}
+                </span>
                 <span className="font-semibold text-warm-800">
-                  {guidesUsed.toLocaleString()} / {guideLimit.toLocaleString()}
+                  {guideLimit.toLocaleString()}
                 </span>
               </div>
-              <div className="w-full h-2 bg-warm-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${guideBarColor}`}
-                  style={{ width: `${guidePercent}%` }}
-                />
+            )}
+            {info?.plan_name && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-warm-600">{t('plan.current_plan')}</span>
+                <span className="font-semibold text-warm-800">{info.plan_name}</span>
               </div>
-              {guidePercent > 90 && (
-                <div className="flex items-center gap-1.5 mt-2 text-xs text-red-600">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  {t('plan.near_guide_limit')}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Renewal */}
-      <div className="card p-5">
-        <h3 className="text-warm-800 font-semibold text-sm mb-2">{t('plan.renew_title')}</h3>
-        <p className="text-warm-500 text-sm mb-4">
-          {t('plan.renew_description')}
-        </p>
-        {renewSent ? (
-          <div className="flex items-center gap-2 text-emerald-600 text-sm">
-            <CheckCircle className="w-4 h-4" />
-            {t('plan.request_sent')}
+            )}
           </div>
-        ) : (
-          <button
-            onClick={handleRenewSubmit}
-            disabled={renewLoading}
-            className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            {renewLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-            {t('plan.request_renewal')}
-          </button>
-        )}
+        </div>
+
+        {/* Right column: dates, usage, renewal */}
+        <div className="space-y-4">
+          <div className="card p-5 space-y-3">
+            {/* Expiry */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-warm-600 text-sm">
+                <Clock className="w-4 h-4 text-warm-400" />
+                {t('plan.expiry')}
+              </div>
+              <div className="text-right">
+                {expiresAt ? (
+                  <>
+                    <p className="text-warm-800 text-sm font-medium">
+                      {new Date(expiresAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: user?.zona_horaria || 'America/Mexico_City' })}
+                    </p>
+                    <p className={`text-xs font-bold ${daysColor}`}>
+                      {days === null ? '' : days < 0 ? t('plan.expired') : days === 0 ? t('plan.expires_today') : `${days} ${t('plan.days_remaining')}`}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-warm-400 text-sm">{t('plan.no_expiry')}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Guide usage bar */}
+            {guideLimit != null && (
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1.5">
+                  <span className="text-warm-600">{t('plan.guides_this_month')}</span>
+                  <span className="font-semibold text-warm-800">
+                    {guidesUsed.toLocaleString()} / {guideLimit.toLocaleString()}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-warm-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${guideBarColor}`}
+                    style={{ width: `${guidePercent}%` }}
+                  />
+                </div>
+                {guidePercent > 90 && (
+                  <div className="flex items-center gap-1.5 mt-2 text-xs text-red-600">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    {t('plan.near_guide_limit')}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Renewal card */}
+          <div className="card p-5">
+            <h3 className="text-warm-800 font-semibold text-sm mb-2">{t('plan.renew_title')}</h3>
+            <p className="text-warm-500 text-sm mb-4">
+              {t('plan.renew_description')}
+            </p>
+            {renewSent ? (
+              <div className="flex items-center gap-2 text-emerald-600 text-sm">
+                <CheckCircle className="w-4 h-4" />
+                {t('plan.request_sent')}
+              </div>
+            ) : (
+              <button
+                onClick={handleRenewSubmit}
+                disabled={renewLoading}
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-colors"
+              >
+                {renewLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+                {t('plan.request_renewal')}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -271,7 +296,7 @@ export default function Administracion() {
             {[
               { key: 'usuarios', label: t('admin.users'), icon: Users },
               { key: 'roles', label: t('admin.roles'), icon: Shield },
-              { key: 'plan', label: 'Plan', icon: CreditCard },
+              { key: 'plan', label: t('admin.tab.plan'), icon: CreditCard },
             ].map(item => (
               <button key={item.key} onClick={() => setTab(item.key)}
                 className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all duration-200

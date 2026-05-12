@@ -87,6 +87,30 @@ router.post('/auth/login', async (req, res) => {
   }
 })
 
+// POST /api/admin/auth/change-password
+router.post('/auth/change-password', authenticateAdmin, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'current_password y new_password son requeridos' })
+    }
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' })
+    }
+    const result = await query('SELECT * FROM super_admins WHERE id = $1 AND is_active = true LIMIT 1', [req.admin.id])
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Admin no encontrado' })
+    const admin = result.rows[0]
+    const valid = await bcrypt.compare(current_password, admin.password_hash)
+    if (!valid) return res.status(401).json({ error: 'Contraseña actual incorrecta' })
+    const newHash = await bcrypt.hash(new_password, 12)
+    await query('UPDATE super_admins SET password_hash = $1 WHERE id = $2', [newHash, req.admin.id])
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[admin/auth/change-password]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
 // POST /api/admin/seed — DEV ONLY: upsert super_admin (creates or updates password)
 router.post('/seed', async (req, res) => {
   if (env.NODE_ENV === 'production') {

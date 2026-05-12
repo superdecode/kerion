@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   RefreshCw, Plus, Edit2, Trash2, X, AlertCircle, Check,
-  CreditCard, Package, Eye, EyeOff, Save, ChevronUp, ChevronDown
+  CreditCard, Package, Eye, EyeOff, Save, ChevronUp, ChevronDown, Search, Calendar
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
@@ -247,12 +247,12 @@ function PlansTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-800 bg-gray-800/40">
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Plan</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Precio</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Limite guias</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Orden</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Estado</th>
-                <th className="text-right px-4 py-3 text-gray-400 font-medium text-xs uppercase">Acciones</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Plan</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Precio</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Limite guias</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Orden</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Estado</th>
+                <th className="text-right px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800">
@@ -319,7 +319,7 @@ function SortTh({ col, label, sortKey, sortDir, onSort, cls = '' }) {
   return (
     <th
       onClick={() => onSort(col)}
-      className={`text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase cursor-pointer select-none hover:text-white transition-colors ${cls}`}
+      className={`text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider cursor-pointer select-none hover:text-white transition-colors ${cls}`}
     >
       <div className="flex items-center gap-1">
         {label}
@@ -418,58 +418,71 @@ function SubscriptionsTab() {
     return ['annual', 'anual'].includes(type)
   }
 
+  const SUB_STATUS_FILTERS = ['', 'active', 'expired', 'cancelled']
+  const SUB_STATUS_LABELS = { '': 'Todas', active: 'Activa', expired: 'Vencida', cancelled: 'Cancelada' }
+
   return (
     <div className="space-y-4">
-      {/* Filters: search → dates → dropdowns */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-3">
-        <div className="relative">
+      {/* Row 1: status pills */}
+      <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5 w-fit">
+        {SUB_STATUS_FILTERS.map(s => (
+          <button
+            key={s}
+            onClick={() => setFilters(f => ({ ...f, status: s }))}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              filters.status === s ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+            }`}
+          >
+            {SUB_STATUS_LABELS[s]}
+          </button>
+        ))}
+      </div>
+
+      {/* Row 2: search + date card + plan dropdown */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar empresa..."
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg pl-3 pr-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors"
+            className="w-full bg-gray-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
-        <div>
+        <div className="flex items-center gap-1.5 bg-gray-800/50 border border-gray-700 rounded-xl px-3 py-2 shrink-0">
+          <Calendar className="w-3.5 h-3.5 text-gray-500" />
           <input
             type="date"
             value={filters.dateFrom}
             onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+            className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
           />
-        </div>
-        <div>
+          <span className="text-gray-600 text-xs">→</span>
           <input
             type="date"
             value={filters.dateTo}
             onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+            className="text-xs outline-none bg-transparent text-gray-300 w-[108px]"
           />
         </div>
-        <div>
-          <select
-            value={filters.status}
-            onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+        <select
+          value={filters.plan}
+          onChange={e => setFilters(f => ({ ...f, plan: e.target.value }))}
+          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+        >
+          <option value="">Plan</option>
+          {plans.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        {(filters.dateFrom || filters.dateTo || filters.plan) && (
+          <button
+            onClick={() => setFilters(f => ({ ...f, dateFrom: '', dateTo: '', plan: '' }))}
+            className="text-xs text-gray-400 hover:text-red-400 transition-colors"
           >
-            <option value="">Estado</option>
-            <option value="active">Activa</option>
-            <option value="expired">Vencida</option>
-            <option value="cancelled">Cancelada</option>
-          </select>
-        </div>
-        <div>
-          <select
-            value={filters.plan}
-            onChange={e => setFilters(f => ({ ...f, plan: e.target.value }))}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
-          >
-            <option value="">Plan</option>
-            {plans.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -488,10 +501,10 @@ function SubscriptionsTab() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800 bg-gray-800/40">
-                    <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">ID</th>
+                    <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">ID</th>
                     <SortTh col="legal_name" label="Empresa" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="plan_name" label="Plan" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                    <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase">Tipo</th>
+                    <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Tipo</th>
                     <SortTh col="started_at" label="Inicio" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="expires_at" label="Vencimiento" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="status" label="Estado" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
