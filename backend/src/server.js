@@ -111,13 +111,15 @@ app.use('/api/wms', tenantContext, tenantDB, wmsRoutes)
 // DropScan — require dropscan module access
 app.use('/api/dropscan', tenantContext, tenantDB, moduleGuard('dropscan'), scanRoutes)
 app.use('/api/dropscan/tarimas', tenantContext, tenantDB, moduleGuard('dropscan'), tarimasRoutes)
+app.use('/api/dropscan/historial', tenantContext, tenantDB, moduleGuard('dropscan'), tarimasRoutes)
 app.use('/api/dropscan/dashboard', tenantContext, tenantDB, moduleGuard('dropscan'), dashboardRoutes)
 app.use('/api/dropscan/config', tenantContext, tenantDB, moduleGuard('dropscan'), dropscanConfigRoutes)
 app.use('/api/dropscan/operadores', tenantContext, tenantDB, moduleGuard('dropscan'), operadoresRoutes)
 
 // Inventory — require inventory module (not in MVP plans, returns 403 for trial/basic)
 app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventory'), invScanRoutes)
-app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventory'), invTarimasRoutes)
+app.use('/api/inventory/tarimas', tenantContext, tenantDB, moduleGuard('inventory'), invTarimasRoutes)
+app.use('/api/inventory/historial', tenantContext, tenantDB, moduleGuard('inventory'), invTarimasRoutes)
 
 // FEP — require dropscan module (FEP is part of dropscan)
 app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)

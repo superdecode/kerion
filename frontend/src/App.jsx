@@ -34,13 +34,13 @@ import Administracion from './pages/Administracion'
 // DropScan Module
 import DropScanDashboard from './modules/dropscan/pages/Dashboard'
 import Escaneo from './modules/dropscan/pages/Escaneo'
-import Tarimas from './modules/dropscan/pages/Tarimas'
+import Historial from './modules/dropscan/pages/Historial'
 import Reportes from './modules/dropscan/pages/Reportes'
 import Configuracion from './modules/dropscan/pages/Configuracion'
 
 // Inventory Module
 import InvEscaneo from './modules/inventory/pages/Escaneo'
-import InvTarimas from './modules/inventory/pages/Tarimas'
+import InvHistorial from './modules/inventory/pages/Historial'
 import InvReportes from './modules/inventory/pages/Reportes'
 
 // WMS Hub
@@ -65,11 +65,11 @@ const MODULE_ROUTES = [
   { module: 'global.inicio', path: '/' },
   { module: 'dropscan.dashboard', path: '/dropscan' },
   { module: 'dropscan.escaneo', path: '/dropscan/escaneo' },
-  { module: 'dropscan.tarimas', path: '/dropscan/tarimas' },
+  { module: 'dropscan.historial', path: '/dropscan/historial' },
   { module: 'dropscan.reportes', path: '/dropscan/reportes' },
   { module: 'dropscan.configuracion', path: '/dropscan/configuracion' },
   { module: 'inventory.escaneo', path: '/inventory/escaneo' },
-  { module: 'inventory.tarimas', path: '/inventory/tarimas' },
+  { module: 'inventory.historial', path: '/inventory/historial' },
   { module: 'inventory.reportes', path: '/inventory/reportes' },
   { module: 'fep.folios', path: '/dropscan/folios' },
   { module: 'global.wms', path: '/wms' },
@@ -154,8 +154,11 @@ function AppRoutes() {
         <Route path="dropscan/escaneo" element={
           <PermissionRoute module="dropscan.escaneo"><ErrorBoundary><Escaneo /></ErrorBoundary></PermissionRoute>
         } />
+        <Route path="dropscan/historial" element={
+          <PermissionRoute module="dropscan.historial"><ErrorBoundary><Historial /></ErrorBoundary></PermissionRoute>
+        } />
         <Route path="dropscan/tarimas" element={
-          <PermissionRoute module="dropscan.tarimas"><ErrorBoundary><Tarimas /></ErrorBoundary></PermissionRoute>
+          <Navigate to="/dropscan/historial" replace />
         } />
         <Route path="dropscan/reportes" element={
           <PermissionRoute module="dropscan.reportes"><ErrorBoundary><Reportes /></ErrorBoundary></PermissionRoute>
@@ -168,11 +171,11 @@ function AppRoutes() {
         <Route path="inventory/escaneo" element={
           <PermissionRoute module="inventory.escaneo"><ErrorBoundary><InvEscaneo /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="inventory/tarimas" element={
-          <PermissionRoute module="inventory.tarimas"><ErrorBoundary><InvTarimas /></ErrorBoundary></PermissionRoute>
-        } />
         <Route path="inventory/historial" element={
-          <Navigate to="/inventory/tarimas" replace />
+          <PermissionRoute module="inventory.historial"><ErrorBoundary><InvHistorial /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="inventory/tarimas" element={
+          <Navigate to="/inventory/historial" replace />
         } />
         <Route path="inventory/reportes" element={
           <PermissionRoute module="inventory.reportes"><ErrorBoundary><InvReportes /></ErrorBoundary></PermissionRoute>
