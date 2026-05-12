@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import env from '../../config/env.js'
-import { query } from '../../config/database.js'
+import { query, getClient } from '../../config/database.js'
 import { provisionTenant } from '../../services/provisioningService.js'
 import { endOfDayInTimezone } from '../../shared/utils/timezone.js'
 
