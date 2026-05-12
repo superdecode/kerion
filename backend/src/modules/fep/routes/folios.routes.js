@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { query, getClient } from '../../../config/database.js'
+import { query } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { dateInTZ, getToday, CDMX_TZ } from '../../../shared/utils/dateUtils.js'
@@ -562,13 +562,11 @@ router.get('/:id/pdf',
         [id]
       )
 
-      // Log impresion
-      const client2 = await getClient()
-      try {
-        await logAction(client2, id, 'IMPRESION', { usuario: req.fullUser.nombre_completo }, req.fullUser.id)
-      } finally {
-        client2.release()
-      }
+      // Log impresion — uses tenant-scoped tQuery so RLS applies
+      await req.tQuery(
+        `INSERT INTO folios_entrega_log (folio_id, accion, detalle, usuario_id, tenant_id) VALUES ($1,$2,$3,$4,$5)`,
+        [id, 'IMPRESION', JSON.stringify({ usuario: req.fullUser.nombre_completo }), req.fullUser.id, req.tenantId]
+      )
 
       const { default: PDFDocument } = await import('pdfkit')
 

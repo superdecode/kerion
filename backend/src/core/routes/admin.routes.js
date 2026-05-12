@@ -475,22 +475,24 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
     if (client) {
       try { await client.query('ROLLBACK') } catch (_) {}
     }
-    console.error('[admin/tenants POST]', err)
-    let message = err.message || 'Error al crear tenant'
+    console.error('[admin/tenants POST] code=%s constraint=%s table=%s column=%s detail=%s message=%s',
+      err.code, err.constraint, err.table, err.column, err.detail, err.message)
+
     if (err.code === '23505') {
-      if (err.constraint === 'tenants_slug_key' || err.constraint?.includes('tenants_slug')) {
-        message = 'El slug ya existe'
-      } else if (err.constraint === 'usuarios_tenant_id_email_key' || err.constraint?.includes('usuarios_tenant_email')) {
-        message = 'El email del administrador ya esta en uso'
-      } else if (err.constraint === 'usuarios_tenant_id_codigo_key' || err.constraint?.includes('usuarios_tenant_codigo')) {
-        message = 'El codigo del administrador ya esta en uso'
-      } else if (err.constraint === 'roles_tenant_id_nombre_key' || err.constraint?.includes('roles_tenant_nombre')) {
-        message = 'El rol Administrador ya existe para este tenant'
-      } else {
-        message = 'Error de duplicado: ' + (err.constraint || err.detail || 'violacion de unicidad')
-      }
+      let message = 'Error de duplicado: ' + (err.constraint || err.detail || 'violacion de unicidad')
+      if (err.constraint?.includes('tenants_slug')) message = 'El slug ya existe'
+      else if (err.constraint?.includes('usuarios_tenant_id_email') || err.constraint?.includes('usuarios_tenant_email')) message = 'El email del administrador ya esta en uso'
+      else if (err.constraint?.includes('usuarios_tenant_id_codigo') || err.constraint?.includes('usuarios_tenant_codigo')) message = 'El codigo del administrador ya esta en uso'
+      else if (err.constraint?.includes('roles_tenant_id_nombre') || err.constraint?.includes('roles_tenant_nombre')) message = 'El rol Administrador ya existe para este tenant'
+      return res.status(409).json({ error: message })
     }
-    res.status(500).json({ error: message })
+
+    if (err.code === '42703') {
+      console.error('[admin/tenants POST] Column not found — check migrations:', err.message)
+      return res.status(500).json({ error: 'Error de esquema: columna faltante. Contactar soporte.' })
+    }
+
+    res.status(500).json({ error: err.message || 'Error al crear tenant' })
   } finally {
     if (client) client.release()
   }
