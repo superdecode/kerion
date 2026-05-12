@@ -3,8 +3,8 @@ import bcrypt from 'bcryptjs'
 import { query, tenantTransaction } from '../config/database.js'
 import env from '../config/env.js'
 
-const TRIAL_PLAN_CODE = 'trial_7d'
-const TRIAL_DAYS = 7
+const TRIAL_PLAN_CODE = 'trial_30d'
+const TRIAL_DAYS = 30
 
 function generateSecurePassword() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%'
