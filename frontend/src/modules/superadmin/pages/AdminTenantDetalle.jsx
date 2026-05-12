@@ -529,7 +529,7 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
                   <th className="py-3 px-4 text-xs uppercase font-medium">Código</th>
                   <th className="py-3 px-4 text-xs uppercase font-medium">Tipo</th>
                   {['status', 'started_at', 'expires_at', 'price'].map((col, i) => {
-                    const labels = { status: 'Estado', started_at: `Inicio (${tz})`, expires_at: `Vence (${tz})`, price: 'Precio' }
+                    const labels = { status: 'Estado', started_at: 'Inicio', expires_at: 'Vence', price: 'Precio' }
                     const active = sortKey === col
                     return (
                       <th key={col} onClick={() => toggleSort(col)}

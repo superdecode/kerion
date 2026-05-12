@@ -422,7 +422,7 @@ router.post('/sessions/:id/scan',
               `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5)
                RETURNING id`,
-              [newCodigo, empresa_id, canal_id, userId, req.tenantId]
+              [newCodigo, tarima.empresa_id, tarima.canal_id, userId, req.tenantId]
             )
             nueva_tarima = newTarimaRes.rows[0]
             break

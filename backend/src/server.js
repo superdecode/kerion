@@ -301,6 +301,8 @@ async function runMigrations() {
     // tenant_id on folios tables for full RLS coverage
     `ALTER TABLE folios_entrega ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id)`,
     `ALTER TABLE folios_entrega_tarimas ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id)`,
+    // es_admin_tenant: marks the default admin user created during tenant provisioning
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS es_admin_tenant BOOLEAN DEFAULT false`,
   ]
   for (const sql of steps) {
     try {

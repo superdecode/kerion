@@ -276,7 +276,7 @@ router.put('/preferences', authenticateToken, async (req, res) => {
 router.get('/plan-info', authenticateToken, async (req, res) => {
   if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
   try {
-    const [subRes, guideRes] = await Promise.all([
+    const [subRes, guideRes, tenantRes] = await Promise.all([
       query(
         `SELECT p.name, p.code, p.guide_limit, s.expires_at, s.started_at
          FROM subscriptions s JOIN plans p ON s.plan_id = p.id
@@ -290,17 +290,22 @@ router.get('/plan-info', authenticateToken, async (req, res) => {
            AND timestamp_escaneo >= date_trunc('month', CURRENT_DATE)`,
         [req.user.tenant_id]
       ),
+      query(
+        `SELECT status, trial_expires_at, subscription_expires_at FROM tenants WHERE id = $1`,
+        [req.user.tenant_id]
+      ),
     ])
     const plan = subRes.rows[0] || null
     const guidesThisMonth = guideRes.rows[0]?.count ?? 0
+    const tenant = tenantRes.rows[0] || {}
     res.json({
       plan_name: plan?.name || null,
       plan_code: plan?.code || null,
       guide_limit: plan?.guide_limit || null,
       guides_this_month: guidesThisMonth,
-      expires_at: plan?.expires_at || null,
-      trial_expires_at: req.user.trial_expires_at || null,
-      tenant_status: req.user.tenant_status,
+      expires_at: plan?.expires_at || tenant.subscription_expires_at || null,
+      trial_expires_at: tenant.trial_expires_at || req.user.trial_expires_at || null,
+      tenant_status: tenant.status || req.user.tenant_status,
     })
   } catch (error) {
     console.error('Plan info error:', error)

@@ -188,7 +188,7 @@ function PlanTab() {
               {expiresAt ? (
                 <>
                   <p className="text-warm-800 text-sm font-medium">
-                    {new Date(expiresAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    {new Date(expiresAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: user?.zona_horaria || 'America/Mexico_City' })}
                   </p>
                   <p className={`text-xs font-bold ${daysColor}`}>
                     {days === null ? '' : days < 0 ? '已到期' : days === 0 ? '今日到期' : `还剩 ${days} 天`}
