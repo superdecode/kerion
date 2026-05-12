@@ -15,7 +15,7 @@ import {
   Wifi,
   Package
 } from 'lucide-react'
-import { useI18n } from '../../stores/i18nStore'
+import { useI18nStore } from '../../stores/i18nStore'
 
 const getNavItems = (t) => [
   {
@@ -50,7 +50,7 @@ const getAdminNav = (t) => [
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const { user, canView } = useAuthStore()
-  const { t } = useI18n()
+  const { t } = useI18nStore()
   const location = useLocation()
   const navigate = useNavigate()
 
