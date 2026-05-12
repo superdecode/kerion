@@ -434,19 +434,21 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       [tenant.id, adminCodigo, contact_email.toLowerCase().trim(), hash, contact_name, roleId]
     )
 
-    // 5. Seed dropscan config
-    await client.query(
-      `INSERT INTO empresas_paqueteria (tenant_id, nombre, codigo, activa) VALUES
-       ($1,'FedEx','FEDEX',true), ($1,'DHL','DHL',true), ($1,'UPS','UPS',true)
-       ON CONFLICT (tenant_id, codigo) DO NOTHING`,
-      [tenant.id]
-    )
-    await client.query(
-      `INSERT INTO canales_escaneo (tenant_id, nombre, descripcion, activo)
-       VALUES ($1, 'Canal Principal', 'Canal por defecto', true)
-       ON CONFLICT (tenant_id, nombre) DO NOTHING`,
-      [tenant.id]
-    )
+    // 5. Seed dropscan config — configuraciones table is what the scan UI reads
+    const seedConfigs = [
+      { tipo: 'empresa', codigo: 'FEDEX', nombre: 'FedEx', config_json: JSON.stringify({ color: '#4d148c' }) },
+      { tipo: 'empresa', codigo: 'DHL', nombre: 'DHL', config_json: JSON.stringify({ color: '#ffcc00' }) },
+      { tipo: 'empresa', codigo: 'UPS', nombre: 'UPS', config_json: JSON.stringify({ color: '#351c15' }) },
+      { tipo: 'canal', codigo: 'PRINCIPAL', nombre: 'Canal Principal', config_json: null },
+    ]
+    for (const c of seedConfigs) {
+      await client.query(
+        `INSERT INTO configuraciones (tenant_id, modulo, tipo, codigo, nombre, config_json)
+         VALUES ($1,'dropscan',$2,$3,$4,$5)
+         ON CONFLICT (tenant_id, modulo, tipo, codigo) DO NOTHING`,
+        [tenant.id, c.tipo, c.codigo, c.nombre, c.config_json]
+      )
+    }
 
     // 6. Log provisioning
     await client.query(
@@ -996,6 +998,44 @@ router.post('/notifications/:id/retry', authenticateAdmin, async (req, res) => {
       `UPDATE notifications_outbox SET status = 'pending', attempts = 0, last_error = null WHERE id = $1`,
       [req.params.id]
     )
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// PATCH /api/admin/notifications/:id/status
+router.patch('/notifications/:id/status', authenticateAdmin, async (req, res) => {
+  try {
+    const { status } = req.body
+    if (!['pending', 'sent', 'failed'].includes(status)) {
+      return res.status(400).json({ error: 'Estado inválido' })
+    }
+    await query(`UPDATE notifications_outbox SET status = $1 WHERE id = $2`, [status, req.params.id])
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// DELETE /api/admin/notifications/:id
+router.delete('/notifications/:id', authenticateAdmin, async (req, res) => {
+  try {
+    await query(`DELETE FROM notifications_outbox WHERE id = $1`, [req.params.id])
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// DELETE /api/admin/notifications (bulk delete)
+router.delete('/notifications', authenticateAdmin, async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids requerido' })
+    }
+    await query(`DELETE FROM notifications_outbox WHERE id = ANY($1::int[])`, [ids])
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: 'Error interno' })

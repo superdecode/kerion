@@ -311,7 +311,8 @@ function PlansTab() {
 
 // ── Subscriptions records ─────────────────────────────────────────────────────
 
-const SUB_PAGE_SIZE = 20
+const SUB_PAGE_SIZES = [10, 20, 50, 100]
+const DEFAULT_SUB_PAGE_SIZE = 20
 
 function SortTh({ col, label, sortKey, sortDir, onSort, cls = '' }) {
   const active = sortKey === col
@@ -341,6 +342,7 @@ function SubscriptionsTab() {
   const [sortKey, setSortKey] = useState('started_at')
   const [sortDir, setSortDir] = useState('desc')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_SUB_PAGE_SIZE)
 
   function load() {
     setLoading(true)
@@ -363,7 +365,7 @@ function SubscriptionsTab() {
   }
 
   useEffect(() => { load() }, [filters])
-  useEffect(() => { setPage(1) }, [search, filters, sortKey, sortDir])
+  useEffect(() => { setPage(1) }, [search, filters, sortKey, sortDir, pageSize])
 
   function toggleSort(col) {
     if (sortKey === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -397,9 +399,9 @@ function SubscriptionsTab() {
       return 0
     })
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / SUB_PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage = Math.min(page, totalPages)
-  const paginated = filtered.slice((safePage - 1) * SUB_PAGE_SIZE, safePage * SUB_PAGE_SIZE)
+  const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   function statusColor(status) {
     if (status === 'active') return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
@@ -527,30 +529,35 @@ function SubscriptionsTab() {
               </table>
             )}
           </div>
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-500">
-                {filtered.length === 0 ? '0' : `${(safePage - 1) * SUB_PAGE_SIZE + 1}–${Math.min(safePage * SUB_PAGE_SIZE, filtered.length)}`} de {filtered.length} suscripciones
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={safePage <= 1}
-                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
-                >
-                  Anterior
-                </button>
-                <span className="text-gray-500 text-xs">Pág. {safePage} / {totalPages}</span>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={safePage >= totalPages}
-                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
-                >
-                  Siguiente
-                </button>
-              </div>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500">
+              {filtered.length === 0 ? '0' : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, filtered.length)}`} de {filtered.length} suscripciones
+            </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={e => setPageSize(Number(e.target.value))}
+                className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+              >
+                {SUB_PAGE_SIZES.map(s => <option key={s} value={s}>{s} / pág</option>)}
+              </select>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+              >
+                Anterior
+              </button>
+              <span className="text-gray-500 text-xs">Pág. {safePage} / {totalPages}</span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+                className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+              >
+                Siguiente
+              </button>
             </div>
-          )}
+          </div>
         </>
       )}
     </div>

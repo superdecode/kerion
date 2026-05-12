@@ -163,9 +163,9 @@ function PlanTab() {
             <CreditCard className="w-5 h-5 text-primary-600" />
           </div>
           <div>
-            <p className="text-xs text-warm-400 font-medium uppercase tracking-wider">当前套餐</p>
+            <p className="text-xs text-warm-400 font-medium uppercase tracking-wider">Plan actual</p>
             <p className="text-warm-800 font-bold text-lg leading-none mt-0.5">
-              {info?.plan_name || (info?.tenant_status === 'trial' ? '试用版' : '暂无套餐')}
+              {info?.plan_name || (info?.tenant_status === 'trial' ? 'Prueba' : 'Sin plan')}
             </p>
           </div>
           <span className={`ml-auto text-xs font-semibold px-2.5 py-1 rounded-full border ${
@@ -173,7 +173,7 @@ function PlanTab() {
             info?.tenant_status === 'trial' ? 'bg-blue-100 text-blue-700 border-blue-200' :
             'bg-orange-100 text-orange-700 border-orange-200'
           }`}>
-            {info?.tenant_status === 'active' ? '已激活' : info?.tenant_status === 'trial' ? '试用中' : '已到期'}
+            {info?.tenant_status === 'active' ? 'Activo' : info?.tenant_status === 'trial' ? 'En prueba' : 'Expirado'}
           </span>
         </div>
 
@@ -182,7 +182,7 @@ function PlanTab() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-warm-600 text-sm">
               <Clock className="w-4 h-4 text-warm-400" />
-              到期时间
+              Vencimiento
             </div>
             <div className="text-right">
               {expiresAt ? (
@@ -191,11 +191,11 @@ function PlanTab() {
                     {new Date(expiresAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: user?.zona_horaria || 'America/Mexico_City' })}
                   </p>
                   <p className={`text-xs font-bold ${daysColor}`}>
-                    {days === null ? '' : days < 0 ? '已到期' : days === 0 ? '今日到期' : `还剩 ${days} 天`}
+                    {days === null ? '' : days < 0 ? 'Expirado' : days === 0 ? 'Vence hoy' : `${days} días restantes`}
                   </p>
                 </>
               ) : (
-                <p className="text-warm-400 text-sm">无到期日期</p>
+                <p className="text-warm-400 text-sm">Sin fecha de vencimiento</p>
               )}
             </div>
           </div>
@@ -204,7 +204,7 @@ function PlanTab() {
           {guideLimit != null && (
             <div>
               <div className="flex items-center justify-between text-sm mb-1.5">
-                <span className="text-warm-600">本月单号</span>
+                <span className="text-warm-600">Guías este mes</span>
                 <span className="font-semibold text-warm-800">
                   {guidesUsed.toLocaleString()} / {guideLimit.toLocaleString()}
                 </span>
@@ -218,7 +218,7 @@ function PlanTab() {
               {guidePercent > 90 && (
                 <div className="flex items-center gap-1.5 mt-2 text-xs text-red-600">
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  接近本月单号上限
+                  Cerca del límite mensual de guías
                 </div>
               )}
             </div>
@@ -228,14 +228,14 @@ function PlanTab() {
 
       {/* Renewal */}
       <div className="card p-5">
-        <h3 className="text-warm-800 font-semibold text-sm mb-2">续订套餐</h3>
+        <h3 className="text-warm-800 font-semibold text-sm mb-2">Renovar plan</h3>
         <p className="text-warm-500 text-sm mb-4">
-          提交续订申请，我们的团队将在24小时内与您联系。
+          Envía una solicitud de renovación y nuestro equipo te contactará en 24 horas.
         </p>
         {renewSent ? (
           <div className="flex items-center gap-2 text-emerald-600 text-sm">
             <CheckCircle className="w-4 h-4" />
-            申请已发送，我们将尽快与您联系。
+            Solicitud enviada. Nos pondremos en contacto pronto.
           </div>
         ) : (
           <button
@@ -244,7 +244,7 @@ function PlanTab() {
             className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-colors"
           >
             {renewLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-            申请续订
+            Solicitar renovación
           </button>
         )}
       </div>
@@ -270,7 +270,7 @@ export default function Administracion() {
             {[
               { key: 'usuarios', label: t('admin.users'), icon: Users },
               { key: 'roles', label: t('admin.roles'), icon: Shield },
-              { key: 'plan', label: '套餐', icon: CreditCard },
+              { key: 'plan', label: 'Plan', icon: CreditCard },
             ].map(item => (
               <button key={item.key} onClick={() => setTab(item.key)}
                 className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all duration-200

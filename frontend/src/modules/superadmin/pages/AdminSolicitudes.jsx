@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, ChevronDown, ChevronUp, Clock, Phone, Mail, Globe, Building2, RotateCcw } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, ChevronDown, ChevronUp, Clock, Phone, Mail, Globe, Building2, RotateCcw, Filter } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
 const STATUS_CFG = {
@@ -266,17 +266,25 @@ function RequestCard({ r, onRefresh }) {
   )
 }
 
-const FILTERS = ['', 'pending', 'approved', 'rejected']
-const FILTER_LABELS = { '': 'Todas', pending: 'Pendientes', approved: 'Aprobadas', rejected: 'Rechazadas' }
-const PAGE_SIZE = 15
+const STATUS_FILTERS = ['', 'pending', 'approved', 'rejected']
+const STATUS_LABELS = { '': 'Todas', pending: 'Pendientes', approved: 'Aprobadas', rejected: 'Rechazadas' }
+const TYPE_FILTERS = ['', 'new', 'renewal']
+const TYPE_LABELS = { '': 'Todos los tipos', new: 'Nuevos', renewal: 'Renovaciones' }
+const PAGE_SIZES = [10, 15, 25, 50]
+const DEFAULT_PAGE_SIZE = 15
 
 export default function AdminSolicitudes() {
   const [requests, setRequests] = useState([])
   const [statusFilter, setStatusFilter] = useState('pending')
+  const [typeFilter, setTypeFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
 
   function load() {
     setLoading(true)
@@ -289,18 +297,25 @@ export default function AdminSolicitudes() {
   }
 
   useEffect(() => { load() }, [statusFilter])
-  useEffect(() => { setPage(1) }, [search, statusFilter])
+  useEffect(() => { setPage(1) }, [search, statusFilter, typeFilter, dateFrom, dateTo, pageSize])
 
   const filtered = requests.filter(r => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return r.organization_name?.toLowerCase().includes(q) || r.contact_email?.toLowerCase().includes(q)
+    if (search) {
+      const q = search.toLowerCase()
+      if (!r.organization_name?.toLowerCase().includes(q) && !r.contact_email?.toLowerCase().includes(q)) return false
+    }
+    if (typeFilter === 'new' && r.request_type !== 'new' && r.request_type !== null && r.request_type !== undefined) return false
+    if (typeFilter === 'renewal' && r.request_type !== 'renewal') return false
+    if (dateFrom && new Date(r.created_at) < new Date(dateFrom)) return false
+    if (dateTo && new Date(r.created_at) > new Date(dateTo + 'T23:59:59')) return false
+    return true
   })
 
   const pendingCount = requests.filter(r => r.status === 'pending').length
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage = Math.min(page, totalPages)
-  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+  const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
+  const hasActiveFilters = typeFilter || dateFrom || dateTo
 
   return (
     <div className="space-y-5">
@@ -315,6 +330,7 @@ export default function AdminSolicitudes() {
         </button>
       </div>
 
+      {/* Search + status chips row */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -326,7 +342,7 @@ export default function AdminSolicitudes() {
           />
         </div>
         <div className="flex bg-gray-900 border border-gray-800 rounded-xl p-1 gap-0.5">
-          {FILTERS.map(s => (
+          {STATUS_FILTERS.map(s => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
@@ -334,7 +350,7 @@ export default function AdminSolicitudes() {
                 statusFilter === s ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
               }`}
             >
-              {FILTER_LABELS[s]}
+              {STATUS_LABELS[s]}
               {s === 'pending' && statusFilter !== 'pending' && pendingCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-black text-[10px] font-bold rounded-full flex items-center justify-center">
                   {pendingCount}
@@ -343,7 +359,75 @@ export default function AdminSolicitudes() {
             </button>
           ))}
         </div>
+        <button
+          onClick={() => setShowFilters(v => !v)}
+          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-sm transition-colors ${
+            hasActiveFilters
+              ? 'bg-blue-600/20 border-blue-500/40 text-blue-300'
+              : 'bg-gray-900 border-gray-800 text-gray-500 hover:text-gray-200 hover:bg-gray-800'
+          }`}
+        >
+          <Filter className="w-3.5 h-3.5" />
+          Filtros
+          {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-blue-400" />}
+        </button>
       </div>
+
+      {/* Advanced filters panel */}
+      {showFilters && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
+          <div className="flex flex-wrap gap-3">
+            {/* Type filter chips */}
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Tipo</p>
+              <div className="flex gap-1.5">
+                {TYPE_FILTERS.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setTypeFilter(t)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                      typeFilter === t
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200 hover:bg-gray-700'
+                    }`}
+                  >
+                    {TYPE_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Date range */}
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Fecha de solicitud</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                <span className="text-gray-600 text-xs">—</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo('') }}
+              className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+            >
+              Limpiar filtros avanzados
+            </button>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="flex items-center gap-3 bg-red-950/30 border border-red-800/40 rounded-xl p-4">
@@ -370,30 +454,35 @@ export default function AdminSolicitudes() {
           <div className="space-y-3">
             {paginated.map(r => <RequestCard key={r.id} r={r} onRefresh={load} />)}
           </div>
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-2">
-              <p className="text-xs text-gray-500">
-                {filtered.length === 0 ? '0' : `${(safePage - 1) * PAGE_SIZE + 1}–${Math.min(safePage * PAGE_SIZE, filtered.length)}`} de {filtered.length} solicitudes
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={safePage <= 1}
-                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
-                >
-                  Anterior
-                </button>
-                <span className="text-gray-500 text-xs">Pág. {safePage} / {totalPages}</span>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={safePage >= totalPages}
-                  className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
-                >
-                  Siguiente
-                </button>
-              </div>
+          <div className="flex items-center justify-between pt-2">
+            <p className="text-xs text-gray-500">
+              {filtered.length === 0 ? '0' : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, filtered.length)}`} de {filtered.length} solicitudes
+            </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={e => setPageSize(Number(e.target.value))}
+                className="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+              >
+                {PAGE_SIZES.map(s => <option key={s} value={s}>{s} / pág</option>)}
+              </select>
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+              >
+                Anterior
+              </button>
+              <span className="text-gray-500 text-xs">Pág. {safePage} / {totalPages}</span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+                className="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 text-xs transition-colors"
+              >
+                Siguiente
+              </button>
             </div>
-          )}
+          </div>
         </>
       )}
     </div>
