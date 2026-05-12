@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kirion-v10'
+const CACHE_NAME = 'kirion-v7'
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -21,42 +21,6 @@ self.addEventListener('activate', (event) => {
     )
   )
   self.clients.claim()
-})
-
-// Safe message handler for explicit SW commands.
-// Avoids dangling async responses and only replies when a MessagePort exists.
-self.addEventListener('message', (event) => {
-  const data = event.data || {}
-  const port = event.ports && event.ports[0]
-
-  const reply = (payload) => {
-    if (!port) return
-    try {
-      port.postMessage(payload)
-    } catch {
-      // Ignore channel closure races.
-    }
-  }
-
-  if (data.type === 'SKIP_WAITING') {
-    event.waitUntil((async () => {
-      try {
-        await self.skipWaiting()
-        reply({ ok: true, type: 'SKIP_WAITING' })
-      } catch (error) {
-        reply({
-          ok: false,
-          type: 'SKIP_WAITING',
-          error: error?.message || 'Failed to skip waiting',
-        })
-      }
-    })())
-    return
-  }
-
-  if (data.type === 'GET_VERSION') {
-    reply({ ok: true, type: 'GET_VERSION', version: CACHE_NAME })
-  }
 })
 
 // Fetch: network-first for API, cache-first for static assets
