@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, TrendingUp, MousePointerClick, FileText, Users, BarChart3, Clock } from 'lucide-react'
+import { RefreshCw, TrendingUp, MousePointerClick, FileText, Users, BarChart3, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
 const EVENT_LABELS = {
@@ -32,6 +32,7 @@ function StatCard({ icon: Icon, label, value, sub, color = 'text-blue-400' }) {
 export default function AdminAnalytics() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [eventsPage, setEventsPage] = useState(1)
 
   async function load() {
     setLoading(true)
@@ -139,50 +140,90 @@ export default function AdminAnalytics() {
           </div>
 
           {/* Recent events */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-gray-400" />
-              Eventos recientes
-            </h2>
-            {data.recent_events.length === 0 ? (
-              <p className="text-gray-500 text-sm">Sin eventos registrados</p>
-            ) : (
-              <div className="overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-800">
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2 pr-4">Evento</th>
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2 pr-4 hidden md:table-cell">Payload</th>
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2">Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800/50">
-                    {data.recent_events.map((e, i) => (
-                      <tr key={i} className="hover:bg-gray-800/20 transition-colors">
-                        <td className="py-2.5 pr-4">
-                          <span className="text-gray-300 text-xs">{EVENT_LABELS[e.event_type] || e.event_type}</span>
-                        </td>
-                        <td className="py-2.5 pr-4 hidden md:table-cell">
-                          {e.payload && Object.keys(e.payload).length > 0 ? (
-                            <span className="text-gray-500 text-xs font-mono">
-                              {Object.entries(e.payload).map(([k, v]) => `${k}=${v}`).join(' ')}
-                            </span>
-                          ) : (
-                            <span className="text-gray-700 text-xs">—</span>
-                          )}
-                        </td>
-                        <td className="py-2.5">
-                          <span className="text-gray-500 text-xs">
-                            {new Date(e.created_at).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </td>
+          {(() => {
+            const EVENTS_PAGE_SIZE = 10
+            const eventsTotal = data.recent_events.length
+            const eventsTotalPages = Math.max(1, Math.ceil(eventsTotal / EVENTS_PAGE_SIZE))
+            const eventsSafePage = Math.min(eventsPage, eventsTotalPages)
+            const eventsStart = (eventsSafePage - 1) * EVENTS_PAGE_SIZE
+            const eventsPaged = data.recent_events.slice(eventsStart, eventsStart + EVENTS_PAGE_SIZE)
+            return (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <div className="p-5 pb-3">
+              <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-gray-400" />
+                Eventos recientes
+              </h2>
+              {eventsTotal === 0 ? (
+                <p className="text-gray-500 text-sm">Sin eventos registrados</p>
+              ) : (
+                <div className="overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-800">
+                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2 pr-4">Evento</th>
+                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2 pr-4 hidden md:table-cell">Payload</th>
+                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2">Fecha</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800/50">
+                      {eventsPaged.map((e, i) => (
+                        <tr key={eventsStart + i} className="hover:bg-gray-800/20 transition-colors">
+                          <td className="py-2.5 pr-4">
+                            <span className="text-gray-300 text-xs">{EVENT_LABELS[e.event_type] || e.event_type}</span>
+                          </td>
+                          <td className="py-2.5 pr-4 hidden md:table-cell">
+                            {e.payload && Object.keys(e.payload).length > 0 ? (
+                              <span className="text-gray-500 text-xs font-mono">
+                                {Object.entries(e.payload).map(([k, v]) => `${k}=${v}`).join(' ')}
+                              </span>
+                            ) : (
+                              <span className="text-gray-700 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5">
+                            <span className="text-gray-500 text-xs">
+                              {new Date(e.created_at).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            {eventsTotal > EVENTS_PAGE_SIZE && (
+              <div className="border-t border-gray-800 px-5 py-3 flex items-center justify-between">
+                <p className="text-xs text-gray-500">
+                  Mostrando {eventsStart + 1} a {eventsStart + eventsPaged.length} de {eventsTotal}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEventsPage(p => Math.max(1, p - 1))}
+                    disabled={eventsSafePage <= 1}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Anterior
+                  </button>
+                  <span className="px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-950 text-gray-300 text-xs">
+                    {eventsSafePage} / {eventsTotalPages}
+                  </span>
+                  <button
+                    onClick={() => setEventsPage(p => Math.min(eventsTotalPages, p + 1))}
+                    disabled={eventsSafePage >= eventsTotalPages}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs"
+                  >
+                    Siguiente
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
+            )
+          })()}
         </>
       )}
     </div>

@@ -473,7 +473,9 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
     }
     const roleRes = await client.query(
       `INSERT INTO roles (tenant_id, nombre, permisos, is_default)
-       VALUES ($1, 'Administrador', $2, true) RETURNING id`,
+       VALUES ($1, 'Administrador', $2, true)
+       ON CONFLICT (tenant_id, nombre) DO UPDATE SET permisos = EXCLUDED.permisos, is_default = true
+       RETURNING id`,
       [tenant.id, JSON.stringify(rolePermisos)]
     )
     const roleId = roleRes.rows[0].id
@@ -487,7 +489,13 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
 
     const userRes = await client.query(
       `INSERT INTO usuarios (tenant_id, codigo, email, password_hash, nombre_completo, rol_id, estado)
-       VALUES ($1,$2,$3,$4,$5,$6,'ACTIVO') RETURNING id, email`,
+       VALUES ($1,$2,$3,$4,$5,$6,'ACTIVO')
+       ON CONFLICT (tenant_id, email) DO UPDATE SET
+         nombre_completo = EXCLUDED.nombre_completo,
+         password_hash   = EXCLUDED.password_hash,
+         rol_id          = EXCLUDED.rol_id,
+         estado          = 'ACTIVO'
+       RETURNING id, email`,
       [tenant.id, adminCodigo, contact_email.toLowerCase().trim(), hash, contact_name, roleId]
     )
     const userId = userRes.rows[0].id
