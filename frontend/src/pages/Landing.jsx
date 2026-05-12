@@ -234,7 +234,7 @@ function HeroSection() {
             onClick={() => { track('cta_click', { location: 'hero' }); scrollTo('contacto') }}
             className="flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all hover:shadow-lg hover:shadow-blue-600/25 text-base"
           >
-            Empezar prueba de 7 dias gratis
+            Empezar prueba de 30 días gratis
             <ArrowRight className="w-4 h-4" />
           </button>
           <button
@@ -355,7 +355,7 @@ function PricingSection() {
             Transparente y sin sorpresas
           </h2>
           <p className="text-gray-400 text-lg max-w-xl mx-auto mb-8">
-            Prueba 7 dias gratis. Cancela cuando quieras. Sin contratos de largo plazo.
+            Prueba 30 días gratis. Cancela cuando quieras. Sin contratos de largo plazo.
           </p>
 
           {/* Billing toggle */}
@@ -523,7 +523,7 @@ function ContactSection({ form, setForm, loading, success, error, onSubmit }) {
             Enviando...
           </>
         ) : (
-          <>Empezar prueba de 7 dias gratis <ArrowRight className="w-4 h-4" /></>
+          <>Empezar prueba de 30 días gratis <ArrowRight className="w-4 h-4" /></>
         )}
       </button>
       <p className="text-center text-gray-500 text-xs">Sin compromiso. Sin tarjeta de credito. Cancelacion inmediata.</p>
@@ -618,7 +618,7 @@ export default function Landing() {
           <div className="text-center mb-12">
             <p className="text-blue-400 text-sm font-semibold uppercase tracking-wider mb-3">Empezar ahora</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              7 dias gratis, sin riesgos
+              30 días gratis, sin riesgos
             </h2>
             <p className="text-gray-400 text-lg max-w-xl mx-auto">
               Completa el formulario y nuestro equipo te configura el sistema en menos de 30 minutos.
@@ -628,7 +628,7 @@ export default function Landing() {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
             <div className="lg:col-span-2 space-y-4">
               {[
-                { title: 'Trial de 7 dias', desc: 'Acceso completo sin restricciones. Sin tarjeta de credito.' },
+                { title: 'Trial de 30 días', desc: 'Acceso completo sin restricciones. Sin tarjeta de credito.' },
                 { title: 'Setup rapido', desc: 'Tu sistema configurado en menos de 30 minutos.' },
                 { title: 'Soporte incluido', desc: 'Te acompanamos durante todo el proceso de adopcion.' },
                 { title: 'Sin contratos', desc: 'Paga mes a mes. Cancela cuando quieras.' },
