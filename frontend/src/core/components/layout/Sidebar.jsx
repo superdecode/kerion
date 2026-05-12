@@ -43,9 +43,9 @@ export default function Sidebar() {
   const navItems = getNavItems(t)
   const adminNav = getAdminNav(t)
 
-  const handleLogout = () => {
-    useAuthStore.getState().logout()
-    navigate('/login')
+  const handleLogout = async () => {
+    await useAuthStore.getState().logout()
+    navigate('/login', { replace: true })
   }
 
   const initials = user?.nombre_completo

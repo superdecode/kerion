@@ -96,6 +96,7 @@ const isActive = (u) => u.estado !== 'INACTIVO' && u.activo !== false
 // ═══════════ PLAN TAB ═══════════
 function PlanTab() {
   const { user } = useAuthStore()
+  const { t } = useI18nStore()
   const [info, setInfo] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showRenew, setShowRenew] = useState(false)
@@ -163,9 +164,9 @@ function PlanTab() {
             <CreditCard className="w-5 h-5 text-primary-600" />
           </div>
           <div>
-            <p className="text-xs text-warm-400 font-medium uppercase tracking-wider">Plan actual</p>
+            <p className="text-xs text-warm-400 font-medium uppercase tracking-wider">{t('plan.current_plan')}</p>
             <p className="text-warm-800 font-bold text-lg leading-none mt-0.5">
-              {info?.plan_name || (info?.tenant_status === 'trial' ? 'Prueba' : 'Sin plan')}
+              {info?.plan_name || (info?.tenant_status === 'trial' ? t('plan.trial') : t('plan.no_plan'))}
             </p>
           </div>
           <span className={`ml-auto text-xs font-semibold px-2.5 py-1 rounded-full border ${
@@ -173,7 +174,7 @@ function PlanTab() {
             info?.tenant_status === 'trial' ? 'bg-blue-100 text-blue-700 border-blue-200' :
             'bg-orange-100 text-orange-700 border-orange-200'
           }`}>
-            {info?.tenant_status === 'active' ? 'Activo' : info?.tenant_status === 'trial' ? 'En prueba' : 'Expirado'}
+            {info?.tenant_status === 'active' ? t('plan.status_active') : info?.tenant_status === 'trial' ? t('plan.status_trial') : t('plan.status_expired')}
           </span>
         </div>
 
@@ -182,7 +183,7 @@ function PlanTab() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-warm-600 text-sm">
               <Clock className="w-4 h-4 text-warm-400" />
-              Vencimiento
+              {t('plan.expiry')}
             </div>
             <div className="text-right">
               {expiresAt ? (
@@ -191,11 +192,11 @@ function PlanTab() {
                     {new Date(expiresAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: user?.zona_horaria || 'America/Mexico_City' })}
                   </p>
                   <p className={`text-xs font-bold ${daysColor}`}>
-                    {days === null ? '' : days < 0 ? 'Expirado' : days === 0 ? 'Vence hoy' : `${days} días restantes`}
+                    {days === null ? '' : days < 0 ? t('plan.expired') : days === 0 ? t('plan.expires_today') : `${days} ${t('plan.days_remaining')}`}
                   </p>
                 </>
               ) : (
-                <p className="text-warm-400 text-sm">Sin fecha de vencimiento</p>
+                <p className="text-warm-400 text-sm">{t('plan.no_expiry')}</p>
               )}
             </div>
           </div>
@@ -204,7 +205,7 @@ function PlanTab() {
           {guideLimit != null && (
             <div>
               <div className="flex items-center justify-between text-sm mb-1.5">
-                <span className="text-warm-600">Guías este mes</span>
+                <span className="text-warm-600">{t('plan.guides_this_month')}</span>
                 <span className="font-semibold text-warm-800">
                   {guidesUsed.toLocaleString()} / {guideLimit.toLocaleString()}
                 </span>
@@ -218,7 +219,7 @@ function PlanTab() {
               {guidePercent > 90 && (
                 <div className="flex items-center gap-1.5 mt-2 text-xs text-red-600">
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  Cerca del límite mensual de guías
+                  {t('plan.near_guide_limit')}
                 </div>
               )}
             </div>
@@ -228,14 +229,14 @@ function PlanTab() {
 
       {/* Renewal */}
       <div className="card p-5">
-        <h3 className="text-warm-800 font-semibold text-sm mb-2">Renovar plan</h3>
+        <h3 className="text-warm-800 font-semibold text-sm mb-2">{t('plan.renew_title')}</h3>
         <p className="text-warm-500 text-sm mb-4">
-          Envía una solicitud de renovación y nuestro equipo te contactará en 24 horas.
+          {t('plan.renew_description')}
         </p>
         {renewSent ? (
           <div className="flex items-center gap-2 text-emerald-600 text-sm">
             <CheckCircle className="w-4 h-4" />
-            Solicitud enviada. Nos pondremos en contacto pronto.
+            {t('plan.request_sent')}
           </div>
         ) : (
           <button
@@ -244,7 +245,7 @@ function PlanTab() {
             className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition-colors"
           >
             {renewLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-            Solicitar renovación
+            {t('plan.request_renewal')}
           </button>
         )}
       </div>

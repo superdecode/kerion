@@ -258,12 +258,12 @@ export default function AdminNotificaciones() {
                     className="rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-0 cursor-pointer"
                   />
                 </th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Destinatario</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3 hidden md:table-cell">Plantilla</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Estado</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3 hidden lg:table-cell">Fecha</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3 hidden xl:table-cell">Intentos</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Destinatario</th>
+                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3 hidden md:table-cell">Plantilla</th>
+                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Estado</th>
+                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3 hidden lg:table-cell">Fecha</th>
+                <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3 hidden xl:table-cell">Intentos</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/60">

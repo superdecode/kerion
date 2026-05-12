@@ -314,9 +314,7 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     hour12: false,
-    timeZoneName: 'short',
   }).format(new Date(d)) : '—'
 
   const [query, setQuery] = useState('')

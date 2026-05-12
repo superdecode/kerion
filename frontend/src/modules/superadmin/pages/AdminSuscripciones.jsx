@@ -519,7 +519,7 @@ function SubscriptionsTab() {
                             {s.status === 'active' ? 'Activa' : s.status === 'expired' ? 'Vencida' : 'Cancelada'}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 text-white">
                           {price ? `$${Number(price).toFixed(2)} ${s.price_currency || 'USD'}` : '—'}
                         </td>
                       </tr>

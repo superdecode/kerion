@@ -811,6 +811,25 @@ const translations = {
     'role.operador': '操作员',
     'role.auditor': '审计员',
     'role.sinRol': '无角色',
+
+    // Plan Tab
+    'plan.current_plan': '当前套餐',
+    'plan.trial': '试用',
+    'plan.no_plan': '无套餐',
+    'plan.status_active': '已激活',
+    'plan.status_trial': '试用中',
+    'plan.status_expired': '已过期',
+    'plan.expiry': '到期日',
+    'plan.expired': '已过期',
+    'plan.expires_today': '今日到期',
+    'plan.days_remaining': '天后到期',
+    'plan.no_expiry': '无到期日',
+    'plan.guides_this_month': '本月面单',
+    'plan.near_guide_limit': '即将达到本月面单上限',
+    'plan.renew_title': '续费套餐',
+    'plan.renew_description': '提交续费申请，我们的团队将在24小时内与您联系。',
+    'plan.request_sent': '申请已提交，我们将尽快与您联系。',
+    'plan.request_renewal': '申请续费',
   },
 
   es: {
@@ -1613,6 +1632,25 @@ const translations = {
     'role.operador': 'Operador',
     'role.auditor': 'Auditor',
     'role.sinRol': 'Sin rol',
+
+    // Plan Tab
+    'plan.current_plan': 'Plan actual',
+    'plan.trial': 'Prueba',
+    'plan.no_plan': 'Sin plan',
+    'plan.status_active': 'Activo',
+    'plan.status_trial': 'En prueba',
+    'plan.status_expired': 'Expirado',
+    'plan.expiry': 'Vencimiento',
+    'plan.expired': 'Expirado',
+    'plan.expires_today': 'Vence hoy',
+    'plan.days_remaining': 'días restantes',
+    'plan.no_expiry': 'Sin fecha de vencimiento',
+    'plan.guides_this_month': 'Guías este mes',
+    'plan.near_guide_limit': 'Cerca del límite mensual de guías',
+    'plan.renew_title': 'Renovar plan',
+    'plan.renew_description': 'Envía una solicitud de renovación y nuestro equipo te contactará en 24 horas.',
+    'plan.request_sent': 'Solicitud enviada. Nos pondremos en contacto pronto.',
+    'plan.request_renewal': 'Solicitar renovación',
   },
 }
 

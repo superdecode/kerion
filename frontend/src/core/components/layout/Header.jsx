@@ -45,8 +45,8 @@ export default function Header({ title, subtitle, actions, showSearch = false })
     return () => window.removeEventListener('keydown', handleEsc)
   }, [])
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     navigate('/login', { replace: true })
   }
 

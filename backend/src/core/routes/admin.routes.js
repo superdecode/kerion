@@ -196,6 +196,36 @@ router.post('/signup-requests/:id/reject', authenticateAdmin, async (req, res) =
   }
 })
 
+// PATCH /api/admin/signup-requests/:id/status — manual status override for renewals/corrections
+router.patch('/signup-requests/:id/status', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status, reason } = req.body
+    const allowed = ['pending', 'approved', 'rejected']
+    if (!allowed.includes(status)) return res.status(400).json({ error: 'Estado invalido. Valores permitidos: ' + allowed.join(', ') })
+
+    const reqRes = await query('SELECT * FROM tenant_signup_requests WHERE id = $1 LIMIT 1', [id])
+    if (reqRes.rows.length === 0) return res.status(404).json({ error: 'Solicitud no encontrada' })
+    const request = reqRes.rows[0]
+
+    if (request.status === status) return res.status(409).json({ error: 'La solicitud ya tiene ese estado' })
+    if (status === 'rejected' && !reason) return res.status(400).json({ error: 'Motivo requerido para rechazar' })
+
+    await query(
+      `UPDATE tenant_signup_requests
+       SET status=$1, reviewed_by=$2, reviewed_at=now(), rejected_reason=COALESCE($3, rejected_reason)
+       WHERE id = $4`,
+      [status, req.admin.id, reason || null, id]
+    )
+
+    adminAudit(req.admin.id, 'UPDATE_SIGNUP_STATUS', 'tenant_signup_request', id, { from: request.status, to: status })
+    res.json({ success: true, status })
+  } catch (err) {
+    console.error('[admin/signup-requests PATCH status]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
 // ── Tenants ────────────────────────────────────────────────────────────────────
 
 // GET /api/admin/tenants?status=trial
@@ -410,6 +440,7 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
     }
 
     // 3. Create Admin role (is_default = true, non-deletable from frontend)
+    console.log('[admin/tenants POST] step 3: creating admin role for tenant', tenant.id)
     const rolePermisos = {
       global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
       dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
@@ -422,19 +453,33 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       [tenant.id, JSON.stringify(rolePermisos)]
     )
     const roleId = roleRes.rows[0].id
+    console.log('[admin/tenants POST] step 3 ok: roleId=%s', roleId)
 
-    // 4. Create admin user (is_default = true, non-deletable from frontend)
+    // 4. Create admin user — use only base columns, then UPDATE new optional columns defensively
+    console.log('[admin/tenants POST] step 4: creating admin user')
     const bcryptMod = await import('bcryptjs')
     const hash = await bcryptMod.default.hash(admin_password, 12)
     const adminCodigo = `ADM-${crypto.randomBytes(3).toString('hex').toUpperCase()}`
 
     const userRes = await client.query(
-      `INSERT INTO usuarios (tenant_id, codigo, email, password_hash, nombre_completo, rol_id, estado, es_admin_tenant, is_default, must_change_password)
-       VALUES ($1,$2,$3,$4,$5,$6,'ACTIVO',true,true,false) RETURNING id, email`,
+      `INSERT INTO usuarios (tenant_id, codigo, email, password_hash, nombre_completo, rol_id, estado)
+       VALUES ($1,$2,$3,$4,$5,$6,'ACTIVO') RETURNING id, email`,
       [tenant.id, adminCodigo, contact_email.toLowerCase().trim(), hash, contact_name, roleId]
     )
+    const userId = userRes.rows[0].id
+
+    // Set new optional columns defensively — columns added by migrations that may not exist on older DBs
+    for (const [col, val] of [['es_admin_tenant', true], ['is_default', true], ['must_change_password', false]]) {
+      try {
+        await client.query(`UPDATE usuarios SET ${col} = $1 WHERE id = $2`, [val, userId])
+      } catch (colErr) {
+        console.error('[admin/tenants POST] step 4 optional column %s skipped: %s', col, colErr.message)
+      }
+    }
+    console.log('[admin/tenants POST] step 4 ok: userId=%s', userId)
 
     // 5. Seed dropscan config — configuraciones table is what the scan UI reads
+    console.log('[admin/tenants POST] step 5: seeding configuraciones for tenant', tenant.id)
     const seedConfigs = [
       { tipo: 'empresa', codigo: 'FEDEX', nombre: 'FedEx', config_json: JSON.stringify({ color: '#4d148c' }) },
       { tipo: 'empresa', codigo: 'DHL', nombre: 'DHL', config_json: JSON.stringify({ color: '#ffcc00' }) },
@@ -449,15 +494,18 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
         [tenant.id, c.tipo, c.codigo, c.nombre, c.config_json]
       )
     }
+    console.log('[admin/tenants POST] step 5 ok')
 
     // 6. Log provisioning
+    console.log('[admin/tenants POST] step 6: provisioning log')
     await client.query(
       `INSERT INTO provisioning_log (tenant_id, step, status, created_at)
        VALUES ($1, 'full_provisioning', 'ok', now())`,
       [tenant.id]
-    )
+    ).catch(e => console.error('[admin/tenants POST] step 6 non-fatal:', e.message))
 
     // 7. Enqueue welcome email
+    console.log('[admin/tenants POST] step 7: enqueue welcome email')
     await client.query(
       `INSERT INTO notifications_outbox (tenant_id, recipient_email, template_code, payload, status, created_at)
        VALUES ($1, $2, 'welcome_email', $3, 'pending', now())`,
@@ -468,16 +516,17 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
         temp_password: admin_password,
         login_url: `https://${finalSlug}.kirion.app/login`,
       })]
-    )
+    ).catch(e => console.error('[admin/tenants POST] step 7 non-fatal:', e.message))
 
     await client.query('COMMIT')
+    console.log('[admin/tenants POST] COMMIT ok — tenant_id=%s slug=%s', tenant.id, finalSlug)
     adminAudit(req.admin.id, 'CREATE_TENANT_DIRECT', 'tenant', tenant.id, { legal_name, contact_email, plan_id })
     res.status(201).json({ success: true, tenant_id: tenant.id, slug: finalSlug, admin_email: userRes.rows[0].email })
   } catch (err) {
     if (client) {
       try { await client.query('ROLLBACK') } catch (_) {}
     }
-    console.error('[admin/tenants POST] code=%s constraint=%s table=%s column=%s detail=%s message=%s',
+    console.error('[admin/tenants POST] FAILED at step — code=%s constraint=%s table=%s column=%s detail=%s message=%s',
       err.code, err.constraint, err.table, err.column, err.detail, err.message)
 
     if (err.code === '23505') {

@@ -303,6 +303,8 @@ async function runMigrations() {
     `ALTER TABLE folios_entrega_tarimas ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id)`,
     // es_admin_tenant: marks the default admin user created during tenant provisioning
     `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS es_admin_tenant BOOLEAN DEFAULT false`,
+    // must_change_password: flag used during direct tenant creation
+    `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false`,
   ]
   for (const sql of steps) {
     try {
@@ -312,7 +314,7 @@ async function runMigrations() {
     }
   }
 }
-runMigrations()
+await runMigrations()
 
 // 404 handler
 app.use((req, res) => {

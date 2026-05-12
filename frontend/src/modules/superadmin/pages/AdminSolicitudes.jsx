@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, ChevronDown, ChevronUp, Clock, Phone, Mail, Globe, Building2, RotateCcw, Filter } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, ChevronDown, ChevronUp, Clock, Phone, Mail, Globe, Building2, RotateCcw } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
 const STATUS_CFG = {
@@ -139,6 +139,53 @@ function ApproveModal({ request, onClose, onDone }) {
   )
 }
 
+function RenewalRejectModal({ request, onClose, onDone }) {
+  const [reason, setReason] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit() {
+    if (!reason.trim()) return setError('El motivo es requerido')
+    setLoading(true)
+    try {
+      await adminApi.patch(`/signup-requests/${request.id}/status`, { status: 'rejected', reason })
+      onDone()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al actualizar')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <h3 className="text-white font-semibold mb-1">Rechazar renovacion</h3>
+        <p className="text-gray-400 text-sm mb-4">{request.organization_name} — {request.contact_email}</p>
+        {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Motivo del rechazo..."
+          rows={3}
+          className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm resize-none focus:outline-none focus:border-red-500 mb-4 transition-colors"
+          autoFocus
+        />
+        <div className="flex gap-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancelar</button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white text-sm rounded-lg transition-colors font-medium"
+          >
+            {loading ? 'Guardando...' : 'Rechazar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TypeBadge({ requestType }) {
   if (requestType === 'renewal') {
     return (
@@ -158,8 +205,21 @@ function TypeBadge({ requestType }) {
 function RequestCard({ r, onRefresh }) {
   const [expanded, setExpanded] = useState(false)
   const [modal, setModal] = useState(null)
+  const [renewalLoading, setRenewalLoading] = useState(false)
   const age = Math.floor((Date.now() - new Date(r.created_at)) / 86400000)
   const isRenewal = r.request_type === 'renewal'
+
+  async function markRenewalApproved() {
+    setRenewalLoading(true)
+    try {
+      await adminApi.patch(`/signup-requests/${r.id}/status`, { status: 'approved' })
+      onRefresh()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al aprobar renovacion')
+    } finally {
+      setRenewalLoading(false)
+    }
+  }
 
   return (
     <>
@@ -168,6 +228,9 @@ function RequestCard({ r, onRefresh }) {
       )}
       {modal === 'reject' && (
         <RejectModal request={r} onClose={() => setModal(null)} onDone={() => { setModal(null); onRefresh() }} />
+      )}
+      {modal === 'renewalReject' && (
+        <RenewalRejectModal request={r} onClose={() => setModal(null)} onDone={() => { setModal(null); onRefresh() }} />
       )}
 
       <div className={`bg-gray-900 border rounded-xl overflow-hidden transition-all ${isRenewal ? 'border-purple-800/40' : 'border-gray-800'}`}>
@@ -229,12 +292,31 @@ function RequestCard({ r, onRefresh }) {
               </div>
             )}
 
-            {isRenewal ? (
-              <div className="flex items-center gap-2 p-3 bg-purple-950/30 border border-purple-800/30 rounded-lg text-sm text-purple-300">
-                <RotateCcw className="w-4 h-4 flex-shrink-0" />
-                Solicitud de renovacion — contactar al cliente para procesar el pago.
+            {isRenewal && r.status === 'pending' ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 p-3 bg-purple-950/30 border border-purple-800/30 rounded-lg text-sm text-purple-300">
+                  <RotateCcw className="w-4 h-4 flex-shrink-0" />
+                  Solicitud de renovacion — contactar al cliente para procesar el pago antes de aprobar.
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={markRenewalApproved}
+                    disabled={renewalLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm rounded-lg transition-colors font-medium"
+                  >
+                    {renewalLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    {renewalLoading ? 'Guardando...' : 'Marcar atendida'}
+                  </button>
+                  <button
+                    onClick={() => setModal('renewalReject')}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-sm rounded-lg transition-colors"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Rechazar
+                  </button>
+                </div>
               </div>
-            ) : r.status === 'pending' ? (
+            ) : !isRenewal && r.status === 'pending' ? (
               <div className="flex gap-3">
                 <button
                   onClick={() => setModal('approve')}
@@ -268,8 +350,6 @@ function RequestCard({ r, onRefresh }) {
 
 const STATUS_FILTERS = ['', 'pending', 'approved', 'rejected']
 const STATUS_LABELS = { '': 'Todas', pending: 'Pendientes', approved: 'Aprobadas', rejected: 'Rechazadas' }
-const TYPE_FILTERS = ['', 'new', 'renewal']
-const TYPE_LABELS = { '': 'Todos los tipos', new: 'Nuevos', renewal: 'Renovaciones' }
 const PAGE_SIZES = [10, 15, 25, 50]
 const DEFAULT_PAGE_SIZE = 15
 
@@ -284,7 +364,6 @@ export default function AdminSolicitudes() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showFilters, setShowFilters] = useState(false)
 
   function load() {
     setLoading(true)
@@ -315,7 +394,6 @@ export default function AdminSolicitudes() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage = Math.min(page, totalPages)
   const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
-  const hasActiveFilters = typeFilter || dateFrom || dateTo
 
   return (
     <div className="space-y-5">
@@ -330,7 +408,7 @@ export default function AdminSolicitudes() {
         </button>
       </div>
 
-      {/* Search + status chips row */}
+      {/* Filters row 1: search + status chips */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -359,75 +437,43 @@ export default function AdminSolicitudes() {
             </button>
           ))}
         </div>
-        <button
-          onClick={() => setShowFilters(v => !v)}
-          className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl border text-sm transition-colors ${
-            hasActiveFilters
-              ? 'bg-blue-600/20 border-blue-500/40 text-blue-300'
-              : 'bg-gray-900 border-gray-800 text-gray-500 hover:text-gray-200 hover:bg-gray-800'
-          }`}
-        >
-          <Filter className="w-3.5 h-3.5" />
-          Filtros
-          {hasActiveFilters && <span className="w-2 h-2 rounded-full bg-blue-400" />}
-        </button>
       </div>
 
-      {/* Advanced filters panel */}
-      {showFilters && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-4">
-          <div className="flex flex-wrap gap-3">
-            {/* Type filter chips */}
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Tipo</p>
-              <div className="flex gap-1.5">
-                {TYPE_FILTERS.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setTypeFilter(t)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                      typeFilter === t
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-gray-200 hover:bg-gray-700'
-                    }`}
-                  >
-                    {TYPE_LABELS[t]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Date range */}
-            <div>
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Fecha de solicitud</p>
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={e => setDateFrom(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors"
-                />
-                <span className="text-gray-600 text-xs">—</span>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={e => setDateTo(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
-            </div>
-          </div>
-
-          {hasActiveFilters && (
-            <button
-              onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo('') }}
-              className="text-xs text-gray-400 hover:text-red-400 transition-colors"
-            >
-              Limpiar filtros avanzados
-            </button>
-          )}
+      {/* Filters row 2: date range + type dropdown */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors"
+          />
+          <span className="text-gray-600 text-xs">—</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors"
+          />
         </div>
-      )}
+        <select
+          value={typeFilter}
+          onChange={e => setTypeFilter(e.target.value)}
+          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-blue-500 transition-colors"
+        >
+          <option value="">Todos los tipos</option>
+          <option value="new">Nuevos</option>
+          <option value="renewal">Renovaciones</option>
+        </select>
+        {(typeFilter || dateFrom || dateTo) && (
+          <button
+            onClick={() => { setTypeFilter(''); setDateFrom(''); setDateTo('') }}
+            className="text-xs text-gray-400 hover:text-red-400 transition-colors"
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
 
       {error && (
         <div className="flex items-center gap-3 bg-red-950/30 border border-red-800/40 rounded-xl p-4">
