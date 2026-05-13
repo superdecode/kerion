@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { query } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { getInventoryMap } from '../../../shared/services/wmsClient.js'
@@ -158,9 +157,9 @@ router.get('/scans/:sessionId',
         `SELECT s.*, u.nombre_completo as user_name
          FROM inventory_scans s
          JOIN usuarios u ON s.user_id = u.id
-         WHERE s.session_id = $1
+         WHERE s.session_id = $1 AND s.tenant_id = $2
          ORDER BY s.created_at DESC`,
-        [sessionId]
+        [sessionId, req.tenantId]
       )
       res.json({ scans: result.rows })
     } catch (err) {

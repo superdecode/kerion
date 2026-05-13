@@ -17,7 +17,9 @@ router.get('/',
                 r.nombre as rol_nombre
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id
-         ORDER BY u.created_at DESC`
+         WHERE u.tenant_id = $1
+         ORDER BY u.created_at DESC`,
+        [req.tenantId]
       )
       res.json({ usuarios: result.rows })
     } catch (error) {
@@ -79,11 +81,11 @@ router.put('/:id',
 
       if (password) {
         const passwordHash = await bcrypt.hash(password, 10)
-        updateQuery += `, password_hash = $5 WHERE id = $6 RETURNING id, codigo, nombre_completo, email, rol_id, estado`
-        params.push(passwordHash, id)
+        updateQuery += `, password_hash = $5 WHERE id = $6 AND tenant_id = $7 RETURNING id, codigo, nombre_completo, email, rol_id, estado`
+        params.push(passwordHash, id, req.tenantId)
       } else {
-        updateQuery += ` WHERE id = $5 RETURNING id, codigo, nombre_completo, email, rol_id, estado`
-        params.push(id)
+        updateQuery += ` WHERE id = $5 AND tenant_id = $6 RETURNING id, codigo, nombre_completo, email, rol_id, estado`
+        params.push(id, req.tenantId)
       }
 
       const result = await req.tQuery(updateQuery, params)
@@ -115,8 +117,8 @@ router.post('/:id/reset-password',
       }
       const passwordHash = await bcrypt.hash(password, 10)
       const result = await req.tQuery(
-        'UPDATE usuarios SET password_hash = $1 WHERE id = $2 RETURNING id, nombre_completo',
-        [passwordHash, id]
+        'UPDATE usuarios SET password_hash = $1 WHERE id = $2 AND tenant_id = $3 RETURNING id, nombre_completo',
+        [passwordHash, id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' })
       auditLog(req, 'PASSWORD_RESET', 'usuario', parseInt(id), { target_user: result.rows[0].nombre_completo })
@@ -140,7 +142,7 @@ router.delete('/:id',
         return res.status(400).json({ error: 'No puedes desactivar tu propio usuario' })
       }
 
-      const targetRes = await req.tQuery('SELECT id, is_default, es_admin_tenant FROM usuarios WHERE id = $1', [id])
+      const targetRes = await req.tQuery('SELECT id, is_default, es_admin_tenant FROM usuarios WHERE id = $1 AND tenant_id = $2', [id, req.tenantId])
       if (targetRes.rows.length === 0) {
         return res.status(404).json({ error: 'Usuario no encontrado' })
       }
@@ -148,7 +150,7 @@ router.delete('/:id',
         return res.status(409).json({ error: 'No se puede desactivar un usuario protegido' })
       }
 
-      await req.tQuery(`UPDATE usuarios SET estado = 'INACTIVO' WHERE id = $1`, [id])
+      await req.tQuery(`UPDATE usuarios SET estado = 'INACTIVO' WHERE id = $1 AND tenant_id = $2`, [id, req.tenantId])
       auditLog(req, 'USER_DEACTIVATE', 'usuario', parseInt(id), null)
       res.json({ success: true, message: 'Usuario desactivado' })
     } catch (error) {

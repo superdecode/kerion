@@ -65,8 +65,9 @@ router.get('/',
       const result = await req.tQuery(
         `SELECT id, nombre, activo, created_at, updated_at
          FROM usuarios_internos
-         WHERE eliminado = false
-         ORDER BY nombre ASC`
+         WHERE eliminado = false AND tenant_id = $1
+         ORDER BY nombre ASC`,
+        [req.tenantId]
       )
       res.json(result.rows)
     } catch (error) {
@@ -85,8 +86,9 @@ router.get('/activos',
       const result = await req.tQuery(
         `SELECT id, nombre
          FROM usuarios_internos
-         WHERE activo = true AND eliminado = false
-         ORDER BY nombre ASC`
+         WHERE activo = true AND eliminado = false AND tenant_id = $1
+         ORDER BY nombre ASC`,
+        [req.tenantId]
       )
       res.json(result.rows)
     } catch (error) {
@@ -119,8 +121,8 @@ router.post('/',
 
       // Check unique nombre
       const existingName = await req.tQuery(
-        'SELECT id FROM usuarios_internos WHERE LOWER(nombre) = LOWER($1) AND eliminado = false',
-        [nombre.trim()]
+        'SELECT id FROM usuarios_internos WHERE LOWER(nombre) = LOWER($1) AND eliminado = false AND tenant_id = $2',
+        [nombre.trim(), req.tenantId]
       )
       if (existingName.rows.length > 0) {
         return res.status(409).json({ error: 'Ya existe un operador con ese nombre' })
@@ -128,7 +130,8 @@ router.post('/',
 
       // Check unique PIN (compare hashes — we need to check all active users)
       const allUsers = await req.tQuery(
-        'SELECT id, pin_hash FROM usuarios_internos WHERE eliminado = false'
+        'SELECT id, pin_hash FROM usuarios_internos WHERE eliminado = false AND tenant_id = $1',
+        [req.tenantId]
       )
       for (const u of allUsers.rows) {
         if (await bcrypt.compare(pin, u.pin_hash)) {
@@ -172,8 +175,8 @@ router.put('/:id',
         }
         // Check unique nombre (excluding self)
         const existingName = await req.tQuery(
-          'SELECT id FROM usuarios_internos WHERE LOWER(nombre) = LOWER($1) AND eliminado = false AND id != $2',
-          [nombre.trim(), id]
+          'SELECT id FROM usuarios_internos WHERE LOWER(nombre) = LOWER($1) AND eliminado = false AND id != $2 AND tenant_id = $3',
+          [nombre.trim(), id, req.tenantId]
         )
         if (existingName.rows.length > 0) {
           return res.status(409).json({ error: 'Ya existe un operador con ese nombre' })
@@ -193,9 +196,10 @@ router.put('/:id',
       }
 
       values.push(id)
+      values.push(req.tenantId)
       const result = await req.tQuery(
         `UPDATE usuarios_internos SET ${fields.join(', ')}
-         WHERE id = $${idx} AND eliminado = false
+         WHERE id = $${idx} AND eliminado = false AND tenant_id = $${idx + 1}
          RETURNING id, nombre, activo, created_at, updated_at`,
         values
       )
@@ -232,8 +236,8 @@ router.put('/:id/pin',
 
       // Get current user
       const current = await req.tQuery(
-        'SELECT id, nombre, pin_hash FROM usuarios_internos WHERE id = $1 AND eliminado = false',
-        [id]
+        'SELECT id, nombre, pin_hash FROM usuarios_internos WHERE id = $1 AND eliminado = false AND tenant_id = $2',
+        [id, req.tenantId]
       )
       if (current.rows.length === 0) {
         return res.status(404).json({ error: 'Operador no encontrado' })
@@ -246,8 +250,8 @@ router.put('/:id/pin',
 
       // Check unique PIN
       const allUsers = await req.tQuery(
-        'SELECT id, pin_hash FROM usuarios_internos WHERE eliminado = false AND id != $1',
-        [id]
+        'SELECT id, pin_hash FROM usuarios_internos WHERE eliminado = false AND id != $1 AND tenant_id = $2',
+        [id, req.tenantId]
       )
       for (const u of allUsers.rows) {
         if (await bcrypt.compare(pin, u.pin_hash)) {
@@ -257,8 +261,8 @@ router.put('/:id/pin',
 
       const pin_hash = await bcrypt.hash(pin, SALT_ROUNDS)
       await req.tQuery(
-        'UPDATE usuarios_internos SET pin_hash = $1, updated_by = $2 WHERE id = $3',
-        [pin_hash, req.user.id, id]
+        'UPDATE usuarios_internos SET pin_hash = $1, updated_by = $2 WHERE id = $3 AND tenant_id = $4',
+        [pin_hash, req.user.id, id, req.tenantId]
       )
 
       await logEvent('PIN_CAMBIADO', parseInt(id), current.rows[0].nombre, req)
@@ -279,8 +283,8 @@ router.delete('/:id',
       const { id } = req.params
 
       const current = await req.tQuery(
-        'SELECT id, nombre FROM usuarios_internos WHERE id = $1 AND eliminado = false',
-        [id]
+        'SELECT id, nombre FROM usuarios_internos WHERE id = $1 AND eliminado = false AND tenant_id = $2',
+        [id, req.tenantId]
       )
       if (current.rows.length === 0) {
         return res.status(404).json({ error: 'Operador no encontrado' })
@@ -288,8 +292,8 @@ router.delete('/:id',
 
       // Check if there are any scan records associated
       const scanRecords = await req.tQuery(
-        'SELECT COUNT(*) FROM sesiones_escaneo WHERE usuario_interno_id = $1',
-        [id]
+        'SELECT COUNT(*) FROM sesiones_escaneo WHERE usuario_interno_id = $1 AND tenant_id = $2',
+        [id, req.tenantId]
       )
       const hasScans = parseInt(scanRecords.rows[0].count) > 0
 
@@ -345,8 +349,8 @@ router.post('/validar-pin',
 
       // Get operator
       const result = await req.tQuery(
-        'SELECT id, nombre, pin_hash, activo FROM usuarios_internos WHERE id = $1 AND eliminado = false',
-        [usuario_interno_id]
+        'SELECT id, nombre, pin_hash, activo FROM usuarios_internos WHERE id = $1 AND eliminado = false AND tenant_id = $2',
+        [usuario_interno_id, req.tenantId]
       )
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Operador no encontrado' })

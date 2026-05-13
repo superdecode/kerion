@@ -10,7 +10,7 @@ router.get('/',
   requirePermission('global.administracion', 'ver'),
   async (req, res) => {
     try {
-      const result = await req.tQuery('SELECT * FROM roles WHERE activo = true ORDER BY id')
+      const result = await req.tQuery('SELECT * FROM roles WHERE activo = true AND tenant_id = $1 ORDER BY id', [req.tenantId])
       res.json({ roles: result.rows })
     } catch (error) {
       console.error('Get roles error:', error)
@@ -60,8 +60,8 @@ router.put('/:id',
 
       const result = await req.tQuery(
         `UPDATE roles SET nombre = $1, descripcion = $2, permisos = $3
-         WHERE id = $4 RETURNING *`,
-        [nombre, descripcion, JSON.stringify(permisos), id]
+         WHERE id = $4 AND tenant_id = $5 RETURNING *`,
+        [nombre, descripcion, JSON.stringify(permisos), id, req.tenantId]
       )
 
       if (result.rows.length === 0) {
@@ -85,7 +85,7 @@ router.post('/:id/duplicate',
   async (req, res) => {
     try {
       const { id } = req.params
-      const sourceRole = await req.tQuery('SELECT * FROM roles WHERE id = $1', [id])
+      const sourceRole = await req.tQuery('SELECT * FROM roles WHERE id = $1 AND tenant_id = $2', [id, req.tenantId])
       if (sourceRole.rows.length === 0) return res.status(404).json({ error: 'Rol no encontrado' })
       const source = sourceRole.rows[0]
       const result = await req.tQuery(
@@ -111,7 +111,7 @@ router.delete('/:id',
     try {
       const { id } = req.params
 
-      const roleRes = await req.tQuery('SELECT id, is_default FROM roles WHERE id = $1', [id])
+      const roleRes = await req.tQuery('SELECT id, is_default FROM roles WHERE id = $1 AND tenant_id = $2', [id, req.tenantId])
       if (roleRes.rows.length === 0) {
         return res.status(404).json({ error: 'Rol no encontrado' })
       }
@@ -120,12 +120,12 @@ router.delete('/:id',
       }
 
       // Check no users assigned
-      const usersRes = await req.tQuery('SELECT COUNT(*) FROM usuarios WHERE rol_id = $1 AND estado = $2', [id, 'ACTIVO'])
+      const usersRes = await req.tQuery('SELECT COUNT(*) FROM usuarios WHERE rol_id = $1 AND estado = $2 AND tenant_id = $3', [id, 'ACTIVO', req.tenantId])
       if (parseInt(usersRes.rows[0].count) > 0) {
         return res.status(409).json({ error: 'No se puede eliminar un rol con usuarios asignados' })
       }
 
-      await req.tQuery('UPDATE roles SET activo = false WHERE id = $1', [id])
+      await req.tQuery('UPDATE roles SET activo = false WHERE id = $1 AND tenant_id = $2', [id, req.tenantId])
       auditLog(req, 'ROLE_DELETE', 'rol', parseInt(id), null)
       res.json({ success: true, message: 'Rol eliminado' })
     } catch (error) {

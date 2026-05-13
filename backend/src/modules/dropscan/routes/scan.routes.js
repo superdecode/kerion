@@ -145,9 +145,9 @@ router.get('/sessions/active',
          FROM sesiones_escaneo s
          LEFT JOIN configuraciones e ON s.empresa_id = e.id AND e.tenant_id = s.tenant_id
          LEFT JOIN configuraciones c ON s.canal_id = c.id AND c.tenant_id = s.tenant_id
-         WHERE s.operador_id = $1 AND s.activa = true
+         WHERE s.operador_id = $1 AND s.activa = true AND s.tenant_id = $2
          ORDER BY s.fecha_inicio DESC`,
-        [req.user.id]
+        [req.user.id, req.tenantId]
       )
 
       if (sesionRes.rows.length === 0) {
@@ -160,8 +160,8 @@ router.get('/sessions/active',
       let tarima = null
       if (sesion.tarima_actual_id) {
         const tarimaRes = await req.tQuery(
-          `SELECT * FROM tarimas WHERE id = $1`,
-          [sesion.tarima_actual_id]
+          `SELECT * FROM tarimas WHERE id = $1 AND tenant_id = $2`,
+          [sesion.tarima_actual_id, req.tenantId]
         )
         tarima = tarimaRes.rows[0] || null
       }
@@ -171,9 +171,9 @@ router.get('/sessions/active',
       if (tarima) {
         const guiasRes = await req.tQuery(
           `SELECT id, codigo_guia, posicion, timestamp_escaneo
-           FROM guias WHERE tarima_id = $1
+           FROM guias WHERE tarima_id = $1 AND tenant_id = $2
            ORDER BY posicion DESC`,
-          [tarima.id]
+          [tarima.id, req.tenantId]
         )
         ultimas_guias = guiasRes.rows
       }
@@ -198,9 +198,9 @@ router.get('/sessions/all-active',
          FROM sesiones_escaneo s
          LEFT JOIN configuraciones e ON s.empresa_id = e.id AND e.tenant_id = s.tenant_id
          LEFT JOIN configuraciones c ON s.canal_id = c.id AND c.tenant_id = s.tenant_id
-         WHERE s.operador_id = $1 AND s.activa = true
+         WHERE s.operador_id = $1 AND s.activa = true AND s.tenant_id = $2
          ORDER BY s.fecha_inicio ASC`,
-        [req.user.id]
+        [req.user.id, req.tenantId]
       )
 
       if (sesionRes.rows.length === 0) {
@@ -211,8 +211,8 @@ router.get('/sessions/all-active',
         let tarima = null
         if (sesion.tarima_actual_id) {
           const tarimaRes = await req.tQuery(
-            `SELECT * FROM tarimas WHERE id = $1 AND estado = 'EN_PROCESO'`,
-            [sesion.tarima_actual_id]
+            `SELECT * FROM tarimas WHERE id = $1 AND estado = 'EN_PROCESO' AND tenant_id = $2`,
+            [sesion.tarima_actual_id, req.tenantId]
           )
           tarima = tarimaRes.rows[0] || null
         }
@@ -222,9 +222,9 @@ router.get('/sessions/all-active',
 
         const guiasRes = await req.tQuery(
           `SELECT id, codigo_guia, posicion, timestamp_escaneo
-           FROM guias WHERE tarima_id = $1
+           FROM guias WHERE tarima_id = $1 AND tenant_id = $2
            ORDER BY posicion DESC`,
-          [tarima.id]
+          [tarima.id, req.tenantId]
         )
 
         return {
@@ -332,9 +332,9 @@ router.post('/sessions/:id/scan',
       const dupGlobal = await client.query(
         `SELECT g.id, g.tarima_id, g.posicion, g.timestamp_escaneo, t.codigo as tarima_codigo
          FROM guias g JOIN tarimas t ON g.tarima_id = t.id
-         WHERE g.codigo_guia = $1 AND g.tarima_id != $2
+         WHERE g.codigo_guia = $1 AND g.tarima_id != $2 AND g.tenant_id = $3
          LIMIT 1`,
-        [code, tarima.id]
+        [code, tarima.id, req.tenantId]
       )
       if (dupGlobal.rows.length > 0) {
         const orig = dupGlobal.rows[0]
@@ -390,7 +390,8 @@ router.post('/sessions/:id/scan',
       try {
         const gptRes = await client.query(
           `SELECT config_json FROM configuraciones
-           WHERE modulo = 'dropscan' AND tipo = 'parametros' AND codigo = 'default' LIMIT 1`
+           WHERE modulo = 'dropscan' AND tipo = 'parametros' AND codigo = 'default' AND tenant_id = $1 LIMIT 1`,
+          [req.tenantId]
         )
         if (gptRes.rows.length > 0 && gptRes.rows[0].config_json?.guias_por_tarima) {
           gpt = parseInt(gptRes.rows[0].config_json.guias_por_tarima) || 100
@@ -439,7 +440,7 @@ router.post('/sessions/:id/scan',
       }
 
       // Refresh tarima data
-      const updatedTarima = await client.query('SELECT * FROM tarimas WHERE id = $1', [tarima.id])
+      const updatedTarima = await client.query('SELECT * FROM tarimas WHERE id = $1 AND tenant_id = $2', [tarima.id, req.tenantId])
 
       await client.query('COMMIT')
 
@@ -575,31 +576,31 @@ router.post('/sessions/:id/switch-tarima',
 
       // Verify session and tarima belong to user and tenant
       const sesionRes = await req.tQuery(
-        'SELECT * FROM sesiones_escaneo WHERE id = $1 AND operador_id = $2 AND activa = true',
-        [sessionId, userId]
+        'SELECT * FROM sesiones_escaneo WHERE id = $1 AND operador_id = $2 AND activa = true AND tenant_id = $3',
+        [sessionId, userId, req.tenantId]
       )
       if (sesionRes.rows.length === 0) {
         return res.status(404).json({ error: 'Sesión no encontrada' })
       }
 
       const tarimaRes = await req.tQuery(
-        `SELECT * FROM tarimas WHERE id = $1 AND operador_id = $2 AND estado = 'EN_PROCESO'`,
-        [tarima_id, userId]
+        `SELECT * FROM tarimas WHERE id = $1 AND operador_id = $2 AND estado = 'EN_PROCESO' AND tenant_id = $3`,
+        [tarima_id, userId, req.tenantId]
       )
       if (tarimaRes.rows.length === 0) {
         return res.status(404).json({ error: 'Tarima no encontrada o no activa' })
       }
 
       await req.tQuery(
-        'UPDATE sesiones_escaneo SET tarima_actual_id = $1 WHERE id = $2',
-        [tarima_id, sessionId]
+        'UPDATE sesiones_escaneo SET tarima_actual_id = $1 WHERE id = $2 AND tenant_id = $3',
+        [tarima_id, sessionId, req.tenantId]
       )
 
       const guiasRes = await req.tQuery(
         `SELECT id, codigo_guia, posicion, timestamp_escaneo
-         FROM guias WHERE tarima_id = $1
+         FROM guias WHERE tarima_id = $1 AND tenant_id = $2
          ORDER BY posicion DESC LIMIT 10`,
-        [tarima_id]
+        [tarima_id, req.tenantId]
       )
 
       res.json({
@@ -625,9 +626,9 @@ router.post('/sessions/:id/end',
 
       const result = await req.tQuery(
         `UPDATE sesiones_escaneo SET activa = false, fecha_fin = CURRENT_TIMESTAMP
-         WHERE id = $1 AND operador_id = $2 AND activa = true
+         WHERE id = $1 AND operador_id = $2 AND activa = true AND tenant_id = $3
          RETURNING *`,
-        [sessionId, userId]
+        [sessionId, userId, req.tenantId]
       )
 
       if (result.rows.length === 0) {
@@ -639,8 +640,8 @@ router.post('/sessions/:id/end',
       // Only finalize/delete the tarima linked to THIS session (not all operator tarimas)
       if (sesion.tarima_actual_id) {
         const tarimaCheck = await req.tQuery(
-          'SELECT id, cantidad_guias, estado FROM tarimas WHERE id = $1 AND estado = $2',
-          [sesion.tarima_actual_id, 'EN_PROCESO']
+          'SELECT id, cantidad_guias, estado FROM tarimas WHERE id = $1 AND estado = $2 AND tenant_id = $3',
+          [sesion.tarima_actual_id, 'EN_PROCESO', req.tenantId]
         )
         if (tarimaCheck.rows.length > 0) {
           const t = tarimaCheck.rows[0]
@@ -648,11 +649,11 @@ router.post('/sessions/:id/end',
             await req.tQuery(
               `UPDATE tarimas SET estado = 'FINALIZADA', fecha_cierre = CURRENT_TIMESTAMP,
                    tiempo_armado_segundos = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - fecha_inicio))::INTEGER
-               WHERE id = $1`,
-              [t.id]
+               WHERE id = $1 AND tenant_id = $2`,
+              [t.id, req.tenantId]
             )
           } else {
-            await req.tQuery('DELETE FROM tarimas WHERE id = $1', [t.id])
+            await req.tQuery('DELETE FROM tarimas WHERE id = $1 AND tenant_id = $2', [t.id, req.tenantId])
           }
         }
       }
@@ -675,32 +676,32 @@ router.delete('/sessions/:sessionId/guia/:guiaId',
     try {
       const { sessionId, guiaId } = req.params
 
-      const guiaRes = await client.query('SELECT * FROM guias WHERE id = $1', [guiaId])
+      const guiaRes = await client.query('SELECT * FROM guias WHERE id = $1 AND tenant_id = $2', [guiaId, req.tenantId])
       if (guiaRes.rows.length === 0) {
         await client.query('ROLLBACK')
         return res.status(404).json({ error: 'Guía no encontrada' })
       }
 
       const guia = guiaRes.rows[0]
-      await client.query('DELETE FROM guias WHERE id = $1', [guiaId])
+      await client.query('DELETE FROM guias WHERE id = $1 AND tenant_id = $2', [guiaId, req.tenantId])
 
       // Reorder positions
       await client.query(
         `UPDATE guias SET posicion = posicion - 1
-         WHERE tarima_id = $1 AND posicion > $2`,
-        [guia.tarima_id, guia.posicion]
+         WHERE tarima_id = $1 AND posicion > $2 AND tenant_id = $3`,
+        [guia.tarima_id, guia.posicion, req.tenantId]
       )
 
       // Update tarima count
       await client.query(
-        'UPDATE tarimas SET cantidad_guias = cantidad_guias - 1 WHERE id = $1',
-        [guia.tarima_id]
+        'UPDATE tarimas SET cantidad_guias = cantidad_guias - 1 WHERE id = $1 AND tenant_id = $2',
+        [guia.tarima_id, req.tenantId]
       )
 
       // Update session count
       await client.query(
-        'UPDATE sesiones_escaneo SET total_guias = total_guias - 1 WHERE id = $1',
-        [sessionId]
+        'UPDATE sesiones_escaneo SET total_guias = total_guias - 1 WHERE id = $1 AND tenant_id = $2',
+        [sessionId, req.tenantId]
       )
 
       await client.query('COMMIT')

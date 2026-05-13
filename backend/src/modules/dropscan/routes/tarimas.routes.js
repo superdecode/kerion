@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { query } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { dateInTZ } from '../../../shared/utils/dateUtils.js'
@@ -18,9 +17,9 @@ router.get('/',
       const offset = (safePage - 1) * safeLimit
 
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
-      let where = []
-      let params = []
-      let paramCount = 0
+      let where = [`t.tenant_id = $1`]
+      let params = [req.tenantId]
+      let paramCount = 1
 
       if (fecha_inicio) {
         paramCount++
@@ -82,7 +81,7 @@ router.get('/',
         params.push(`%${codigo_guia.trim()}%`)
       }
 
-      const whereClause = where.length > 0 ? 'WHERE ' + where.join(' AND ') : ''
+      const whereClause = 'WHERE ' + where.join(' AND ')
 
       // Count total
       const countRes = await req.tQuery(
@@ -177,8 +176,8 @@ router.get('/:id',
            LIMIT 1
          ) s ON true
          LEFT JOIN usuarios_internos ui ON s.usuario_interno_id = ui.id
-         WHERE t.id = $1`,
-        [id]
+         WHERE t.id = $1 AND t.tenant_id = $2`,
+        [id, req.tenantId]
       )
 
       if (tarimaRes.rows.length === 0) {
@@ -191,14 +190,14 @@ router.get('/:id',
          FROM guias g
          JOIN usuarios u ON g.operador_id = u.id
          LEFT JOIN usuarios_internos ui ON g.usuario_interno_id = ui.id
-         WHERE g.tarima_id = $1
+         WHERE g.tarima_id = $1 AND g.tenant_id = $2
          ORDER BY g.posicion ASC`,
-        [id]
+        [id, req.tenantId]
       )
 
       const duplicadosRes = await req.tQuery(
-        `SELECT COUNT(*) FROM alertas_duplicados WHERE tarima_id = $1`,
-        [id]
+        `SELECT COUNT(*) FROM alertas_duplicados WHERE tarima_id = $1 AND tenant_id = $2`,
+        [id, req.tenantId]
       )
 
       res.json({
@@ -223,8 +222,8 @@ router.post('/:id/finalize',
       const result = await req.tQuery(
         `UPDATE tarimas SET estado = 'FINALIZADA', fecha_cierre = CURRENT_TIMESTAMP,
            tiempo_armado_segundos = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - fecha_inicio))::INTEGER
-         WHERE id = $1 AND estado = 'EN_PROCESO' RETURNING *`,
-        [id]
+         WHERE id = $1 AND estado = 'EN_PROCESO' AND tenant_id = $2 RETURNING *`,
+        [id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada o no está en proceso' })
       res.json({ success: true, tarima: result.rows[0] })
@@ -245,8 +244,8 @@ router.post('/:id/cancel',
       const { razon } = req.body
       if (!razon || !razon.trim()) return res.status(400).json({ error: 'La razón de cancelación es requerida' })
       const result = await req.tQuery(
-        `UPDATE tarimas SET estado = 'CANCELADA', fecha_cierre = CURRENT_TIMESTAMP, cancelada_razon = $1 WHERE id = $2 AND estado = 'EN_PROCESO' RETURNING *`,
-        [razon.trim(), id]
+        `UPDATE tarimas SET estado = 'CANCELADA', fecha_cierre = CURRENT_TIMESTAMP, cancelada_razon = $1 WHERE id = $2 AND estado = 'EN_PROCESO' AND tenant_id = $3 RETURNING *`,
+        [razon.trim(), id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada o no está en proceso' })
       res.json({ success: true, tarima: result.rows[0] })
@@ -265,8 +264,8 @@ router.post('/:id/reopen',
     try {
       const { id } = req.params
       const result = await req.tQuery(
-        `UPDATE tarimas SET estado = 'EN_PROCESO', fecha_cierre = NULL WHERE id = $1 AND estado = 'FINALIZADA' RETURNING *`,
-        [id]
+        `UPDATE tarimas SET estado = 'EN_PROCESO', fecha_cierre = NULL WHERE id = $1 AND estado = 'FINALIZADA' AND tenant_id = $2 RETURNING *`,
+        [id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada o no está finalizada' })
       res.json({ success: true, tarima: result.rows[0] })
@@ -288,8 +287,8 @@ router.post('/:id/adopt',
       const userId = req.user.id
 
       const tarimaRes = await req.tQuery(
-        `SELECT * FROM tarimas WHERE id = $1 AND estado = 'EN_PROCESO'`,
-        [id]
+        `SELECT * FROM tarimas WHERE id = $1 AND estado = 'EN_PROCESO' AND tenant_id = $2`,
+        [id, req.tenantId]
       )
       if (tarimaRes.rows.length === 0) {
         return res.status(404).json({ error: 'Tarima no encontrada o no está en proceso' })
@@ -297,8 +296,8 @@ router.post('/:id/adopt',
       const tarima = tarimaRes.rows[0]
 
       const activeCountRes = await req.tQuery(
-        'SELECT COUNT(*) AS count FROM sesiones_escaneo WHERE operador_id = $1 AND activa = true',
-        [userId]
+        'SELECT COUNT(*) AS count FROM sesiones_escaneo WHERE operador_id = $1 AND activa = true AND tenant_id = $2',
+        [userId, req.tenantId]
       )
       const activeCount = parseInt(activeCountRes.rows[0].count || 0)
       if (activeCount >= 3) {
@@ -307,10 +306,10 @@ router.post('/:id/adopt',
 
       const existingSessionRes = await req.tQuery(
         `SELECT * FROM sesiones_escaneo
-         WHERE operador_id = $1 AND activa = true AND tarima_actual_id = $2
+         WHERE operador_id = $1 AND activa = true AND tarima_actual_id = $2 AND tenant_id = $3
          ORDER BY fecha_inicio DESC
          LIMIT 1`,
-        [userId, tarima.id]
+        [userId, tarima.id, req.tenantId]
       )
 
       let sesion = existingSessionRes.rows[0] || null
@@ -327,17 +326,17 @@ router.post('/:id/adopt',
         await req.tQuery(
           `UPDATE sesiones_escaneo
            SET empresa_id = $1, canal_id = $2, tarima_actual_id = $3
-           WHERE id = $4`,
-          [tarima.empresa_id, tarima.canal_id, tarima.id, sesion.id]
+           WHERE id = $4 AND tenant_id = $5`,
+          [tarima.empresa_id, tarima.canal_id, tarima.id, sesion.id, req.tenantId]
         )
       }
 
       const guiasRes = await req.tQuery(
         `SELECT id, codigo_guia, posicion, timestamp_escaneo
          FROM guias
-         WHERE tarima_id = $1
+         WHERE tarima_id = $1 AND tenant_id = $2
          ORDER BY posicion DESC`,
-        [tarima.id]
+        [tarima.id, req.tenantId]
       )
 
       res.json({
@@ -368,9 +367,9 @@ router.get('/:id/duplicados',
          FROM alertas_duplicados ad
          LEFT JOIN guias g ON ad.guia_original_id = g.id
          JOIN usuarios u ON ad.operador_id = u.id
-         WHERE ad.tarima_id = $1
+         WHERE ad.tarima_id = $1 AND ad.tenant_id = $2
          ORDER BY ad.timestamp_alerta DESC`,
-        [id]
+        [id, req.tenantId]
       )
       res.json({ duplicados: result.rows })
     } catch (error) {
@@ -395,8 +394,8 @@ router.post('/:tarimaId/guias',
 
       // Verify tarima exists
       const tarimaRes = await req.tQuery(
-        'SELECT id, cantidad_guias FROM tarimas WHERE id = $1',
-        [tarimaId]
+        'SELECT id, cantidad_guias FROM tarimas WHERE id = $1 AND tenant_id = $2',
+        [tarimaId, req.tenantId]
       )
       if (tarimaRes.rows.length === 0) {
         return res.status(404).json({ error: 'Tarima no encontrada' })
@@ -404,8 +403,8 @@ router.post('/:tarimaId/guias',
 
       // Check for duplicates
       const dupRes = await req.tQuery(
-        'SELECT id FROM guias WHERE tarima_id = $1 AND codigo_guia = $2',
-        [tarimaId, codigo_guia]
+        'SELECT id FROM guias WHERE tarima_id = $1 AND codigo_guia = $2 AND tenant_id = $3',
+        [tarimaId, codigo_guia, req.tenantId]
       )
       if (dupRes.rows.length > 0) {
         return res.status(400).json({ error: 'DUPLICADO', message: 'Esta guía ya está registrada en esta tarima' })
@@ -413,8 +412,8 @@ router.post('/:tarimaId/guias',
 
       // Get next position
       const posRes = await req.tQuery(
-        'SELECT MAX(CAST(posicion AS INTEGER)) as max_pos FROM guias WHERE tarima_id = $1',
-        [tarimaId]
+        'SELECT MAX(CAST(posicion AS INTEGER)) as max_pos FROM guias WHERE tarima_id = $1 AND tenant_id = $2',
+        [tarimaId, req.tenantId]
       )
       const nextPos = (parseInt(posRes.rows[0]?.max_pos || 0) || 0) + 1
 
@@ -429,10 +428,10 @@ router.post('/:tarimaId/guias',
 
       // Update guide count (but don't touch fecha_cierre or tiempo_armado)
       const newCount = (parseInt(tarimaRes.rows[0].cantidad_guias) || 0) + 1
-      await req.tQuery('UPDATE tarimas SET cantidad_guias = $1 WHERE id = $2', [newCount, tarimaId])
+      await req.tQuery('UPDATE tarimas SET cantidad_guias = $1 WHERE id = $2 AND tenant_id = $3', [newCount, tarimaId, req.tenantId])
 
       // Return new guide with operator name
-      const operRes = await req.tQuery('SELECT nombre_completo FROM usuarios WHERE id = $1', [req.fullUser.id])
+      const operRes = await req.tQuery('SELECT nombre_completo FROM usuarios WHERE id = $1 AND tenant_id = $2', [req.fullUser.id, req.tenantId])
       const operadorNombre = operRes.rows[0]?.nombre_completo || req.fullUser.nombre_completo || 'Desconocido'
 
       res.json({
@@ -462,18 +461,18 @@ router.delete('/:tarimaId/guias/:guiaId',
       const { tarimaId, guiaId } = req.params
 
       const guiaRes = await req.tQuery(
-        'SELECT id FROM guias WHERE id = $1 AND tarima_id = $2',
-        [guiaId, tarimaId]
+        'SELECT id FROM guias WHERE id = $1 AND tarima_id = $2 AND tenant_id = $3',
+        [guiaId, tarimaId, req.tenantId]
       )
       if (guiaRes.rows.length === 0) {
         return res.status(404).json({ error: 'Guía no encontrada en esta tarima' })
       }
 
-      await req.tQuery('DELETE FROM guias WHERE id = $1', [guiaId])
+      await req.tQuery('DELETE FROM guias WHERE id = $1 AND tenant_id = $2', [guiaId, req.tenantId])
 
-      const countRes = await req.tQuery('SELECT COUNT(*) as cnt FROM guias WHERE tarima_id = $1', [tarimaId])
+      const countRes = await req.tQuery('SELECT COUNT(*) as cnt FROM guias WHERE tarima_id = $1 AND tenant_id = $2', [tarimaId, req.tenantId])
       const newCount = parseInt(countRes.rows[0].cnt)
-      await req.tQuery('UPDATE tarimas SET cantidad_guias = $1 WHERE id = $2', [newCount, tarimaId])
+      await req.tQuery('UPDATE tarimas SET cantidad_guias = $1 WHERE id = $2 AND tenant_id = $3', [newCount, tarimaId, req.tenantId])
 
       res.json({ success: true, cantidad_guias: newCount })
     } catch (error) {
@@ -491,13 +490,13 @@ router.delete('/:id',
     try {
       const { id } = req.params
 
-      const tarimaRes = await req.tQuery('SELECT * FROM tarimas WHERE id = $1', [id])
+      const tarimaRes = await req.tQuery('SELECT * FROM tarimas WHERE id = $1 AND tenant_id = $2', [id, req.tenantId])
       if (tarimaRes.rows.length === 0) {
         return res.status(404).json({ error: 'Tarima no encontrada' })
       }
 
       // Cascade deletes guias and alertas
-      await req.tQuery('DELETE FROM tarimas WHERE id = $1', [id])
+      await req.tQuery('DELETE FROM tarimas WHERE id = $1 AND tenant_id = $2', [id, req.tenantId])
       res.json({ success: true, message: 'Tarima eliminada' })
     } catch (error) {
       console.error('Delete tarima error:', error)

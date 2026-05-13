@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { query } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { dateInTZ, getToday, CDMX_TZ } from '../../../shared/utils/dateUtils.js'
@@ -51,8 +50,8 @@ router.get('/stats/hoy',
            COALESCE(SUM(total_tarimas),0) AS total_tarimas,
            COALESCE(SUM(total_guias),0)   AS total_guias
          FROM folios_entrega
-         WHERE ${dateInTZ('created_at', TZ)} = $1::date`,
-        [todayDate]
+         WHERE ${dateInTZ('created_at', TZ)} = $1::date AND tenant_id = $2`,
+        [todayDate, req.tenantId]
       )
       res.json({ stats: result.rows[0] })
     } catch (err) {
@@ -75,9 +74,9 @@ router.get('/preview-tarimas',
       const safeLimit = Math.min(200, Math.max(1, parseInt(limit) || 50))
       const offset = (safePage - 1) * safeLimit
 
-      const params = [Number(empresa_id)]
-      let where = ['t.empresa_id = $1']
-      let pc = 1
+      const params = [Number(empresa_id), req.tenantId]
+      let where = ['t.empresa_id = $1', 't.tenant_id = $2']
+      let pc = 2
 
       if (canales && canales !== 'all') {
         const ids = String(canales).split(',').map(Number).filter(Boolean)
@@ -157,9 +156,9 @@ router.get('/',
       const sortCol = SORT_COLS[sort_by] || 'fe.created_at'
       const sortOrder = sort_dir === 'asc' ? 'ASC' : 'DESC'
 
-      const params = []
-      const where = []
-      let pc = 0
+      const params = [req.tenantId]
+      const where = [`fe.tenant_id = $1`]
+      let pc = 1
 
       if (empresa_id) { pc++; where.push(`fe.empresa_id = $${pc}`); params.push(Number(empresa_id)) }
       if (estado) { pc++; where.push(`fe.estado = $${pc}`); params.push(estado) }
@@ -284,8 +283,8 @@ router.post('/',
          FROM folios_entrega fe
          JOIN configuraciones e ON e.id = fe.empresa_id
          JOIN usuarios u ON u.id = fe.creado_por
-         WHERE fe.id = $1`,
-        [folio.id]
+         WHERE fe.id = $1 AND fe.tenant_id = $2`,
+        [folio.id, req.tenantId]
       )
       res.status(201).json({ success: true, folio: fullRes.rows[0] })
     } catch (err) {
@@ -312,8 +311,8 @@ router.get('/:id',
          FROM folios_entrega fe
          JOIN configuraciones e ON e.id = fe.empresa_id
          JOIN usuarios u ON u.id = fe.creado_por
-         WHERE fe.id = $1`,
-        [id]
+         WHERE fe.id = $1 AND fe.tenant_id = $2`,
+        [id, req.tenantId]
       )
       if (!folioRes.rows.length) return res.status(404).json({ error: 'Folio no encontrado' })
       const folio = folioRes.rows[0]
@@ -325,9 +324,9 @@ router.get('/:id',
          FROM folios_entrega_tarimas fet
          JOIN tarimas t ON t.id = fet.tarima_id
          JOIN configuraciones c ON c.id = t.canal_id
-         WHERE fet.folio_id = $1 AND fet.eliminado_en IS NULL
+         WHERE fet.folio_id = $1 AND fet.eliminado_en IS NULL AND fet.tenant_id = $2
          ORDER BY fet.agregado_en ASC`,
-        [id]
+        [id, req.tenantId]
       )
 
       const guiasRes = await req.tQuery(
@@ -337,9 +336,9 @@ router.get('/:id',
          JOIN guias g ON g.tarima_id = fet.tarima_id
          JOIN tarimas t ON t.id = fet.tarima_id
          JOIN configuraciones c ON c.id = t.canal_id
-         WHERE fet.folio_id = $1 AND fet.eliminado_en IS NULL
+         WHERE fet.folio_id = $1 AND fet.eliminado_en IS NULL AND fet.tenant_id = $2
          ORDER BY g.timestamp_escaneo ASC`,
-        [id]
+        [id, req.tenantId]
       )
 
       res.json({ folio, tarimas: tarimasRes.rows, guias: guiasRes.rows })
@@ -362,7 +361,7 @@ router.patch('/:id',
     try {
       // BEGIN is already active via tGetClient
 
-      const folioRes = await client.query(`SELECT * FROM folios_entrega WHERE id = $1 FOR UPDATE`, [id])
+      const folioRes = await client.query(`SELECT * FROM folios_entrega WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [id, req.tenantId])
       if (!folioRes.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Folio no encontrado' }) }
       const folio = folioRes.rows[0]
 
@@ -416,8 +415,8 @@ router.patch('/:id',
 
       const fullRes = await req.tQuery(
         `SELECT fe.*, e.nombre AS empresa_nombre FROM folios_entrega fe
-         JOIN configuraciones e ON e.id = fe.empresa_id WHERE fe.id = $1`,
-        [id]
+         JOIN configuraciones e ON e.id = fe.empresa_id WHERE fe.id = $1 AND fe.tenant_id = $2`,
+        [id, req.tenantId]
       )
       res.json({ success: true, folio: fullRes.rows[0] })
     } catch (err) {
@@ -440,7 +439,7 @@ router.post('/:id/cancelar',
 
     const client = await req.tGetClient()
     try {
-      const folioRes = await client.query(`SELECT * FROM folios_entrega WHERE id = $1 FOR UPDATE`, [id])
+      const folioRes = await client.query(`SELECT * FROM folios_entrega WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [id, req.tenantId])
       if (!folioRes.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Folio no encontrado' }) }
       const folio = folioRes.rows[0]
 
@@ -473,7 +472,7 @@ router.delete('/:id',
     const { id } = req.params
     const client = await req.tGetClient()
     try {
-      const folioRes = await client.query(`SELECT * FROM folios_entrega WHERE id = $1 FOR UPDATE`, [id])
+      const folioRes = await client.query(`SELECT * FROM folios_entrega WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [id, req.tenantId])
       if (!folioRes.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Folio no encontrado' }) }
       const folio = folioRes.rows[0]
 
@@ -513,9 +512,9 @@ router.get('/:id/log',
         `SELECT l.id, l.accion, l.detalle, l.timestamp, u.nombre_completo AS usuario_nombre
          FROM folios_entrega_log l
          LEFT JOIN usuarios u ON u.id = l.usuario_id
-         WHERE l.folio_id = $1
+         WHERE l.folio_id = $1 AND l.tenant_id = $2
          ORDER BY l.timestamp ASC`,
-        [req.params.id]
+        [req.params.id, req.tenantId]
       )
       res.json({ log: result.rows })
     } catch (err) {
@@ -539,8 +538,8 @@ router.get('/:id/pdf',
          FROM folios_entrega fe
          JOIN configuraciones e ON e.id = fe.empresa_id
          JOIN usuarios u ON u.id = fe.creado_por
-         WHERE fe.id = $1`,
-        [id]
+         WHERE fe.id = $1 AND fe.tenant_id = $2`,
+        [id, req.tenantId]
       )
       if (!folioRes.rows.length) return res.status(404).json({ error: 'Folio no encontrado' })
       const folio = folioRes.rows[0]
@@ -552,14 +551,14 @@ router.get('/:id/pdf',
          JOIN guias g ON g.tarima_id = fet.tarima_id
          JOIN tarimas t ON t.id = fet.tarima_id
          JOIN configuraciones c ON c.id = t.canal_id
-         WHERE fet.folio_id = $1 AND fet.eliminado_en IS NULL
+         WHERE fet.folio_id = $1 AND fet.eliminado_en IS NULL AND fet.tenant_id = $2
          ORDER BY g.timestamp_escaneo ASC`,
-        [id]
+        [id, req.tenantId]
       )
 
       const tarimasRes = await req.tQuery(
-        `SELECT COUNT(*) AS total FROM folios_entrega_tarimas WHERE folio_id = $1 AND eliminado_en IS NULL`,
-        [id]
+        `SELECT COUNT(*) AS total FROM folios_entrega_tarimas WHERE folio_id = $1 AND eliminado_en IS NULL AND tenant_id = $2`,
+        [id, req.tenantId]
       )
 
       // Log impresion — uses tenant-scoped tQuery so RLS applies

@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { query } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { getToday, dateInTZ, hourInTZ, dateFrom, dateTo } from '../../../shared/utils/dateUtils.js'
@@ -16,11 +15,11 @@ router.get('/',
       const today = getToday(tz)
       const { fecha_inicio = today, fecha_fin = today } = req.query
 
-      const dateWhere = `${dateInTZ('t.fecha_inicio', tz)} BETWEEN $1 AND $2`
-      const dateParams = [fecha_inicio, fecha_fin]
+      const dateWhere = `${dateInTZ('t.fecha_inicio', tz)} BETWEEN $1 AND $2 AND t.tenant_id = $3`
+      const dateParams = [fecha_inicio, fecha_fin, req.tenantId]
 
       const [summaryRes, alertasRes, activeSessions, hourlyRes, operatorsRes, empresasRes] = await Promise.all([
-        query(
+        req.tQuery(
           `SELECT
             COUNT(DISTINCT t.id) as total_tarimas,
             COUNT(DISTINCT CASE WHEN t.estado = 'FINALIZADA' THEN t.id END) as tarimas_completadas,
@@ -31,12 +30,12 @@ router.get('/',
            FROM tarimas t WHERE ${dateWhere}`,
           dateParams
         ),
-        query(
+        req.tQuery(
           `SELECT COUNT(*) as total_alertas FROM alertas_duplicados
-           WHERE ${dateInTZ('timestamp_alerta', tz)} BETWEEN $1 AND $2`,
+           WHERE ${dateInTZ('timestamp_alerta', tz)} BETWEEN $1 AND $2 AND tenant_id = $3`,
           dateParams
         ),
-        query(
+        req.tQuery(
           `SELECT s.id, COALESCE(ui.nombre, s.usuario_operador, u.nombre_completo) as operador,
                   e.nombre as empresa, c.nombre as canal,
                   s.total_guias, s.tarimas_completadas, s.fecha_inicio
@@ -45,10 +44,11 @@ router.get('/',
            JOIN configuraciones e ON s.empresa_id = e.id
            JOIN configuraciones c ON s.canal_id = c.id
            LEFT JOIN usuarios_internos ui ON s.usuario_interno_id = ui.id
-           WHERE s.activa = true
-           ORDER BY s.fecha_inicio DESC`
+           WHERE s.activa = true AND s.tenant_id = $1
+           ORDER BY s.fecha_inicio DESC`,
+          [req.tenantId]
         ),
-        query(
+        req.tQuery(
           `SELECT ${hourInTZ('g.timestamp_escaneo', tz)} as hora, COUNT(*) as cantidad
            FROM guias g
            JOIN tarimas t ON g.tarima_id = t.id
@@ -57,7 +57,7 @@ router.get('/',
            ORDER BY hora`,
           dateParams
         ),
-        query(
+        req.tQuery(
           `SELECT COALESCE(ui.nombre, g.usuario_operador, u.nombre_completo) as operador,
                   COUNT(DISTINCT g.tarima_id) as tarimas,
                   COUNT(g.id) as guias
@@ -71,7 +71,7 @@ router.get('/',
            LIMIT 10`,
           dateParams
         ),
-        query(
+        req.tQuery(
           `SELECT e.nombre as empresa, e.codigo,
                   COUNT(DISTINCT t.id) as tarimas,
                   SUM(t.cantidad_guias) as guias
@@ -122,9 +122,9 @@ router.get('/metrics',
       }
 
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
-      const where = [`TO_CHAR(${dateInTZ('t.fecha_inicio', tz)}, 'YYYY-MM-DD') BETWEEN $1 AND $2`]
-      const params = [fecha_inicio, fecha_fin]
-      let pCount = 2
+      const where = [`TO_CHAR(${dateInTZ('t.fecha_inicio', tz)}, 'YYYY-MM-DD') BETWEEN $1 AND $2`, `t.tenant_id = $3`]
+      const params = [fecha_inicio, fecha_fin, req.tenantId]
+      let pCount = 3
 
       if (empresa_id) {
         const ids = empresa_id.split(',').map(Number).filter(Boolean)
@@ -160,7 +160,7 @@ router.get('/metrics',
 
       const operadorWhereClause = whereClause
       const [dailyRes, totalRes, empresasRes, canalesRes, escaneadoresRes, hourlyRes] = await Promise.all([
-        query(
+        req.tQuery(
           `SELECT TO_CHAR(${dateInTZ('t.fecha_inicio', tz)}, 'YYYY-MM-DD') as fecha,
                   COUNT(DISTINCT t.id) as tarimas,
                   COALESCE(SUM(t.cantidad_guias), 0) as guias,
@@ -168,26 +168,26 @@ router.get('/metrics',
                   COALESCE(AVG(CASE WHEN t.estado = 'FINALIZADA' THEN COALESCE(t.tiempo_armado_segundos, EXTRACT(EPOCH FROM (t.fecha_cierre - t.fecha_inicio))::INTEGER) END), 0) as tiempo_promedio
            FROM tarimas t WHERE ${whereClause}
            GROUP BY TO_CHAR(${dateInTZ('t.fecha_inicio', tz)}, 'YYYY-MM-DD') ORDER BY fecha`, params),
-        query(
+        req.tQuery(
           `SELECT COUNT(DISTINCT t.id) as tarimas,
                   COALESCE(SUM(t.cantidad_guias), 0) as guias,
                   COUNT(DISTINCT CASE WHEN t.estado = 'FINALIZADA' THEN t.id END) as completadas
            FROM tarimas t WHERE ${whereClause}`, params),
-        query(
+        req.tQuery(
           `SELECT e.nombre as empresa, e.config_json->>'color' as color,
                   COUNT(DISTINCT t.id) as tarimas,
                   COALESCE(SUM(t.cantidad_guias), 0) as guias
            FROM tarimas t JOIN configuraciones e ON t.empresa_id = e.id
            WHERE ${whereClause}
            GROUP BY e.id, e.nombre, e.config_json->>'color' ORDER BY guias DESC`, params),
-        query(
+        req.tQuery(
           `SELECT c.nombre as canal,
                   COUNT(DISTINCT t.id) as tarimas,
                   COALESCE(SUM(t.cantidad_guias), 0) as guias
            FROM tarimas t JOIN configuraciones c ON t.canal_id = c.id
            WHERE ${whereClause}
            GROUP BY c.id, c.nombre ORDER BY guias DESC`, params),
-        query(
+        req.tQuery(
           `SELECT COALESCE(ui.nombre, g.usuario_operador, u.nombre_completo) as escaneador,
                   COUNT(DISTINCT g.tarima_id) as tarimas,
                   COUNT(g.id) as guias
@@ -198,7 +198,7 @@ router.get('/metrics',
            WHERE ${operadorWhereClause}
            GROUP BY COALESCE(ui.nombre, g.usuario_operador, u.nombre_completo)
            ORDER BY guias DESC LIMIT 15`, params),
-        query(
+        req.tQuery(
           `SELECT ${hourInTZ('g.timestamp_escaneo', tz)} as hora,
                   COUNT(g.id) as cantidad
            FROM tarimas t
@@ -250,9 +250,9 @@ router.get('/export',
       }
 
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
-      let where = [`${dateInTZ('t.fecha_inicio', tz)} BETWEEN $1 AND $2`]
-      let params = [fecha_inicio, fecha_fin]
-      let paramCount = 2
+      let where = [`${dateInTZ('t.fecha_inicio', tz)} BETWEEN $1 AND $2`, `t.tenant_id = $3`]
+      let params = [fecha_inicio, fecha_fin, req.tenantId]
+      let paramCount = 3
 
       if (empresa_id) {
         const ids = empresa_id.split(',').map(Number).filter(Boolean)
@@ -273,7 +273,7 @@ router.get('/export',
 
       const whereClause = where.join(' AND ')
 
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT
           t.codigo as tarima_codigo,
           e.nombre as empresa,
@@ -322,7 +322,7 @@ router.get('/guias/search',
         return res.json({ guias: [] })
       }
 
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT g.id, g.codigo_guia, g.posicion, g.timestamp_escaneo,
                 t.id as tarima_id, t.codigo as tarima_codigo, t.estado as tarima_estado,
                 e.nombre as empresa_nombre, c.nombre as canal_nombre,
@@ -340,10 +340,10 @@ router.get('/guias/search',
          JOIN configuraciones e ON t.empresa_id = e.id
          JOIN configuraciones c ON t.canal_id = c.id
          JOIN usuarios u ON g.operador_id = u.id
-         WHERE g.codigo_guia ILIKE $1
+         WHERE g.codigo_guia ILIKE $1 AND g.tenant_id = $2
          ORDER BY g.timestamp_escaneo DESC
          LIMIT 20`,
-        [`%${q}%`]
+        [`%${q}%`, req.tenantId]
       )
 
       res.json({ guias: result.rows })
@@ -362,9 +362,9 @@ router.get('/escaneadores',
     try {
       const { fecha_inicio, fecha_fin, empresa_id, canal_id } = req.query
 
-      const where = []
-      const params = []
-      let pCount = 0
+      const where = [`t.tenant_id = $1`]
+      const params = [req.tenantId]
+      let pCount = 1
 
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       if (fecha_inicio) { pCount++; where.push(dateFrom('t.fecha_inicio', pCount, tz)); params.push(fecha_inicio) }
@@ -378,9 +378,9 @@ router.get('/escaneadores',
         if (ids.length) { pCount++; where.push(`t.canal_id = ANY($${pCount})`); params.push(ids) }
       }
 
-      const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : ''
+      const whereClause = 'WHERE ' + where.join(' AND ')
 
-      const result = await query(
+      const result = await req.tQuery(
         `SELECT DISTINCT COALESCE(ui.nombre, g.usuario_operador, u.nombre_completo) as escaneador
          FROM guias g
          JOIN tarimas t ON g.tarima_id = t.id

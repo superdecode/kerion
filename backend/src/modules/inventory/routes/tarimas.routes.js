@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { query } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 
@@ -22,9 +21,9 @@ router.get('/',
       } = req.query
 
       const offset = (parseInt(page) - 1) * parseInt(limit)
-      const conditions = []
-      const params = []
-      let idx = 1
+      const conditions = [`s.tenant_id = $1`]
+      const params = [req.tenantId]
+      let idx = 2
 
       if (status) {
         conditions.push(`s.status = $${idx++}`)
@@ -47,7 +46,7 @@ router.get('/',
         params.push(parseInt(user_id))
       }
 
-      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+      const where = `WHERE ${conditions.join(' AND ')}`
 
       const [dataRes, countRes] = await Promise.all([
         req.tQuery(
@@ -86,9 +85,9 @@ router.get('/reports',
   async (req, res) => {
     try {
       const { date_from, date_to } = req.query
-      const conditions = []
-      const params = []
-      let idx = 1
+      const conditions = [`tenant_id = $1`]
+      const params = [req.tenantId]
+      let idx = 2
 
       if (date_from) {
         conditions.push(`created_at >= $${idx++}`)
@@ -99,7 +98,7 @@ router.get('/reports',
         params.push(date_to)
       }
 
-      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+      const where = `WHERE ${conditions.join(' AND ')}`
 
       const [kpiRes, byStatusRes, byDayRes, topScannedRes] = await Promise.all([
         req.tQuery(
