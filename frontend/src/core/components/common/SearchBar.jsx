@@ -73,7 +73,7 @@ export default function SearchBar() {
   }
 
   return (
-    <div ref={wrapperRef} className="relative w-full max-w-[645px]">
+    <div ref={wrapperRef} className="relative w-full max-w-[780px]">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
         <input
@@ -123,52 +123,43 @@ export default function SearchBar() {
                   </p>
                 </div>
                 <div className="max-h-72 overflow-y-auto scrollbar-thin">
-                  {results.map((g, i) => (
-                    <motion.div
-                      key={g.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: i * 0.02 }}
-                      onMouseDown={(e) => { e.preventDefault(); handleResultClick(g) }}
-                      className="px-4 py-2.5 hover:bg-primary-50/50 cursor-pointer border-b border-warm-50 last:border-b-0 transition-colors group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-mono font-bold text-warm-800 truncate flex-1">{g.codigo_guia}</p>
-                        {(() => {
-                          const ds = g.folio_asignado ? 'ENVIADA' : g.tarima_estado
-                          const clr = ds === 'ENVIADA'
-                            ? 'bg-accent-100 text-accent-700'
-                            : ds === 'FINALIZADA'
-                              ? 'bg-success-100 text-success-700'
-                              : ds === 'CANCELADA'
-                                ? 'bg-danger-100 text-danger-700'
-                                : 'bg-warning-100 text-warning-700'
-                          return (
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${clr}`}>
-                              {t(`status.${ds}`) || ds}
-                            </span>
-                          )
-                        })()}
-                        <ArrowRight className="w-3 h-3 text-warm-300 group-hover:text-primary-500 transition-colors shrink-0" />
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-warm-400 flex-wrap">
-                        <span className="font-mono text-warm-600">{g.tarima_codigo}</span>
-                        {g.folio_asignado && (
-                          <>
-                            <span>·</span>
-                            <span className="text-primary-600 font-semibold">{g.folio_asignado}</span>
-                          </>
-                        )}
-                        <span>·</span>
-                        <span className="inline-flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.empresa_color || '#94a3b8' }} />
-                          {g.empresa_nombre}
-                        </span>
-                        <span>·</span>
-                        <span>#{g.posicion}</span>
-                      </div>
-                    </motion.div>
-                  ))}
+                  {results.map((g, i) => {
+                    const ds = g.folio_asignado ? 'ENVIADA' : g.tarima_estado
+                    const clr = ds === 'ENVIADA'
+                      ? 'bg-accent-100 text-accent-700'
+                      : ds === 'FINALIZADA'
+                        ? 'bg-success-100 text-success-700'
+                        : ds === 'CANCELADA'
+                          ? 'bg-danger-100 text-danger-700'
+                          : 'bg-warning-100 text-warning-700'
+                    return (
+                      <motion.div
+                        key={g.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: i * 0.02 }}
+                        onMouseDown={(e) => { e.preventDefault(); handleResultClick(g) }}
+                        className="px-4 py-3 hover:bg-primary-50/50 cursor-pointer border-b border-warm-50 last:border-b-0 transition-colors group"
+                      >
+                        {/* Line 1: Guide code full width */}
+                        <p className="text-sm font-mono font-bold text-warm-800">{g.codigo_guia}</p>
+                        {/* Line 2: Tarima, folio, status chip */}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[11px] font-mono text-warm-600 font-semibold">{g.tarima_codigo}</span>
+                          {g.folio_asignado && (
+                            <>
+                              <span className="text-warm-300 text-[10px]">·</span>
+                              <span className="text-[11px] text-primary-600 font-semibold">{g.folio_asignado}</span>
+                            </>
+                          )}
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ml-auto shrink-0 ${clr}`}>
+                            {t(`status.${ds}`)}
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-warm-300 group-hover:text-primary-500 transition-colors shrink-0" />
+                        </div>
+                      </motion.div>
+                    )
+                  })}
                 </div>
               </div>
             )}

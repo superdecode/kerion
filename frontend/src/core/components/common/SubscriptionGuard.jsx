@@ -3,6 +3,33 @@ import { AlertTriangle, Clock, X, RefreshCw, CheckCircle2, ChevronRight } from '
 import { useAuthStore } from '../../stores/authStore'
 
 const BANNER_DISMISS_KEY = 'sb_banner_dismiss'
+const RENEWAL_TODAY_KEY = 'sb_renewal_sent'
+
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function getRenewalSentToday() {
+  try {
+    const raw = localStorage.getItem(RENEWAL_TODAY_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (data.date !== getTodayKey()) return null
+    return data
+  } catch { return null }
+}
+
+function saveRenewalSent(form, tenantName) {
+  try {
+    localStorage.setItem(RENEWAL_TODAY_KEY, JSON.stringify({
+      date: getTodayKey(),
+      contact_name: form.contact_name,
+      contact_email: form.contact_email,
+      tenant_name: tenantName || '',
+      sent_at: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+    }))
+  } catch {}
+}
 
 function getBannerDismissed(expiresAt) {
   try {
@@ -52,6 +79,7 @@ function getSubscriptionState(user) {
 }
 
 function RenewalModal({ user, state, onClose, onSent }) {
+  const previousRequest = getRenewalSentToday()
   const [form, setForm] = useState({
     contact_name: user?.nombre_completo || '',
     contact_email: user?.tenant_contact_email || user?.email || '',
@@ -75,9 +103,11 @@ function RenewalModal({ user, state, onClose, onSent }) {
           message: form.message,
         }),
       })
+      saveRenewalSent(form, user?.tenant_name)
       setSent(true)
       onSent?.()
     } catch {
+      saveRenewalSent(form, user?.tenant_name)
       setSent(true)
     } finally {
       setLoading(false)
@@ -85,6 +115,46 @@ function RenewalModal({ user, state, onClose, onSent }) {
   }
 
   const inputCls = "w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+
+  if (previousRequest && !sent) {
+    return (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md shadow-2xl">
+          <div className="flex items-center justify-between p-5 border-b border-gray-800">
+            <h2 className="text-white font-bold text-base">Solicitud ya enviada hoy</h2>
+            <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <p className="text-emerald-300 text-sm font-medium">Ya enviaste una solicitud hoy. Solo se permite una por dia.</p>
+            </div>
+            <div className="bg-gray-800/60 rounded-xl p-4 space-y-2">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Solicitud enviada</p>
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Contacto</span>
+                <span className="text-white text-sm font-semibold">{previousRequest.contact_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Email</span>
+                <span className="text-white text-sm">{previousRequest.contact_email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 text-sm">Hora de envio</span>
+                <span className="text-white text-sm">{previousRequest.sent_at}</span>
+              </div>
+            </div>
+            <p className="text-gray-500 text-xs text-center">Nuestro equipo te contactara en menos de 24 horas.</p>
+            <button onClick={onClose} className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-xl transition-colors">
+              Entendido
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">

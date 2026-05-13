@@ -943,8 +943,7 @@ export default function Folios() {
                     {detailLog.filter((entry, i, arr) =>
                       i === 0 || !(
                         arr[i - 1].accion === entry.accion &&
-                        arr[i - 1].usuario_nombre === entry.usuario_nombre &&
-                        Math.abs(new Date(arr[i - 1].timestamp) - new Date(entry.timestamp)) < 3000
+                        arr[i - 1].usuario_nombre === entry.usuario_nombre
                       )
                     ).map((entry, i, log) => (
                       <div key={entry.id || i} className="flex items-start gap-3">

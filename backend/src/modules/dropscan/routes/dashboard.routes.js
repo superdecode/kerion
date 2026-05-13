@@ -325,7 +325,7 @@ router.get('/guias/search',
       const result = await req.tQuery(
         `SELECT g.id, g.codigo_guia, g.posicion, g.timestamp_escaneo,
                 t.id as tarima_id, t.codigo as tarima_codigo, t.estado as tarima_estado,
-                e.nombre as empresa_nombre, e.color as empresa_color, c.nombre as canal_nombre,
+                e.nombre as empresa_nombre, e.config_json->>'color' as empresa_color, c.nombre as canal_nombre,
                 u.nombre_completo as operador_nombre,
                 (SELECT fe2.folio_numero FROM folios_entrega_tarimas fet2
                  JOIN folios_entrega fe2 ON fe2.id = fet2.folio_id

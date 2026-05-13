@@ -16,7 +16,7 @@ import { fmtTime, fmtTimeShort, fmtDate, fmtDateTime, getToday, subtractDays } f
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Eye, Trash2, Search, Download,
   Package, Clock, CheckCircle, ArrowUpDown, ArrowUp, ArrowDown, X,
-  RotateCcw, AlertTriangle, Copy, Pencil, Building2, Radio, Lock, Plus, ArrowRight, Filter
+  RotateCcw, AlertTriangle, Copy, Pencil, Building2, Radio, Lock, Plus, ArrowRight, Filter, User
 } from 'lucide-react'
 
 const calcDuration = (tarima) => {
@@ -191,6 +191,13 @@ export default function Historial() {
     queryFn: () => ds.getTarimaDuplicados(selectedTarima),
     enabled: !!selectedTarima && detailTab === 'duplicados',
   })
+
+  const { data: logData } = useQuery({
+    queryKey: ['dropscan-historial-tarima-log', selectedTarima],
+    queryFn: () => ds.getTarimaLog(selectedTarima),
+    enabled: !!selectedTarima && detailTab === 'historial',
+  })
+  const tarimaLog = logData?.log || []
 
   const deleteMutation = useMutation({
     mutationFn: (id) => ds.deleteTarima(id),
@@ -770,7 +777,7 @@ export default function Historial() {
                     ? <CheckCircle className="w-3.5 h-3.5 text-success-500" />
                     : <Copy className="w-3.5 h-3.5" />}
                 </button>
-                <span className={`badge text-[10px] px-2 py-0.5 ${estadoColors[getDisplayEstado(detail)] || 'bg-warm-100 text-warm-600'}`}>
+                <span className={`badge text-xs px-2.5 py-1 ${estadoColors[getDisplayEstado(detail)] || 'bg-warm-100 text-warm-600'}`}>
                   {estadoLabels[getDisplayEstado(detail)] || getDisplayEstado(detail)}
                 </span>
               </div>
@@ -779,7 +786,7 @@ export default function Historial() {
                   onClick={() => { setSelectedTarima(null); setEditMode(false); navigate(`/dropscan/folios?folio_id=${detail.folio_id}`) }}
                   className="text-[11px] font-semibold text-primary-600 hover:text-primary-800 hover:underline text-left leading-tight"
                 >
-                  Folio Entrega: {detail.folio_asignado}
+                  {detail.folio_asignado}
                 </button>
               )}
             </div>
@@ -820,12 +827,12 @@ export default function Historial() {
               {[
                 { icon: Package, l: t('history.company'), v: detail.empresa_nombre },
                 { icon: Package, l: t('history.channel'), v: detail.canal_nombre },
-                { icon: Package, l: t('history.operator'), v: detail.operador_nombre },
                 { icon: Package, l: t('history.guides'), v: `${detail.cantidad_guias}/100` },
+                { icon: Clock, l: t('history.duration'), v: calcDuration(detail) },
                 { icon: CheckCircle, l: t('common.status'), v: estadoLabels[detail.estado] || detail.estado },
+                { icon: Package, l: t('history.operator'), v: detail.operador_nombre },
                 { icon: Clock, l: t('history.startTime'), v: fmtDateTime(detail.fecha_inicio) },
                 { icon: Clock, l: t('history.endTime'), v: detail.fecha_cierre ? fmtDateTime(detail.fecha_cierre) : '--' },
-                { icon: Clock, l: t('history.duration'), v: calcDuration(detail) },
               ].map(f => (
                 <div key={f.l} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
                   <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{f.l}</p>
@@ -872,6 +879,15 @@ export default function Historial() {
                     : 'border-transparent text-warm-400 hover:text-warm-600'}`}
               >
                 <Copy className="w-3.5 h-3.5" /> {t('scan.duplicates')}
+              </button>
+              <button
+                onClick={() => setDetailTab('historial')}
+                className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5
+                  ${detailTab === 'historial'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-warm-400 hover:text-warm-600'}`}
+              >
+                <Clock className="w-3.5 h-3.5" /> {t('fep.detail.historial')}
               </button>
             </div>
 
@@ -1000,6 +1016,46 @@ export default function Historial() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab content: Historial */}
+            {detailTab === 'historial' && (
+              <div className="space-y-3">
+                {tarimaLog.length === 0 ? (
+                  <div className="p-10 text-center text-sm text-warm-400">{t('fep.detail.noHistorial')}</div>
+                ) : (
+                  <div className="space-y-1 max-h-96 overflow-y-auto scrollbar-thin pr-1">
+                    {tarimaLog.map((entry, i) => (
+                      <div key={entry.id || i} className="flex items-start gap-3">
+                        <div className="flex flex-col items-center pt-1.5 shrink-0">
+                          <div className="w-2 h-2 rounded-full bg-primary-400" />
+                          {i < tarimaLog.length - 1 && <div className="w-px flex-1 bg-warm-100 mt-1" style={{ minHeight: 20 }} />}
+                        </div>
+                        <div className="flex-1 pb-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-warm-700">
+                              {t(`tarima.log.${entry.action?.toLowerCase()}`)}
+                            </span>
+                            <span className="text-xs text-warm-400">{fmtDateTime(entry.timestamp)}</span>
+                            {entry.usuario_nombre && (
+                              <span className="text-xs text-warm-500 flex items-center gap-1">
+                                <User className="w-3 h-3" /> {entry.usuario_nombre}
+                              </span>
+                            )}
+                          </div>
+                          {entry.details && (
+                            <p className="text-xs text-warm-400 mt-0.5">
+                              {typeof entry.details === 'string'
+                                ? entry.details
+                                : Object.values(entry.details).filter(Boolean).join(' · ')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

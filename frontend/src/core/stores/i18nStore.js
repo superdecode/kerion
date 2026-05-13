@@ -791,6 +791,7 @@ const translations = {
     'fep.log.eliminacion': '删除',
     'fep.log.adicion_tarima': '添加托盘',
     'fep.log.eliminacion_tarima': '移除托盘',
+    'fep.log.impresion': '打印',
 
     // Tarima audit actions
     'tarima.log.finalizar_tarima': '完成托盘',
@@ -873,6 +874,9 @@ const translations = {
     'plan.upgradeSent': '申请已发送——团队将很快与您联系',
     'plan.sending': '发送中...',
     'plan.logoutBtn': '退出登录',
+    'plan.limit_reached_btn': '套餐限额已达',
+    'plan.guides_used_month': '本月面单已用',
+    'plan.see_details': '查看详情',
   },
 
   es: {
@@ -1724,6 +1728,9 @@ const translations = {
     'plan.upgradeSent': 'Solicitud enviada — el equipo te contactará pronto',
     'plan.sending': 'Enviando...',
     'plan.logoutBtn': 'Cerrar sesión',
+    'plan.limit_reached_btn': 'Limite del plan alcanzado',
+    'plan.guides_used_month': 'guías usadas este mes',
+    'plan.see_details': 'ver detalles',
 
     // FEP historial actions
     'fep.log.creacion': 'Creación',
@@ -1732,6 +1739,7 @@ const translations = {
     'fep.log.eliminacion': 'Eliminación',
     'fep.log.adicion_tarima': 'Tarima añadida',
     'fep.log.eliminacion_tarima': 'Tarima removida',
+    'fep.log.impresion': 'Impresión',
 
     // Tarima audit actions
     'tarima.log.finalizar_tarima': 'Tarima finalizada',

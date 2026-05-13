@@ -763,10 +763,10 @@ export default function Escaneo() {
                     onClick={() => setShowPlanLimitModal(true)}
                     className="inline-flex items-center gap-2.5 px-8 py-3.5 text-base font-semibold rounded-2xl bg-danger-100 text-danger-600 cursor-not-allowed opacity-80"
                   >
-                    <ShieldAlert className="w-5 h-5" /> Limite del plan alcanzado
+                    <ShieldAlert className="w-5 h-5" /> {t('plan.limit_reached_btn')}
                   </button>
                   <p className="text-xs text-warm-400">
-                    {guideUsage?.used}/{guideUsage?.limit} guias usadas este mes — <button onClick={() => setShowPlanLimitModal(true)} className="text-primary-500 underline">ver detalles</button>
+                    {guideUsage?.used}/{guideUsage?.limit} {t('plan.guides_used_month')} — <button onClick={() => setShowPlanLimitModal(true)} className="text-primary-500 underline">{t('plan.see_details')}</button>
                   </p>
                 </div>
               ) : canScanWithPin ? (
@@ -986,7 +986,7 @@ export default function Escaneo() {
                 ? 'text-danger-400 bg-danger-50 cursor-not-allowed opacity-70'
                 : 'text-success-600 bg-success-50 hover:bg-success-100'
             }`}
-            title={planLimitReached ? 'Limite del plan alcanzado' : t('scan.addPallet')}
+            title={planLimitReached ? t('plan.limit_reached_btn') : t('scan.addPallet')}
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline text-xs">Nueva tab</span>
