@@ -21,7 +21,7 @@ import {
   createFolio, cancelarFolio, eliminarFolio, downloadPdf,
   getFolio, getFolioLog,
 } from '../services/fepService'
-import { fmtDateTime, fmtDate, getToday, subtractDays } from '../../../core/utils/dateFormat'
+import { fmtDateTime, fmtDate, fmtTimeShort, getToday, subtractDays } from '../../../core/utils/dateFormat'
 import * as XLSX from 'xlsx'
 
 const ESTADO_COLORS = {
@@ -414,6 +414,12 @@ export default function Folios() {
               )}
             </div>
 
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
+                <X className="w-3 h-3" />{t('common.clear')}
+              </button>
+            )}
+
             {/* Filtros toggle — same position as Historial */}
             <button
               onClick={() => setShowFilters(v => !v)}
@@ -434,11 +440,6 @@ export default function Folios() {
             </button>
 
             <div className="ml-auto flex items-center gap-2">
-              {hasActiveFilters && (
-                <button onClick={clearFilters} className="text-xs text-primary-600 hover:text-primary-700 font-semibold flex items-center gap-1">
-                  <X className="w-3 h-3" />{t('common.clear')}
-                </button>
-              )}
               {canCreateFolios && (
                 <button onClick={openWizard}
                   className="btn-primary inline-flex items-center gap-2">
@@ -538,7 +539,7 @@ export default function Folios() {
                         </td>
                         <td className="table-cell text-warm-500 text-xs">
                           {fmtDate(row.created_at)}
-                          <br /><span className="text-warm-400">{new Date(row.created_at).toLocaleTimeString('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit' })}</span>
+                          <br /><span className="text-warm-400">{fmtTimeShort(row.created_at)}</span>
                         </td>
                         <td className="table-cell text-warm-600 text-xs">{row.creado_por_nombre}</td>
                         <td className="table-cell" onClick={e => e.stopPropagation()}>
@@ -748,12 +749,12 @@ export default function Folios() {
         ) : detailFolio ? (
           <div className="space-y-4">
             {/* Info grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               {[
                 { icon: Building2, l: t('fep.empresa'), v: detailFolio.empresa_nombre },
-                { icon: User, l: t('fep.createdBy'), v: detailFolio.creado_por_nombre || '—' },
                 { icon: Package, l: t('fep.col.tarimas'), v: detailFolio.total_tarimas },
                 { icon: FileText, l: t('fep.col.guias'), v: detailFolio.total_guias },
+                { icon: User, l: t('fep.createdBy'), v: detailFolio.creado_por_nombre || '—' },
                 { icon: Clock, l: t('fep.detail.creacion'), v: fmtDateTime(detailFolio.created_at) },
                 { icon: Clock, l: t('fep.detail.actualizacion'), v: detailFolio.updated_at ? fmtDateTime(detailFolio.updated_at) : '—' },
               ].map(f => (
@@ -947,7 +948,7 @@ export default function Folios() {
                         </div>
                         <div className="flex-1 pb-3">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold text-warm-700">{entry.accion}</span>
+                            <span className="text-sm font-semibold text-warm-700">{t(`fep.log.${entry.accion?.toLowerCase()}`) || entry.accion}</span>
                             <span className="text-xs text-warm-400">{fmtDateTime(entry.timestamp)}</span>
                             {entry.usuario_nombre && (
                               <span className="text-xs text-warm-500 flex items-center gap-1">

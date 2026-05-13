@@ -784,6 +784,14 @@ const translations = {
     'perm.mod.fep': '交接单',
     'perm.sub.folios': '交接单',
 
+    // FEP historial actions
+    'fep.log.creacion': '创建',
+    'fep.log.edicion': '编辑',
+    'fep.log.cancelacion': '取消',
+    'fep.log.eliminacion': '删除',
+    'fep.log.adicion_tarima': '添加托盘',
+    'fep.log.eliminacion_tarima': '移除托盘',
+
     // MultiSelect
     'multiselect.todos': '全选',
     'multiselect.limpiar': '清除',
@@ -1653,6 +1661,14 @@ const translations = {
     'plan.renew_description': 'Envía una solicitud de renovación y nuestro equipo te contactará en 24 horas.',
     'plan.request_sent': 'Solicitud enviada. Nos pondremos en contacto pronto.',
     'plan.request_renewal': 'Solicitar renovación',
+
+    // FEP historial actions
+    'fep.log.creacion': 'Creación',
+    'fep.log.edicion': 'Edición',
+    'fep.log.cancelacion': 'Cancelación',
+    'fep.log.eliminacion': 'Eliminación',
+    'fep.log.adicion_tarima': 'Tarima añadida',
+    'fep.log.eliminacion_tarima': 'Tarima removida',
   },
 }
 

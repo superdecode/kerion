@@ -215,7 +215,7 @@ function EmpresasTab({ canEdit, canToggle, canRemove }) {
 
               <div className="flex items-center gap-4 text-xs text-warm-400 mb-3">
                 <div className="flex items-center gap-1.5">
-                  <span>Color:</span>
+                  <span>{t('config.color')}:</span>
                   <div
                     className="w-4 h-4 rounded border border-warm-200"
                     style={{ backgroundColor: empresa.color }}

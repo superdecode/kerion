@@ -94,6 +94,8 @@ const getRoles = async () => { const { data } = await api.get('/roles'); return 
 const isActive = (u) => u.estado !== 'INACTIVO' && u.activo !== false
 
 // ═══════════ PLAN TAB ═══════════
+const RENEWAL_LS_KEY = 'kirion_renewal_last_sent'
+
 function PlanTab() {
   const { user } = useAuthStore()
   const { t } = useI18nStore()
@@ -102,6 +104,8 @@ function PlanTab() {
   const [showRenew, setShowRenew] = useState(false)
   const [renewSent, setRenewSent] = useState(false)
   const [renewLoading, setRenewLoading] = useState(false)
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [previousRequest, setPreviousRequest] = useState(null)
 
   useEffect(() => {
     api.get('/auth/plan-info')
@@ -124,21 +128,38 @@ function PlanTab() {
   const guidePercent = guideLimit ? Math.min((guidesUsed / guideLimit) * 100, 100) : 0
   const guideBarColor = guidePercent > 90 ? 'bg-red-500' : guidePercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'
 
+  function getTodayStr() {
+    return new Date().toISOString().slice(0, 10)
+  }
+
   async function handleRenewSubmit(e) {
-    e.preventDefault()
+    if (e && e.preventDefault) e.preventDefault()
+    const stored = localStorage.getItem(RENEWAL_LS_KEY)
+    if (stored) {
+      try {
+        const { date, data } = JSON.parse(stored)
+        if (date === getTodayStr()) {
+          setPreviousRequest(data)
+          setShowDuplicateModal(true)
+          return
+        }
+      } catch {}
+    }
     setRenewLoading(true)
+    const requestData = {
+      tenant_name: user?.tenant_name || '',
+      contact_name: user?.nombre_completo || '',
+      contact_email: user?.tenant_contact_email || user?.email || '',
+      current_plan: info?.plan_code || 'unknown',
+      message: '',
+    }
     try {
       await fetch('/api/public/renewal-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenant_name: user?.tenant_name || '',
-          contact_name: user?.nombre_completo || '',
-          contact_email: user?.tenant_contact_email || user?.email || '',
-          current_plan: info?.plan_code || 'unknown',
-          message: '',
-        }),
+        body: JSON.stringify(requestData),
       })
+      localStorage.setItem(RENEWAL_LS_KEY, JSON.stringify({ date: getTodayStr(), data: requestData }))
       setRenewSent(true)
     } catch {
       setRenewSent(true)
@@ -274,6 +295,36 @@ function PlanTab() {
           </div>
         </div>
       </div>
+
+      {/* Duplicate renewal request modal */}
+      {showDuplicateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-depth w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-warning-100 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-warning-600" />
+              </div>
+              <h3 className="text-warm-800 font-bold">{t('plan.renew_title')}</h3>
+            </div>
+            <p className="text-sm text-warm-600">
+              Ya enviaste una solicitud de renovacion hoy. Te contactaremos pronto.
+            </p>
+            {previousRequest && (
+              <div className="text-xs bg-warm-50 rounded-xl p-3 space-y-1 text-warm-500">
+                <p><span className="font-semibold text-warm-700">Empresa:</span> {previousRequest.tenant_name}</p>
+                <p><span className="font-semibold text-warm-700">Contacto:</span> {previousRequest.contact_email}</p>
+                <p><span className="font-semibold text-warm-700">Plan:</span> {previousRequest.current_plan}</p>
+              </div>
+            )}
+            <button
+              onClick={() => setShowDuplicateModal(false)}
+              className="w-full px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              {t('common.close')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

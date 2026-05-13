@@ -192,6 +192,13 @@ export default function Tarimas() {
     enabled: !!selectedTarima && detailTab === 'duplicados',
   })
 
+  const { data: logData } = useQuery({
+    queryKey: ['dropscan-tarima-log', selectedTarima],
+    queryFn: () => ds.getTarimaLog(selectedTarima),
+    enabled: !!selectedTarima && detailTab === 'historial',
+  })
+  const tarimaLog = logData?.log || []
+
   const deleteMutation = useMutation({
     mutationFn: (id) => ds.deleteTarima(id),
     onSuccess: () => { toast.success(t('history.palletDeleted')); qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] }); setSelectedTarima(null) },
@@ -448,7 +455,7 @@ export default function Tarimas() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -4, scale: 0.98 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute top-full left-0 right-0 mt-1 z-[100] bg-white/95 backdrop-blur-xl rounded-xl shadow-depth border border-warm-100 overflow-hidden min-w-[320px]"
+                    className="absolute top-full left-0 right-0 mt-1 z-[100] bg-white/95 backdrop-blur-xl rounded-xl shadow-depth border border-warm-100 overflow-hidden min-w-[384px]"
                   >
                     {guiaSearchLoading ? (
                       <div className="p-4 text-center"><div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto" /></div>
@@ -464,20 +471,26 @@ export default function Tarimas() {
                             <div
                               key={g.id}
                               onMouseDown={(e) => { e.preventDefault(); handleGuiaResultClick(g) }}
-                              className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-primary-50/50 cursor-pointer border-b border-warm-50 last:border-b-0 transition-colors group"
+                              className="px-3 py-2.5 hover:bg-primary-50/50 cursor-pointer border-b border-warm-50 last:border-b-0 transition-colors group"
                             >
-                              <Package className="w-4 h-4 text-primary-500 shrink-0" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-mono font-bold text-warm-800 truncate">{g.codigo_guia}</p>
-                                <div className="flex items-center gap-1 mt-0.5 text-[10px] text-warm-400">
-                                  <span className="truncate">{g.tarima_codigo}</span>
-                                  <span>·</span>
-                                  <span className="truncate">{g.empresa_nombre}</span>
-                                  <span>·</span>
-                                  <span className="text-primary-600 font-semibold shrink-0">#{g.posicion}</span>
-                                </div>
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-mono font-bold text-warm-800 truncate flex-1">{g.codigo_guia}</p>
+                                <ArrowRight className="w-3.5 h-3.5 text-warm-300 group-hover:text-primary-500 transition-colors shrink-0" />
                               </div>
-                              <ArrowRight className="w-3.5 h-3.5 text-warm-300 group-hover:text-primary-500 transition-colors shrink-0" />
+                              <div className="flex items-center gap-1.5 mt-1 text-[10px] text-warm-400 flex-wrap">
+                                <span className="font-mono text-warm-600">{g.tarima_codigo}</span>
+                                {g.folio_asignado && <>
+                                  <span>·</span>
+                                  <span className="text-primary-600 font-semibold">{g.folio_asignado}</span>
+                                </>}
+                                <span>·</span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.empresa_color || '#94a3b8' }} />
+                                  {g.empresa_nombre}
+                                </span>
+                                <span>·</span>
+                                <span>#{g.posicion}</span>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -487,6 +500,12 @@ export default function Tarimas() {
                 )}
               </AnimatePresence>
             </div>
+
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
+                <X className="w-3 h-3" />{t('common.clear')}
+              </button>
+            )}
 
             {/* Filtros toggle — same position as Folios */}
             <button
@@ -508,11 +527,6 @@ export default function Tarimas() {
             </button>
 
             <div className="ml-auto flex items-center gap-2">
-              {hasActiveFilters && (
-                <button onClick={clearFilters} className="text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors flex items-center gap-1">
-                  <X className="w-3 h-3" />{t('common.clear')}
-                </button>
-              )}
               {canExportTarimas && !selectMode && (
                 <button onClick={() => { setSelectMode(true); setSelectedIds(new Set()) }}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold bg-success-600 text-white hover:bg-success-700 rounded-xl transition-all duration-200 hover:shadow-glow hover:-translate-y-[1px] active:scale-[0.97]">
@@ -770,7 +784,7 @@ export default function Tarimas() {
                     ? <CheckCircle className="w-3.5 h-3.5 text-success-500" />
                     : <Copy className="w-3.5 h-3.5" />}
                 </button>
-                <span className={`badge text-[10px] px-2 py-0.5 ${estadoColors[getDisplayEstado(detail)] || 'bg-warm-100 text-warm-600'}`}>
+                <span className={`badge text-xs px-2.5 py-1 ${estadoColors[getDisplayEstado(detail)] || 'bg-warm-100 text-warm-600'}`}>
                   {estadoLabels[getDisplayEstado(detail)] || getDisplayEstado(detail)}
                 </span>
               </div>
@@ -779,7 +793,7 @@ export default function Tarimas() {
                   onClick={() => { setSelectedTarima(null); setEditMode(false); navigate(`/dropscan/folios?folio_id=${detail.folio_id}`) }}
                   className="text-[11px] font-semibold text-primary-600 hover:text-primary-800 hover:underline text-left leading-tight"
                 >
-                  Folio Entrega: {detail.folio_asignado}
+                  {detail.folio_asignado}
                 </button>
               )}
             </div>
@@ -816,16 +830,16 @@ export default function Tarimas() {
         ) : detail ? (
           <div className="space-y-5">
             {/* Info grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               {[
                 { icon: Package, l: t('history.company'), v: detail.empresa_nombre },
                 { icon: Package, l: t('history.channel'), v: detail.canal_nombre },
-                { icon: Package, l: t('history.operator'), v: detail.operador_nombre },
                 { icon: Package, l: t('history.guides'), v: `${detail.cantidad_guias}/100` },
+                { icon: Clock, l: t('history.duration'), v: calcDuration(detail) },
                 { icon: CheckCircle, l: t('common.status'), v: estadoLabels[detail.estado] || detail.estado },
+                { icon: Package, l: t('history.operator'), v: detail.operador_nombre },
                 { icon: Clock, l: t('history.startTime'), v: fmtDateTime(detail.fecha_inicio) },
                 { icon: Clock, l: t('history.endTime'), v: detail.fecha_cierre ? fmtDateTime(detail.fecha_cierre) : '--' },
-                { icon: Clock, l: t('history.duration'), v: calcDuration(detail) },
               ].map(f => (
                 <div key={f.l} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
                   <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{f.l}</p>
@@ -872,6 +886,15 @@ export default function Tarimas() {
                     : 'border-transparent text-warm-400 hover:text-warm-600'}`}
               >
                 <Copy className="w-3.5 h-3.5" /> {t('scan.duplicates')}
+              </button>
+              <button
+                onClick={() => setDetailTab('historial')}
+                className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5
+                  ${detailTab === 'historial'
+                    ? 'border-primary-500 text-primary-600'
+                    : 'border-transparent text-warm-400 hover:text-warm-600'}`}
+              >
+                <Clock className="w-3.5 h-3.5" /> {t('fep.detail.historial')}
               </button>
             </div>
 
@@ -1000,6 +1023,44 @@ export default function Tarimas() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab content: Historial */}
+            {detailTab === 'historial' && (
+              <div className="space-y-3">
+                {tarimaLog.length === 0 ? (
+                  <div className="p-10 text-center text-sm text-warm-400">{t('fep.detail.noHistorial')}</div>
+                ) : (
+                  <div className="space-y-1 max-h-96 overflow-y-auto scrollbar-thin pr-1">
+                    {tarimaLog.map((entry, i) => (
+                      <div key={entry.id || i} className="flex items-start gap-3">
+                        <div className="flex flex-col items-center pt-1.5 shrink-0">
+                          <div className="w-2 h-2 rounded-full bg-primary-400" />
+                          {i < tarimaLog.length - 1 && <div className="w-px flex-1 bg-warm-100 mt-1" style={{ minHeight: 20 }} />}
+                        </div>
+                        <div className="flex-1 pb-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-warm-700">{entry.action}</span>
+                            <span className="text-xs text-warm-400">{fmtDateTime(entry.timestamp)}</span>
+                            {entry.usuario_nombre && (
+                              <span className="text-xs text-warm-500 flex items-center gap-1">
+                                <Package className="w-3 h-3" /> {entry.usuario_nombre}
+                              </span>
+                            )}
+                          </div>
+                          {entry.details && (
+                            <p className="text-xs text-warm-400 mt-0.5">
+                              {typeof entry.details === 'string'
+                                ? entry.details
+                                : Object.values(entry.details).filter(Boolean).join(' · ')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

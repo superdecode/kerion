@@ -180,23 +180,28 @@ export default function Reportes() {
           <motion.div className="card p-4"
             initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-2 shrink-0">
-                <Clock className="w-3.5 h-3.5 text-warm-400" />
-                <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)}
-                  className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
-                <span className="text-warm-300 text-xs">→</span>
-                <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)}
-                  className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
+            <div className="flex flex-col gap-2">
+              {/* Row 1: date range + shortcuts */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-2 shrink-0">
+                  <Clock className="w-3.5 h-3.5 text-warm-400" />
+                  <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)}
+                    className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
+                  <span className="text-warm-300 text-xs">→</span>
+                  <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)}
+                    className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
+                </div>
+                {[
+                  { label: t('shortcut.today'), f: () => { setFechaInicio(today); setFechaFin(today) } },
+                  { label: t('shortcut.7days'), f: () => { setFechaInicio(weekAgo); setFechaFin(today) } },
+                  { label: t('shortcut.30days'), f: () => { setFechaInicio(subtractDays(today, 30)); setFechaFin(today) } },
+                ].map(({ label, f }) => (
+                  <button key={label} onClick={f}
+                    className="px-2.5 py-1.5 text-xs font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 rounded-lg transition-colors">{label}</button>
+                ))}
               </div>
-              {[
-                { label: t('shortcut.today'), f: () => { setFechaInicio(today); setFechaFin(today) } },
-                { label: t('shortcut.7days'), f: () => { setFechaInicio(weekAgo); setFechaFin(today) } },
-                { label: t('shortcut.30days'), f: () => { setFechaInicio(subtractDays(today, 30)); setFechaFin(today) } },
-              ].map(({ label, f }) => (
-                <button key={label} onClick={f}
-                  className="px-2.5 py-1.5 text-xs font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 rounded-lg transition-colors">{label}</button>
-              ))}
+              {/* Row 2: dropdowns + export */}
+              <div className="flex items-center gap-3 flex-wrap">
               <MultiSelect icon={Building2} placeholder={t('history.company')}
                 options={empresas.map(e => ({ value: e.id, label: e.nombre, color: e.color }))}
                 selected={empresaFilter} onChange={setEmpresaFilter} />
@@ -238,7 +243,8 @@ export default function Reportes() {
                   </button>
                 )}
               </div>
-            </div>
+              </div>{/* end row 2 */}
+            </div>{/* end flex-col */}
           </motion.div>
 
           {/* Tabs */}

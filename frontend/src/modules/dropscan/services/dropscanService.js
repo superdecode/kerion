@@ -42,6 +42,9 @@ export const getTarimaDetail = (id) =>
 export const getTarimaDuplicados = (id) =>
   api.get(`/dropscan/tarimas/${id}/duplicados`).then(r => r.data)
 
+export const getTarimaLog = (id) =>
+  api.get(`/dropscan/tarimas/${id}/log`).then(r => r.data)
+
 export const finalizeTarima = (id) =>
   api.post(`/dropscan/tarimas/${id}/finalize`).then(r => r.data)
 

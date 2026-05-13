@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
+import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { dateInTZ } from '../../../shared/utils/dateUtils.js'
 
@@ -226,6 +226,7 @@ router.post('/:id/finalize',
         [id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada o no está en proceso' })
+      auditLog(req, 'FINALIZAR_TARIMA', 'tarima', id, { codigo: result.rows[0].codigo })
       res.json({ success: true, tarima: result.rows[0] })
     } catch (error) {
       console.error('Finalize tarima error:', error)
@@ -248,6 +249,7 @@ router.post('/:id/cancel',
         [razon.trim(), id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada o no está en proceso' })
+      auditLog(req, 'CANCELAR_TARIMA', 'tarima', id, { codigo: result.rows[0].codigo, razon: razon.trim() })
       res.json({ success: true, tarima: result.rows[0] })
     } catch (error) {
       console.error('Cancel tarima error:', error)
@@ -268,6 +270,7 @@ router.post('/:id/reopen',
         [id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada o no está finalizada' })
+      auditLog(req, 'REABRIR_TARIMA', 'tarima', id, { codigo: result.rows[0].codigo })
       res.json({ success: true, tarima: result.rows[0] })
     } catch (error) {
       console.error('Reopen tarima error:', error)
@@ -478,6 +481,31 @@ router.delete('/:tarimaId/guias/:guiaId',
     } catch (error) {
       console.error('Delete guia from tarima error:', error)
       res.status(500).json({ error: 'Error eliminando guía' })
+    }
+  }
+)
+
+// GET /api/dropscan/tarimas/:id/log
+router.get('/:id/log',
+  authenticateToken, loadFullUser,
+  requirePermission('dropscan.tarimas', 'ver'),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+      const owns = await req.tQuery('SELECT id FROM tarimas WHERE id = $1 AND tenant_id = $2', [id, req.tenantId])
+      if (owns.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada' })
+      const result = await req.tQuery(
+        `SELECT al.id, al.action, al.details, al.created_at AS timestamp, u.nombre_completo AS usuario_nombre
+         FROM audit_log al
+         LEFT JOIN usuarios u ON u.id = al.user_id
+         WHERE al.entity_type = 'tarima' AND al.entity_id = $1
+         ORDER BY al.created_at ASC`,
+        [id]
+      )
+      res.json({ log: result.rows })
+    } catch (error) {
+      console.error('Tarima log error:', error)
+      res.status(500).json({ error: 'Error obteniendo historial' })
     }
   }
 )
