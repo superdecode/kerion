@@ -192,7 +192,7 @@ export default function Historial() {
     enabled: !!selectedTarima && detailTab === 'duplicados',
   })
 
-  const { data: logData } = useQuery({
+  const { data: logData, isPending: logPending, isError: logError } = useQuery({
     queryKey: ['dropscan-historial-tarima-log', selectedTarima],
     queryFn: () => ds.getTarimaLog(selectedTarima),
     enabled: !!selectedTarima && detailTab === 'historial',
@@ -1034,7 +1034,11 @@ export default function Historial() {
             {/* Tab content: Historial */}
             {detailTab === 'historial' && (
               <div className="space-y-3">
-                {tarimaLog.length === 0 ? (
+                {logPending ? (
+                  <LoadingSpinner text={t('common.loading')} />
+                ) : logError ? (
+                  <div className="p-8 text-center text-sm text-danger-500">{t('toast.error')}</div>
+                ) : tarimaLog.length === 0 ? (
                   <div className="p-10 text-center text-sm text-warm-400">{t('fep.detail.noHistorial')}</div>
                 ) : (
                   <div className="space-y-1 max-h-96 overflow-y-auto scrollbar-thin pr-1">

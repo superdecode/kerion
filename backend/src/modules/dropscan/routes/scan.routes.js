@@ -42,15 +42,15 @@ router.get('/guide-usage',
   }
 )
 
-// Helper: generate a unique tarima code using global MAX (not tenant-scoped)
-// so the sequence is globally unique and the UNIQUE constraint never conflicts across tenants.
-async function generateTarimaCodigo() {
+// Helper: generate a tenant-scoped tarima code.
+// Runs inside an existing transaction client so the SELECT and subsequent INSERT are atomic.
+async function generateTarimaCodigo(client, tenantId) {
   const today = getTodayMX().replace(/-/g, '')
   const prefix = `TAR-${today}-`
-  const maxRes = await query(
+  const maxRes = await client.query(
     `SELECT MAX(CAST(SPLIT_PART(codigo, '-', 3) AS INTEGER)) AS max_seq
-     FROM tarimas WHERE codigo LIKE $1`,
-    [`${prefix}%`]
+     FROM tarimas WHERE codigo LIKE $1 AND tenant_id = $2`,
+    [`${prefix}%`, tenantId]
   )
   const next = (maxRes.rows[0].max_seq || 0) + 1
   return `${prefix}${String(next).padStart(3, '0')}`
@@ -140,10 +140,10 @@ router.post('/sessions/start',
         return res.status(409).json({ error: 'Máximo 3 sesiones activas permitidas', sesion_id: existing.rows[0].id })
       }
 
-      // Generate tarima code and create tarima (retry on unique collision)
+      // Generate tarima code and create tarima (retry on unique collision within tenant)
       let tarima
       for (let attempt = 0; attempt < 5; attempt++) {
-        const tarimaCodigo = await generateTarimaCodigo()
+        const tarimaCodigo = await generateTarimaCodigo(client, req.tenantId)
         try {
           const tarimaRes = await client.query(
             `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
@@ -154,7 +154,7 @@ router.post('/sessions/start',
           tarima = tarimaRes.rows[0]
           break
         } catch (e) {
-          if (e.code === '23505' && e.constraint === 'tarimas_codigo_key' && attempt < 4) continue
+          if (e.code === '23505' && e.constraint === 'tarimas_tenant_codigo_unique' && attempt < 4) continue
           throw e
         }
       }

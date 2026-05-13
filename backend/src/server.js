@@ -323,6 +323,12 @@ async function runMigrations() {
     `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS es_admin_tenant BOOLEAN DEFAULT false`,
     // must_change_password: flag used during direct tenant creation
     `ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false`,
+    // Tenant-scoped unique codes: tarima codes and folio numbers must be unique per tenant,
+    // not globally — two different tenants may share the same code without conflict.
+    `ALTER TABLE tarimas DROP CONSTRAINT IF EXISTS tarimas_codigo_key`,
+    `ALTER TABLE tarimas ADD CONSTRAINT tarimas_tenant_codigo_unique UNIQUE (tenant_id, codigo)`,
+    `ALTER TABLE folios_entrega DROP CONSTRAINT IF EXISTS folios_entrega_folio_numero_key`,
+    `ALTER TABLE folios_entrega ADD CONSTRAINT fep_tenant_numero_unique UNIQUE (tenant_id, folio_numero)`,
   ]
   for (const sql of steps) {
     try {

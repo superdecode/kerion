@@ -1,7 +1,15 @@
 import { Router } from 'express'
+import crypto from 'crypto'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { dateInTZ, getToday, CDMX_TZ } from '../../../shared/utils/dateUtils.js'
+
+// Convert a tenant UUID to a stable int8 advisory lock key.
+function tenantLockKey(tenantId) {
+  const buf = crypto.createHash('sha256').update(tenantId).digest()
+  const val = buf.readBigUInt64BE(0) & BigInt('0x7FFFFFFFFFFFFFFF')
+  return val.toString()
+}
 
 const router = Router()
 const TZ = CDMX_TZ
@@ -230,8 +238,15 @@ router.post('/',
 
     const client = await req.tGetClient()
     try {
-      // Atomic folio number generation
-      const seqRes = await client.query(`SELECT nextval('fep_folio_seq') AS n`)
+      // Tenant-scoped folio number generation.
+      // Advisory lock serializes concurrent requests for the same tenant,
+      // preventing two transactions from selecting the same MAX before either inserts.
+      await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [tenantLockKey(req.tenantId)])
+      const seqRes = await client.query(
+        `SELECT COALESCE(MAX(CAST(SPLIT_PART(folio_numero, '-', 2) AS INTEGER)), 0) + 1 AS n
+         FROM folios_entrega WHERE tenant_id = $1`,
+        [req.tenantId]
+      )
       const n = seqRes.rows[0].n
       const folioNumero = `FEP-${String(n).padStart(5, '0')}`
 
@@ -564,7 +579,7 @@ router.get('/:id/pdf',
       // Log impresion — uses tenant-scoped tQuery so RLS applies
       await req.tQuery(
         `INSERT INTO folios_entrega_log (folio_id, accion, detalle, usuario_id, tenant_id) VALUES ($1,$2,$3,$4,$5)`,
-        [id, 'IMPRESION', JSON.stringify({ usuario: req.fullUser.nombre_completo }), req.fullUser.id, req.tenantId]
+        [id, 'IMPRESION', null, req.fullUser.id, req.tenantId]
       )
 
       const { default: PDFDocument } = await import('pdfkit')

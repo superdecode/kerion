@@ -958,13 +958,15 @@ export default function Folios() {
                               </span>
                             )}
                           </div>
-                          {entry.detalle && (
-                            <p className="text-xs text-warm-400 mt-0.5">
-                              {typeof entry.detalle === 'string'
-                                ? entry.detalle
-                                : Object.values(entry.detalle).filter(Boolean).join(' · ')}
-                            </p>
-                          )}
+                          {entry.detalle && (() => {
+                            const text = typeof entry.detalle === 'string'
+                              ? entry.detalle
+                              : Object.entries(entry.detalle)
+                                  .filter(([k, v]) => k !== 'usuario' && Boolean(v))
+                                  .map(([, v]) => v)
+                                  .join(' · ')
+                            return text ? <p className="text-xs text-warm-400 mt-0.5">{text}</p> : null
+                          })()}
                         </div>
                       </div>
                     ))}
