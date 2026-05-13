@@ -475,7 +475,15 @@ export default function Tarimas() {
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <p className="text-sm font-mono font-bold text-warm-800 truncate flex-1">{g.codigo_guia}</p>
-                                <ArrowRight className="w-3.5 h-3.5 text-warm-300 group-hover:text-primary-500 transition-colors shrink-0" />
+                                {(() => {
+                                  const ds = g.folio_asignado ? 'ENVIADA' : g.tarima_estado
+                                  return (
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${estadoColors[ds] || 'bg-warm-100 text-warm-500'}`}>
+                                      {estadoLabels[ds] || ds}
+                                    </span>
+                                  )
+                                })()}
+                                <ArrowRight className="w-3 h-3 text-warm-300 group-hover:text-primary-500 transition-colors shrink-0" />
                               </div>
                               <div className="flex items-center gap-1.5 mt-1 text-[10px] text-warm-400 flex-wrap">
                                 <span className="font-mono text-warm-600">{g.tarima_codigo}</span>

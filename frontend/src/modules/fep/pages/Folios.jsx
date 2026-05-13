@@ -940,11 +940,17 @@ export default function Folios() {
                   <div className="p-10 text-center text-sm text-warm-400">{t('fep.detail.noHistorial')}</div>
                 ) : (
                   <div className="space-y-1 max-h-96 overflow-y-auto scrollbar-thin pr-1">
-                    {detailLog.map((entry, i) => (
+                    {detailLog.filter((entry, i, arr) =>
+                      i === 0 || !(
+                        arr[i - 1].accion === entry.accion &&
+                        arr[i - 1].usuario_nombre === entry.usuario_nombre &&
+                        Math.abs(new Date(arr[i - 1].timestamp) - new Date(entry.timestamp)) < 3000
+                      )
+                    ).map((entry, i, log) => (
                       <div key={entry.id || i} className="flex items-start gap-3">
                         <div className="flex flex-col items-center pt-1.5 shrink-0">
                           <div className="w-2 h-2 rounded-full bg-primary-400" />
-                          {i < detailLog.length - 1 && <div className="w-px flex-1 bg-warm-100 mt-1" style={{ minHeight: 20 }} />}
+                          {i < log.length - 1 && <div className="w-px flex-1 bg-warm-100 mt-1" style={{ minHeight: 20 }} />}
                         </div>
                         <div className="flex-1 pb-3">
                           <div className="flex items-center gap-2 flex-wrap">

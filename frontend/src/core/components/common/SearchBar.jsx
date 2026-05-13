@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Search, X, Package, ArrowRight } from 'lucide-react'
 import api from '../../services/api'
+import { useI18nStore } from '../../stores/i18nStore'
 
 export default function SearchBar() {
   const [query, setQuery] = useState('')
@@ -13,6 +14,7 @@ export default function SearchBar() {
   const wrapperRef = useRef(null)
   const navigate = useNavigate()
   const debounceRef = useRef(null)
+  const { t } = useI18nStore()
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -81,7 +83,7 @@ export default function SearchBar() {
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onFocus={() => query.length >= 2 && results.length > 0 && setOpen(true)}
-          placeholder="Buscar guía..."
+          placeholder={t('common.searchGuide')}
           className="w-full pl-10 pr-10 py-2 text-sm bg-warm-50 border border-warm-200 rounded-xl
                      focus:bg-white focus:border-primary-400 focus:ring-2 focus:ring-primary-100
                      transition-all outline-none placeholder:text-warm-400"
@@ -106,18 +108,18 @@ export default function SearchBar() {
             {loading ? (
               <div className="p-6 text-center">
                 <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                <p className="text-xs text-warm-400">Buscando...</p>
+                <p className="text-xs text-warm-400">{t('common.loading')}</p>
               </div>
             ) : results.length === 0 ? (
               <div className="p-6 text-center">
                 <Search className="w-8 h-8 text-warm-200 mx-auto mb-2" />
-                <p className="text-xs text-warm-500 font-medium">No se encontraron guías</p>
+                <p className="text-xs text-warm-500 font-medium">{t('common.noResults')}</p>
               </div>
             ) : (
               <div>
                 <div className="px-4 py-2 border-b border-warm-100 bg-warm-50/50">
                   <p className="text-[10px] text-warm-400 font-bold uppercase tracking-wider">
-                    {results.length} resultado{results.length !== 1 ? 's' : ''}
+                    {results.length} {t('search.results')}
                   </p>
                 </div>
                 <div className="max-h-72 overflow-y-auto scrollbar-thin">
@@ -140,7 +142,7 @@ export default function SearchBar() {
                           <span className="text-warm-300 text-[10px] shrink-0">·</span>
                           <span className="text-[10px] text-warm-500 truncate">{g.empresa_nombre}</span>
                           <span className="text-warm-300 text-[10px] shrink-0">·</span>
-                          <span className="text-[10px] font-semibold text-primary-600 shrink-0">Pos #{g.posicion}</span>
+                          <span className="text-[10px] font-semibold text-primary-600 shrink-0">#{g.posicion}</span>
                         </div>
                       </div>
                       {(() => {
@@ -152,7 +154,7 @@ export default function SearchBar() {
                             : ds === 'CANCELADA'
                               ? 'bg-danger-100 text-danger-700'
                               : 'bg-warning-100 text-warning-700'
-                        const label = ds === 'ENVIADA' ? 'Enviada' : ds
+                        const label = t(`status.${ds}`) || ds
                         return (
                           <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold ${clr}`}>
                             {label}

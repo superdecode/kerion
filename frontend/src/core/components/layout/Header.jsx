@@ -12,6 +12,8 @@ import {
   Shield, Clock, Activity
 } from 'lucide-react'
 
+const DISPLAY_PARENT = { fep: 'dropscan' }
+
 export default function Header({ title, subtitle, actions, showSearch = false }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -397,33 +399,42 @@ export default function Header({ title, subtitle, actions, showSearch = false })
           </div>
 
           {/* Permissions */}
-          {user?.permisos && (
-            <div>
-              <h4 className="text-xs font-bold text-warm-400 uppercase tracking-wider mb-3">{t('profile.assignedPermissions')}</h4>
-              <div className="space-y-2">
-                {Object.entries(user.permisos).map(([mod, perms]) => (
-                  <div key={mod} className="p-3 rounded-xl border border-warm-100 bg-white">
-                    <p className="text-xs font-bold text-warm-600 uppercase mb-2">{t(`perm.mod.${mod}`)}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {typeof perms === 'object' ? Object.entries(perms).map(([sub, level]) => (
-                        <span key={sub} className={`badge text-[10px] ${
-                          level === 'eliminar' ? 'bg-primary-100 text-primary-700' :
-                          level === 'actualizar' ? 'bg-accent-100 text-accent-700' :
-                          level === 'crear' ? 'bg-success-100 text-success-700' :
-                          level === 'ver' ? 'bg-warning-100 text-warning-700' :
-                          'bg-warm-100 text-warm-500'
-                        }`}>
-                          {t(`perm.sub.${sub}`)}: {t(`perm.${level}`)}
-                        </span>
-                      )) : (
-                        <span className="badge bg-primary-100 text-primary-700 text-[10px]">{t(`perm.${perms}`)}</span>
-                      )}
+          {user?.permisos && (() => {
+            const displayPerms = Object.entries(user.permisos).reduce((acc, [mod, perms]) => {
+              const parent = DISPLAY_PARENT[mod]
+              if (parent && typeof perms === 'object') {
+                return { ...acc, [parent]: { ...(acc[parent] || {}), ...perms } }
+              }
+              return { ...acc, [mod]: perms }
+            }, {})
+            return (
+              <div>
+                <h4 className="text-xs font-bold text-warm-400 uppercase tracking-wider mb-3">{t('profile.assignedPermissions')}</h4>
+                <div className="space-y-2">
+                  {Object.entries(displayPerms).map(([mod, perms]) => (
+                    <div key={mod} className="p-3 rounded-xl border border-warm-100 bg-white">
+                      <p className="text-xs font-bold text-warm-600 uppercase mb-2">{t(`perm.mod.${mod}`)}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {typeof perms === 'object' ? Object.entries(perms).map(([sub, level]) => (
+                          <span key={sub} className={`badge text-[10px] ${
+                            level === 'eliminar' ? 'bg-primary-100 text-primary-700' :
+                            level === 'actualizar' ? 'bg-accent-100 text-accent-700' :
+                            level === 'crear' ? 'bg-success-100 text-success-700' :
+                            level === 'ver' ? 'bg-warning-100 text-warning-700' :
+                            'bg-warm-100 text-warm-500'
+                          }`}>
+                            {t(`perm.sub.${sub}`)}: {t(`perm.${level}`)}
+                          </span>
+                        )) : (
+                          <span className="badge bg-primary-100 text-primary-700 text-[10px]">{t(`perm.${perms}`)}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
       </Modal>
     </>
