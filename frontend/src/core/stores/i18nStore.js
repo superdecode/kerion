@@ -844,6 +844,35 @@ const translations = {
     'plan.renew_description': '提交续费申请，我们的团队将在24小时内与您联系。',
     'plan.request_sent': '申请已提交，我们将尽快与您联系。',
     'plan.request_renewal': '申请续费',
+
+    // No-channels warning
+    'scan.noChannelsForCompany': '该公司暂无已分配通道，请前往配置 → 通道并分配至少一个通道。',
+    'scan.goToConfig': '前往配置',
+    // Suspicious code modal
+    'scan.suspicious.title': '可疑条码',
+    'scan.suspicious.description': '此码不像是快递面单号',
+    'scan.suspicious.detail': '扫描的条码与已知追踪面单相似度较低，可能是 SKU、产品码或其他非物流相关码。',
+    'scan.suspicious.scannedCode': '扫描的码',
+    'scan.suspicious.similarity': '与快递面单的相似度',
+    'scan.suspicious.confirm': '确定要添加此记录吗？',
+    'scan.suspicious.addAnyway': '是的，仍然添加',
+    // End session modal
+    'scan.endSession.title': '结束扫描会话',
+    'scan.endSession.warning': '是否要结束此扫描会话？',
+    'scan.endSession.detail': '当前活跃托盘将被标记为已完成，时间为当前时刻。此操作不可撤销。',
+    'scan.endSession.finalized': '已完成',
+    'scan.endSession.activePallet': '当前托盘',
+    'scan.endSession.scannedGuides': '已扫描面单',
+    'scan.endSession.confirm': '结束会话',
+    // Plan limit blocking modal
+    'plan.limitTitle': '已达月度面单上限',
+    'plan.limitDesc': '您的套餐 {plan} 本月面单数已达上限。您可以继续完成已有托盘，但无法开始新的扫描会话。',
+    'plan.guidesThisMonth': '本月面单数',
+    'plan.percentUsed': '% 已用',
+    'plan.requestUpgrade': '申请升级套餐',
+    'plan.upgradeSent': '申请已发送——团队将很快与您联系',
+    'plan.sending': '发送中...',
+    'plan.logoutBtn': '退出登录',
   },
 
   es: {
@@ -1666,6 +1695,35 @@ const translations = {
     'plan.renew_description': 'Envía una solicitud de renovación y nuestro equipo te contactará en 24 horas.',
     'plan.request_sent': 'Solicitud enviada. Nos pondremos en contacto pronto.',
     'plan.request_renewal': 'Solicitar renovación',
+
+    // No-channels warning
+    'scan.noChannelsForCompany': 'Esta empresa no tiene canales asignados. Ve a Configuración → Canales y asigna al menos un canal.',
+    'scan.goToConfig': 'Ir a configuración',
+    // Suspicious code modal
+    'scan.suspicious.title': 'Código sospechoso',
+    'scan.suspicious.description': 'Este código no parece una guía de paquetería',
+    'scan.suspicious.detail': 'El código escaneado tiene baja similitud con guías de rastreo conocidas. Podría ser un SKU, código de producto u otro código no relacionado con envíos.',
+    'scan.suspicious.scannedCode': 'Código escaneado',
+    'scan.suspicious.similarity': 'Similitud con guías de paquetería',
+    'scan.suspicious.confirm': '¿Está seguro de que desea agregar este registro?',
+    'scan.suspicious.addAnyway': 'Sí, agregar de todas formas',
+    // End session modal
+    'scan.endSession.title': 'Finalizar sesión de escaneo',
+    'scan.endSession.warning': '¿Finalizar esta sesión de escaneo?',
+    'scan.endSession.detail': 'La tarima activa se marcará como FINALIZADA con la hora actual. Esta acción no se puede deshacer.',
+    'scan.endSession.finalized': 'FINALIZADA',
+    'scan.endSession.activePallet': 'Tarima activa',
+    'scan.endSession.scannedGuides': 'Guías escaneadas',
+    'scan.endSession.confirm': 'Finalizar sesión',
+    // Plan limit blocking modal
+    'plan.limitTitle': 'Límite mensual alcanzado',
+    'plan.limitDesc': 'Has alcanzado el límite de guías de tu plan {plan} para este mes. Puedes continuar completando las tarimas abiertas, pero no se pueden iniciar nuevas sesiones.',
+    'plan.guidesThisMonth': 'Guías este mes',
+    'plan.percentUsed': '% usado',
+    'plan.requestUpgrade': 'Solicitar upgrade de plan',
+    'plan.upgradeSent': 'Solicitud enviada — el equipo te contactará pronto',
+    'plan.sending': 'Enviando...',
+    'plan.logoutBtn': 'Cerrar sesión',
 
     // FEP historial actions
     'fep.log.creacion': 'Creación',

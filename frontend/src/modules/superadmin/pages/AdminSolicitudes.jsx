@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, ChevronDown, ChevronUp, Clock, Phone, Mail, Globe, Building2, RotateCcw, Calendar } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, Clock, Phone, Mail, Globe, Building2, RotateCcw, Calendar, X } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
 function fmtDateTime(iso) {
@@ -7,6 +7,15 @@ function fmtDateTime(iso) {
   return new Intl.DateTimeFormat('es-MX', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(iso))
+}
+
+function fmtDateTimeFull(iso) {
+  if (!iso) return '—'
+  return new Intl.DateTimeFormat('es-MX', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    timeZoneName: 'short',
   }).format(new Date(iso))
 }
 
@@ -22,6 +31,34 @@ function StatusBadge({ status }) {
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
       {cfg.label}
     </span>
+  )
+}
+
+function TypeBadge({ requestType }) {
+  if (requestType === 'renewal') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border bg-purple-500/15 text-purple-300 border-purple-500/25">
+        <RotateCcw className="w-3 h-3" />
+        Renovacion
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-blue-500/10 text-blue-400 border-blue-500/20">
+      Nuevo
+    </span>
+  )
+}
+
+function Field({ icon: Icon, label, value }) {
+  return (
+    <div className="flex items-start gap-2">
+      <Icon className="w-3.5 h-3.5 text-gray-500 mt-0.5 flex-shrink-0" />
+      <div className="min-w-0">
+        <p className="text-gray-500 text-xs">{label}</p>
+        <p className="text-white text-sm break-all">{value}</p>
+      </div>
+    </div>
   )
 }
 
@@ -44,7 +81,7 @@ function RejectModal({ request, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
       <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
         <h3 className="text-white font-semibold mb-1">Rechazar solicitud</h3>
         <p className="text-gray-400 text-sm mb-4">{request.organization_name} — {request.contact_email}</p>
@@ -93,7 +130,7 @@ function ApproveModal({ request, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
       <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
         {!result ? (
           <>
@@ -166,7 +203,7 @@ function RenewalRejectModal({ request, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
       <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl">
         <h3 className="text-white font-semibold mb-1">Rechazar renovacion</h3>
         <p className="text-gray-400 text-sm mb-4">{request.organization_name} — {request.contact_email}</p>
@@ -194,24 +231,164 @@ function RenewalRejectModal({ request, onClose, onDone }) {
   )
 }
 
-function TypeBadge({ requestType }) {
-  if (requestType === 'renewal') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border bg-purple-500/15 text-purple-300 border-purple-500/25">
-        <RotateCcw className="w-3 h-3" />
-        Renovacion
-      </span>
-    )
+function RequestDetailModal({ r, onClose, onRefresh }) {
+  const [modal, setModal] = useState(null)
+  const [renewalLoading, setRenewalLoading] = useState(false)
+  const isRenewal = r.request_type === 'renewal'
+
+  async function markRenewalApproved() {
+    setRenewalLoading(true)
+    try {
+      await adminApi.patch(`/signup-requests/${r.id}/status`, { status: 'approved' })
+      onRefresh()
+      onClose()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al aprobar renovacion')
+    } finally {
+      setRenewalLoading(false)
+    }
   }
+
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-blue-500/10 text-blue-400 border-blue-500/20">
-      Nuevo
-    </span>
+    <>
+      {modal === 'approve' && (
+        <ApproveModal request={r} onClose={() => setModal(null)} onDone={() => { setModal(null); onRefresh(); onClose() }} />
+      )}
+      {modal === 'reject' && (
+        <RejectModal request={r} onClose={() => setModal(null)} onDone={() => { setModal(null); onRefresh(); onClose() }} />
+      )}
+      {modal === 'renewalReject' && (
+        <RenewalRejectModal request={r} onClose={() => setModal(null)} onDone={() => { setModal(null); onRefresh(); onClose() }} />
+      )}
+
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[90vh]">
+          {/* Header */}
+          <div className="flex items-start justify-between p-6 border-b border-gray-800 flex-shrink-0">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm ${
+                isRenewal
+                  ? 'bg-purple-500/15 border border-purple-500/25 text-purple-400'
+                  : 'bg-amber-500/15 border border-amber-500/25 text-amber-400'
+              }`}>
+                {r.organization_name?.[0]?.toUpperCase() ?? '?'}
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-white font-semibold text-base">{r.organization_name}</h3>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <TypeBadge requestType={r.request_type} />
+                  <StatusBadge status={r.status} />
+                </div>
+              </div>
+            </div>
+            <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors ml-4 flex-shrink-0 p-1 rounded-lg hover:bg-gray-800">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="p-6 space-y-5 overflow-y-auto flex-1">
+            {/* Contact info */}
+            <div>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Informacion de contacto</p>
+              <div className="grid grid-cols-2 gap-3">
+                {r.contact_name && <Field icon={Building2} label="Contacto" value={r.contact_name} />}
+                <Field icon={Mail} label="Email" value={r.contact_email} />
+                <Field icon={Phone} label="Telefono" value={r.contact_phone || '—'} />
+                <Field icon={Globe} label="Pais" value={r.country || '—'} />
+              </div>
+            </div>
+
+            {/* Request details */}
+            <div>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Detalles de solicitud</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Field icon={Clock} label="Fecha y hora (con zona horaria)" value={fmtDateTimeFull(r.created_at)} />
+                </div>
+                {r.volume && <Field icon={Clock} label="Volumen estimado" value={r.volume} />}
+                {isRenewal && r.reviewed_by && <Field icon={Building2} label="Atendido por" value={r.reviewed_by} />}
+                {r.reviewed_at && (
+                  <div className="col-span-2">
+                    <Field icon={Clock} label="Revisado el" value={fmtDateTimeFull(r.reviewed_at)} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Message */}
+            {r.message && (
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Mensaje del solicitante</p>
+                <div className="bg-gray-800/50 rounded-xl p-3 text-sm text-gray-300 border border-gray-700/40 leading-relaxed">
+                  {r.message}
+                </div>
+              </div>
+            )}
+
+            {/* Renewal note */}
+            {isRenewal && r.status === 'pending' && (
+              <div className="flex items-center gap-2 p-3 bg-purple-950/30 border border-purple-800/30 rounded-xl text-sm text-purple-300">
+                <RotateCcw className="w-4 h-4 flex-shrink-0" />
+                Solicitud de renovacion — contactar al cliente para procesar el pago antes de aprobar.
+              </div>
+            )}
+
+            {/* Rejection reason */}
+            {r.rejected_reason && (
+              <div className="p-3 bg-red-950/20 border border-red-800/30 rounded-xl text-sm text-red-300">
+                <p className="text-red-400 text-xs font-medium mb-1">Motivo de rechazo</p>
+                {r.rejected_reason}
+              </div>
+            )}
+          </div>
+
+          {/* Footer actions — only for pending */}
+          {r.status === 'pending' && (
+            <div className="flex gap-3 p-6 pt-0 border-t border-gray-800 flex-shrink-0">
+              {!isRenewal ? (
+                <>
+                  <button
+                    onClick={() => setModal('reject')}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-sm rounded-lg transition-colors"
+                  >
+                    <XCircle className="w-4 h-4" /> Rechazar
+                  </button>
+                  <button
+                    onClick={() => setModal('approve')}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors font-medium ml-auto"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Aprobar y provisionar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setModal('renewalReject')}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-sm rounded-lg transition-colors"
+                  >
+                    <XCircle className="w-4 h-4" /> Rechazar
+                  </button>
+                  <button
+                    onClick={markRenewalApproved}
+                    disabled={renewalLoading}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm rounded-lg transition-colors font-medium ml-auto"
+                  >
+                    {renewalLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    Atender renovacion
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
 
 function RequestRow({ r, onRefresh }) {
-  const [expanded, setExpanded] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
   const [modal, setModal] = useState(null)
   const [renewalLoading, setRenewalLoading] = useState(false)
   const isRenewal = r.request_type === 'renewal'
@@ -230,6 +407,9 @@ function RequestRow({ r, onRefresh }) {
 
   return (
     <>
+      {detailOpen && (
+        <RequestDetailModal r={r} onClose={() => setDetailOpen(false)} onRefresh={onRefresh} />
+      )}
       {modal === 'approve' && (
         <ApproveModal request={r} onClose={() => setModal(null)} onDone={() => { setModal(null); onRefresh() }} />
       )}
@@ -240,10 +420,7 @@ function RequestRow({ r, onRefresh }) {
         <RenewalRejectModal request={r} onClose={() => setModal(null)} onDone={() => { setModal(null); onRefresh() }} />
       )}
 
-      <tr
-        className={`border-b border-gray-800 hover:bg-gray-800/30 transition-colors cursor-pointer ${isRenewal ? 'border-l-2 border-l-purple-600' : ''}`}
-        onClick={() => setExpanded(v => !v)}
-      >
+      <tr className={`border-b border-gray-800 hover:bg-gray-800/30 transition-colors ${isRenewal ? 'border-l-2 border-l-purple-600' : ''}`}>
         <td className="py-3.5 px-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 font-bold text-xs ${
@@ -269,94 +446,53 @@ function RequestRow({ r, onRefresh }) {
         <td className="py-3.5 px-4">
           <StatusBadge status={r.status} />
         </td>
-        <td className="py-3.5 px-4" onClick={e => e.stopPropagation()}>
-          {r.status === 'pending' && !isRenewal && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setModal('approve')}
-                className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg transition-colors font-medium"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" /> Aprobar
-              </button>
-              <button
-                onClick={() => setModal('reject')}
-                className="flex items-center gap-1 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-xs rounded-lg transition-colors"
-              >
-                <XCircle className="w-3.5 h-3.5" /> Rechazar
-              </button>
-            </div>
-          )}
-          {r.status === 'pending' && isRenewal && (
-            <div className="flex gap-2">
-              <button
-                onClick={markRenewalApproved}
-                disabled={renewalLoading}
-                className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs rounded-lg transition-colors font-medium"
-              >
-                {renewalLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                Atender
-              </button>
-              <button
-                onClick={() => setModal('renewalReject')}
-                className="flex items-center gap-1 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-xs rounded-lg transition-colors"
-              >
-                <XCircle className="w-3.5 h-3.5" /> Rechazar
-              </button>
-            </div>
-          )}
+        <td className="py-3.5 px-4">
+          <div className="flex items-center gap-2">
+            {r.status === 'pending' && !isRenewal && (
+              <>
+                <button
+                  onClick={() => setModal('approve')}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg transition-colors font-medium"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Aprobar
+                </button>
+                <button
+                  onClick={() => setModal('reject')}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-xs rounded-lg transition-colors"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Rechazar
+                </button>
+              </>
+            )}
+            {r.status === 'pending' && isRenewal && (
+              <>
+                <button
+                  onClick={markRenewalApproved}
+                  disabled={renewalLoading}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs rounded-lg transition-colors font-medium"
+                >
+                  {renewalLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  Atender
+                </button>
+                <button
+                  onClick={() => setModal('renewalReject')}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-xs rounded-lg transition-colors"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Rechazar
+                </button>
+              </>
+            )}
+          </div>
         </td>
         <td className="py-3.5 px-3 text-right">
-          {expanded ? <ChevronUp className="w-4 h-4 text-gray-500 inline" /> : <ChevronDown className="w-4 h-4 text-gray-500 inline" />}
+          <button
+            onClick={() => setDetailOpen(true)}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white text-xs rounded-lg transition-colors whitespace-nowrap"
+          >
+            Ver detalle
+          </button>
         </td>
       </tr>
-
-      {expanded && (
-        <tr className="bg-gray-900/50 border-b border-gray-800">
-          <td colSpan={6} className="px-5 py-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
-              {[
-                { icon: Building2, label: 'Organizacion', value: r.organization_name },
-                { icon: Mail,      label: 'Email',        value: r.contact_email },
-                { icon: Phone,     label: 'Telefono',     value: r.contact_phone || '—' },
-                { icon: Globe,     label: 'Pais',         value: r.country || '—' },
-              ].map(({ icon: Icon, label, value }) => (
-                <div key={label} className="flex items-start gap-2">
-                  <Icon className="w-3.5 h-3.5 text-gray-500 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-gray-500 text-xs">{label}</p>
-                    <p className="text-white text-sm">{value}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {r.volume && (
-              <div className="mb-2 flex items-center gap-2 text-sm text-gray-400">
-                <Clock className="w-3.5 h-3.5 text-gray-500" />
-                <span className="text-gray-500">Volumen:</span>
-                <span className="text-gray-200">{r.volume}</span>
-              </div>
-            )}
-            {r.message && (
-              <div className="bg-gray-800/50 rounded-lg p-3 mb-3 text-sm text-gray-300 border border-gray-700/40">
-                <p className="text-gray-500 text-xs mb-1">Mensaje del solicitante</p>
-                {r.message}
-              </div>
-            )}
-            {isRenewal && r.status === 'pending' && (
-              <div className="flex items-center gap-2 p-3 bg-purple-950/30 border border-purple-800/30 rounded-lg text-sm text-purple-300">
-                <RotateCcw className="w-4 h-4 flex-shrink-0" />
-                Solicitud de renovacion — contactar al cliente para procesar el pago antes de aprobar.
-              </div>
-            )}
-            {r.rejected_reason && (
-              <div className="mt-2 p-3 bg-red-950/20 border border-red-800/30 rounded-lg text-sm text-red-300">
-                <p className="text-red-400 text-xs font-medium mb-1">Motivo de rechazo</p>
-                {r.rejected_reason}
-              </div>
-            )}
-          </td>
-        </tr>
-      )}
     </>
   )
 }
@@ -421,7 +557,7 @@ export default function AdminSolicitudes() {
         </button>
       </div>
 
-      {/* Filters: search + date card + type dropdown + status pills on right */}
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
@@ -519,7 +655,7 @@ export default function AdminSolicitudes() {
                   <th className="py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Hora de solicitud</th>
                   <th className="py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Estado</th>
                   <th className="py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Acciones</th>
-                  <th className="py-3 px-3 w-8" />
+                  <th className="py-3 px-3 w-24" />
                 </tr>
               </thead>
               <tbody>

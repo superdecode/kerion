@@ -831,17 +831,16 @@ export default function Escaneo() {
           onEmpresaChange={(v) => { setPickerEmpresa(v); setPickerCanal('') }}
           onCanalChange={setPickerCanal}
           onConfirm={() => handleStartSession(false)}
-          isLoading={isStarting} t={t}
+          isLoading={isStarting} t={t} navigate={navigate}
         />
 
-        {/* Plan limit modal */}
+        {/* Plan limit modal — blocking, no close */}
         {showPlanLimitModal && (
           <PlanLimitModal
             guideUsage={guideUsage}
             user={user}
             upgradeSent={upgradeSent}
             setUpgradeSent={setUpgradeSent}
-            onClose={() => setShowPlanLimitModal(false)}
           />
         )}
 
@@ -1423,31 +1422,29 @@ export default function Escaneo() {
         const esTab = endSessionModal ? tabs.find(t => t.tabId === endSessionModal.tabId) : null
         return (
           <Modal isOpen={!!endSessionModal} onClose={() => setEndSessionModal(null)}
-            title="Finalizar sesión de escaneo" icon={Square} size="sm"
+            title={t('scan.endSession.title')} icon={Square} size="sm"
             footer={<>
-              <button onClick={() => setEndSessionModal(null)} className="btn-ghost">Cancelar</button>
+              <button onClick={() => setEndSessionModal(null)} className="btn-ghost">{t('common.cancel')}</button>
               <button onClick={handleConfirmEndSession} className="btn-danger inline-flex items-center gap-2">
-                <Square className="w-4 h-4" /> Finalizar sesión
+                <Square className="w-4 h-4" /> {t('scan.endSession.confirm')}
               </button>
             </>}>
             <div className="space-y-3">
               <div className="p-4 rounded-xl bg-warning-50 border border-warning-200 flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-warning-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-warning-800">¿Finalizar esta sesión de escaneo?</p>
-                  <p className="text-xs text-warning-700 mt-1">
-                    La tarima activa se marcará como <span className="font-bold">FINALIZADA</span> con la hora actual. Esta acción no se puede deshacer.
-                  </p>
+                  <p className="text-sm font-semibold text-warning-800">{t('scan.endSession.warning')}</p>
+                  <p className="text-xs text-warning-700 mt-1">{t('scan.endSession.detail')}</p>
                 </div>
               </div>
               {esTab?.tarima && (
                 <div className="grid grid-cols-2 gap-2">
                   <div className="p-3 rounded-xl bg-warm-50 border border-warm-100">
-                    <p className="text-[10px] text-warm-400 font-medium uppercase tracking-wider mb-0.5">Tarima activa</p>
+                    <p className="text-[10px] text-warm-400 font-medium uppercase tracking-wider mb-0.5">{t('scan.endSession.activePallet')}</p>
                     <p className="text-sm font-mono font-bold text-warm-800">{esTab.tarima.codigo}</p>
                   </div>
                   <div className="p-3 rounded-xl bg-warm-50 border border-warm-100">
-                    <p className="text-[10px] text-warm-400 font-medium uppercase tracking-wider mb-0.5">Guías escaneadas</p>
+                    <p className="text-[10px] text-warm-400 font-medium uppercase tracking-wider mb-0.5">{t('scan.endSession.scannedGuides')}</p>
                     <p className="text-sm font-bold text-warm-800">{esTab.tarima.cantidad_guias} <span className="text-warm-400 font-normal">/ {gpt}</span></p>
                   </div>
                 </div>
@@ -1459,32 +1456,29 @@ export default function Escaneo() {
 
       {/* Suspicious scan confirmation modal */}
       <Modal isOpen={!!suspiciousModal} onClose={() => setSuspiciousModal(null)}
-        title="Código sospechoso" icon={ShieldAlert} size="sm"
+        title={t('scan.suspicious.title')} icon={ShieldAlert} size="sm"
         footer={<>
-          <button onClick={() => setSuspiciousModal(null)} className="btn-ghost">Cancelar</button>
+          <button onClick={() => setSuspiciousModal(null)} className="btn-ghost">{t('common.cancel')}</button>
           <button onClick={handleConfirmSuspicious}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors">
-            <CheckCircle className="w-4 h-4" /> Sí, agregar de todas formas
+            <CheckCircle className="w-4 h-4" /> {t('scan.suspicious.addAnyway')}
           </button>
         </>}>
         <div className="space-y-3">
           <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3">
             <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-amber-900">Este código no parece una guía de paquetería</p>
-              <p className="text-xs text-amber-700 mt-1">
-                El código escaneado tiene baja similitud con guías de rastreo conocidas.
-                Podría ser un SKU, código de producto u otro código no relacionado con envíos.
-              </p>
+              <p className="text-sm font-semibold text-amber-900">{t('scan.suspicious.description')}</p>
+              <p className="text-xs text-amber-700 mt-1">{t('scan.suspicious.detail')}</p>
             </div>
           </div>
           <div className="p-3 rounded-xl bg-warm-50 border border-warm-100">
-            <p className="text-[10px] text-warm-400 font-medium uppercase tracking-wider mb-1">Código escaneado</p>
+            <p className="text-[10px] text-warm-400 font-medium uppercase tracking-wider mb-1">{t('scan.suspicious.scannedCode')}</p>
             <p className="text-sm font-mono font-bold text-warm-800 break-all">{suspiciousModal?.code}</p>
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <p className="text-xs text-warm-500 font-medium">Similitud con guías de paquetería</p>
+              <p className="text-xs text-warm-500 font-medium">{t('scan.suspicious.similarity')}</p>
               <span className={`text-xs font-bold ${suspiciousModal?.level === 'medium' ? 'text-amber-600' : 'text-danger-600'}`}>
                 {suspiciousModal?.score}%
               </span>
@@ -1494,7 +1488,7 @@ export default function Escaneo() {
                 style={{ width: `${suspiciousModal?.score || 0}%` }} />
             </div>
           </div>
-          <p className="text-xs text-warm-500 text-center">¿Está seguro de que desea agregar este registro?</p>
+          <p className="text-xs text-warm-500 text-center">{t('scan.suspicious.confirm')}</p>
         </div>
       </Modal>
 
@@ -1626,7 +1620,7 @@ export default function Escaneo() {
         onEmpresaChange={(v) => { setPickerEmpresa(v); setPickerCanal('') }}
         onCanalChange={setPickerCanal}
         onConfirm={() => handleStartSession(true)}
-        isLoading={isStarting} t={t}
+        isLoading={isStarting} t={t} navigate={navigate}
       />
 
       <Modal
@@ -1652,14 +1646,13 @@ export default function Escaneo() {
           )}
         </div>
       </Modal>
-      {/* Plan limit modal — also available in active-tabs view */}
+      {/* Plan limit modal — blocking, no close */}
       {showPlanLimitModal && (
         <PlanLimitModal
           guideUsage={guideUsage}
           user={user}
           upgradeSent={upgradeSent}
           setUpgradeSent={setUpgradeSent}
-          onClose={() => setShowPlanLimitModal(false)}
         />
       )}
     </div>
@@ -1667,8 +1660,10 @@ export default function Escaneo() {
 }
 
 /* ── plan limit blocking modal ───────────────────────── */
-function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose }) {
+function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent }) {
   const [sending, setSending] = useState(false)
+  const { t } = useI18nStore()
+  const { logout } = useAuthStore()
   const used = guideUsage?.used ?? 0
   const limit = guideUsage?.limit ?? 0
   const planName = guideUsage?.plan_name || 'Plan actual'
@@ -1705,16 +1700,16 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose
             <ShieldAlert className="w-7 h-7 text-danger-500" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-warm-800 mb-1">Limite mensual alcanzado</h3>
+            <h3 className="text-lg font-bold text-warm-800 mb-1">{t('plan.limitTitle')}</h3>
             <p className="text-sm text-warm-500 leading-relaxed">
-              Has alcanzado el limite de guias de tu plan <strong>{planName}</strong> para este mes. Puedes continuar completando las tarimas abiertas, pero no se pueden iniciar nuevas sesiones.
+              {t('plan.limitDesc').replace('{plan}', planName)}
             </p>
           </div>
 
           {/* Progress bar */}
           <div className="w-full bg-warm-50 rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between text-sm font-semibold">
-              <span className="text-warm-700">Guias este mes</span>
+              <span className="text-warm-700">{t('plan.guidesThisMonth')}</span>
               <span className="text-danger-600">{used} / {limit}</span>
             </div>
             <div className="h-3 rounded-full bg-warm-200 overflow-hidden">
@@ -1723,12 +1718,12 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <p className="text-xs text-warm-400 text-right">{pct}% usado</p>
+            <p className="text-xs text-warm-400 text-right">{pct}{t('plan.percentUsed')}</p>
           </div>
 
           {upgradeSent ? (
             <div className="flex items-center gap-2 text-success-600 text-sm font-medium bg-success-50 rounded-xl px-4 py-2.5 w-full justify-center">
-              <Zap className="w-4 h-4" /> Solicitud enviada — el equipo te contactara pronto
+              <Zap className="w-4 h-4" /> {t('plan.upgradeSent')}
             </div>
           ) : (
             <button
@@ -1737,15 +1732,15 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 btn-primary text-sm font-semibold rounded-xl disabled:opacity-60"
             >
               <Zap className="w-4 h-4" />
-              {sending ? 'Enviando...' : 'Solicitar upgrade de plan'}
+              {sending ? t('plan.sending') : t('plan.requestUpgrade')}
             </button>
           )}
 
           <button
-            onClick={onClose}
+            onClick={logout}
             className="w-full px-4 py-2.5 border border-warm-200 text-warm-600 rounded-xl text-sm font-semibold hover:bg-warm-50 transition-colors"
           >
-            Cerrar
+            {t('plan.logoutBtn')}
           </button>
         </div>
       </motion.div>
@@ -1754,7 +1749,7 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose
 }
 
 /* ── reusable empresa/canal picker modal ─────────────── */
-function EmpresaCanalModal({ isOpen, onClose, empresas, canales, empresa, canal, onEmpresaChange, onCanalChange, onConfirm, isLoading, t }) {
+function EmpresaCanalModal({ isOpen, onClose, empresas, canales, empresa, canal, onEmpresaChange, onCanalChange, onConfirm, isLoading, t, navigate }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('scan.newScanSession')} icon={ScanBarcode}
       footer={<>
@@ -1782,9 +1777,17 @@ function EmpresaCanalModal({ isOpen, onClose, empresas, canales, empresa, canal,
           {empresa && canales.length === 0 ? (
             <div className="p-3 rounded-xl bg-warning-50 border border-warning-200 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-warning-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-warning-700 font-medium">
-                Esta empresa no tiene canales asignados. Ve a <span className="font-bold">Configuración → Canales</span> y asigna al menos un canal.
-              </p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-warning-700 font-medium">{t('scan.noChannelsForCompany')}</p>
+                {navigate && (
+                  <button
+                    onClick={() => { onClose(); navigate('/dropscan/configuracion') }}
+                    className="text-xs text-warning-600 underline mt-1 hover:text-warning-800 transition-colors"
+                  >
+                    {t('scan.goToConfig')}
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <select value={canal} onChange={e => onCanalChange(e.target.value)} className="select-field" disabled={!empresa}>
