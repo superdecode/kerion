@@ -822,17 +822,27 @@ export default function Historial() {
           <LoadingSpinner text={t('common.loading')} />
         ) : detail ? (
           <div className="space-y-5">
-            {/* Info grid */}
+            {/* Info grid — row 1: empresa, canal, guías, tiempo */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { icon: Package, l: t('history.company'), v: detail.empresa_nombre },
-                { icon: Package, l: t('history.channel'), v: detail.canal_nombre },
-                { icon: Package, l: t('history.guides'), v: `${detail.cantidad_guias}/100` },
-                { icon: Clock, l: t('history.duration'), v: calcDuration(detail) },
-                { icon: CheckCircle, l: t('common.status'), v: estadoLabels[detail.estado] || detail.estado },
-                { icon: Package, l: t('history.operator'), v: detail.operador_nombre },
-                { icon: Clock, l: t('history.startTime'), v: fmtDateTime(detail.fecha_inicio) },
-                { icon: Clock, l: t('history.endTime'), v: detail.fecha_cierre ? fmtDateTime(detail.fecha_cierre) : '--' },
+                { l: t('history.company'), v: detail.empresa_nombre },
+                { l: t('history.channel'), v: detail.canal_nombre },
+                { l: t('history.guides'), v: `${detail.cantidad_guias}/100` },
+                { l: t('history.duration'), v: calcDuration(detail) },
+              ].map(f => (
+                <div key={f.l} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
+                  <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{f.l}</p>
+                  <p className="text-sm font-semibold text-warm-700">{f.v}</p>
+                </div>
+              ))}
+            </div>
+            {/* Info grid — row 2: estado, escaneador, hora inicio, hora fin */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { l: t('common.status'), v: estadoLabels[detail.estado] || detail.estado },
+                { l: t('history.operator'), v: detail.operador_nombre },
+                { l: t('history.startTime'), v: fmtDateTime(detail.fecha_inicio) },
+                { l: t('history.endTime'), v: detail.fecha_cierre ? fmtDateTime(detail.fecha_cierre) : '--' },
               ].map(f => (
                 <div key={f.l} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
                   <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{f.l}</p>

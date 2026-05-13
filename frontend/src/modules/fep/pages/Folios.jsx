@@ -940,12 +940,9 @@ export default function Folios() {
                   <div className="p-10 text-center text-sm text-warm-400">{t('fep.detail.noHistorial')}</div>
                 ) : (
                   <div className="space-y-1 max-h-96 overflow-y-auto scrollbar-thin pr-1">
-                    {detailLog.filter((entry, i, arr) =>
-                      i === 0 || !(
-                        arr[i - 1].accion === entry.accion &&
-                        arr[i - 1].usuario_nombre === entry.usuario_nombre
-                      )
-                    ).map((entry, i, log) => (
+                    {detailLog
+                      .filter((entry, i, arr) => arr.findIndex(e => e.id === entry.id) === i)
+                      .map((entry, i, log) => (
                       <div key={entry.id || i} className="flex items-start gap-3">
                         <div className="flex flex-col items-center pt-1.5 shrink-0">
                           <div className="w-2 h-2 rounded-full bg-primary-400" />
