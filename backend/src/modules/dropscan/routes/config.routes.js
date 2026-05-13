@@ -44,8 +44,9 @@ router.get('/empresas',
     try {
       const result = await req.tQuery(
         `SELECT * FROM configuraciones
-         WHERE modulo = 'dropscan' AND tipo = 'empresa'
-         ORDER BY nombre ASC`
+         WHERE modulo = 'dropscan' AND tipo = 'empresa' AND tenant_id = $1
+         ORDER BY nombre ASC`,
+        [req.tenantId]
       )
       res.json(result.rows.map(toEmpresa))
     } catch (error) {
@@ -172,8 +173,8 @@ router.get('/canales',
   async (req, res) => {
     try {
       const [canalesRes, empresasRes] = await Promise.all([
-        req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'canal' ORDER BY nombre ASC`),
-        req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa' ORDER BY nombre ASC`)
+        req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'canal' AND tenant_id = $1 ORDER BY nombre ASC`, [req.tenantId]),
+        req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa' AND tenant_id = $1 ORDER BY nombre ASC`, [req.tenantId])
       ])
       const empresasMap = Object.fromEntries(empresasRes.rows.map(e => [e.id, toEmpresa(e)]))
       res.json(canalesRes.rows.map(r => toCanal(r, empresasMap)))
@@ -218,7 +219,7 @@ router.post('/canales',
         )
       }
 
-      const empresasRes = await req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa'`)
+      const empresasRes = await req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa' AND tenant_id = $1`, [req.tenantId])
       const empresasMap = Object.fromEntries(empresasRes.rows.map(e => [e.id, toEmpresa(e)]))
       res.status(201).json(toCanal(result.rows[0], empresasMap))
     } catch (error) {
@@ -262,7 +263,7 @@ router.put('/canales/:id',
         )
       }
 
-      const empresasRes = await req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa'`)
+      const empresasRes = await req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa' AND tenant_id = $1`, [req.tenantId])
       const empresasMap = Object.fromEntries(empresasRes.rows.map(e => [e.id, toEmpresa(e)]))
       res.json(toCanal(result.rows[0], empresasMap))
     } catch (error) {
@@ -287,7 +288,7 @@ router.patch('/canales/:id/toggle',
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Canal no encontrado' })
 
-      const empresasRes = await req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa'`)
+      const empresasRes = await req.tQuery(`SELECT * FROM configuraciones WHERE modulo = 'dropscan' AND tipo = 'empresa' AND tenant_id = $1`, [req.tenantId])
       const empresasMap = Object.fromEntries(empresasRes.rows.map(e => [e.id, toEmpresa(e)]))
       res.json(toCanal(result.rows[0], empresasMap))
     } catch (error) {

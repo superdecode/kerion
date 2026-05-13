@@ -111,3 +111,6 @@ export const getCanales = () =>
 
 export const getParametros = () =>
   api.get('/dropscan/config/parametros').then(r => r.data)
+
+export const getGuideUsage = () =>
+  api.get('/dropscan/guide-usage').then(r => r.data)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as XLSX from 'xlsx'
 import Header from '../../../core/components/layout/Header'
@@ -142,10 +142,15 @@ export default function Escaneo() {
   const [pickerEmpresa, setPickerEmpresa] = useState('')
   const [pickerCanal, setPickerCanal] = useState('')
   const [isStarting, setIsStarting] = useState(false)
+  const [showNoConfigModal, setShowNoConfigModal] = useState(false)
+  const [showPlanLimitModal, setShowPlanLimitModal] = useState(false)
+  const [planLimitDismissed, setPlanLimitDismissed] = useState(false)
+  const [upgradeSent, setUpgradeSent] = useState(false)
 
   const inputRef = useRef(null)
   const scanInFlight = useRef(new Set()) // tracks tabId:code pairs currently in flight
   const location = useLocation()
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const { canDelete, canWrite, hasPermission, user } = useAuthStore()
   const toast = useToastStore.getState()
@@ -205,15 +210,24 @@ export default function Escaneo() {
     } catch { toast.error(t('toast.error')) }
   }
 
-  const { data: empresasData } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas })
-  const { data: canalesData } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales })
+  const { data: empresasData, isSuccess: empresasLoaded } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas })
+  const { data: canalesData, isSuccess: canalesLoaded } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales })
   const { data: parametrosData } = useQuery({ queryKey: ['dropscan-parametros'], queryFn: ds.getParametros })
   const gpt = parametrosData?.guias_por_tarima || 100
+  const { data: guideUsage } = useQuery({
+    queryKey: ['dropscan-guide-usage'],
+    queryFn: ds.getGuideUsage,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  })
   const empresas = (Array.isArray(empresasData) ? empresasData : empresasData?.items || empresasData?.empresas || []).filter(e => e.activo !== false)
   const allCanales = Array.isArray(canalesData) ? canalesData : canalesData?.items || canalesData?.canales || []
   const pickerCanales = pickerEmpresa
     ? allCanales.filter(c => c.activo !== false && c.empresas?.some(e => e.id === parseInt(pickerEmpresa)))
     : allCanales.filter(c => c.activo !== false)
+  const configLoaded = empresasLoaded && canalesLoaded
+  const hasNoConfig = configLoaded && (empresas.length === 0 || allCanales.filter(c => c.activo !== false).length === 0)
+  const planLimitReached = guideUsage?.at_limit === true
 
   // Today's history (shown when no tabs)
   const todayStr = getTodayDateStr()
@@ -311,6 +325,14 @@ export default function Escaneo() {
   const [authTarget, setAuthTarget] = useState('start') // 'start' or 'addTab'
 
   const handleRequestNewSession = () => {
+    if (planLimitReached) {
+      setShowPlanLimitModal(true)
+      return
+    }
+    if (hasNoConfig) {
+      setShowNoConfigModal(true)
+      return
+    }
     if (canScanDirect) {
       // actualizar+: skip PIN, start directly with own profile
       setPickerEmpresa(''); setPickerCanal(''); setShowStartModal(true)
@@ -323,6 +345,10 @@ export default function Escaneo() {
   }
 
   const handleRequestAddTab = () => {
+    if (planLimitReached) {
+      setShowPlanLimitModal(true)
+      return
+    }
     if (tabs.length >= MAX_ACTIVE_TABS) {
       toast.warning(t('scan.reopenLimitReached'))
       return
@@ -731,7 +757,19 @@ export default function Escaneo() {
               </motion.div>
               <h2 className="text-2xl font-bold text-warm-800 mb-2">{t('scan.startSession')}</h2>
               <p className="text-sm text-warm-500 mb-8 leading-relaxed">{t('scan.startDesc')}</p>
-              {canScanWithPin ? (
+              {planLimitReached ? (
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={() => setShowPlanLimitModal(true)}
+                    className="inline-flex items-center gap-2.5 px-8 py-3.5 text-base font-semibold rounded-2xl bg-danger-100 text-danger-600 cursor-not-allowed opacity-80"
+                  >
+                    <ShieldAlert className="w-5 h-5" /> Limite del plan alcanzado
+                  </button>
+                  <p className="text-xs text-warm-400">
+                    {guideUsage?.used}/{guideUsage?.limit} guias usadas este mes — <button onClick={() => setShowPlanLimitModal(true)} className="text-primary-500 underline">ver detalles</button>
+                  </p>
+                </div>
+              ) : canScanWithPin ? (
                 <motion.button onClick={handleRequestNewSession}
                   className="btn-primary inline-flex items-center gap-2.5 px-8 py-3.5 text-base shadow-glow"
                   whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
@@ -795,6 +833,53 @@ export default function Escaneo() {
           onConfirm={() => handleStartSession(false)}
           isLoading={isStarting} t={t}
         />
+
+        {/* Plan limit modal */}
+        {showPlanLimitModal && (
+          <PlanLimitModal
+            guideUsage={guideUsage}
+            user={user}
+            upgradeSent={upgradeSent}
+            setUpgradeSent={setUpgradeSent}
+            onClose={() => setShowPlanLimitModal(false)}
+          />
+        )}
+
+        {/* No-config modal: tenant has no empresas or canales configured */}
+        {showNoConfigModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+            >
+              <div className="flex flex-col items-center text-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-warning-100 flex items-center justify-center">
+                  <AlertTriangle className="w-7 h-7 text-warning-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-warm-800 mb-1">Sin empresas o canales configurados</h3>
+                  <p className="text-sm text-warm-500 leading-relaxed">
+                    Este tenant aún no tiene empresas de paquetería ni canales configurados. Un administrador debe configurarlos antes de iniciar un escaneo.
+                  </p>
+                </div>
+                <div className="flex gap-3 w-full pt-2">
+                  <button
+                    onClick={() => setShowNoConfigModal(false)}
+                    className="flex-1 px-4 py-2.5 border border-warm-200 text-warm-600 rounded-xl text-sm font-semibold hover:bg-warm-50 transition-colors"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    onClick={() => { setShowNoConfigModal(false); navigate('/configuracion') }}
+                    className="flex-1 px-4 py-2.5 btn-primary text-sm font-semibold rounded-xl"
+                  >
+                    Ir a Configuracion
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </div>
     )
   }
@@ -896,8 +981,12 @@ export default function Escaneo() {
         {tabs.length < MAX_ACTIVE_TABS && (
           <button
             onClick={handleRequestAddTab}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-sm font-semibold text-success-600 bg-success-50 hover:bg-success-100 border-2 border-transparent transition-all shrink-0"
-            title={t('scan.addPallet')}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-sm font-semibold border-2 border-transparent transition-all shrink-0 ${
+              planLimitReached
+                ? 'text-danger-400 bg-danger-50 cursor-not-allowed opacity-70'
+                : 'text-success-600 bg-success-50 hover:bg-success-100'
+            }`}
+            title={planLimitReached ? 'Limite del plan alcanzado' : t('scan.addPallet')}
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline text-xs">Nueva tab</span>
@@ -1563,6 +1652,103 @@ export default function Escaneo() {
           )}
         </div>
       </Modal>
+      {/* Plan limit modal — also available in active-tabs view */}
+      {showPlanLimitModal && (
+        <PlanLimitModal
+          guideUsage={guideUsage}
+          user={user}
+          upgradeSent={upgradeSent}
+          setUpgradeSent={setUpgradeSent}
+          onClose={() => setShowPlanLimitModal(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ── plan limit blocking modal ───────────────────────── */
+function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose }) {
+  const [sending, setSending] = useState(false)
+  const used = guideUsage?.used ?? 0
+  const limit = guideUsage?.limit ?? 0
+  const planName = guideUsage?.plan_name || 'Plan actual'
+  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 100
+
+  async function handleUpgradeRequest() {
+    setSending(true)
+    try {
+      await import('../../../core/services/api').then(m =>
+        m.default.post('/public/renewal-request', {
+          tenant_name: user?.tenant_name || '',
+          contact_name: user?.nombre_completo || '',
+          contact_email: user?.tenant_contact_email || user?.email || '',
+          current_plan: planName,
+          message: `Solicitud de upgrade — guias usadas: ${used}/${limit}`,
+        })
+      )
+      setUpgradeSent(true)
+    } catch {
+      setUpgradeSent(true)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+      >
+        <div className="flex flex-col items-center text-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-danger-100 flex items-center justify-center">
+            <ShieldAlert className="w-7 h-7 text-danger-500" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-warm-800 mb-1">Limite mensual alcanzado</h3>
+            <p className="text-sm text-warm-500 leading-relaxed">
+              Has alcanzado el limite de guias de tu plan <strong>{planName}</strong> para este mes. Puedes continuar completando las tarimas abiertas, pero no se pueden iniciar nuevas sesiones.
+            </p>
+          </div>
+
+          {/* Progress bar */}
+          <div className="w-full bg-warm-50 rounded-xl p-4 space-y-2">
+            <div className="flex items-center justify-between text-sm font-semibold">
+              <span className="text-warm-700">Guias este mes</span>
+              <span className="text-danger-600">{used} / {limit}</span>
+            </div>
+            <div className="h-3 rounded-full bg-warm-200 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-danger-400 to-danger-600 transition-all"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="text-xs text-warm-400 text-right">{pct}% usado</p>
+          </div>
+
+          {upgradeSent ? (
+            <div className="flex items-center gap-2 text-success-600 text-sm font-medium bg-success-50 rounded-xl px-4 py-2.5 w-full justify-center">
+              <Zap className="w-4 h-4" /> Solicitud enviada — el equipo te contactara pronto
+            </div>
+          ) : (
+            <button
+              onClick={handleUpgradeRequest}
+              disabled={sending}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 btn-primary text-sm font-semibold rounded-xl disabled:opacity-60"
+            >
+              <Zap className="w-4 h-4" />
+              {sending ? 'Enviando...' : 'Solicitar upgrade de plan'}
+            </button>
+          )}
+
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2.5 border border-warm-200 text-warm-600 rounded-xl text-sm font-semibold hover:bg-warm-50 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </motion.div>
     </div>
   )
 }

@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react'
 import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, ChevronDown, ChevronUp, Clock, Phone, Mail, Globe, Building2, RotateCcw, Calendar } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
+function fmtDateTime(iso) {
+  if (!iso) return '—'
+  return new Intl.DateTimeFormat('es-MX', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(iso))
+}
+
 const STATUS_CFG = {
   pending:  { label: 'Pendiente', bg: 'bg-amber-500/15',   text: 'text-amber-300',   border: 'border-amber-500/25' },
   approved: { label: 'Aprobada',  bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/25' },
@@ -202,11 +210,10 @@ function TypeBadge({ requestType }) {
   )
 }
 
-function RequestCard({ r, onRefresh }) {
+function RequestRow({ r, onRefresh }) {
   const [expanded, setExpanded] = useState(false)
   const [modal, setModal] = useState(null)
   const [renewalLoading, setRenewalLoading] = useState(false)
-  const age = Math.floor((Date.now() - new Date(r.created_at)) / 86400000)
   const isRenewal = r.request_type === 'renewal'
 
   async function markRenewalApproved() {
@@ -233,13 +240,13 @@ function RequestCard({ r, onRefresh }) {
         <RenewalRejectModal request={r} onClose={() => setModal(null)} onDone={() => { setModal(null); onRefresh() }} />
       )}
 
-      <div className={`bg-gray-900 border rounded-xl overflow-hidden transition-all ${isRenewal ? 'border-purple-800/40' : 'border-gray-800'}`}>
-        <div
-          className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-gray-800/30 transition-colors"
-          onClick={() => setExpanded(v => !v)}
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm ${
+      <tr
+        className={`border-b border-gray-800 hover:bg-gray-800/30 transition-colors cursor-pointer ${isRenewal ? 'border-l-2 border-l-purple-600' : ''}`}
+        onClick={() => setExpanded(v => !v)}
+      >
+        <td className="py-3.5 px-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 font-bold text-xs ${
               isRenewal
                 ? 'bg-purple-500/15 border border-purple-500/25 text-purple-400'
                 : 'bg-amber-500/15 border border-amber-500/25 text-amber-400'
@@ -247,22 +254,66 @@ function RequestCard({ r, onRefresh }) {
               {r.organization_name?.[0]?.toUpperCase() ?? '?'}
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-white font-medium truncate">{r.organization_name}</p>
-                <TypeBadge requestType={r.request_type} />
-              </div>
-              <p className="text-gray-400 text-xs truncate">{r.contact_email} · {age === 0 ? 'hoy' : `hace ${age}d`}</p>
+              <p className="text-white font-medium text-sm truncate">{r.organization_name}</p>
+              <TypeBadge requestType={r.request_type} />
             </div>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <StatusBadge status={r.status} />
-            {expanded ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-          </div>
-        </div>
+        </td>
+        <td className="py-3.5 px-4">
+          <p className="text-gray-300 text-sm">{r.contact_email}</p>
+          {r.contact_phone && <p className="text-gray-500 text-xs mt-0.5">{r.contact_phone}</p>}
+        </td>
+        <td className="py-3.5 px-4 whitespace-nowrap">
+          <p className="text-gray-300 text-sm">{fmtDateTime(r.created_at)}</p>
+        </td>
+        <td className="py-3.5 px-4">
+          <StatusBadge status={r.status} />
+        </td>
+        <td className="py-3.5 px-4" onClick={e => e.stopPropagation()}>
+          {r.status === 'pending' && !isRenewal && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setModal('approve')}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg transition-colors font-medium"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Aprobar
+              </button>
+              <button
+                onClick={() => setModal('reject')}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-xs rounded-lg transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" /> Rechazar
+              </button>
+            </div>
+          )}
+          {r.status === 'pending' && isRenewal && (
+            <div className="flex gap-2">
+              <button
+                onClick={markRenewalApproved}
+                disabled={renewalLoading}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs rounded-lg transition-colors font-medium"
+              >
+                {renewalLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                Atender
+              </button>
+              <button
+                onClick={() => setModal('renewalReject')}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-xs rounded-lg transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" /> Rechazar
+              </button>
+            </div>
+          )}
+        </td>
+        <td className="py-3.5 px-3 text-right">
+          {expanded ? <ChevronUp className="w-4 h-4 text-gray-500 inline" /> : <ChevronDown className="w-4 h-4 text-gray-500 inline" />}
+        </td>
+      </tr>
 
-        {expanded && (
-          <div className="px-5 pb-5 border-t border-gray-800">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 mb-4">
+      {expanded && (
+        <tr className="bg-gray-900/50 border-b border-gray-800">
+          <td colSpan={6} className="px-5 py-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
               {[
                 { icon: Building2, label: 'Organizacion', value: r.organization_name },
                 { icon: Mail,      label: 'Email',        value: r.contact_email },
@@ -279,71 +330,33 @@ function RequestCard({ r, onRefresh }) {
               ))}
             </div>
             {r.volume && (
-              <div className="mb-3 flex items-center gap-2 text-sm text-gray-400">
+              <div className="mb-2 flex items-center gap-2 text-sm text-gray-400">
                 <Clock className="w-3.5 h-3.5 text-gray-500" />
                 <span className="text-gray-500">Volumen:</span>
                 <span className="text-gray-200">{r.volume}</span>
               </div>
             )}
             {r.message && (
-              <div className="bg-gray-800/50 rounded-lg p-3 mb-4 text-sm text-gray-300 border border-gray-700/40">
+              <div className="bg-gray-800/50 rounded-lg p-3 mb-3 text-sm text-gray-300 border border-gray-700/40">
                 <p className="text-gray-500 text-xs mb-1">Mensaje del solicitante</p>
                 {r.message}
               </div>
             )}
-
-            {isRenewal && r.status === 'pending' ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 p-3 bg-purple-950/30 border border-purple-800/30 rounded-lg text-sm text-purple-300">
-                  <RotateCcw className="w-4 h-4 flex-shrink-0" />
-                  Solicitud de renovacion — contactar al cliente para procesar el pago antes de aprobar.
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={markRenewalApproved}
-                    disabled={renewalLoading}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm rounded-lg transition-colors font-medium"
-                  >
-                    {renewalLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                    {renewalLoading ? 'Guardando...' : 'Marcar atendida'}
-                  </button>
-                  <button
-                    onClick={() => setModal('renewalReject')}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-sm rounded-lg transition-colors"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Rechazar
-                  </button>
-                </div>
+            {isRenewal && r.status === 'pending' && (
+              <div className="flex items-center gap-2 p-3 bg-purple-950/30 border border-purple-800/30 rounded-lg text-sm text-purple-300">
+                <RotateCcw className="w-4 h-4 flex-shrink-0" />
+                Solicitud de renovacion — contactar al cliente para procesar el pago antes de aprobar.
               </div>
-            ) : !isRenewal && r.status === 'pending' ? (
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setModal('approve')}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition-colors font-medium"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Aprobar
-                </button>
-                <button
-                  onClick={() => setModal('reject')}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-sm rounded-lg transition-colors"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Rechazar
-                </button>
-              </div>
-            ) : null}
-
+            )}
             {r.rejected_reason && (
-              <div className="mt-3 p-3 bg-red-950/20 border border-red-800/30 rounded-lg text-sm text-red-300">
+              <div className="mt-2 p-3 bg-red-950/20 border border-red-800/30 rounded-lg text-sm text-red-300">
                 <p className="text-red-400 text-xs font-medium mb-1">Motivo de rechazo</p>
                 {r.rejected_reason}
               </div>
             )}
-          </div>
-        )}
-      </div>
+          </td>
+        </tr>
+      )}
     </>
   )
 }
@@ -368,7 +381,7 @@ export default function AdminSolicitudes() {
   function load() {
     setLoading(true)
     setError('')
-    const url = statusFilter ? `/signup-requests?status=${statusFilter}` : '/signup-requests?status=pending'
+    const url = statusFilter ? `/signup-requests?status=${statusFilter}` : '/signup-requests'
     adminApi.get(url)
       .then(r => setRequests(r.data.data))
       .catch(() => setError('Error cargando solicitudes'))
@@ -497,8 +510,22 @@ export default function AdminSolicitudes() {
         </div>
       ) : (
         <>
-          <div className="space-y-3">
-            {paginated.map(r => <RequestCard key={r.id} r={r} onRefresh={load} />)}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-gray-800 bg-gray-900/80">
+                <tr>
+                  <th className="py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Organizacion</th>
+                  <th className="py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Email</th>
+                  <th className="py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider whitespace-nowrap">Hora de solicitud</th>
+                  <th className="py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Estado</th>
+                  <th className="py-3 px-4 text-xs font-medium text-gray-400 uppercase tracking-wider">Acciones</th>
+                  <th className="py-3 px-3 w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {paginated.map(r => <RequestRow key={r.id} r={r} onRefresh={load} />)}
+              </tbody>
+            </table>
           </div>
           <div className="flex items-center justify-between pt-2">
             <p className="text-xs text-gray-500">

@@ -6,6 +6,42 @@ import { getTodayMX } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
 
+// GET /api/dropscan/guide-usage — monthly guide usage vs plan limit for this tenant
+router.get('/guide-usage',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const [planRes, usageRes] = await Promise.all([
+        query(
+          `SELECT p.guide_limit, p.name AS plan_name
+           FROM tenants t
+           LEFT JOIN plans p ON t.current_plan_id = p.id
+           WHERE t.id = $1`,
+          [req.tenantId]
+        ),
+        query(
+          `SELECT COUNT(*) AS count FROM guias
+           WHERE tenant_id = $1
+             AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)`,
+          [req.tenantId]
+        ),
+      ])
+      const guide_limit = planRes.rows[0]?.guide_limit ?? null
+      const plan_name = planRes.rows[0]?.plan_name ?? null
+      const used = parseInt(usageRes.rows[0]?.count ?? 0)
+      res.json({
+        used,
+        limit: guide_limit,
+        plan_name,
+        at_limit: guide_limit !== null && used >= guide_limit,
+      })
+    } catch (error) {
+      console.error('Guide usage error:', error)
+      res.status(500).json({ error: 'Error obteniendo uso de guias' })
+    }
+  }
+)
+
 // Helper: generate a unique tarima code using global MAX (not tenant-scoped)
 // so the sequence is globally unique and the UNIQUE constraint never conflicts across tenants.
 async function generateTarimaCodigo() {
@@ -44,6 +80,33 @@ router.post('/sessions/start',
       if (empCheck.rows.length === 0 || canCheck.rows.length === 0) {
         await client.query('ROLLBACK')
         return res.status(400).json({ error: 'Empresa o canal no encontrado' })
+      }
+
+      // Check monthly guide limit against active plan
+      const planLimitRes = await query(
+        `SELECT p.guide_limit FROM tenants t
+         LEFT JOIN plans p ON t.current_plan_id = p.id
+         WHERE t.id = $1`,
+        [req.tenantId]
+      )
+      const guideLimit = planLimitRes.rows[0]?.guide_limit ?? null
+      if (guideLimit !== null) {
+        const monthUsageRes = await query(
+          `SELECT COUNT(*) AS count FROM guias
+           WHERE tenant_id = $1
+             AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)`,
+          [req.tenantId]
+        )
+        const used = parseInt(monthUsageRes.rows[0]?.count ?? 0)
+        if (used >= guideLimit) {
+          await client.query('ROLLBACK')
+          return res.status(402).json({
+            error: 'Limite de guias del plan alcanzado',
+            code: 'PLAN_LIMIT_REACHED',
+            used,
+            limit: guideLimit,
+          })
+        }
       }
 
       // Auto-close stale sessions older than 24h to prevent orphans

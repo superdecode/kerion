@@ -156,14 +156,13 @@ router.get('/debug', async (req, res) => {
 
 // ── Signup Requests ────────────────────────────────────────────────────────────
 
-// GET /api/admin/signup-requests?status=pending
+// GET /api/admin/signup-requests?status=pending|approved|rejected (omit for all)
 router.get('/signup-requests', authenticateAdmin, async (req, res) => {
   try {
-    const status = req.query.status || 'pending'
-    const result = await query(
-      `SELECT * FROM tenant_signup_requests WHERE status = $1 ORDER BY created_at DESC`,
-      [status]
-    )
+    const { status } = req.query
+    const result = status
+      ? await query(`SELECT * FROM tenant_signup_requests WHERE status = $1 ORDER BY created_at DESC`, [status])
+      : await query(`SELECT * FROM tenant_signup_requests ORDER BY created_at DESC`)
     res.json({ success: true, data: result.rows })
   } catch (err) {
     console.error('[admin/signup-requests]', err)

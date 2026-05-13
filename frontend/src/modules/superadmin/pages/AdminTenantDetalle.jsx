@@ -625,11 +625,6 @@ function SubscriptionHistoryModal({ subscriptions, onClose, zona_horaria }) {
           </div>
         </div>
 
-        <div className="px-6 pb-6 pt-4 flex justify-end border-t border-gray-800/60">
-          <button onClick={onClose} className="px-6 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors">
-            Cerrar
-          </button>
-        </div>
       </div>
     </div>
   )
