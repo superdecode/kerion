@@ -792,6 +792,11 @@ const translations = {
     'fep.log.adicion_tarima': '添加托盘',
     'fep.log.eliminacion_tarima': '移除托盘',
 
+    // Tarima audit actions
+    'tarima.log.finalizar_tarima': '完成托盘',
+    'tarima.log.cancelar_tarima': '取消托盘',
+    'tarima.log.reabrir_tarima': '重新开放托盘',
+
     // MultiSelect
     'multiselect.todos': '全选',
     'multiselect.limpiar': '清除',
@@ -1669,6 +1674,11 @@ const translations = {
     'fep.log.eliminacion': 'Eliminación',
     'fep.log.adicion_tarima': 'Tarima añadida',
     'fep.log.eliminacion_tarima': 'Tarima removida',
+
+    // Tarima audit actions
+    'tarima.log.finalizar_tarima': 'Tarima finalizada',
+    'tarima.log.cancelar_tarima': 'Tarima cancelada',
+    'tarima.log.reabrir_tarima': 'Tarima reabierta',
   },
 }
 

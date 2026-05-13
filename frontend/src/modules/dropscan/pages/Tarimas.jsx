@@ -16,7 +16,7 @@ import { fmtTime, fmtTimeShort, fmtDate, fmtDateTime, getToday, subtractDays } f
 import {
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Eye, Trash2, Search, Download,
   Package, Clock, CheckCircle, ArrowUpDown, ArrowUp, ArrowDown, X,
-  RotateCcw, AlertTriangle, Copy, Pencil, Building2, Radio, Lock, Plus, ArrowRight, Filter
+  RotateCcw, AlertTriangle, Copy, Pencil, Building2, Radio, Lock, Plus, ArrowRight, Filter, User
 } from 'lucide-react'
 
 const calcDuration = (tarima) => {
@@ -1051,11 +1051,13 @@ export default function Tarimas() {
                         </div>
                         <div className="flex-1 pb-3">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold text-warm-700">{entry.action}</span>
+                            <span className="text-sm font-semibold text-warm-700">
+                              {t(`tarima.log.${entry.action?.toLowerCase()}`)}
+                            </span>
                             <span className="text-xs text-warm-400">{fmtDateTime(entry.timestamp)}</span>
                             {entry.usuario_nombre && (
                               <span className="text-xs text-warm-500 flex items-center gap-1">
-                                <Package className="w-3 h-3" /> {entry.usuario_nombre}
+                                <User className="w-3 h-3" /> {entry.usuario_nombre}
                               </span>
                             )}
                           </div>

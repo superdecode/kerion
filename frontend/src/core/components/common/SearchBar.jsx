@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, X, Package, ArrowRight } from 'lucide-react'
+import { Search, X, ArrowRight } from 'lucide-react'
 import api from '../../services/api'
 import { useI18nStore } from '../../stores/i18nStore'
 
@@ -73,7 +73,7 @@ export default function SearchBar() {
   }
 
   return (
-    <div ref={wrapperRef} className="relative w-full max-w-[538px]">
+    <div ref={wrapperRef} className="relative w-full max-w-[645px]">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
         <input
@@ -130,38 +130,43 @@ export default function SearchBar() {
                       animate={{ opacity: 1 }}
                       transition={{ delay: i * 0.02 }}
                       onMouseDown={(e) => { e.preventDefault(); handleResultClick(g) }}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-primary-50/50 cursor-pointer border-b border-warm-50 last:border-b-0 transition-colors group"
+                      className="px-4 py-2.5 hover:bg-primary-50/50 cursor-pointer border-b border-warm-50 last:border-b-0 transition-colors group"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-primary-100 text-primary-600 flex items-center justify-center shrink-0">
-                        <Package className="w-4 h-4" />
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-mono font-bold text-warm-800 truncate flex-1">{g.codigo_guia}</p>
+                        {(() => {
+                          const ds = g.folio_asignado ? 'ENVIADA' : g.tarima_estado
+                          const clr = ds === 'ENVIADA'
+                            ? 'bg-accent-100 text-accent-700'
+                            : ds === 'FINALIZADA'
+                              ? 'bg-success-100 text-success-700'
+                              : ds === 'CANCELADA'
+                                ? 'bg-danger-100 text-danger-700'
+                                : 'bg-warning-100 text-warning-700'
+                          return (
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${clr}`}>
+                              {t(`status.${ds}`) || ds}
+                            </span>
+                          )
+                        })()}
+                        <ArrowRight className="w-3 h-3 text-warm-300 group-hover:text-primary-500 transition-colors shrink-0" />
                       </div>
-                      <div className="flex-1 min-w-0 overflow-hidden">
-                        <p className="text-sm font-mono font-bold text-warm-800 truncate">{g.codigo_guia}</p>
-                        <div className="flex items-center gap-1 mt-0.5 overflow-hidden whitespace-nowrap">
-                          <span className="text-[10px] text-warm-500 truncate max-w-[80px]">{g.tarima_codigo}</span>
-                          <span className="text-warm-300 text-[10px] shrink-0">·</span>
-                          <span className="text-[10px] text-warm-500 truncate">{g.empresa_nombre}</span>
-                          <span className="text-warm-300 text-[10px] shrink-0">·</span>
-                          <span className="text-[10px] font-semibold text-primary-600 shrink-0">#{g.posicion}</span>
-                        </div>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-warm-400 flex-wrap">
+                        <span className="font-mono text-warm-600">{g.tarima_codigo}</span>
+                        {g.folio_asignado && (
+                          <>
+                            <span>·</span>
+                            <span className="text-primary-600 font-semibold">{g.folio_asignado}</span>
+                          </>
+                        )}
+                        <span>·</span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.empresa_color || '#94a3b8' }} />
+                          {g.empresa_nombre}
+                        </span>
+                        <span>·</span>
+                        <span>#{g.posicion}</span>
                       </div>
-                      {(() => {
-                        const ds = g.folio_asignado ? 'ENVIADA' : g.tarima_estado
-                        const clr = ds === 'ENVIADA'
-                          ? 'bg-accent-100 text-accent-700'
-                          : ds === 'FINALIZADA'
-                            ? 'bg-success-100 text-success-700'
-                            : ds === 'CANCELADA'
-                              ? 'bg-danger-100 text-danger-700'
-                              : 'bg-warning-100 text-warning-700'
-                        const label = t(`status.${ds}`) || ds
-                        return (
-                          <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold ${clr}`}>
-                            {label}
-                          </span>
-                        )
-                      })()}
-                      <ArrowRight className="w-3.5 h-3.5 text-warm-300 group-hover:text-primary-500 transition-colors shrink-0" />
                     </motion.div>
                   ))}
                 </div>
