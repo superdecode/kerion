@@ -40,22 +40,40 @@ function isAllowedDevOrigin(origin) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
 }
 
+function isAllowedOrigin(origin) {
+  if (!origin) return true
+
+  // Explicit allowlist from env (comma-separated)
+  const allowedOrigins = new Set(
+    String(env.CORS_ORIGIN || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+  )
+  if (allowedOrigins.has(origin)) return true
+
+  // Dev: allow localhost
+  if (env.NODE_ENV !== 'production' && isAllowedDevOrigin(origin)) return true
+
+  // Allow any subdomain of TENANT_BASE_DOMAIN (wildcard tenant subdomains)
+  try {
+    const { hostname, protocol } = new URL(origin)
+    const baseDomain = env.TENANT_BASE_DOMAIN
+    if (
+      protocol === 'https:' &&
+      (hostname === baseDomain || hostname.endsWith(`.${baseDomain}`))
+    ) return true
+  } catch {}
+
+  return false
+}
+
 // Security
 app.use(helmet())
 app.use(cors({
   origin(origin, callback) {
-    if (!origin) return callback(null, true)
-
-    const allowedOrigins = new Set(
-      String(env.CORS_ORIGIN || '')
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean)
-    )
-
-    if (allowedOrigins.has(origin)) return callback(null, true)
-    if (env.NODE_ENV !== 'production' && isAllowedDevOrigin(origin)) return callback(null, true)
-
+    if (isAllowedOrigin(origin)) return callback(null, true)
+    console.warn(`[CORS] blocked origin: ${origin}`)
     return callback(new Error(`CORS blocked for origin: ${origin}`))
   },
   credentials: true,

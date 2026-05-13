@@ -21,7 +21,9 @@ function normalizePermisos(obj) {
 const router = Router()
 
 async function resolveTenantIdFromRequest(req) {
-  const host = req.headers['host'] || ''
+  // x-forwarded-host takes priority (Vercel sets this to the public hostname)
+  const rawHost = req.headers['x-forwarded-host'] || req.headers['host'] || ''
+  const host = rawHost.split(',')[0].trim()
   const baseDomain = env.TENANT_BASE_DOMAIN
   const withoutPort = host.split(':')[0]
 
@@ -32,27 +34,30 @@ async function resolveTenantIdFromRequest(req) {
     slug = req.headers['x-tenant-slug']
   }
 
+  console.log('[auth/login] host=' + host + ' baseDomain=' + baseDomain + ' slug=' + (slug || '(none)'))
+
   if (slug) {
     const res = await query(
-      'SELECT id, status FROM tenants WHERE slug = $1 LIMIT 1',
+      'SELECT id, slug, status FROM tenants WHERE slug = $1 LIMIT 1',
       [slug]
     )
+    console.log(`[auth/login] tenant query rows=${res.rows.length}`)
     if (res.rows.length === 0) return null
     const tenant = res.rows[0]
     if (['suspended', 'rejected', 'pending'].includes(tenant.status)) return { blocked: true, status: tenant.status }
-    return { id: tenant.id, status: tenant.status }
+    return { id: tenant.id, slug: tenant.slug, status: tenant.status }
   }
 
   // Fallback: no subdomain — use legacy tenant (single-tenant production or local dev)
   if (env.LEGACY_TENANT_ID) {
     const res = await query(
-      'SELECT id, status FROM tenants WHERE id = $1 LIMIT 1',
+      'SELECT id, slug, status FROM tenants WHERE id = $1 LIMIT 1',
       [env.LEGACY_TENANT_ID]
     )
     if (res.rows.length === 0) return null
     const tenant = res.rows[0]
     if (['suspended', 'rejected', 'pending'].includes(tenant.status)) return { blocked: true, status: tenant.status }
-    return { id: tenant.id, status: tenant.status }
+    return { id: tenant.id, slug: tenant.slug, status: tenant.status }
   }
 
   return null

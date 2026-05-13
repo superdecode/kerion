@@ -8,25 +8,28 @@ const BLOCKED_STATUSES = new Set(['suspended', 'rejected', 'pending'])
 
 function extractSlugFromHost(host) {
   if (!host) return null
-  const baseDomain = env.TENANT_BASE_DOMAIN // e.g. 'kerion.app'
+  const baseDomain = env.TENANT_BASE_DOMAIN
   const withoutPort = host.split(':')[0]
 
-  // e.g. 'acme.kerion.app' -> 'acme'
   if (withoutPort.endsWith(`.${baseDomain}`)) {
     return withoutPort.slice(0, -(baseDomain.length + 1))
   }
 
-  // Local dev: allow X-Tenant-Slug header override
   return null
 }
 
 // Applies to all /api/* routes except /api/auth, /api/public, /api/admin, /api/health, /api/cron
 export async function tenantContext(req, res, next) {
-  const host = req.headers['host'] || ''
+  // x-forwarded-host takes priority (Vercel and other reverse proxies set this to the public hostname)
+  const rawHost = req.headers['x-forwarded-host'] || req.headers['host'] || ''
+  const host = rawHost.split(',')[0].trim()
+
   // Allow slug override via header in development
   const slug =
     extractSlugFromHost(host) ||
     (env.NODE_ENV !== 'production' ? req.headers['x-tenant-slug'] : null)
+
+  console.log('[tenantContext] host=' + host + ' baseDomain=' + env.TENANT_BASE_DOMAIN + ' slug=' + (slug || '(none)'))
 
   // Fallback: no subdomain — use legacy tenant (single-domain production or local dev)
   const useDevFallback = !slug && !!env.LEGACY_TENANT_ID
