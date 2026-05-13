@@ -260,6 +260,9 @@ router.get('/tenants', authenticateAdmin, async (req, res) => {
              (SELECT COUNT(*) FROM usuarios u WHERE u.tenant_id = t.id) as user_count,
              (SELECT MAX(u.ultimo_acceso) FROM usuarios u WHERE u.tenant_id = t.id) as last_access,
              (SELECT COUNT(*) FROM guias g WHERE g.tenant_id = t.id) as guias_count,
+             (SELECT COUNT(*) FROM guias g
+              WHERE g.tenant_id = t.id
+                AND DATE_TRUNC('month', g.created_at) = DATE_TRUNC('month', CURRENT_DATE)) as guias_this_month,
              (SELECT s2.expires_at FROM subscriptions s2
               WHERE s2.tenant_id = t.id AND s2.status = 'active'
                 AND (s2.expires_at IS NULL OR s2.expires_at >= now())
@@ -268,7 +271,12 @@ router.get('/tenants', authenticateAdmin, async (req, res) => {
               JOIN plans p2 ON p2.id = s2.plan_id
               WHERE s2.tenant_id = t.id AND s2.status = 'active'
                 AND (s2.expires_at IS NULL OR s2.expires_at >= now())
-              ORDER BY s2.expires_at DESC LIMIT 1) as active_plan_name
+              ORDER BY s2.expires_at DESC LIMIT 1) as active_plan_name,
+             (SELECT p2.guide_limit FROM subscriptions s2
+              JOIN plans p2 ON p2.id = s2.plan_id
+              WHERE s2.tenant_id = t.id AND s2.status = 'active'
+                AND (s2.expires_at IS NULL OR s2.expires_at >= now())
+              ORDER BY s2.expires_at DESC LIMIT 1) as active_plan_guide_limit
       FROM tenants t
       LEFT JOIN plans p ON t.current_plan_id = p.id
     `

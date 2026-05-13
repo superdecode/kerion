@@ -834,13 +834,14 @@ export default function Escaneo() {
           isLoading={isStarting} t={t} navigate={navigate}
         />
 
-        {/* Plan limit modal — blocking, no close */}
+        {/* Plan limit modal */}
         {showPlanLimitModal && (
           <PlanLimitModal
             guideUsage={guideUsage}
             user={user}
             upgradeSent={upgradeSent}
             setUpgradeSent={setUpgradeSent}
+            onClose={() => setShowPlanLimitModal(false)}
           />
         )}
 
@@ -1646,13 +1647,14 @@ export default function Escaneo() {
           )}
         </div>
       </Modal>
-      {/* Plan limit modal — blocking, no close */}
+      {/* Plan limit modal */}
       {showPlanLimitModal && (
         <PlanLimitModal
           guideUsage={guideUsage}
           user={user}
           upgradeSent={upgradeSent}
           setUpgradeSent={setUpgradeSent}
+          onClose={() => setShowPlanLimitModal(false)}
         />
       )}
     </div>
@@ -1660,14 +1662,27 @@ export default function Escaneo() {
 }
 
 /* ── plan limit blocking modal ───────────────────────── */
-function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent }) {
+const UPGRADE_KEY = 'kirion_upgrade_req'
+const todayStr = () => new Date().toISOString().slice(0, 10)
+
+function getPreviousRequest() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(UPGRADE_KEY) || 'null')
+    if (stored?.date === todayStr()) return stored
+  } catch {}
+  return null
+}
+
+function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose }) {
   const [sending, setSending] = useState(false)
+  const [prevReq] = useState(getPreviousRequest)
   const { t } = useI18nStore()
   const { logout } = useAuthStore()
   const used = guideUsage?.used ?? 0
   const limit = guideUsage?.limit ?? 0
   const planName = guideUsage?.plan_name || 'Plan actual'
   const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 100
+  const alreadySentToday = !!prevReq || upgradeSent
 
   async function handleUpgradeRequest() {
     setSending(true)
@@ -1676,11 +1691,19 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent }) {
         m.default.post('/public/renewal-request', {
           tenant_name: user?.tenant_name || '',
           contact_name: user?.nombre_completo || '',
-          contact_email: user?.tenant_contact_email || user?.email || '',
+          contact_email: user?.email || '',
           current_plan: planName,
           message: `Solicitud de upgrade — guias usadas: ${used}/${limit}`,
         })
       )
+      const reqData = {
+        date: todayStr(),
+        email: user?.email || '',
+        name: user?.nombre_completo || '',
+        plan: planName,
+        sentAt: new Date().toISOString(),
+      }
+      localStorage.setItem(UPGRADE_KEY, JSON.stringify(reqData))
       setUpgradeSent(true)
     } catch {
       setUpgradeSent(true)
@@ -1693,8 +1716,16 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent }) {
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-        className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative"
       >
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1.5 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
         <div className="flex flex-col items-center text-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-danger-100 flex items-center justify-center">
             <ShieldAlert className="w-7 h-7 text-danger-500" />
@@ -1721,9 +1752,21 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent }) {
             <p className="text-xs text-warm-400 text-right">{pct}{t('plan.percentUsed')}</p>
           </div>
 
-          {upgradeSent ? (
-            <div className="flex items-center gap-2 text-success-600 text-sm font-medium bg-success-50 rounded-xl px-4 py-2.5 w-full justify-center">
-              <Zap className="w-4 h-4" /> {t('plan.upgradeSent')}
+          {alreadySentToday ? (
+            <div className="w-full space-y-2">
+              <div className="flex items-center gap-2 text-success-600 text-sm font-medium bg-success-50 rounded-xl px-4 py-2.5 w-full justify-center">
+                <Zap className="w-4 h-4" /> {t('plan.upgradeSent')}
+              </div>
+              <div className="bg-warm-50 border border-warm-100 rounded-xl px-4 py-3 text-left space-y-1 text-xs text-warm-600">
+                <p><span className="font-medium text-warm-700">{prevReq?.name || user?.nombre_completo || '—'}</span></p>
+                <p>{prevReq?.email || user?.email || '—'}</p>
+                <p>{prevReq?.plan || planName}</p>
+                {prevReq?.sentAt && (
+                  <p className="text-warm-400">
+                    {new Date(prevReq.sentAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+              </div>
             </div>
           ) : (
             <button

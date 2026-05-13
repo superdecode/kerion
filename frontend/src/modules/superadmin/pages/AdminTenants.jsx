@@ -196,7 +196,13 @@ export default function AdminTenants() {
                     <td className="px-4 py-4 hidden xl:table-cell">
                       <div className="flex items-center gap-1.5 text-gray-400">
                         <Zap className="w-3.5 h-3.5" />
-                        <span>{Number(t.guias_count ?? 0).toLocaleString()}</span>
+                        <span>
+                          {Number(t.guias_this_month ?? 0).toLocaleString()}
+                          {' / '}
+                          <span className="text-gray-600">
+                            {t.active_plan_guide_limit != null ? Number(t.active_plan_guide_limit).toLocaleString() : '∞'}
+                          </span>
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-4 hidden xl:table-cell">
