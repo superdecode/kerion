@@ -9,8 +9,10 @@ import api from '../../services/api'
 import { useToastStore } from '../../stores/toastStore'
 import {
   Search, X, User, LogOut, Key, Settings, Globe, ChevronDown,
-  Shield, Clock, Activity
+  Shield, Clock, Activity, HelpCircle
 } from 'lucide-react'
+import { useTourStore } from '../../stores/tourStore'
+import { tourHelpVisible } from './OnboardingTour'
 
 const DISPLAY_PARENT = { fep: 'dropscan' }
 
@@ -25,6 +27,8 @@ export default function Header({ title, subtitle, actions, showSearch = false })
   const [changePassSuccess, setChangePassSuccess] = useState(false)
   const { user, logout, updateTimezone } = useAuthStore()
   const { locale, setLocale, t } = useI18nStore()
+  const triggerTour = useTourStore((s) => s.trigger)
+  const showTourHelp = tourHelpVisible(user?.id)
   const [savingTz, setSavingTz] = useState(false)
   const navigate = useNavigate()
   const menuRef = useRef(null)
@@ -397,6 +401,23 @@ export default function Header({ title, subtitle, actions, showSearch = false })
               </select>
             </div>
           </div>
+
+          {/* Tour help */}
+          {showTourHelp && (
+            <button
+              onClick={() => {
+                if (window.confirm(t('tour.help_confirm'))) {
+                  setProfileOpen(false)
+                  triggerTour()
+                }
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-primary-700
+                         bg-primary-50 hover:bg-primary-100 border border-primary-100 transition-all"
+            >
+              <HelpCircle className="w-4 h-4 flex-shrink-0" />
+              {t('tour.help')}
+            </button>
+          )}
 
           {/* Permissions */}
           {user?.permisos && (() => {

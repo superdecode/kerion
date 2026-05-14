@@ -20,18 +20,18 @@ const getNavItems = (t) => [
     id: 'dropscan',
     label: 'DropScan',
     items: [
-      { path: '/dropscan',              label: t('nav.dashboard'),     icon: LayoutDashboard, permission: 'dropscan.dashboard' },
-      { path: '/dropscan/escaneo',      label: t('nav.scanning'),      icon: ScanBarcode,     permission: 'dropscan.escaneo' },
-      { path: '/dropscan/historial',    label: t('nav.history'),       icon: History,         permission: 'dropscan.historial' },
-      { path: '/dropscan/folios',       label: t('nav.fep'),           icon: FileText,        permission: 'fep.folios' },
-      { path: '/dropscan/reportes',     label: t('nav.reports'),       icon: BarChart3,       permission: 'dropscan.reportes' },
-      { path: '/dropscan/configuracion',label: t('nav.configuration'), icon: Settings,        permission: 'dropscan.configuracion' },
+      { path: '/dropscan',              tourId: 'nav-dashboard',      label: t('nav.dashboard'),     icon: LayoutDashboard, permission: 'dropscan.dashboard' },
+      { path: '/dropscan/escaneo',      tourId: 'nav-escaneo',        label: t('nav.scanning'),      icon: ScanBarcode,     permission: 'dropscan.escaneo' },
+      { path: '/dropscan/historial',    tourId: 'nav-historial',      label: t('nav.history'),       icon: History,         permission: 'dropscan.historial' },
+      { path: '/dropscan/folios',       tourId: 'nav-folios',         label: t('nav.fep'),           icon: FileText,        permission: 'fep.folios' },
+      { path: '/dropscan/reportes',     tourId: 'nav-reportes',       label: t('nav.reports'),       icon: BarChart3,       permission: 'dropscan.reportes' },
+      { path: '/dropscan/configuracion',tourId: 'nav-configuracion',  label: t('nav.configuration'), icon: Settings,        permission: 'dropscan.configuracion' },
     ],
   },
 ]
 
 const getAdminNav = (t) => [
-  { path: '/admin', label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
+  { path: '/admin', tourId: 'nav-admin', label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
 ]
 
 export default function Sidebar() {
@@ -62,6 +62,7 @@ export default function Sidebar() {
         key={item.path}
         to={item.path}
         end={item.path === '/dropscan'}
+        data-tour={item.tourId}
         className={({ isActive }) =>
           `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
             isActive
@@ -107,7 +108,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+      <nav data-tour="sidebar" className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         {navItems.map((group) => {
           const visibleItems = group.items.filter(item => canView(item.permission))
           if (visibleItems.length === 0) return null

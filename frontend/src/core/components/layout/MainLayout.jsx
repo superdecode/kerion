@@ -3,6 +3,7 @@ import Sidebar from './Sidebar'
 import Toast from '../common/Toast'
 import ConnectionBanner from '../common/ConnectionBanner'
 import SubscriptionGuard from '../common/SubscriptionGuard'
+import OnboardingTour from './OnboardingTour'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { usePermissionSync } from '../../hooks/usePermissionSync'
 
@@ -22,6 +23,7 @@ export default function MainLayout() {
         </SubscriptionGuard>
       </div>
       <Toast />
+      <OnboardingTour />
     </div>
   )
 }
