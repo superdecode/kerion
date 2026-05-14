@@ -69,7 +69,7 @@ export default function SearchBar() {
     setOpen(false)
     setQuery('')
     setResults([])
-    navigate(`/dropscan/tarimas?search=${encodeURIComponent(guia.codigo_guia)}&tarima_id=${guia.tarima_id}&highlight_guia=${encodeURIComponent(guia.codigo_guia)}`)
+    navigate(`/dropscan/historial?tarima_id=${guia.tarima_id}&highlight_guia=${encodeURIComponent(guia.codigo_guia)}`)
   }
 
   return (

@@ -249,6 +249,21 @@ router.patch('/signup-requests/:id/status', authenticateAdmin, async (req, res) 
   }
 })
 
+// DELETE /api/admin/signup-requests/:id
+router.delete('/signup-requests/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const reqRes = await query('SELECT id FROM tenant_signup_requests WHERE id = $1 LIMIT 1', [id])
+    if (reqRes.rows.length === 0) return res.status(404).json({ error: 'Solicitud no encontrada' })
+    await query('DELETE FROM tenant_signup_requests WHERE id = $1', [id])
+    adminAudit(req.admin.id, 'DELETE_SIGNUP_REQUEST', 'tenant_signup_request', id, null)
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[admin/signup-requests DELETE]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
 // ── Tenants ────────────────────────────────────────────────────────────────────
 
 // GET /api/admin/tenants?status=trial
@@ -856,7 +871,13 @@ router.patch('/subscriptions/:id', authenticateAdmin, async (req, res) => {
     let expiresAtUtc = undefined
     if (expires_at !== undefined && expires_at !== null) {
       const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(expires_at)
-      expiresAtUtc = isDateOnly ? endOfDayInTimezone(expires_at, tz) : new Date(expires_at)
+      if (isDateOnly) {
+        expiresAtUtc = endOfDayInTimezone(expires_at, tz)
+      } else {
+        // Treat datetime strings without timezone offset as UTC (form shows/edits UTC values)
+        const hasOffset = expires_at.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(expires_at)
+        expiresAtUtc = new Date(hasOffset ? expires_at : expires_at + 'Z')
+      }
     }
 
     await query(

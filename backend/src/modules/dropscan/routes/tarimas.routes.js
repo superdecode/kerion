@@ -496,24 +496,22 @@ router.get('/:id/log',
       const numId = parseInt(id, 10)
       if (isNaN(numId)) return res.status(400).json({ error: 'ID inválido' })
 
-      // Verify tarima belongs to this tenant via empresa (configuraciones is tenant-scoped)
+      // RLS scopes tarimas to the current tenant automatically via app.tenant_id
       const owns = await req.tQuery(
-        `SELECT t.id FROM tarimas t
-         JOIN configuraciones c ON c.id = t.empresa_id AND c.tenant_id = $2
-         WHERE t.id = $1`,
-        [numId, req.tenantId]
+        `SELECT id FROM tarimas WHERE id = $1`,
+        [numId]
       )
       if (owns.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada' })
 
-      // audit_log is a global table — query without tenant context
-      const result = await query(
+      // Use tenant-scoped query so the LEFT JOIN to usuarios (which has RLS) works correctly
+      const result = await req.tQuery(
         `SELECT al.id, al.action, al.details, al.created_at AS timestamp,
                 COALESCE(u.nombre_completo, al.user_email) AS usuario_nombre
          FROM audit_log al
          LEFT JOIN usuarios u ON u.id = al.user_id
-         WHERE al.entity_type = 'tarima' AND al.entity_id = $1
+         WHERE al.entity_type = 'tarima' AND al.entity_id::text = $1
          ORDER BY al.created_at ASC`,
-        [numId]
+        [String(numId)]
       )
       res.json({ log: result.rows })
     } catch (error) {

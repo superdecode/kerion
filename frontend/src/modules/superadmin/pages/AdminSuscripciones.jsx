@@ -365,7 +365,10 @@ function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
         <div className="flex items-center justify-between p-5 border-b border-gray-800">
           <div>
             <h2 className="text-white font-bold text-sm">Editar suscripcion</h2>
-            <p className="text-gray-500 text-xs mt-0.5">{sub.legal_name}</p>
+            <p className="text-gray-500 text-xs mt-0.5">
+              {sub.legal_name}
+              {sub.code && <span className="ml-1.5 font-mono text-gray-600">{sub.code}</span>}
+            </p>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-5 h-5" />
