@@ -840,6 +840,67 @@ router.get('/subscriptions', authenticateAdmin, async (req, res) => {
   }
 })
 
+// PATCH /api/admin/subscriptions/:id — edit subscription
+router.patch('/subscriptions/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { plan_id, subscription_type, expires_at, status, price_amount } = req.body
+
+    const subRes = await query('SELECT tenant_id FROM subscriptions WHERE id = $1', [id])
+    if (subRes.rows.length === 0) return res.status(404).json({ error: 'Suscripcion no encontrada' })
+
+    const tenantId = subRes.rows[0].tenant_id
+    const tenantTzRes = await query('SELECT zona_horaria FROM tenants WHERE id = $1', [tenantId])
+    const tz = tenantTzRes.rows[0]?.zona_horaria || 'America/Mexico_City'
+
+    let expiresAtUtc = undefined
+    if (expires_at !== undefined && expires_at !== null) {
+      const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(expires_at)
+      expiresAtUtc = isDateOnly ? endOfDayInTimezone(expires_at, tz) : new Date(expires_at)
+    }
+
+    await query(
+      `UPDATE subscriptions SET
+         plan_id = COALESCE($1, plan_id),
+         subscription_type = COALESCE($2, subscription_type),
+         expires_at = COALESCE($3, expires_at),
+         status = COALESCE($4, status),
+         price_amount = COALESCE($5, price_amount)
+       WHERE id = $6`,
+      [plan_id || null, subscription_type || null, expiresAtUtc || null, status || null,
+       price_amount != null ? parseFloat(price_amount) : null, id]
+    )
+
+    if (status === 'active' && expiresAtUtc) {
+      await query(
+        `UPDATE tenants SET subscription_expires_at = $1, status = 'active', updated_at = now() WHERE id = $2`,
+        [expiresAtUtc, tenantId]
+      )
+    }
+
+    adminAudit(req.admin.id, 'EDIT_SUBSCRIPTION', 'subscription', id, { plan_id, expires_at: expiresAtUtc, status })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[admin/subscriptions PATCH]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// DELETE /api/admin/subscriptions/:id
+router.delete('/subscriptions/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const subRes = await query('SELECT id FROM subscriptions WHERE id = $1', [id])
+    if (subRes.rows.length === 0) return res.status(404).json({ error: 'Suscripcion no encontrada' })
+    await query('DELETE FROM subscriptions WHERE id = $1', [id])
+    adminAudit(req.admin.id, 'DELETE_SUBSCRIPTION', 'subscription', id, null)
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[admin/subscriptions DELETE]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
 // POST /api/admin/tenants/:id/subscriptions
 router.post('/tenants/:id/subscriptions', authenticateAdmin, async (req, res) => {
   try {
@@ -1123,7 +1184,7 @@ router.delete('/notifications', authenticateAdmin, async (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'ids requerido' })
     }
-    await query(`DELETE FROM notifications_outbox WHERE id = ANY($1::int[])`, [ids])
+    await query(`DELETE FROM notifications_outbox WHERE id = ANY($1::uuid[])`, [ids])
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: 'Error interno' })

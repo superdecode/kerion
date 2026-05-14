@@ -312,10 +312,19 @@ function PlansTab() {
 // ── Edit Subscription Modal ───────────────────────────────────────────────────
 
 function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
+  function extractTime(isoStr) {
+    if (!isoStr) return '23:59'
+    const d = new Date(isoStr)
+    const h = String(d.getUTCHours()).padStart(2, '0')
+    const m = String(d.getUTCMinutes()).padStart(2, '0')
+    return `${h}:${m}`
+  }
+
   const [form, setForm] = useState({
     plan_id: sub.plan_id || '',
     subscription_type: sub.subscription_type || 'monthly',
     expires_at: sub.expires_at ? sub.expires_at.slice(0, 10) : '',
+    expires_at_time: extractTime(sub.expires_at),
     status: sub.status || 'active',
     price_amount: sub.subscription_price_amount ?? sub.price_amount ?? '',
   })
@@ -329,10 +338,13 @@ function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
     setSaving(true)
     setError('')
     try {
+      const expiresAt = form.expires_at
+        ? `${form.expires_at}T${form.expires_at_time || '23:59'}:00`
+        : null
       await adminApi.patch(`/subscriptions/${sub.id}`, {
         plan_id: form.plan_id || null,
         subscription_type: form.subscription_type,
-        expires_at: form.expires_at || null,
+        expires_at: expiresAt,
         status: form.status,
         price_amount: form.price_amount !== '' ? parseFloat(form.price_amount) : null,
       })
@@ -391,9 +403,13 @@ function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
                 <option value="cancelled">Cancelada</option>
               </select>
             </div>
-            <div className="col-span-2">
+            <div>
               <label className={labelCls}>Fecha de vencimiento</label>
               <input type="date" value={form.expires_at} onChange={set('expires_at')} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Hora de corte</label>
+              <input type="time" value={form.expires_at_time} onChange={set('expires_at_time')} className={inputCls} />
             </div>
             <div className="col-span-2">
               <label className={labelCls}>Precio (USD)</label>
@@ -729,7 +745,7 @@ function SubscriptionsTab() {
                             {s.status === 'active' ? 'Activa' : s.status === 'expired' ? 'Vencida' : 'Cancelada'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-white">
+                        <td className="px-4 py-3 text-white text-sm">
                           {price ? `$${Number(price).toFixed(2)} ${s.price_currency || 'USD'}` : '—'}
                         </td>
                         <td className="px-4 py-3">

@@ -1137,86 +1137,89 @@ export default function AdminTenantDetalle() {
         <p className="text-xs text-gray-600 -mt-2">Abre consola (F12) → pestaña Console para ver errores. Verifica que las migraciones se hayan ejecutado.</p>
       ) : null}
 
-      {/* Main grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      {/* Main grid: left = tenant info, right = subscriptions + provisioning log stacked */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
         <EditInfoCard tenant={tenant} activeSub={active_subscription} onSaved={(msg) => { showToast(msg); load() }} />
-        <SubscriptionCard 
-          tenantId={id} 
-          subscriptions={subscriptions} 
-          history={data.subscription_history || []}
-          zona_horaria={tenant.zona_horaria}
-          plans={plans} 
-          onSaved={(msg) => { showToast(msg); load() }} 
-        />
-      </div>
 
-      {/* Provisioning log */}
-      {(() => {
-        const PROV_PAGE_SIZE = 10
-        const provTotal = provisioning_log.length
-        const provTotalPages = Math.max(1, Math.ceil(provTotal / PROV_PAGE_SIZE))
-        const provSafePage = Math.min(provPage, provTotalPages)
-        const provStart = (provSafePage - 1) * PROV_PAGE_SIZE
-        const provPaged = provisioning_log.slice(provStart, provStart + PROV_PAGE_SIZE)
-        return (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-            <div className="p-5 pb-3">
-              <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-blue-400" />
-                Log de provisioning
-              </h2>
-              {provTotal === 0 ? (
-                <p className="text-gray-500 text-sm">Sin registros de provisioning</p>
-              ) : (
-                <div className="space-y-0.5">
-                  {provPaged.map(l => (
-                    <div key={l.id} className="flex items-center gap-3 py-2 border-b border-gray-800/60 last:border-0 text-xs">
-                      <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full ${
-                        l.status === 'ok' ? 'bg-emerald-500/20 text-emerald-400' :
-                        l.status === 'skipped' ? 'bg-gray-700 text-gray-500' :
-                        'bg-red-500/20 text-red-400'
-                      }`}>
-                        {l.status === 'ok' ? '✓' : l.status === 'skipped' ? '–' : '✗'}
-                      </span>
-                      <span className="text-gray-300 font-mono flex-1 truncate">{l.step}</span>
-                      {l.error_message && <span className="text-red-400 truncate max-w-xs">{l.error_message}</span>}
-                      <span className="text-gray-600 flex-shrink-0">{new Date(l.created_at).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+        <div className="flex flex-col gap-5">
+          <SubscriptionCard
+            tenantId={id}
+            subscriptions={subscriptions}
+            history={data.subscription_history || []}
+            zona_horaria={tenant.zona_horaria}
+            plans={plans}
+            onSaved={(msg) => { showToast(msg); load() }}
+          />
+
+          {/* Provisioning log */}
+          {(() => {
+            const PROV_PAGE_SIZE = 10
+            const provTotal = provisioning_log.length
+            const provTotalPages = Math.max(1, Math.ceil(provTotal / PROV_PAGE_SIZE))
+            const provSafePage = Math.min(provPage, provTotalPages)
+            const provStart = (provSafePage - 1) * PROV_PAGE_SIZE
+            const provPaged = provisioning_log.slice(provStart, provStart + PROV_PAGE_SIZE)
+            return (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                <div className="p-5 pb-3">
+                  <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-blue-400" />
+                    Log de provisioning
+                  </h2>
+                  {provTotal === 0 ? (
+                    <p className="text-gray-500 text-sm">Sin registros de provisioning</p>
+                  ) : (
+                    <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                      {provPaged.map(l => (
+                        <div key={l.id} className="flex items-center gap-3 py-2 border-b border-gray-800/60 last:border-0 text-xs">
+                          <span className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-full ${
+                            l.status === 'ok' ? 'bg-emerald-500/20 text-emerald-400' :
+                            l.status === 'skipped' ? 'bg-gray-700 text-gray-500' :
+                            'bg-red-500/20 text-red-400'
+                          }`}>
+                            {l.status === 'ok' ? '✓' : l.status === 'skipped' ? '–' : '✗'}
+                          </span>
+                          <span className="text-gray-300 font-mono flex-1 truncate">{l.step}</span>
+                          {l.error_message && <span className="text-red-400 truncate max-w-xs">{l.error_message}</span>}
+                          <span className="text-gray-600 flex-shrink-0">{new Date(l.created_at).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
-            {provTotal > PROV_PAGE_SIZE && (
-              <div className="border-t border-gray-800 px-5 py-3 flex items-center justify-between">
-                <p className="text-xs text-gray-500">
-                  Mostrando {provStart + 1} a {provStart + provPaged.length} de {provTotal}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setProvPage(p => Math.max(1, p - 1))}
-                    disabled={provSafePage <= 1}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                    Anterior
-                  </button>
-                  <span className="px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-950 text-gray-300 text-xs">
-                    {provSafePage} / {provTotalPages}
-                  </span>
-                  <button
-                    onClick={() => setProvPage(p => Math.min(provTotalPages, p + 1))}
-                    disabled={provSafePage >= provTotalPages}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs"
-                  >
-                    Siguiente
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {provTotal > PROV_PAGE_SIZE && (
+                  <div className="border-t border-gray-800 px-5 py-3 flex items-center justify-between">
+                    <p className="text-xs text-gray-500">
+                      Mostrando {provStart + 1} a {provStart + provPaged.length} de {provTotal}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setProvPage(p => Math.max(1, p - 1))}
+                        disabled={provSafePage <= 1}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        Anterior
+                      </button>
+                      <span className="px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-950 text-gray-300 text-xs">
+                        {provSafePage} / {provTotalPages}
+                      </span>
+                      <button
+                        onClick={() => setProvPage(p => Math.min(provTotalPages, p + 1))}
+                        disabled={provSafePage >= provTotalPages}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-xs"
+                      >
+                        Siguiente
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        )
-      })()}
+            )
+          })()}
+        </div>
+      </div>
     </div>
   )
 }

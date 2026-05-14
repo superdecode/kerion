@@ -6,6 +6,8 @@ import { useAuthStore } from '../../stores/authStore'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
 
+const LANG_LABELS = { es: 'Español', zh: '中文' }
+
 const TOUR_DONE_KEY = (id) => `kirion_tour_${id}`
 const TOUR_SEEN_KEY = (id) => `kirion_tour_first_seen_${id}`
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -37,6 +39,7 @@ export default function OnboardingTour() {
   const { user, canView } = useAuthStore()
   const { t } = useI18nStore()
   const { triggerCount, setActive } = useTourStore()
+  const startTourRef = useRef(null)
   const navigate = useNavigate()
   const navigateRef = useRef(navigate)
   const driverRef = useRef(null)
@@ -216,6 +219,27 @@ export default function OnboardingTour() {
       prevBtnText: t('tour.prev'),
       doneBtnText: t('tour.finish.button'),
       steps,
+      onPopoverRender: (popover, { state }) => {
+        if (state.activeIndex === 0) {
+          const { locale, setLocale } = useI18nStore.getState()
+          const wrap = document.createElement('div')
+          wrap.className = 'driver-tour-lang-wrap'
+          wrap.innerHTML = `
+            <span>语言 / Idioma:</span>
+            <select class="driver-tour-lang-select" data-driver-lang>
+              ${Object.entries(LANG_LABELS).map(([code, label]) =>
+                `<option value="${code}"${locale === code ? ' selected' : ''}>${label}</option>`
+              ).join('')}
+            </select>
+          `
+          popover.description.appendChild(wrap)
+          wrap.querySelector('[data-driver-lang]').addEventListener('change', (e) => {
+            setLocale(e.target.value)
+            driverRef.current?.destroy()
+            setTimeout(() => startTourRef.current?.(), 50)
+          })
+        }
+      },
       onNextClick: () => {
         const nextIndex = (instance.getActiveIndex() ?? 0) + 1
         if (nextIndex >= stepPaths.length) {
@@ -262,6 +286,7 @@ export default function OnboardingTour() {
     })
 
     driverRef.current = instance
+    startTourRef.current = startTour
     instance.drive()
   }
 
