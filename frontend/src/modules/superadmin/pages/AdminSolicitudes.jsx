@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, Clock, Phone, Mail, Globe, Building2, RotateCcw, Calendar, X } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Search, Clock, Phone, Mail, Globe, Building2, RotateCcw, Calendar, X, Eye } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
 function fmtDateTime(iso) {
@@ -447,20 +447,22 @@ function RequestRow({ r, onRefresh }) {
           <StatusBadge status={r.status} />
         </td>
         <td className="py-3.5 px-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {r.status === 'pending' && !isRenewal && (
               <>
                 <button
                   onClick={() => setModal('approve')}
-                  className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded-lg transition-colors font-medium"
+                  title="Aprobar"
+                  className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-lg transition-colors border border-emerald-600/30"
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Aprobar
+                  <CheckCircle2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setModal('reject')}
-                  className="flex items-center gap-1 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-xs rounded-lg transition-colors"
+                  title="Rechazar"
+                  className="p-1.5 bg-red-950/30 hover:bg-red-600 text-red-400 hover:text-white rounded-lg transition-colors border border-red-800/30"
                 >
-                  <XCircle className="w-3.5 h-3.5" /> Rechazar
+                  <XCircle className="w-4 h-4" />
                 </button>
               </>
             )}
@@ -469,16 +471,17 @@ function RequestRow({ r, onRefresh }) {
                 <button
                   onClick={markRenewalApproved}
                   disabled={renewalLoading}
-                  className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs rounded-lg transition-colors font-medium"
+                  title="Atender renovacion"
+                  className="p-1.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-lg transition-colors border border-emerald-600/30 disabled:opacity-60"
                 >
-                  {renewalLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                  Atender
+                  {renewalLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                 </button>
                 <button
                   onClick={() => setModal('renewalReject')}
-                  className="flex items-center gap-1 px-2.5 py-1.5 bg-red-950/40 hover:bg-red-950/70 border border-red-800/40 text-red-300 text-xs rounded-lg transition-colors"
+                  title="Rechazar"
+                  className="p-1.5 bg-red-950/30 hover:bg-red-600 text-red-400 hover:text-white rounded-lg transition-colors border border-red-800/30"
                 >
-                  <XCircle className="w-3.5 h-3.5" /> Rechazar
+                  <XCircle className="w-4 h-4" />
                 </button>
               </>
             )}
@@ -487,9 +490,10 @@ function RequestRow({ r, onRefresh }) {
         <td className="py-3.5 px-3 text-right">
           <button
             onClick={() => setDetailOpen(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white text-xs rounded-lg transition-colors whitespace-nowrap"
+            title="Ver detalle"
+            className="p-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-lg transition-colors border border-gray-700"
           >
-            Ver detalle
+            <Eye className="w-4 h-4" />
           </button>
         </td>
       </tr>

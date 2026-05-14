@@ -158,7 +158,7 @@ export default function AdminTenants() {
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden lg:table-cell">Usuarios</th>
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden xl:table-cell">Guias</th>
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden xl:table-cell">Vencimiento</th>
-                <th className="px-4 py-3 w-10" />
+                <th className="px-4 py-3 w-10 text-gray-400 font-medium text-xs uppercase tracking-wider" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/60">

@@ -343,6 +343,7 @@ function SubscriptionsTab() {
   const [sortDir, setSortDir] = useState('desc')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_SUB_PAGE_SIZE)
+  const [selectedIds, setSelectedIds] = useState(new Set())
 
   function load() {
     setLoading(true)
@@ -366,6 +367,7 @@ function SubscriptionsTab() {
 
   useEffect(() => { load() }, [filters])
   useEffect(() => { setPage(1) }, [search, filters, sortKey, sortDir, pageSize])
+  useEffect(() => { setSelectedIds(new Set()) }, [search, filters, sortKey, sortDir, pageSize, page])
 
   function toggleSort(col) {
     if (sortKey === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -402,6 +404,41 @@ function SubscriptionsTab() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage = Math.min(page, totalPages)
   const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
+
+  const allSelected = paginated.length > 0 && paginated.every(s => selectedIds.has(s.id))
+  const someSelected = paginated.some(s => selectedIds.has(s.id))
+
+  function toggleAll() {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (allSelected) {
+        paginated.forEach(s => next.delete(s.id))
+      } else {
+        paginated.forEach(s => next.add(s.id))
+      }
+      return next
+    })
+  }
+
+  function toggleRow(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    if (!window.confirm(`Eliminar ${selectedIds.size} suscripcion${selectedIds.size !== 1 ? 'es' : ''}? Esta accion no se puede deshacer.`)) return
+    try {
+      await Promise.all([...selectedIds].map(id => adminApi.delete(`/subscriptions/${id}`)))
+      setSelectedIds(new Set())
+      load()
+    } catch (err) {
+      alert(err.response?.data?.error || 'Error al eliminar suscripciones')
+    }
+  }
 
   function statusColor(status) {
     if (status === 'active') return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
@@ -493,6 +530,27 @@ function SubscriptionsTab() {
         </div>
       ) : (
         <>
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-950/40 border border-blue-800/40 rounded-xl">
+              <span className="text-blue-300 text-sm font-medium">
+                {selectedIds.size} seleccionada{selectedIds.size !== 1 ? 's' : ''}
+              </span>
+              <div className="flex-1" />
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-gray-400 hover:text-white transition-colors"
+              >
+                Deseleccionar todo
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-colors font-medium"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Eliminar seleccionadas
+              </button>
+            </div>
+          )}
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
             {filtered.length === 0 ? (
               <div className="px-6 py-8 text-center text-gray-500 text-sm">
@@ -502,6 +560,15 @@ function SubscriptionsTab() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800 bg-gray-800/40">
+                    <th className="px-3 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleAll}
+                        ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
+                        className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                      />
+                    </th>
                     <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">ID</th>
                     <SortTh col="legal_name" label="Empresa" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="plan_name" label="Plan" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
@@ -518,7 +585,15 @@ function SubscriptionsTab() {
                       ? (s.subscription_price_amount ?? s.price_annual ?? s.price_amount)
                       : (s.subscription_price_amount ?? s.price_amount)
                     return (
-                      <tr key={s.id} className="hover:bg-gray-800/20 transition-colors">
+                      <tr key={s.id} className={`hover:bg-gray-800/20 transition-colors ${selectedIds.has(s.id) ? 'bg-blue-950/20' : ''}`}>
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(s.id)}
+                            onChange={() => toggleRow(s.id)}
+                            className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                          />
+                        </td>
                         <td className="px-4 py-3 text-gray-500 font-mono text-xs">{s.id.slice(0, 8)}</td>
                         <td className="px-4 py-3">
                           <p className="text-white font-medium text-sm">{s.legal_name}</p>
