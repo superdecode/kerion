@@ -14,6 +14,7 @@ import {
   Settings,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
+import { useTourStore } from '../../stores/tourStore'
 
 const getNavItems = (t) => [
   {
@@ -38,6 +39,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const { user, canView } = useAuthStore()
   const { t } = useI18nStore()
+  const tourActive = useTourStore((s) => s.active)
   const navigate = useNavigate()
 
   const navItems = getNavItems(t)
@@ -83,7 +85,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`relative ${collapsed ? 'w-16' : 'w-60'} bg-[#0b1437] border-r border-blue-900/40 flex flex-col transition-all duration-200 flex-shrink-0`}
+      className={`relative ${collapsed ? 'w-16' : 'w-60'} bg-[#0b1437] border-r border-blue-900/40 flex flex-col transition-all duration-200 flex-shrink-0 ${tourActive ? 'z-[100001]' : ''}`}
     >
       {/* Collapse toggle — attached to sidebar right edge */}
       <button

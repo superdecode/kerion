@@ -10,21 +10,20 @@ const TOUR_DONE_KEY = (id) => `kirion_tour_${id}`
 const TOUR_SEEN_KEY = (id) => `kirion_tour_first_seen_${id}`
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
-// Path to navigate to before showing each step index (null = no navigation needed)
+// Path to navigate to before showing each step (null = no navigation, stay wherever we are)
 const STEP_PATHS = [
   null,                        // 0: welcome
-  '/dropscan',                 // 1: dashboard KPIs
-  '/dropscan',                 // 2: dashboard active sessions
-  '/dropscan/configuracion',   // 3: config tab bar
-  '/dropscan/configuracion',   // 4: config empresas content
-  '/dropscan/configuracion',   // 5: config canales tab button
-  '/dropscan/configuracion',   // 6: config operadores tab button
-  '/dropscan/escaneo',         // 7: escaneo start screen
-  '/dropscan/historial',       // 8: historial filter bar
-  '/dropscan/historial',       // 9: historial table
-  '/dropscan/folios',          // 10: folios table
-  '/dropscan/reportes',        // 11: reportes stat cards
-  null,                        // 12: finish
+  null,                        // 1: sidebar overview (sidebar always visible)
+  '/dropscan/configuracion',   // 2: config tab bar
+  '/dropscan/configuracion',   // 3: config empresas content
+  '/dropscan/configuracion',   // 4: config canales tab button
+  '/dropscan/configuracion',   // 5: config operadores tab button
+  '/dropscan/escaneo',         // 6: escaneo start screen
+  '/dropscan/historial',       // 7: historial filter bar
+  '/dropscan/historial',       // 8: historial table
+  '/dropscan/folios',          // 9: folios table
+  null,                        // 10: admin nav item (sidebar always visible)
+  null,                        // 11: finish
 ]
 
 export function tourHelpVisible(userId) {
@@ -35,9 +34,9 @@ export function tourHelpVisible(userId) {
 }
 
 export default function OnboardingTour() {
-  const { user } = useAuthStore()
+  const { user, canView } = useAuthStore()
   const { t } = useI18nStore()
-  const { triggerCount } = useTourStore()
+  const { triggerCount, setActive } = useTourStore()
   const navigate = useNavigate()
   const navigateRef = useRef(navigate)
   const driverRef = useRef(null)
@@ -46,7 +45,7 @@ export default function OnboardingTour() {
 
   const buildSteps = () => {
     const tenantName = user?.tenant_name || 'Kirion'
-    return [
+    const steps = [
       // 0: Welcome
       {
         popover: {
@@ -56,27 +55,17 @@ export default function OnboardingTour() {
           align: 'center',
         },
       },
-      // 1: Dashboard KPI cards
+      // 1: Sidebar navigation overview
       {
-        element: '[data-tour="dashboard-kpis"]',
+        element: '[data-tour="sidebar"]',
         popover: {
-          title: t('tour.dashboard_kpis.title'),
-          description: t('tour.dashboard_kpis.description'),
-          side: 'bottom',
+          title: t('tour.sidebar.title'),
+          description: t('tour.sidebar.description'),
+          side: 'right',
           align: 'start',
         },
       },
-      // 2: Dashboard active sessions
-      {
-        element: '[data-tour="dashboard-sesiones"]',
-        popover: {
-          title: t('tour.dashboard_sesiones.title'),
-          description: t('tour.dashboard_sesiones.description'),
-          side: 'top',
-          align: 'start',
-        },
-      },
-      // 3: Config tab bar overview
+      // 2: Config tab bar
       {
         element: '[data-tour="config-tabs"]',
         popover: {
@@ -86,7 +75,7 @@ export default function OnboardingTour() {
           align: 'start',
         },
       },
-      // 4: Config empresas content area
+      // 3: Config empresas content
       {
         element: '[data-tour="config-empresas"]',
         popover: {
@@ -96,7 +85,7 @@ export default function OnboardingTour() {
           align: 'start',
         },
       },
-      // 5: Config canales tab button
+      // 4: Config canales tab button
       {
         element: '[data-tour="config-tab-canales"]',
         popover: {
@@ -106,7 +95,7 @@ export default function OnboardingTour() {
           align: 'start',
         },
       },
-      // 6: Config operadores tab button
+      // 5: Config operadores tab button
       {
         element: '[data-tour="config-tab-operadores"]',
         popover: {
@@ -116,7 +105,7 @@ export default function OnboardingTour() {
           align: 'start',
         },
       },
-      // 7: Escaneo start screen
+      // 6: Escaneo start screen
       {
         element: '[data-tour="escaneo-inicio"]',
         popover: {
@@ -126,7 +115,7 @@ export default function OnboardingTour() {
           align: 'center',
         },
       },
-      // 8: Historial filter bar
+      // 7: Historial filter bar
       {
         element: '[data-tour="historial-filtros"]',
         popover: {
@@ -136,7 +125,7 @@ export default function OnboardingTour() {
           align: 'start',
         },
       },
-      // 9: Historial table
+      // 8: Historial table
       {
         element: '[data-tour="historial-tabla"]',
         popover: {
@@ -146,7 +135,7 @@ export default function OnboardingTour() {
           align: 'start',
         },
       },
-      // 10: Folios table
+      // 9: Folios table
       {
         element: '[data-tour="folios-tabla"]',
         popover: {
@@ -156,27 +145,33 @@ export default function OnboardingTour() {
           align: 'start',
         },
       },
-      // 11: Reportes stat cards
-      {
-        element: '[data-tour="reportes-stats"]',
+    ]
+
+    // 10: Admin nav item — only if user has access
+    if (canView('global.administracion')) {
+      steps.push({
+        element: '[data-tour="nav-admin"]',
         popover: {
-          title: t('tour.reportes.title'),
-          description: t('tour.reportes.description'),
-          side: 'bottom',
+          title: t('tour.administracion.title'),
+          description: t('tour.administracion.description'),
+          side: 'right',
           align: 'start',
         },
+      })
+    }
+
+    // Finish
+    steps.push({
+      popover: {
+        title: t('tour.finish.title'),
+        description: t('tour.finish.description'),
+        side: 'over',
+        align: 'center',
+        doneBtnText: t('tour.finish.button'),
       },
-      // 12: Finish
-      {
-        popover: {
-          title: t('tour.finish.title'),
-          description: t('tour.finish.description'),
-          side: 'over',
-          align: 'center',
-          doneBtnText: t('tour.finish.button'),
-        },
-      },
-    ]
+    })
+
+    return steps
   }
 
   const markDone = () => {
@@ -184,7 +179,7 @@ export default function OnboardingTour() {
     localStorage.setItem(TOUR_DONE_KEY(user.id), 'done')
   }
 
-  // Navigate to the required path for a given step, then call callback
+  // Navigate to the required path for a given step index, then call callback
   const goToStep = (index, callback) => {
     const path = STEP_PATHS[index]
     if (!path) {
@@ -202,6 +197,11 @@ export default function OnboardingTour() {
 
   const startTour = () => {
     driverRef.current?.destroy()
+    setActive(true)
+
+    const steps = buildSteps()
+    // Build a per-step path array matching the dynamic steps list
+    const stepPaths = buildStepPaths(steps.length)
 
     const instance = driver({
       animate: true,
@@ -215,19 +215,41 @@ export default function OnboardingTour() {
       nextBtnText: t('tour.next'),
       prevBtnText: t('tour.prev'),
       doneBtnText: t('tour.finish.button'),
-      steps: buildSteps(),
+      steps,
       onNextClick: () => {
         const nextIndex = (instance.getActiveIndex() ?? 0) + 1
-        if (nextIndex >= STEP_PATHS.length) {
+        if (nextIndex >= stepPaths.length) {
           instance.moveNext()
           return
         }
-        goToStep(nextIndex, () => instance.moveNext())
+        const path = stepPaths[nextIndex]
+        if (!path) {
+          instance.moveNext()
+        } else {
+          const current = window.location.pathname
+          if (current === path || current.startsWith(path + '?')) {
+            instance.moveNext()
+          } else {
+            navigateRef.current(path)
+            setTimeout(() => instance.moveNext(), 650)
+          }
+        }
       },
       onPrevClick: () => {
         const prevIndex = (instance.getActiveIndex() ?? 1) - 1
         if (prevIndex < 0) return
-        goToStep(prevIndex, () => instance.movePrevious())
+        const path = stepPaths[prevIndex]
+        if (!path) {
+          instance.movePrevious()
+        } else {
+          const current = window.location.pathname
+          if (current === path || current.startsWith(path + '?')) {
+            instance.movePrevious()
+          } else {
+            navigateRef.current(path)
+            setTimeout(() => instance.movePrevious(), 650)
+          }
+        }
       },
       onCloseClick: () => {
         markDone()
@@ -235,14 +257,33 @@ export default function OnboardingTour() {
       },
       onDestroyed: () => {
         markDone()
+        setActive(false)
       },
     })
 
     driverRef.current = instance
-
-    // Navigate to first real step path (step 0 is welcome with no path, step 1 needs /dropscan)
-    // We start at step 0 without navigating; navigation happens on first Next click
     instance.drive()
+  }
+
+  // Build a path array for the dynamically built steps (admin step is conditional)
+  const buildStepPaths = (totalSteps) => {
+    const hasAdmin = canView('global.administracion')
+    // Static steps 0-9, then optionally admin (10), then finish
+    const paths = [
+      null,                        // 0: welcome
+      null,                        // 1: sidebar
+      '/dropscan/configuracion',   // 2: config tabs
+      '/dropscan/configuracion',   // 3: config empresas
+      '/dropscan/configuracion',   // 4: config canales
+      '/dropscan/configuracion',   // 5: config operadores
+      '/dropscan/escaneo',         // 6: escaneo
+      '/dropscan/historial',       // 7: historial filtros
+      '/dropscan/historial',       // 8: historial tabla
+      '/dropscan/folios',          // 9: folios
+    ]
+    if (hasAdmin) paths.push(null) // 10: admin nav (sidebar always visible)
+    paths.push(null) // finish
+    return paths
   }
 
   // Auto-start for Administrador users on first login
@@ -269,8 +310,11 @@ export default function OnboardingTour() {
   }, [triggerCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    return () => driverRef.current?.destroy()
-  }, [])
+    return () => {
+      driverRef.current?.destroy()
+      setActive(false)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return null
 }

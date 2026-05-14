@@ -793,7 +793,7 @@ export default function Historial() {
             </div>
           ) : t('common.loading')
         }
-        size="xl"
+        size="full"
         headerAction={detail && canExportHistorial && (
           <button onClick={handleExportTarimaExcel}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-success-50 text-success-700 rounded-lg hover:bg-success-100 font-semibold transition-all border border-success-200">

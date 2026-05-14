@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { dateInTZ } from '../../../shared/utils/dateUtils.js'
+import { query } from '../../../config/database.js'
 
 const router = Router()
 
@@ -492,19 +493,31 @@ router.get('/:id/log',
   async (req, res) => {
     try {
       const { id } = req.params
-      const owns = await req.tQuery('SELECT id FROM tarimas WHERE id = $1 AND tenant_id = $2', [id, req.tenantId])
+      const numId = parseInt(id, 10)
+      if (isNaN(numId)) return res.status(400).json({ error: 'ID inválido' })
+
+      // Verify tarima belongs to this tenant via empresa (configuraciones is tenant-scoped)
+      const owns = await req.tQuery(
+        `SELECT t.id FROM tarimas t
+         JOIN configuraciones c ON c.id = t.empresa_id AND c.tenant_id = $2
+         WHERE t.id = $1`,
+        [numId, req.tenantId]
+      )
       if (owns.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada' })
-      const result = await req.tQuery(
-        `SELECT al.id, al.action, al.details, al.created_at AS timestamp, u.nombre_completo AS usuario_nombre
+
+      // audit_log is a global table — query without tenant context
+      const result = await query(
+        `SELECT al.id, al.action, al.details, al.created_at AS timestamp,
+                COALESCE(u.nombre_completo, al.user_email) AS usuario_nombre
          FROM audit_log al
          LEFT JOIN usuarios u ON u.id = al.user_id
          WHERE al.entity_type = 'tarima' AND al.entity_id = $1
          ORDER BY al.created_at ASC`,
-        [id]
+        [numId]
       )
       res.json({ log: result.rows })
     } catch (error) {
-      console.error('Tarima log error:', error)
+      console.error('[tarima/log] error:', error.message, '| code:', error.code, '| detail:', error.detail)
       res.status(500).json({ error: 'Error obteniendo historial' })
     }
   }
