@@ -486,6 +486,7 @@ export default function Folios() {
 
         <div className="p-4">
           <motion.div
+            data-tour="folios-tabla"
             className="card overflow-hidden"
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}

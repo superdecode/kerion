@@ -35,14 +35,14 @@ export default function Configuracion() {
       <div className="flex-1 overflow-y-auto">
         {/* Tab bar */}
         <div className="sticky top-0 z-[5] bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6">
-          <div className="flex gap-1">
+          <div data-tour="config-tabs" className="flex gap-1">
             {[
               { key: 'empresas', label: t('config.companies'), icon: Package },
               { key: 'canales', label: t('config.channels'), icon: Radio },
               { key: 'operadores', label: t('config.internalUsers'), icon: Users },
               { key: 'parametros', label: t('config.parameters'), icon: Sliders },
             ].map(item => (
-              <button key={item.key} onClick={() => setTab(item.key)}
+              <button key={item.key} data-tour={`config-tab-${item.key}`} onClick={() => setTab(item.key)}
                 className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all duration-200
                   ${tab === item.key
                     ? 'border-primary-600 text-primary-700 bg-primary-50/50'
@@ -58,7 +58,7 @@ export default function Configuracion() {
 
         {/* Tab content */}
         <div className="p-6">
-          {tab === 'empresas' && <EmpresasTab canEdit={canEdit} canToggle={canToggle} canRemove={canRemove} />}
+          {tab === 'empresas' && <div data-tour="config-empresas"><EmpresasTab canEdit={canEdit} canToggle={canToggle} canRemove={canRemove} /></div>}
           {tab === 'canales' && <CanalesTab canEdit={canEdit} canToggle={canToggle} canRemove={canRemove} />}
           {tab === 'operadores' && <OperadoresTab canEdit={canEdit} canToggle={canToggle} canRemove={canRemove} />}
           {tab === 'parametros' && <ParametrosTab canEdit={canEdit} />}

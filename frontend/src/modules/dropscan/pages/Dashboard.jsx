@@ -154,7 +154,7 @@ export default function DropScanDashboard() {
         <div className="p-4">
           <div className="max-w-full mx-auto space-y-4">
             {/* KPI Cards - Clickable, navigate to tarimas with filter */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div data-tour="dashboard-kpis" className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               <KPICard icon={Package} label={t('dashboard.totalGuides')} value={r.total_guias} gradient="from-primary-500 to-primary-700" iconBg="bg-primary-400/20" index={0} href="/dropscan/tarimas" />
               <KPICard icon={Clock} label={t('dashboard.inProcess')} value={r.tarimas_en_proceso} gradient="from-warning-400 to-warning-600" iconBg="bg-warning-400/20" index={1} href="/dropscan/tarimas?estado=EN_PROCESO" />
               <KPICard icon={AlertTriangle} label={t('dashboard.duplicates')} value={r.alertas_duplicados} gradient="from-danger-400 to-danger-600" iconBg="bg-danger-400/20" index={2} href="/dropscan/tarimas?search=duplicado" />
@@ -232,7 +232,7 @@ export default function DropScanDashboard() {
 
             {/* Active Sessions & Top Operators - Larger */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="card p-5">
+              <div data-tour="dashboard-sesiones" className="card p-5">
                 <h3 className="text-sm font-bold text-warm-700 mb-3 flex items-center gap-2">
                   <div className="w-6 h-6 rounded-lg bg-success-100 text-success-600 flex items-center justify-center">
                     <Activity className="w-3 h-3" />

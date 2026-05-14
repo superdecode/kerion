@@ -395,7 +395,7 @@ export default function Historial() {
 
       <div className="flex-1 overflow-y-auto">
         {/* Filter bar */}
-        <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5 space-y-2">
+        <div data-tour="historial-filtros" className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5 space-y-2">
           {/* Row 1: Date range + quick presets */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5">
@@ -599,6 +599,7 @@ export default function Historial() {
           <div className="max-w-full mx-auto">
             {/* Table */}
             <motion.div
+              data-tour="historial-tabla"
               className="card overflow-hidden"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}

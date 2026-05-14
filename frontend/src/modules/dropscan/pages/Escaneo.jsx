@@ -744,7 +744,7 @@ export default function Escaneo() {
       <div className="flex flex-col h-full">
         <Header title={t('scan.title')} subtitle="DropScan" showSearch />
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-2xl mx-auto">
+          <div data-tour="escaneo-inicio" className="max-w-2xl mx-auto">
             <motion.div className="text-center mb-8"
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>

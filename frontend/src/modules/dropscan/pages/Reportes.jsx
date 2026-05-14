@@ -274,7 +274,7 @@ export default function Reportes() {
                 {reportTab === 'resumen' && (
                   <>
                     {/* Stat cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div data-tour="reportes-stats" className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       {statCards.map((stat, i) => (
                         <motion.div key={stat.label}
                           className="card-interactive p-5 flex items-center gap-4 group"
