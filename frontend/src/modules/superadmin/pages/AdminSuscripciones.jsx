@@ -309,6 +309,117 @@ function PlansTab() {
   )
 }
 
+// ── Edit Subscription Modal ───────────────────────────────────────────────────
+
+function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    plan_id: sub.plan_id || '',
+    subscription_type: sub.subscription_type || 'monthly',
+    expires_at: sub.expires_at ? sub.expires_at.slice(0, 10) : '',
+    status: sub.status || 'active',
+    price_amount: sub.subscription_price_amount ?? sub.price_amount ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })) }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      await adminApi.patch(`/subscriptions/${sub.id}`, {
+        plan_id: form.plan_id || null,
+        subscription_type: form.subscription_type,
+        expires_at: form.expires_at || null,
+        status: form.status,
+        price_amount: form.price_amount !== '' ? parseFloat(form.price_amount) : null,
+      })
+      onSaved()
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = "w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+  const labelCls = "block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5"
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between p-5 border-b border-gray-800">
+          <div>
+            <h2 className="text-white font-bold text-sm">Editar suscripcion</h2>
+            <p className="text-gray-500 text-xs mt-0.5">{sub.legal_name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {error && (
+            <div className="flex items-center gap-2 bg-red-950/40 border border-red-800/40 rounded-lg p-3 text-red-300 text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className={labelCls}>Plan</label>
+              <select value={form.plan_id} onChange={set('plan_id')} className={inputCls}>
+                <option value="">Sin cambio</option>
+                {plans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Tipo</label>
+              <select value={form.subscription_type} onChange={set('subscription_type')} className={inputCls}>
+                <option value="monthly">Mensual</option>
+                <option value="annual">Anual</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Estado</label>
+              <select value={form.status} onChange={set('status')} className={inputCls}>
+                <option value="active">Activa</option>
+                <option value="expired">Vencida</option>
+                <option value="cancelled">Cancelada</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className={labelCls}>Fecha de vencimiento</label>
+              <input type="date" value={form.expires_at} onChange={set('expires_at')} className={inputCls} />
+            </div>
+            <div className="col-span-2">
+              <label className={labelCls}>Precio (USD)</label>
+              <input type="number" step="0.01" value={form.price_amount} onChange={set('price_amount')} className={inputCls} placeholder="0.00" />
+            </div>
+          </div>
+
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm rounded-lg transition-colors font-medium"
+            >
+              {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {saving ? 'Guardando...' : 'Guardar cambios'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Subscriptions records ─────────────────────────────────────────────────────
 
 const SUB_PAGE_SIZES = [10, 20, 50, 100]
@@ -344,6 +455,7 @@ function SubscriptionsTab() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_SUB_PAGE_SIZE)
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [editSub, setEditSub] = useState(null)
 
   function load() {
     setLoading(true)
@@ -460,6 +572,14 @@ function SubscriptionsTab() {
 
   return (
     <div className="space-y-4">
+      {editSub && (
+        <EditSubscriptionModal
+          sub={editSub}
+          plans={plans}
+          onClose={() => setEditSub(null)}
+          onSaved={() => { setEditSub(null); load() }}
+        />
+      )}
       {/* Filters: search + date card + plan dropdown + status pills on right */}
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="flex flex-wrap items-center gap-3">
@@ -577,6 +697,7 @@ function SubscriptionsTab() {
                     <SortTh col="expires_at" label="Vencimiento" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="status" label="Estado" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                     <SortTh col="price" label="Precio" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                    <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider w-12" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800">
@@ -610,6 +731,15 @@ function SubscriptionsTab() {
                         </td>
                         <td className="px-4 py-3 text-white">
                           {price ? `$${Number(price).toFixed(2)} ${s.price_currency || 'USD'}` : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => setEditSub(s)}
+                            title="Editar suscripcion"
+                            className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     )

@@ -1122,7 +1122,7 @@ export default function AdminTenantDetalle() {
       {/* Stats section */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard icon={Zap} label="Guias totales" value={stats?.total_guias.toLocaleString() ?? '—'} color="text-blue-400" loading={statsLoading} />
-        <StatCard icon={Package} label="Tarimas" value={stats?.total_tarimas.toLocaleString() ?? '—'} color="text-purple-400" loading={statsLoading} />
+        <StatCard icon={Package} label="Tarimas" value={stats?.total_tarimas.toLocaleString() ?? '—'} color="text-blue-400" loading={statsLoading} />
         <StatCard icon={FileText} label="Folios" value={stats?.total_folios.toLocaleString() ?? '—'} color="text-cyan-400" loading={statsLoading} />
         <StatCard icon={Users} label="Escaneadores activos" value={stats?.active_scanners.toLocaleString() ?? '—'} color="text-amber-400" loading={statsLoading} />
       </div>
@@ -1162,7 +1162,7 @@ export default function AdminTenantDetalle() {
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
             <div className="p-5 pb-3">
               <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
-                <Activity className="w-4 h-4 text-purple-400" />
+                <Activity className="w-4 h-4 text-blue-400" />
                 Log de provisioning
               </h2>
               {provTotal === 0 ? (
