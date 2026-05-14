@@ -329,6 +329,36 @@ async function runMigrations() {
     `ALTER TABLE tarimas ADD CONSTRAINT tarimas_tenant_codigo_unique UNIQUE (tenant_id, codigo)`,
     `ALTER TABLE folios_entrega DROP CONSTRAINT IF EXISTS folios_entrega_folio_numero_key`,
     `ALTER TABLE folios_entrega ADD CONSTRAINT fep_tenant_numero_unique UNIQUE (tenant_id, folio_numero)`,
+    // token_blacklist: required for JWT invalidation on logout
+    `CREATE TABLE IF NOT EXISTS token_blacklist (
+       id SERIAL PRIMARY KEY,
+       token_jti VARCHAR(64) UNIQUE NOT NULL,
+       user_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+       expires_at TIMESTAMP NOT NULL,
+       tenant_id UUID REFERENCES tenants(id),
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_token_blacklist_jti ON token_blacklist(token_jti)`,
+    `CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires ON token_blacklist(expires_at)`,
+    // audit_log: required for tarima operation history and sensitive action logging
+    `CREATE TABLE IF NOT EXISTS audit_log (
+       id SERIAL PRIMARY KEY,
+       user_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+       user_email VARCHAR(100),
+       action VARCHAR(50) NOT NULL,
+       entity_type VARCHAR(50),
+       entity_id TEXT,
+       details JSONB,
+       ip_address VARCHAR(45),
+       user_agent TEXT,
+       tenant_id UUID REFERENCES tenants(id),
+       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON audit_log(tenant_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
   ]
   for (const sql of steps) {
     try {

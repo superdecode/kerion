@@ -861,23 +861,20 @@ router.patch('/subscriptions/:id', authenticateAdmin, async (req, res) => {
     const { id } = req.params
     const { plan_id, subscription_type, expires_at, status, price_amount } = req.body
 
-    const subRes = await query('SELECT tenant_id FROM subscriptions WHERE id = $1', [id])
+    const subRes = await query('SELECT tenant_id, status FROM subscriptions WHERE id = $1', [id])
     if (subRes.rows.length === 0) return res.status(404).json({ error: 'Suscripcion no encontrada' })
 
     const tenantId = subRes.rows[0].tenant_id
+    const currentStatus = subRes.rows[0].status
     const tenantTzRes = await query('SELECT zona_horaria FROM tenants WHERE id = $1', [tenantId])
     const tz = tenantTzRes.rows[0]?.zona_horaria || 'America/Mexico_City'
 
+    // Always compute end-of-day in tenant timezone using only the date portion.
+    // Ignoring any time component sent by the frontend avoids UTC passthrough bugs.
     let expiresAtUtc = undefined
     if (expires_at !== undefined && expires_at !== null) {
-      const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(expires_at)
-      if (isDateOnly) {
-        expiresAtUtc = endOfDayInTimezone(expires_at, tz)
-      } else {
-        // Treat datetime strings without timezone offset as UTC (form shows/edits UTC values)
-        const hasOffset = expires_at.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(expires_at)
-        expiresAtUtc = new Date(hasOffset ? expires_at : expires_at + 'Z')
-      }
+      const dateOnly = String(expires_at).slice(0, 10)
+      expiresAtUtc = endOfDayInTimezone(dateOnly, tz)
     }
 
     await query(
@@ -892,7 +889,9 @@ router.patch('/subscriptions/:id', authenticateAdmin, async (req, res) => {
        price_amount != null ? parseFloat(price_amount) : null, id]
     )
 
-    if (status === 'active' && expiresAtUtc) {
+    // Update tenant's expires_at whenever the new/current status is active and a date was provided.
+    const effectiveStatus = status || currentStatus
+    if (expiresAtUtc && effectiveStatus === 'active') {
       await query(
         `UPDATE tenants SET subscription_expires_at = $1, status = 'active', updated_at = now() WHERE id = $2`,
         [expiresAtUtc, tenantId]

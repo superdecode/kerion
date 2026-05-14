@@ -1138,10 +1138,10 @@ export default function AdminTenantDetalle() {
       ) : null}
 
       {/* Main grid: left = tenant info, right = subscriptions + provisioning log stacked */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-stretch">
         <EditInfoCard tenant={tenant} activeSub={active_subscription} onSaved={(msg) => { showToast(msg); load() }} />
 
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-5 h-full">
           <SubscriptionCard
             tenantId={id}
             subscriptions={subscriptions}
@@ -1160,7 +1160,7 @@ export default function AdminTenantDetalle() {
             const provStart = (provSafePage - 1) * PROV_PAGE_SIZE
             const provPaged = provisioning_log.slice(provStart, provStart + PROV_PAGE_SIZE)
             return (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+              <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
                 <div className="p-5 pb-3">
                   <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
                     <Activity className="w-4 h-4 text-blue-400" />

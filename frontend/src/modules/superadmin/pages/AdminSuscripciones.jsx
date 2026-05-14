@@ -338,13 +338,10 @@ function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
     setSaving(true)
     setError('')
     try {
-      const expiresAt = form.expires_at
-        ? `${form.expires_at}T${form.expires_at_time || '23:59'}:00`
-        : null
       await adminApi.patch(`/subscriptions/${sub.id}`, {
         plan_id: form.plan_id || null,
         subscription_type: form.subscription_type,
-        expires_at: expiresAt,
+        expires_at: form.expires_at || null,
         status: form.status,
         price_amount: form.price_amount !== '' ? parseFloat(form.price_amount) : null,
       })
@@ -367,7 +364,7 @@ function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
             <h2 className="text-white font-bold text-sm">Editar suscripcion</h2>
             <p className="text-gray-500 text-xs mt-0.5">
               {sub.legal_name}
-              {sub.code && <span className="ml-1.5 font-mono text-gray-600">{sub.code}</span>}
+              {sub.code && <span className="ml-1.5 font-mono text-gray-400">{sub.code}</span>}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">

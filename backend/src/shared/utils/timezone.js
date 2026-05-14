@@ -50,6 +50,14 @@ export function zonedDateTimeToUtc({ year, month, day, hour = 0, minute = 0, sec
 }
 
 export function endOfDayInTimezone(dateInput, timeZone) {
+  // Date-only strings (YYYY-MM-DD) must be treated as a calendar date in the
+  // target timezone, not parsed as UTC midnight which shifts the date backward
+  // for negative-offset timezones (e.g. America/Mexico_City UTC-6).
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    const [year, month, day] = dateInput.split('-').map(Number)
+    return zonedDateTimeToUtc({ year, month, day, hour: 23, minute: 59, second: 59, millisecond: 999 }, timeZone)
+  }
+
   const date = dateInput instanceof Date ? dateInput : new Date(dateInput)
   if (Number.isNaN(date.getTime())) {
     throw new Error('Fecha invalida')

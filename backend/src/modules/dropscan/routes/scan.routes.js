@@ -480,7 +480,7 @@ router.post('/sessions/:id/scan',
 
         // Auto-create new tarima (retry on unique collision)
         for (let attempt = 0; attempt < 5; attempt++) {
-          const newCodigo = await generateTarimaCodigo()
+          const newCodigo = await generateTarimaCodigo(client, req.tenantId)
           try {
             const newTarimaRes = await client.query(
               `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
@@ -573,7 +573,7 @@ router.post('/sessions/:id/add-tarima',
       const { empresa_id, canal_id } = sesion
       let tarimaRes
       for (let attempt = 0; attempt < 5; attempt++) {
-        const tarimaCodigo = await generateTarimaCodigo()
+        const tarimaCodigo = await generateTarimaCodigo(client, req.tenantId)
         try {
           tarimaRes = await client.query(
             `INSERT INTO tarimas (codigo, empresa_id, canal_id, operador_id, fecha_inicio, tenant_id)
