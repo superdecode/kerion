@@ -848,6 +848,7 @@ function CanalModal({ canal, onClose, onSubmit, isLoading }) {
 
 function ParametrosTab({ canEdit }) {
   const { t } = useI18nStore()
+  const qc = useQueryClient()
   const [guiasPorTarima, setGuiasPorTarima] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const toast = useToastStore.getState()
@@ -875,6 +876,7 @@ function ParametrosTab({ canEdit }) {
       await api.put('/dropscan/config/parametros', {
         guias_por_tarima: Number(guiasPorTarima)
       })
+      qc.invalidateQueries({ queryKey: ['dropscan-parametros'] })
       toast.success(t('config.parametersSaved'))
     } catch (error) {
       toast.error(error.response?.data?.error || t('config.parametersSaveError'))

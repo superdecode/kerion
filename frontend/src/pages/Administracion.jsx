@@ -29,32 +29,12 @@ const MODULE_GROUPS = [
     ]
   },
   {
-    group: 'Inventario',
-    groupKey: 'admin.group.inventory',
-    modules: [
-      { key: 'inventory.escaneo',  label: 'Escaneo',  labelKey: 'perm.sub.escaneo' },
-      { key: 'inventory.tarimas',label: 'Tarimas',labelKey: 'perm.sub.tarimas' },
-      { key: 'inventory.reportes', label: 'Reportes', labelKey: 'perm.sub.reportes' },
-    ]
-  },
-  {
     group: 'Sistema',
     groupKey: 'admin.group.sistema',
     modules: [
       { key: 'global.inicio',        label: 'Inicio',          labelKey: 'perm.sub.inicio' },
       { key: 'global.administracion',label: 'Administración',  labelKey: 'perm.sub.administracion' },
       { key: 'global.wms',           label: 'WMS Hub',         labelKey: 'perm.sub.wms' },
-    ]
-  },
-  {
-    group: 'Módulos Futuros',
-    groupKey: 'admin.group.future',
-    modules: [
-      { key: 'despacho.ordenes',    label: 'Despacho - Órdenes',    labelKey: 'perm.sub.despacho.ordenes' },
-      { key: 'despacho.validacion', label: 'Despacho - Validación', labelKey: 'perm.sub.despacho.validacion' },
-      { key: 'rastreo.consulta',    label: 'Rastreo - Consulta',    labelKey: 'perm.sub.rastreo.consulta' },
-      { key: 'integraciones.config',label: 'Integraciones',         labelKey: 'perm.sub.integraciones' },
-      { key: 'reportes.global',     label: 'Reportes Globales',     labelKey: 'perm.sub.reportes.global' },
     ]
   },
 ]

@@ -245,3 +245,12 @@
   outline: none;
   cursor: pointer;
 }
+
+@keyframes tour-arrow-bounce {
+  0%, 100% { transform: translateY(-50%) translateX(0); }
+  50% { transform: translateY(-50%) translateX(4px); }
+}
+
+.tour-nav-arrow {
+  animation: tour-arrow-bounce 0.7s ease-in-out infinite;
+}

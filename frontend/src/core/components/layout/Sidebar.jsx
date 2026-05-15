@@ -40,6 +40,7 @@ export default function Sidebar() {
   const { user, canView } = useAuthStore()
   const { t } = useI18nStore()
   const tourActive = useTourStore((s) => s.active)
+  const highlightedSidebarItem = useTourStore((s) => s.highlightedSidebarItem)
   const navigate = useNavigate()
 
   const navItems = getNavItems(t)
@@ -59,27 +60,39 @@ export default function Sidebar() {
   const renderLink = (item) => {
     if (!canView(item.permission)) return null
     const Icon = item.icon
+    const isTourHighlighted = tourActive && highlightedSidebarItem === item.tourId
     return (
-      <NavLink
-        key={item.path}
-        to={item.path}
-        end={item.path === '/dropscan'}
-        data-tour={item.tourId}
-        className={({ isActive }) =>
-          `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-            isActive
-              ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
-              : 'text-blue-200/70 hover:text-white hover:bg-white/10'
-          }`
-        }
-      >
-        {({ isActive }) => (
-          <>
-            <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-400' : ''}`} />
-            {!collapsed && <span className="truncate">{item.label}</span>}
-          </>
+      <div key={item.path} className="relative">
+        <NavLink
+          to={item.path}
+          end={item.path === '/dropscan'}
+          data-tour={item.tourId}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              isActive
+                ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
+                : 'text-blue-200/70 hover:text-white hover:bg-white/10'
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-400' : ''}`} />
+              {!collapsed && <span className="truncate">{item.label}</span>}
+            </>
+          )}
+        </NavLink>
+        {isTourHighlighted && (
+          <svg
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="absolute -right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-white tour-nav-arrow"
+            aria-hidden="true"
+          >
+            <path d="M8 5l8 7-8 7V5z" />
+          </svg>
         )}
-      </NavLink>
+      </div>
     )
   }
 

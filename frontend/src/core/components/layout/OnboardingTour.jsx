@@ -24,8 +24,17 @@ const STEP_PATHS = [
   '/dropscan/historial',       // 7: historial filter bar
   '/dropscan/historial',       // 8: historial table
   '/dropscan/folios',          // 9: folios table
-  null,                        // 10: admin nav item (sidebar always visible)
-  null,                        // 11: finish
+  null,                        // 10: finish
+]
+
+// Sidebar nav item to highlight (data-tour id) for each step index
+const STEP_NAV_IDS = [
+  null, null,
+  'nav-configuracion', 'nav-configuracion', 'nav-configuracion', 'nav-configuracion',
+  'nav-escaneo',
+  'nav-historial', 'nav-historial',
+  'nav-folios',
+  null,
 ]
 
 export function tourHelpVisible(userId) {
@@ -38,7 +47,7 @@ export function tourHelpVisible(userId) {
 export default function OnboardingTour() {
   const { user, canView } = useAuthStore()
   const { t } = useI18nStore()
-  const { triggerCount, setActive } = useTourStore()
+  const { triggerCount, setActive, setHighlightedItem } = useTourStore()
   const startTourRef = useRef(null)
   const navigate = useNavigate()
   const navigateRef = useRef(navigate)
@@ -150,19 +159,6 @@ export default function OnboardingTour() {
       },
     ]
 
-    // 10: Admin nav item — only if user has access
-    if (canView('global.administracion')) {
-      steps.push({
-        element: '[data-tour="nav-admin"]',
-        popover: {
-          title: t('tour.administracion.title'),
-          description: t('tour.administracion.description'),
-          side: 'right',
-          align: 'start',
-        },
-      })
-    }
-
     // Finish
     steps.push({
       popover: {
@@ -203,8 +199,7 @@ export default function OnboardingTour() {
     setActive(true)
 
     const steps = buildSteps()
-    // Build a per-step path array matching the dynamic steps list
-    const stepPaths = buildStepPaths(steps.length)
+    const stepPaths = buildStepPaths()
 
     const instance = driver({
       animate: true,
@@ -275,6 +270,10 @@ export default function OnboardingTour() {
           }
         }
       },
+      onHighlightStarted: () => {
+        const idx = instance.getActiveIndex() ?? 0
+        setHighlightedItem(STEP_NAV_IDS[idx] ?? null)
+      },
       onCloseClick: () => {
         markDone()
         instance.destroy()
@@ -282,6 +281,7 @@ export default function OnboardingTour() {
       onDestroyed: () => {
         markDone()
         setActive(false)
+        setHighlightedItem(null)
       },
     })
 
@@ -290,11 +290,9 @@ export default function OnboardingTour() {
     instance.drive()
   }
 
-  // Build a path array for the dynamically built steps (admin step is conditional)
-  const buildStepPaths = (totalSteps) => {
-    const hasAdmin = canView('global.administracion')
-    // Static steps 0-9, then optionally admin (10), then finish
-    const paths = [
+  // Build a path array for the dynamically built steps
+  const buildStepPaths = () => {
+    return [
       null,                        // 0: welcome
       null,                        // 1: sidebar
       '/dropscan/configuracion',   // 2: config tabs
@@ -305,10 +303,8 @@ export default function OnboardingTour() {
       '/dropscan/historial',       // 7: historial filtros
       '/dropscan/historial',       // 8: historial tabla
       '/dropscan/folios',          // 9: folios
+      null,                        // 10: finish
     ]
-    if (hasAdmin) paths.push(null) // 10: admin nav (sidebar always visible)
-    paths.push(null) // finish
-    return paths
   }
 
   // Auto-start for Administrador users on first login

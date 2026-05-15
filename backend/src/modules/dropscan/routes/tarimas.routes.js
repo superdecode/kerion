@@ -245,11 +245,17 @@ router.post('/:id/cancel',
       const { id } = req.params
       const { razon } = req.body
       if (!razon || !razon.trim()) return res.status(400).json({ error: 'La razón de cancelación es requerida' })
+      const exists = await req.tQuery(
+        `SELECT estado FROM tarimas WHERE id = $1 AND tenant_id = $2`,
+        [id, req.tenantId]
+      )
+      if (exists.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada' })
+      if (exists.rows[0].estado !== 'EN_PROCESO') return res.status(409).json({ error: 'La tarima no está en proceso' })
       const result = await req.tQuery(
-        `UPDATE tarimas SET estado = 'CANCELADA', fecha_cierre = CURRENT_TIMESTAMP, cancelada_razon = $1 WHERE id = $2 AND estado = 'EN_PROCESO' AND tenant_id = $3 RETURNING *`,
+        `UPDATE tarimas SET estado = 'CANCELADA', fecha_cierre = CURRENT_TIMESTAMP, cancelada_razon = $1 WHERE id = $2 AND tenant_id = $3 RETURNING *`,
         [razon.trim(), id, req.tenantId]
       )
-      if (result.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada o no está en proceso' })
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada' })
       auditLog(req, 'CANCELAR_TARIMA', 'tarima', id, { codigo: result.rows[0].codigo, razon: razon.trim() })
       res.json({ success: true, tarima: result.rows[0] })
     } catch (error) {

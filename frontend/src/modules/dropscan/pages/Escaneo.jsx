@@ -1414,6 +1414,9 @@ export default function Escaneo() {
             <textarea value={cancelReason} onChange={e => setCancelReason(e.target.value)}
               placeholder={t('scan.cancelReasonPlaceholder')} rows={3}
               className="w-full px-4 py-3 text-sm bg-white border-2 border-warm-200 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none placeholder:text-warm-300 resize-none" />
+            {!cancelReason.trim() && (
+              <p className="mt-1.5 text-xs text-danger-500">{t('scan.cancelReasonRequired')}</p>
+            )}
           </div>
         </div>
       </Modal>
