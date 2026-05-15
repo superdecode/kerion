@@ -794,6 +794,7 @@ const translations = {
     'fep.log.impresion': '打印',
 
     // Tarima audit actions
+    'tarima.log.crear_tarima': '创建托盘',
     'tarima.log.finalizar_tarima': '完成托盘',
     'tarima.log.cancelar_tarima': '取消托盘',
     'tarima.log.reabrir_tarima': '重新开放托盘',
@@ -1782,6 +1783,7 @@ const translations = {
     'fep.log.impresion': 'Impresión',
 
     // Tarima audit actions
+    'tarima.log.crear_tarima': 'Tarima creada',
     'tarima.log.finalizar_tarima': 'Tarima finalizada',
     'tarima.log.cancelar_tarima': 'Tarima cancelada',
     'tarima.log.reabrir_tarima': 'Tarima reabierta',

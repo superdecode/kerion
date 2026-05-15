@@ -503,17 +503,41 @@ router.get('/:id/log',
       )
       if (owns.rows.length === 0) return res.status(404).json({ error: 'Tarima no encontrada' })
 
-      // Use tenant-scoped query so the LEFT JOIN to usuarios (which has RLS) works correctly
-      const result = await req.tQuery(
-        `SELECT al.id, al.action, al.details, al.created_at AS timestamp,
-                COALESCE(u.nombre_completo, al.user_email) AS usuario_nombre
-         FROM audit_log al
-         LEFT JOIN usuarios u ON u.id = al.user_id
-         WHERE al.entity_type = 'tarima' AND al.entity_id::text = $1
-         ORDER BY al.created_at ASC`,
-        [String(numId)]
-      )
-      res.json({ log: result.rows })
+      // Fetch audit log events + synthesize a creation entry from the tarimas row
+      const [auditRes, tarimaRes] = await Promise.all([
+        req.tQuery(
+          `SELECT al.id, al.action, al.details, al.created_at AS timestamp,
+                  COALESCE(u.nombre_completo, al.user_email) AS usuario_nombre
+           FROM audit_log al
+           LEFT JOIN usuarios u ON u.id = al.user_id
+           WHERE al.entity_type = 'tarima' AND al.entity_id::text = $1
+           ORDER BY al.created_at ASC`,
+          [String(numId)]
+        ),
+        req.tQuery(
+          `SELECT t.fecha_inicio, COALESCE(u.nombre_completo, u.email) AS operador_nombre
+           FROM tarimas t
+           LEFT JOIN usuarios u ON u.id = t.operador_id
+           WHERE t.id = $1`,
+          [numId]
+        ),
+      ])
+
+      const creationEntry = tarimaRes.rows[0]
+        ? {
+            id: `synthetic-creation-${numId}`,
+            action: 'CREAR_TARIMA',
+            details: null,
+            timestamp: tarimaRes.rows[0].fecha_inicio,
+            usuario_nombre: tarimaRes.rows[0].operador_nombre,
+          }
+        : null
+
+      const log = [
+        ...(creationEntry ? [creationEntry] : []),
+        ...auditRes.rows,
+      ]
+      res.json({ log })
     } catch (error) {
       console.error('[tarima/log] error:', error.message, '| code:', error.code, '| detail:', error.detail)
       res.status(500).json({ error: 'Error obteniendo historial' })

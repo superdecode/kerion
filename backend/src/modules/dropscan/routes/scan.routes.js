@@ -62,8 +62,9 @@ router.post('/sessions/start',
   requirePermission('dropscan.escaneo', 'crear'),
   async (req, res) => {
     if (!req.tenantId) return res.status(400).json({ error: 'Contexto de tenant no disponible' })
-    const client = await req.tGetClient()
+    let client
     try {
+      client = await req.tGetClient()
       const { empresa_id, canal_id, usuario_operador, usuario_interno_id, nivel_usuario } = req.body
       const userId = req.user.id
       const empId = parseInt(empresa_id)
@@ -188,11 +189,11 @@ router.post('/sessions/start',
         tarimas_activas: [tarima]
       })
     } catch (error) {
-      try { await client.query('ROLLBACK') } catch {}
+      if (client) try { await client.query('ROLLBACK') } catch {}
       console.error('Start session error:', error.message, error.detail || '')
       res.status(500).json({ error: 'Error iniciando sesión', detail: error.message })
     } finally {
-      client.release()
+      if (client) client.release()
     }
   }
 )
@@ -312,13 +313,15 @@ router.post('/sessions/:id/scan',
   requirePermission('dropscan.escaneo', 'crear'),
   async (req, res) => {
     if (!req.tenantId) return res.status(400).json({ error: 'Contexto de tenant no disponible' })
-    const client = await req.tGetClient()
+    let client
     try {
+      client = await req.tGetClient()
       const sessionId = req.params.id
       const { codigo_guia, tarima_id } = req.body // tarima_id is optional for multi-tarima support
       const userId = req.user.id
 
       if (!codigo_guia || !codigo_guia.trim()) {
+        await client.query('ROLLBACK')
         return res.status(400).json({ error: 'codigo_guia es requerido' })
       }
 
@@ -491,7 +494,7 @@ router.post('/sessions/:id/scan',
             nueva_tarima = newTarimaRes.rows[0]
             break
           } catch (e) {
-            if (e.code === '23505' && e.constraint === 'tarimas_codigo_key' && attempt < 4) continue
+            if (e.code === '23505' && e.constraint === 'tarimas_tenant_codigo_unique' && attempt < 4) continue
             throw e
           }
         }
@@ -519,11 +522,11 @@ router.post('/sessions/:id/scan',
           : null
       })
     } catch (error) {
-      await client.query('ROLLBACK')
+      if (client) try { await client.query('ROLLBACK') } catch {}
       console.error('Scan error:', error)
       res.status(500).json({ error: 'Error escaneando guía' })
     } finally {
-      client.release()
+      if (client) client.release()
     }
   }
 )
@@ -534,8 +537,9 @@ router.post('/sessions/:id/add-tarima',
   requirePermission('dropscan.escaneo', 'crear'),
   async (req, res) => {
     if (!req.tenantId) return res.status(400).json({ error: 'Contexto de tenant no disponible' })
-    const client = await req.tGetClient()
+    let client
     try {
+      client = await req.tGetClient()
       const sessionId = req.params.id
       const userId = req.user.id
       const maxTarimas = 3 // Maximum simultaneous tarimas
@@ -583,7 +587,7 @@ router.post('/sessions/:id/add-tarima',
           )
           break
         } catch (e) {
-          if (e.code === '23505' && e.constraint === 'tarimas_codigo_key' && attempt < 4) continue
+          if (e.code === '23505' && e.constraint === 'tarimas_tenant_codigo_unique' && attempt < 4) continue
           throw e
         }
       }
@@ -614,11 +618,11 @@ router.post('/sessions/:id/add-tarima',
         total_activas: allTarimasRes.rows.length
       })
     } catch (error) {
-      await client.query('ROLLBACK')
+      if (client) try { await client.query('ROLLBACK') } catch {}
       console.error('Add tarima error:', error)
       res.status(500).json({ error: 'Error creando tarima adicional' })
     } finally {
-      client.release()
+      if (client) client.release()
     }
   }
 )
@@ -735,8 +739,9 @@ router.delete('/sessions/:sessionId/guia/:guiaId',
   requirePermission('dropscan.escaneo', 'eliminar'),
   async (req, res) => {
     if (!req.tenantId) return res.status(400).json({ error: 'Contexto de tenant no disponible' })
-    const client = await req.tGetClient()
+    let client
     try {
+      client = await req.tGetClient()
       const { sessionId, guiaId } = req.params
 
       const guiaRes = await client.query('SELECT * FROM guias WHERE id = $1 AND tenant_id = $2', [guiaId, req.tenantId])
@@ -770,11 +775,11 @@ router.delete('/sessions/:sessionId/guia/:guiaId',
       await client.query('COMMIT')
       res.json({ success: true, message: 'Guía eliminada' })
     } catch (error) {
-      await client.query('ROLLBACK')
+      if (client) try { await client.query('ROLLBACK') } catch {}
       console.error('Delete guia error:', error)
       res.status(500).json({ error: 'Error eliminando guía' })
     } finally {
-      client.release()
+      if (client) client.release()
     }
   }
 )
