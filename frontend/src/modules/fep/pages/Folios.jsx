@@ -400,12 +400,21 @@ export default function Folios() {
               </button>
             ))}
 
-            <div className="flex items-center gap-1.5">
-              {hasActiveFilters && (
-                <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
-                  <X className="w-3 h-3" />{t('common.clear')}
+            {/* Search input — always visible */}
+            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5 min-w-[200px]">
+              <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+              <input type="text" value={folioSearchInput}
+                onChange={e => handleFolioSearch(e.target.value)}
+                placeholder={t('fep.searchPlaceholder')}
+                className="text-xs outline-none bg-transparent text-warm-700 flex-1" />
+              {folioSearchInput && (
+                <button onClick={() => handleFolioSearch('')} className="text-warm-400 hover:text-warm-600">
+                  <X className="w-3 h-3" />
                 </button>
               )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setShowFilters(v => !v)}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors border ${
@@ -423,18 +432,9 @@ export default function Folios() {
                 )}
                 {showFilters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               </button>
-            </div>
-
-            {/* Search input — always visible */}
-            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5 min-w-[200px]">
-              <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
-              <input type="text" value={folioSearchInput}
-                onChange={e => handleFolioSearch(e.target.value)}
-                placeholder={t('fep.searchPlaceholder')}
-                className="text-xs outline-none bg-transparent text-warm-700 flex-1" />
-              {folioSearchInput && (
-                <button onClick={() => handleFolioSearch('')} className="text-warm-400 hover:text-warm-600">
-                  <X className="w-3 h-3" />
+              {hasActiveFilters && (
+                <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
+                  <X className="w-3 h-3" />{t('common.clear')}
                 </button>
               )}
             </div>
