@@ -62,37 +62,31 @@ export default function Sidebar() {
     const Icon = item.icon
     const isTourHighlighted = tourActive && highlightedSidebarItem === item.tourId
     return (
-      <div key={item.path} className="relative">
-        <NavLink
-          to={item.path}
-          end={item.path === '/dropscan'}
-          data-tour={item.tourId}
-          className={({ isActive }) =>
-            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              isActive
-                ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
-                : 'text-blue-200/70 hover:text-white hover:bg-white/10'
-            }`
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-400' : ''}`} />
-              {!collapsed && <span className="truncate">{item.label}</span>}
-            </>
-          )}
-        </NavLink>
-        {isTourHighlighted && (
-          <svg
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className="absolute -right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-white tour-nav-arrow"
-            aria-hidden="true"
-          >
-            <path d="M8 5l8 7-8 7V5z" />
-          </svg>
+      <NavLink
+        key={item.path}
+        to={item.path}
+        end={item.path === '/dropscan'}
+        data-tour={item.tourId}
+        className={({ isActive }) =>
+          `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            isActive
+              ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
+              : 'text-blue-200/70 hover:text-white hover:bg-white/10'
+          }`
+        }
+      >
+        {({ isActive }) => (
+          <>
+            <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-400' : ''}`} />
+            {!collapsed && <span className="truncate flex-1">{item.label}</span>}
+            {isTourHighlighted && (
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-white flex-shrink-0 tour-nav-arrow" aria-hidden="true">
+                <path d="M8 5l8 7-8 7V5z" />
+              </svg>
+            )}
+          </>
         )}
-      </div>
+      </NavLink>
     )
   }
 

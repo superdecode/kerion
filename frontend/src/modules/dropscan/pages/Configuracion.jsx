@@ -873,10 +873,10 @@ function ParametrosTab({ canEdit }) {
     if (!canEdit) return
     setIsSaving(true)
     try {
-      await api.put('/dropscan/config/parametros', {
+      const { data } = await api.put('/dropscan/config/parametros', {
         guias_por_tarima: Number(guiasPorTarima)
       })
-      qc.invalidateQueries({ queryKey: ['dropscan-parametros'] })
+      qc.setQueryData(['dropscan-parametros'], data)
       toast.success(t('config.parametersSaved'))
     } catch (error) {
       toast.error(error.response?.data?.error || t('config.parametersSaveError'))

@@ -210,11 +210,13 @@ export default function OnboardingTour() {
       stageRadius: 8,
       showProgress: true,
       progressText: t('tour.step_of'),
-      nextBtnText: t('tour.next'),
-      prevBtnText: t('tour.prev'),
-      doneBtnText: t('tour.finish.button'),
       steps,
       onPopoverRender: (popover, { state }) => {
+        if (popover.nextButton) popover.nextButton.textContent = t('tour.next')
+        if (popover.previousButton) popover.previousButton.textContent = t('tour.prev')
+        if (state.activeIndex === steps.length - 1 && popover.nextButton) {
+          popover.nextButton.textContent = t('tour.finish.button')
+        }
         if (state.activeIndex === 0) {
           const { locale, setLocale } = useI18nStore.getState()
           const wrap = document.createElement('div')

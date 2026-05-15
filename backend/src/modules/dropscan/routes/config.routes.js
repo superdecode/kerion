@@ -331,7 +331,9 @@ router.get('/parametros',
       const result = await req.tQuery(
         `SELECT config_json FROM configuraciones
          WHERE modulo = 'dropscan' AND tipo = 'parametros' AND codigo = 'default'
-         LIMIT 1`
+         AND tenant_id = $1
+         LIMIT 1`,
+        [req.tenantId]
       )
       if (result.rows.length === 0) {
         return res.json({ guias_por_tarima: 100 })

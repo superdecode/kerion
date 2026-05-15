@@ -419,6 +419,31 @@ export default function Tarimas() {
                 setFilters(f => ({ ...f, fecha_inicio: s, fecha_fin: todayNow })); setPage(1)
               }} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors">{t(k)}</button>
             ))}
+            <div className="flex items-center gap-1.5">
+              {hasActiveFilters && (
+                <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
+                  <X className="w-3 h-3" />{t('common.clear')}
+                </button>
+              )}
+              <button
+                onClick={() => setShowFilters(v => !v)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors border ${
+                  showFilters
+                    ? 'bg-primary-50 text-primary-700 border-primary-200 hover:bg-primary-100'
+                    : 'bg-warm-50 text-warm-500 border-warm-200 hover:bg-warm-100'
+                } ${advancedFiltersCount > 0 ? 'ring-1 ring-primary-400' : ''}`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                Filtros
+                {advancedFiltersCount > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-primary-500 text-white text-[9px] flex items-center justify-center font-bold">
+                    {advancedFiltersCount}
+                  </span>
+                )}
+                {showFilters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            </div>
+
             {/* Search input — always visible */}
             <div ref={guiaSearchRef} className="relative">
               <form
@@ -507,33 +532,6 @@ export default function Tarimas() {
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {hasActiveFilters && (
-                <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
-                  <X className="w-3 h-3" />{t('common.clear')}
-                </button>
-              )}
-
-              {/* Filtros toggle — same position as Folios */}
-              <button
-                onClick={() => setShowFilters(v => !v)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors border ${
-                  showFilters
-                    ? 'bg-primary-50 text-primary-700 border-primary-200 hover:bg-primary-100'
-                    : 'bg-warm-50 text-warm-500 border-warm-200 hover:bg-warm-100'
-                } ${advancedFiltersCount > 0 ? 'ring-1 ring-primary-400' : ''}`}
-              >
-                <Filter className="w-3.5 h-3.5" />
-                Filtros
-                {advancedFiltersCount > 0 && (
-                  <span className="w-4 h-4 rounded-full bg-primary-500 text-white text-[9px] flex items-center justify-center font-bold">
-                    {advancedFiltersCount}
-                  </span>
-                )}
-                {showFilters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              </button>
             </div>
 
             <div className="ml-auto flex items-center gap-2">
