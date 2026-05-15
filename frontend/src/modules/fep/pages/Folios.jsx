@@ -400,6 +400,31 @@ export default function Folios() {
               </button>
             ))}
 
+            <div className="flex items-center gap-1.5">
+              {hasActiveFilters && (
+                <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
+                  <X className="w-3 h-3" />{t('common.clear')}
+                </button>
+              )}
+              <button
+                onClick={() => setShowFilters(v => !v)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors border ${
+                  showFilters
+                    ? 'bg-primary-50 text-primary-700 border-primary-200 hover:bg-primary-100'
+                    : 'bg-warm-50 text-warm-500 border-warm-200 hover:bg-warm-100'
+                } ${hasAdvancedFilters ? 'ring-1 ring-primary-400' : ''}`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                {t('history.filters')}
+                {hasAdvancedFilters && (
+                  <span className="w-4 h-4 rounded-full bg-primary-500 text-white text-[9px] flex items-center justify-center font-bold">
+                    {filters.empresa_ids.length + filters.estados.length}
+                  </span>
+                )}
+                {showFilters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            </div>
+
             {/* Search input — always visible */}
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5 min-w-[200px]">
               <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
@@ -413,31 +438,6 @@ export default function Folios() {
                 </button>
               )}
             </div>
-
-            {hasActiveFilters && (
-              <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
-                <X className="w-3 h-3" />{t('common.clear')}
-              </button>
-            )}
-
-            {/* Filtros toggle — same position as Historial */}
-            <button
-              onClick={() => setShowFilters(v => !v)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg transition-colors border ${
-                showFilters
-                  ? 'bg-primary-50 text-primary-700 border-primary-200 hover:bg-primary-100'
-                  : 'bg-warm-50 text-warm-500 border-warm-200 hover:bg-warm-100'
-              } ${hasAdvancedFilters ? 'ring-1 ring-primary-400' : ''}`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              {t('history.filters')}
-              {hasAdvancedFilters && (
-                <span className="w-4 h-4 rounded-full bg-primary-500 text-white text-[9px] flex items-center justify-center font-bold">
-                  {filters.empresa_ids.length + filters.estados.length}
-                </span>
-              )}
-              {showFilters ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
 
             <div className="ml-auto flex items-center gap-2">
               {canCreateFolios && (
@@ -454,10 +454,10 @@ export default function Folios() {
             {showFilters && (
               <motion.div
                 key="adv-filters"
-                initial={{ height: 0, opacity: 0, overflow: 'hidden' }}
-                animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }}
-                exit={{ height: 0, opacity: 0, overflow: 'hidden' }}
-                transition={{ duration: 0.2 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
               >
                 <div className="flex items-center gap-2 flex-wrap pt-0.5">
                   <MultiSelect

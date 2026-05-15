@@ -174,93 +174,88 @@ export default function Reportes() {
     <div className="flex flex-col h-full">
       <Header title={t('reports.title')} subtitle={t('reports.subtitle')} />
 
+      {/* Sticky filter bar */}
+      <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5 space-y-2">
+        {/* Row 1: date range + shortcuts */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5 shrink-0">
+            <Clock className="w-3.5 h-3.5 text-warm-400" />
+            <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)}
+              className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
+            <span className="text-warm-300 text-xs">→</span>
+            <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)}
+              className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
+          </div>
+          {[
+            { label: t('shortcut.today'), f: () => { setFechaInicio(today); setFechaFin(today) } },
+            { label: t('shortcut.7days'), f: () => { setFechaInicio(weekAgo); setFechaFin(today) } },
+            { label: t('shortcut.30days'), f: () => { setFechaInicio(subtractDays(today, 30)); setFechaFin(today) } },
+          ].map(({ label, f }) => (
+            <button key={label} onClick={f}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors">{label}</button>
+          ))}
+        </div>
+        {/* Row 2: dropdowns + export */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <MultiSelect icon={Building2} placeholder={t('history.company')}
+            options={empresas.map(e => ({ value: e.id, label: e.nombre, color: e.color }))}
+            selected={empresaFilter} onChange={setEmpresaFilter} />
+          <MultiSelect icon={Radio} placeholder={t('history.channel')}
+            options={canales.map(c => ({ value: c.id, label: c.nombre }))}
+            selected={canalFilter} onChange={setCanalFilter} />
+          <MultiSelect icon={User} placeholder={t('reports.scanner')}
+            options={escaneadoresOpts}
+            selected={escaneadorFilter} onChange={setEscaneadorFilter} />
+          <div className="ml-auto flex items-center gap-2">
+            {reportTab === 'resumen' && (
+              <div className="relative group">
+                <button className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold bg-warm-100 text-warm-700 hover:bg-warm-200 rounded-xl transition-colors border border-warm-200">
+                  <BarChart3 className="w-3.5 h-3.5" /> {t('reports.chartSelector')} <ChevronDown className="w-3 h-3" />
+                </button>
+                <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-xl shadow-depth border border-warm-100 min-w-[200px] overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
+                  {CHART_OPTIONS.map(opt => (
+                    <button key={opt.key} onClick={() => toggleChart(opt.key)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors ${
+                        visibleCharts[opt.key] ? 'text-primary-700 bg-primary-50/60' : 'text-warm-500 hover:bg-warm-50'
+                      }`}>
+                      <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 ${
+                        visibleCharts[opt.key] ? 'border-primary-500 bg-primary-500' : 'border-warm-300'
+                      }`}>
+                        {visibleCharts[opt.key] && <span className="text-white text-[8px] font-bold">✓</span>}
+                      </div>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {hasPermission('dropscan.reportes', 'exportar') && (
+              <button onClick={handleExport} disabled={!porDia.length || isExporting}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold bg-success-50 text-success-700 hover:bg-success-100 rounded-xl transition-colors border border-success-200 disabled:opacity-50">
+                {isExporting ? <div className="w-3.5 h-3.5 border-2 border-success-600 border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                {t('common.export')}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-warm-100 px-5 bg-white">
+        {TABS.map(tab => (
+          <button key={tab.id} onClick={() => setReportTab(tab.id)}
+            className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px ${
+              reportTab === tab.id
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-warm-400 hover:text-warm-600'
+            }`}>
+            <tab.icon className="w-4 h-4" /> {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-full mx-auto space-y-4">
-          {/* Filter bar */}
-          <motion.div className="card p-4"
-            initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
-            <div className="flex flex-col gap-2">
-              {/* Row 1: date range + shortcuts */}
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-2 shrink-0">
-                  <Clock className="w-3.5 h-3.5 text-warm-400" />
-                  <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)}
-                    className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
-                  <span className="text-warm-300 text-xs">→</span>
-                  <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)}
-                    className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
-                </div>
-                {[
-                  { label: t('shortcut.today'), f: () => { setFechaInicio(today); setFechaFin(today) } },
-                  { label: t('shortcut.7days'), f: () => { setFechaInicio(weekAgo); setFechaFin(today) } },
-                  { label: t('shortcut.30days'), f: () => { setFechaInicio(subtractDays(today, 30)); setFechaFin(today) } },
-                ].map(({ label, f }) => (
-                  <button key={label} onClick={f}
-                    className="px-2.5 py-1.5 text-xs font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 rounded-lg transition-colors">{label}</button>
-                ))}
-              </div>
-              {/* Row 2: dropdowns + export */}
-              <div className="flex items-center gap-3 flex-wrap">
-              <MultiSelect icon={Building2} placeholder={t('history.company')}
-                options={empresas.map(e => ({ value: e.id, label: e.nombre, color: e.color }))}
-                selected={empresaFilter} onChange={setEmpresaFilter} />
-              <MultiSelect icon={Radio} placeholder={t('history.channel')}
-                options={canales.map(c => ({ value: c.id, label: c.nombre }))}
-                selected={canalFilter} onChange={setCanalFilter} />
-              <MultiSelect icon={User} placeholder={t('reports.scanner')}
-                options={escaneadoresOpts}
-                selected={escaneadorFilter} onChange={setEscaneadorFilter} />
-              <div className="ml-auto flex items-center gap-2">
-                {/* Chart selector — only relevant on Resumen tab */}
-                {reportTab === 'resumen' && (
-                  <div className="relative group">
-                    <button className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-warm-100 text-warm-700 hover:bg-warm-200 rounded-xl transition-colors border border-warm-200">
-                      <BarChart3 className="w-3.5 h-3.5" /> {t('reports.chartSelector')} <ChevronDown className="w-3 h-3" />
-                    </button>
-                    <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-xl shadow-depth border border-warm-100 min-w-[200px] overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
-                      {CHART_OPTIONS.map(opt => (
-                        <button key={opt.key} onClick={() => toggleChart(opt.key)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors ${
-                            visibleCharts[opt.key] ? 'text-primary-700 bg-primary-50/60' : 'text-warm-500 hover:bg-warm-50'
-                          }`}>
-                          <div className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 ${
-                            visibleCharts[opt.key] ? 'border-primary-500 bg-primary-500' : 'border-warm-300'
-                          }`}>
-                            {visibleCharts[opt.key] && <span className="text-white text-[8px] font-bold">✓</span>}
-                          </div>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {hasPermission('dropscan.reportes', 'exportar') && (
-                  <button onClick={handleExport} disabled={!porDia.length || isExporting}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-success-50 text-success-700 hover:bg-success-100 rounded-xl transition-colors border border-success-200 disabled:opacity-50">
-                    {isExporting ? <div className="w-3.5 h-3.5 border-2 border-success-600 border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                    {t('common.export')}
-                  </button>
-                )}
-              </div>
-              </div>{/* end row 2 */}
-            </div>{/* end flex-col */}
-          </motion.div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 border-b border-warm-100">
-            {TABS.map(tab => (
-              <button key={tab.id} onClick={() => setReportTab(tab.id)}
-                className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px ${
-                  reportTab === tab.id
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-warm-400 hover:text-warm-600'
-                }`}>
-                <tab.icon className="w-4 h-4" /> {tab.label}
-              </button>
-            ))}
-          </div>
-
           {isLoading ? (
             <LoadingSpinner text={t('common.loading')} />
           ) : (

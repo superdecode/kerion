@@ -198,6 +198,7 @@
   font-weight: 600 !important;
   padding: 6px 14px !important;
   transition: opacity 0.15s !important;
+  text-shadow: none !important;
 }
 
 .driver-popover-prev-btn {
@@ -244,6 +245,22 @@
   color: #1e3a5f;
   outline: none;
   cursor: pointer;
+}
+
+.driver-tour-dont-show-btn {
+  display: block;
+  margin-top: 10px;
+  padding: 5px 0;
+  font-size: 11px;
+  color: #94a3b8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.driver-tour-dont-show-btn:hover {
+  color: #64748b;
 }
 
 @keyframes tour-arrow-bounce {

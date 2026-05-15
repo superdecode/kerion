@@ -235,6 +235,15 @@ export default function OnboardingTour() {
             driverRef.current?.destroy()
             setTimeout(() => startTourRef.current?.(), 50)
           })
+
+          const dontShowBtn = document.createElement('button')
+          dontShowBtn.textContent = t('tour.dontShowAgain')
+          dontShowBtn.className = 'driver-tour-dont-show-btn'
+          dontShowBtn.addEventListener('click', () => {
+            markDone()
+            instance.destroy()
+          })
+          popover.description.appendChild(dontShowBtn)
         }
       },
       onNextClick: () => {
