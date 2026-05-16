@@ -15,6 +15,7 @@ import { useTourStore } from '../../stores/tourStore'
 import { tourHelpVisible } from './OnboardingTour'
 
 const DISPLAY_PARENT = { fep: 'dropscan' }
+const ALLOWED_PERM_MODULES = new Set(['dropscan'])
 
 export default function Header({ title, subtitle, actions, showSearch = false }) {
   const [searchOpen, setSearchOpen] = useState(false)
@@ -422,11 +423,12 @@ export default function Header({ title, subtitle, actions, showSearch = false })
           {/* Permissions */}
           {user?.permisos && (() => {
             const displayPerms = Object.entries(user.permisos).reduce((acc, [mod, perms]) => {
-              const parent = DISPLAY_PARENT[mod]
-              if (parent && typeof perms === 'object') {
+              const parent = DISPLAY_PARENT[mod] || mod
+              if (!ALLOWED_PERM_MODULES.has(parent)) return acc
+              if (typeof perms === 'object') {
                 return { ...acc, [parent]: { ...(acc[parent] || {}), ...perms } }
               }
-              return { ...acc, [mod]: perms }
+              return { ...acc, [parent]: perms }
             }, {})
             return (
               <div>

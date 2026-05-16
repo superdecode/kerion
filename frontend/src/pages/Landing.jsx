@@ -97,11 +97,9 @@ const STATS = [
   { value: '12+', label: 'Empresas activas' },
   { value: '500K+', label: 'Guias procesadas' },
   { value: '99.9%', label: 'Uptime garantizado' },
-  { value: '< 30 min', label: 'Tiempo de setup' },
+  { value: '< 10 min', label: 'Tiempo de setup' },
 ]
 
-const MONTHLY_PRICES = { basic: 97, pro: 188 }
-const ANNUAL_PRICES = { basic: Math.round(97 * 0.8), pro: Math.round(188 * 0.8) }
 
 const PLANS_CONFIG = [
   {
@@ -246,7 +244,7 @@ function HeroSection() {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
-          {['Sin tarjeta de credito', 'Setup en menos de 30 min', '100+ guias diarias'].map(t => (
+          {['Sin tarjeta de credito', 'Setup en menos de 10 min', '100+ guias diarias'].map(t => (
             <span key={t} className="flex items-center gap-1.5">
               <Check className="w-3.5 h-3.5 text-emerald-500" />
               {t}
@@ -339,24 +337,29 @@ function FeaturesSection() {
 
 function PricingSection() {
   const [annual, setAnnual] = useState(false)
-  const [liveMonthly, setLiveMonthly] = useState({ ...MONTHLY_PRICES })
-  const [liveAnnual, setLiveAnnual] = useState({ ...ANNUAL_PRICES })
+  const [liveMonthly, setLiveMonthly] = useState({})
+  const [liveAnnualPerMonth, setLiveAnnualPerMonth] = useState({})
+  const [liveAnnualTotal, setLiveAnnualTotal] = useState({})
 
   useEffect(() => {
     axios.get('/api/public/plans').then(r => {
       const rows = r.data?.data || []
-      const monthly = { ...MONTHLY_PRICES }
-      const annual = { ...ANNUAL_PRICES }
+      const monthly = {}
+      const annualPerMonth = {}
+      const annualTotal = {}
       rows.forEach(p => {
         const key = p.code === 'basic' || p.code?.startsWith('basic') ? 'basic'
           : p.code === 'pro' || p.code?.startsWith('pro') ? 'pro' : null
-        if (!key) return
-        if (p.price_amount != null) monthly[key] = Number(p.price_amount)
-        if (p.price_annual != null) annual[key] = Math.round(Number(p.price_annual) / 12)
-        else if (p.price_amount != null) annual[key] = Math.round(Number(p.price_amount) * 0.8)
+        if (!key || p.price_amount == null) return
+        const m = Number(p.price_amount)
+        const at = p.price_annual != null ? Number(p.price_annual) : Math.round(m * 12 * 0.8)
+        monthly[key] = m
+        annualTotal[key] = at
+        annualPerMonth[key] = Math.round(at / 12)
       })
       setLiveMonthly(monthly)
-      setLiveAnnual(annual)
+      setLiveAnnualPerMonth(annualPerMonth)
+      setLiveAnnualTotal(annualTotal)
     }).catch(() => {})
   }, [])
 
@@ -364,7 +367,7 @@ function PricingSection() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const prices = annual ? liveAnnual : liveMonthly
+  const prices = annual ? liveAnnualPerMonth : liveMonthly
 
   return (
     <section id="precios" className="py-20 bg-gray-950">
@@ -419,12 +422,14 @@ function PricingSection() {
                 {plan.id !== 'custom' ? (
                   <>
                     <div className="flex items-end gap-1">
-                      <span className="text-4xl font-black text-white">${prices[plan.id]}</span>
+                      <span className="text-4xl font-black text-white">
+                        {prices[plan.id] != null ? `$${prices[plan.id]}` : '---'}
+                      </span>
                       <span className="text-gray-400 text-sm mb-1">/mes USD</span>
                     </div>
-                    {annual && (
+                    {annual && liveAnnualTotal[plan.id] != null && (
                       <p className="text-emerald-400 text-xs mt-1">
-                        Facturado anualmente — ahorra ${((liveMonthly[plan.id] || 0) - (liveAnnual[plan.id] || 0)) * 12} USD/ano
+                        Ahorras ${(liveMonthly[plan.id] || 0) * 12 - (liveAnnualTotal[plan.id] || 0)} al año
                       </p>
                     )}
                   </>
@@ -641,7 +646,7 @@ export default function Landing() {
               30 días gratis, sin riesgos
             </h2>
             <p className="text-gray-400 text-lg max-w-xl mx-auto">
-              Completa el formulario y nuestro equipo te configura el sistema en menos de 30 minutos.
+              Completa el formulario y nuestro equipo te configura el sistema en menos de 10 minutos.
             </p>
           </div>
 
@@ -649,7 +654,7 @@ export default function Landing() {
             <div className="lg:col-span-2 space-y-4">
               {[
                 { title: 'Trial de 30 días', desc: 'Acceso completo sin restricciones. Sin tarjeta de credito.' },
-                { title: 'Setup rapido', desc: 'Tu sistema configurado en menos de 30 minutos.' },
+                { title: 'Setup rapido', desc: 'Tu sistema configurado en menos de 10 minutos.' },
                 { title: 'Soporte incluido', desc: 'Te acompanamos durante todo el proceso de adopcion.' },
                 { title: 'Sin contratos', desc: 'Paga mes a mes. Cancela cuando quieras.' },
               ].map(({ title, desc }) => (
