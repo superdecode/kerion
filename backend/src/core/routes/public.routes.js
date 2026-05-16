@@ -153,24 +153,21 @@ router.get('/health', (_req, res) => {
 })
 
 // GET /api/public/plans — active visible plans for landing page (no auth)
-// price_annual is always computed as price_amount * 12 * 0.8 (20% annual discount)
 router.get('/plans', async (_req, res) => {
   try {
     let result
     try {
       result = await query(
-        `SELECT id, code, name, description, price_amount,
-                ROUND(price_amount * 12 * 0.8) AS price_annual,
-                price_currency, guide_limit, warehouse_count, modules, display_order
+        `SELECT id, code, name, description, price_amount, price_annual, price_currency,
+                guide_limit, warehouse_count, modules, display_order
          FROM plans
          WHERE is_active = true AND is_visible = true
          ORDER BY display_order ASC NULLS LAST, price_amount ASC`
       )
     } catch {
       result = await query(
-        `SELECT id, code, name, description, price_amount,
-                ROUND(price_amount * 12 * 0.8) AS price_annual,
-                price_currency, guide_limit, warehouse_count, modules
+        `SELECT id, code, name, description, price_amount, price_annual, price_currency,
+                guide_limit, warehouse_count, modules
          FROM plans
          WHERE is_active = true AND is_visible = true
          ORDER BY price_amount ASC`

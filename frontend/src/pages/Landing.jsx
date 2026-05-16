@@ -340,6 +340,7 @@ function PricingSection() {
   const [liveMonthly, setLiveMonthly] = useState({})
   const [liveAnnualPerMonth, setLiveAnnualPerMonth] = useState({})
   const [liveAnnualTotal, setLiveAnnualTotal] = useState({})
+  const [avgDiscountPct, setAvgDiscountPct] = useState(null)
 
   useEffect(() => {
     axios.get('/api/public/plans').then(r => {
@@ -347,19 +348,27 @@ function PricingSection() {
       const monthly = {}
       const annualPerMonth = {}
       const annualTotal = {}
+      const discounts = []
       rows.forEach(p => {
         const key = p.code === 'basic' || p.code?.startsWith('basic') ? 'basic'
           : p.code === 'pro' || p.code?.startsWith('pro') ? 'pro' : null
         if (!key || p.price_amount == null) return
         const m = Number(p.price_amount)
-        const at = p.price_annual != null ? Number(p.price_annual) : Math.round(m * 12 * 0.8)
         monthly[key] = m
-        annualTotal[key] = at
-        annualPerMonth[key] = Math.round(at / 12)
+        if (p.price_annual != null) {
+          const at = Number(p.price_annual)
+          annualTotal[key] = at
+          annualPerMonth[key] = Math.round(at / 12)
+          if (m > 0) discounts.push(1 - at / (m * 12))
+        }
       })
       setLiveMonthly(monthly)
       setLiveAnnualPerMonth(annualPerMonth)
       setLiveAnnualTotal(annualTotal)
+      if (discounts.length > 0) {
+        const avg = discounts.reduce((a, b) => a + b, 0) / discounts.length
+        setAvgDiscountPct(Math.round(avg * 100))
+      }
     }).catch(() => {})
   }, [])
 
@@ -368,6 +377,7 @@ function PricingSection() {
   }
 
   const prices = annual ? liveAnnualPerMonth : liveMonthly
+  const discountLabel = avgDiscountPct != null ? `-${avgDiscountPct}%` : 'Anual'
 
   return (
     <section id="precios" className="py-20 bg-gray-950">
@@ -394,9 +404,11 @@ function PricingSection() {
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${annual ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
             >
               Anual
-              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${annual ? 'bg-blue-500 text-white' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
-                -20%
-              </span>
+              {discountLabel && (
+                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${annual ? 'bg-blue-500 text-white' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
+                  {discountLabel}
+                </span>
+              )}
             </button>
           </div>
         </div>
