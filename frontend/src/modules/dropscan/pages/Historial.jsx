@@ -46,6 +46,8 @@ export default function Historial() {
     fecha_inicio: searchParams.get('fecha_inicio') || defaultStart,
     fecha_fin: searchParams.get('fecha_fin') || defaultEnd,
   })
+  const autoFilterEndRef = useRef(defaultEnd)
+  const isRollingDateRangeRef = useRef(!searchParams.get('fecha_inicio') && !searchParams.get('fecha_fin'))
   const [guiaSearch, setGuiaSearch] = useState('')
   const [guiaSearchInput, setGuiaSearchInput] = useState('')
   const [guiaSearchResults, setGuiaSearchResults] = useState([])
@@ -76,6 +78,38 @@ export default function Historial() {
   const toast = useToastStore.getState()
   const { t } = useI18nStore()
   const qc = useQueryClient()
+
+  const syncRollingDateRange = useCallback(() => {
+    const previousEnd = autoFilterEndRef.current
+    const today = getToday()
+    if (today === previousEnd) return
+
+    if (isRollingDateRangeRef.current) {
+      setFilters(current => ({
+        ...current,
+        fecha_inicio: subtractDays(today, 30),
+        fecha_fin: today,
+      }))
+      setPage(1)
+    }
+    autoFilterEndRef.current = today
+  }, [])
+
+  useEffect(() => {
+    const syncWhenVisible = () => {
+      if (document.visibilityState === 'visible') syncRollingDateRange()
+    }
+
+    window.addEventListener('focus', syncRollingDateRange)
+    document.addEventListener('visibilitychange', syncWhenVisible)
+    const intervalId = window.setInterval(syncRollingDateRange, 60_000)
+
+    return () => {
+      window.removeEventListener('focus', syncRollingDateRange)
+      document.removeEventListener('visibilitychange', syncWhenVisible)
+      window.clearInterval(intervalId)
+    }
+  }, [syncRollingDateRange])
 
   // Fetch empresas/canales/escaneadores for filters
   const { data: empresasData } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas })
@@ -289,7 +323,10 @@ export default function Historial() {
   }
 
   const clearFilters = () => {
-    setFilters({ estados: [], empresa_ids: [], canal_ids: [], escaneadores: [], fecha_inicio: defaultStart, fecha_fin: defaultEnd })
+    const today = getToday()
+    autoFilterEndRef.current = today
+    isRollingDateRangeRef.current = true
+    setFilters({ estados: [], empresa_ids: [], canal_ids: [], escaneadores: [], fecha_inicio: subtractDays(today, 30), fecha_fin: today })
     setGuiaSearch(''); setGuiaSearchInput('')
     setPage(1)
   }
@@ -401,11 +438,11 @@ export default function Historial() {
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5">
               <Clock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
               <input type="date" value={filters.fecha_inicio}
-                onChange={e => { setFilters(f => ({ ...f, fecha_inicio: e.target.value })); setPage(1) }}
+                onChange={e => { isRollingDateRangeRef.current = false; setFilters(f => ({ ...f, fecha_inicio: e.target.value })); setPage(1) }}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
               <span className="text-warm-300 text-xs">→</span>
               <input type="date" value={filters.fecha_fin}
-                onChange={e => { setFilters(f => ({ ...f, fecha_fin: e.target.value })); setPage(1) }}
+                onChange={e => { isRollingDateRangeRef.current = false; setFilters(f => ({ ...f, fecha_fin: e.target.value })); setPage(1) }}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
             </div>
             {[
@@ -416,6 +453,8 @@ export default function Historial() {
               <button key={k} onClick={() => {
                 const todayNow = getToday()
                 const s = d === 0 ? todayNow : subtractDays(todayNow, d)
+                autoFilterEndRef.current = todayNow
+                isRollingDateRangeRef.current = true
                 setFilters(f => ({ ...f, fecha_inicio: s, fecha_fin: todayNow })); setPage(1)
               }} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors">{t(k)}</button>
             ))}

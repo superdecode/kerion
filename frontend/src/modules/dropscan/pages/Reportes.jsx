@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import Header from '../../../core/components/layout/Header'
@@ -57,6 +57,36 @@ export default function Reportes() {
   const [escaneadorFilter, setEscaneadorFilter] = useState([])
   const [reportTab, setReportTab] = useState('resumen')
   const [isExporting, setIsExporting] = useState(false)
+  const autoFilterEndRef = useRef(today)
+  const isRollingDateRangeRef = useRef(true)
+
+  const syncRollingDateRange = useCallback(() => {
+    const previousEnd = autoFilterEndRef.current
+    const currentToday = getToday()
+    if (currentToday === previousEnd) return
+
+    if (isRollingDateRangeRef.current) {
+      setFechaInicio(subtractDays(currentToday, 7))
+      setFechaFin(currentToday)
+    }
+    autoFilterEndRef.current = currentToday
+  }, [])
+
+  useEffect(() => {
+    const syncWhenVisible = () => {
+      if (document.visibilityState === 'visible') syncRollingDateRange()
+    }
+
+    window.addEventListener('focus', syncRollingDateRange)
+    document.addEventListener('visibilitychange', syncWhenVisible)
+    const intervalId = window.setInterval(syncRollingDateRange, 60_000)
+
+    return () => {
+      window.removeEventListener('focus', syncRollingDateRange)
+      document.removeEventListener('visibilitychange', syncWhenVisible)
+      window.clearInterval(intervalId)
+    }
+  }, [syncRollingDateRange])
 
   const [visibleCharts, setVisibleCharts] = useState(() => {
     try {
@@ -180,18 +210,24 @@ export default function Reportes() {
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5 shrink-0">
             <Clock className="w-3.5 h-3.5 text-warm-400" />
-            <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)}
+            <input type="date" value={fechaInicio} onChange={e => { isRollingDateRangeRef.current = false; setFechaInicio(e.target.value) }}
               className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
             <span className="text-warm-300 text-xs">→</span>
-            <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)}
+            <input type="date" value={fechaFin} onChange={e => { isRollingDateRangeRef.current = false; setFechaFin(e.target.value) }}
               className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
           </div>
           {[
-            { label: t('shortcut.today'), f: () => { setFechaInicio(today); setFechaFin(today) } },
-            { label: t('shortcut.7days'), f: () => { setFechaInicio(weekAgo); setFechaFin(today) } },
-            { label: t('shortcut.30days'), f: () => { setFechaInicio(subtractDays(today, 30)); setFechaFin(today) } },
-          ].map(({ label, f }) => (
-            <button key={label} onClick={f}
+            { label: t('shortcut.today'), d: 0 },
+            { label: t('shortcut.7days'), d: 7 },
+            { label: t('shortcut.30days'), d: 30 },
+          ].map(({ label, d }) => (
+            <button key={label} onClick={() => {
+              const currentToday = getToday()
+              autoFilterEndRef.current = currentToday
+              isRollingDateRangeRef.current = true
+              setFechaInicio(d === 0 ? currentToday : subtractDays(currentToday, d))
+              setFechaFin(currentToday)
+            }}
               className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors">{label}</button>
           ))}
         </div>

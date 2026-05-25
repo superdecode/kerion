@@ -2,7 +2,7 @@ import { Router } from 'express'
 import crypto from 'crypto'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
-import { dateInTZ, getToday, CDMX_TZ } from '../../../shared/utils/dateUtils.js'
+import { dateInTZ, instantDateInTZ, getToday } from '../../../shared/utils/dateUtils.js'
 
 // Convert a tenant UUID to a stable int8 advisory lock key.
 function tenantLockKey(tenantId) {
@@ -12,15 +12,19 @@ function tenantLockKey(tenantId) {
 }
 
 const router = Router()
-const TZ = CDMX_TZ
+const DEFAULT_TZ = 'America/Mexico_City'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function isSameDay(tsUTC) {
+function getTimezone(req) {
+  return req.fullUser?.zona_horaria || DEFAULT_TZ
+}
+
+function isSameDay(tsUTC, tz) {
   const now = new Date()
-  const nowMx = new Date(now.toLocaleString('en-US', { timeZone: TZ }))
-  const tsMx = new Date(new Date(tsUTC).toLocaleString('en-US', { timeZone: TZ }))
-  return nowMx.toDateString() === tsMx.toDateString()
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now)
+  const timestampDay = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(tsUTC))
+  return today === timestampDay
 }
 
 async function recalcTotals(client, folioId) {
@@ -49,7 +53,8 @@ router.get('/stats/hoy',
   requirePermission('fep.folios', 'ver'),
   async (req, res) => {
     try {
-      const todayDate = getToday(TZ)
+      const tz = getTimezone(req)
+      const todayDate = getToday(tz)
       const result = await req.tQuery(
         `SELECT
            COUNT(*) FILTER (WHERE estado = 'ACTIVO')     AS activos,
@@ -58,7 +63,7 @@ router.get('/stats/hoy',
            COALESCE(SUM(total_tarimas),0) AS total_tarimas,
            COALESCE(SUM(total_guias),0)   AS total_guias
          FROM folios_entrega
-         WHERE ${dateInTZ('created_at', TZ)} = $1::date AND tenant_id = $2`,
+         WHERE ${instantDateInTZ('created_at', tz)} = $1::date AND tenant_id = $2`,
         [todayDate, req.tenantId]
       )
       res.json({ stats: result.rows[0] })
@@ -75,6 +80,7 @@ router.get('/preview-tarimas',
   requirePermission('fep.folios', 'ver'),
   async (req, res) => {
     try {
+      const tz = getTimezone(req)
       const { empresa_id, canales, fecha_desde, fecha_hasta, estatus_tarima = 'FINALIZADA', page = 1, limit = 50 } = req.query
       if (!empresa_id) return res.status(400).json({ error: 'empresa_id requerido' })
 
@@ -91,8 +97,8 @@ router.get('/preview-tarimas',
         if (ids.length) { pc++; where.push(`t.canal_id = ANY($${pc})`); params.push(ids) }
       }
 
-      if (fecha_desde) { pc++; where.push(`${dateInTZ('t.fecha_inicio', TZ)} >= $${pc}::date`); params.push(fecha_desde) }
-      if (fecha_hasta) { pc++; where.push(`${dateInTZ('t.fecha_inicio', TZ)} <= $${pc}::date`); params.push(fecha_hasta) }
+      if (fecha_desde) { pc++; where.push(`${dateInTZ('t.fecha_inicio', tz)} >= $${pc}::date`); params.push(fecha_desde) }
+      if (fecha_hasta) { pc++; where.push(`${dateInTZ('t.fecha_inicio', tz)} <= $${pc}::date`); params.push(fecha_hasta) }
 
       if (estatus_tarima === 'FINALIZADA') {
         where.push(`t.estado = 'FINALIZADA'`)
@@ -152,6 +158,7 @@ router.get('/',
   requirePermission('fep.folios', 'ver'),
   async (req, res) => {
     try {
+      const tz = getTimezone(req)
       const { empresa_id, estado, canal_id, fecha_desde, fecha_hasta, q, sort_by, sort_dir, page = 1, limit = 20 } = req.query
       const safePage = Math.max(1, parseInt(page) || 1)
       const safeLimit = Math.min(500, Math.max(1, parseInt(limit) || 20))
@@ -172,8 +179,8 @@ router.get('/',
       if (estado) { pc++; where.push(`fe.estado = $${pc}`); params.push(estado) }
       if (canal_id) { pc++; where.push(`$${pc} = ANY(fe.canales)`); params.push(Number(canal_id)) }
 
-      if (fecha_desde) { pc++; where.push(`${dateInTZ('fe.created_at', TZ)} >= $${pc}::date`); params.push(fecha_desde) }
-      if (fecha_hasta) { pc++; where.push(`${dateInTZ('fe.created_at', TZ)} <= $${pc}::date`); params.push(fecha_hasta) }
+      if (fecha_desde) { pc++; where.push(`${instantDateInTZ('fe.created_at', tz)} >= $${pc}::date`); params.push(fecha_desde) }
+      if (fecha_hasta) { pc++; where.push(`${instantDateInTZ('fe.created_at', tz)} <= $${pc}::date`); params.push(fecha_hasta) }
 
       if (q?.trim()) {
         pc++
@@ -232,6 +239,7 @@ router.post('/',
   requirePermission('fep.folios', 'crear'),
   async (req, res) => {
     const { empresa_id, canales, fecha_desde, fecha_hasta, estatus_tarima, tarima_ids } = req.body
+    const tz = getTimezone(req)
 
     if (!empresa_id) return res.status(400).json({ error: 'empresa_id requerido' })
     if (!tarima_ids?.length) return res.status(400).json({ error: 'Se requiere al menos una tarima' })
@@ -258,8 +266,8 @@ router.post('/',
             estatus_tarima_filtro, estado, hora_inicio, creado_por, tenant_id)
          VALUES ($1,$2,$3,$4,$5,$6,'ACTIVO',now(),$7,$8)
          RETURNING *`,
-        [folioNumero, empresa_id, canalIds, fecha_desde || new Date().toISOString().slice(0,10),
-         fecha_hasta || new Date().toISOString().slice(0,10),
+        [folioNumero, empresa_id, canalIds, fecha_desde || getToday(tz),
+         fecha_hasta || getToday(tz),
          estatus_tarima || 'FINALIZADA', req.fullUser.id, req.tenantId]
       )
       const folio = folioRes.rows[0]
@@ -381,7 +389,7 @@ router.patch('/:id',
       const folio = folioRes.rows[0]
 
       if (folio.estado !== 'ACTIVO') { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Solo se pueden editar folios activos' }) }
-      if (!isSameDay(folio.created_at) && req.fullUser.rol_nombre !== 'Administrador') {
+      if (!isSameDay(folio.created_at, getTimezone(req)) && req.fullUser.rol_nombre !== 'Administrador') {
         await client.query('ROLLBACK')
         return res.status(403).json({ error: 'Solo se pueden editar folios creados hoy' })
       }
@@ -493,7 +501,7 @@ router.delete('/:id',
 
       if (folio.estado === 'COMPLETADO') { await client.query('ROLLBACK'); return res.status(403).json({ error: 'Los folios completados son inmutables' }) }
 
-      if (!isSameDay(folio.created_at)) {
+      if (!isSameDay(folio.created_at, getTimezone(req))) {
         await client.query('ROLLBACK')
         return res.status(403).json({ error: 'Solo se pueden eliminar folios del día actual' })
       }
@@ -546,6 +554,7 @@ router.get('/:id/pdf',
   async (req, res) => {
     try {
       const { id } = req.params
+      const tz = getTimezone(req)
 
       const folioRes = await req.tQuery(
         `SELECT fe.*, e.nombre AS empresa_nombre, e.codigo AS empresa_codigo,
@@ -606,7 +615,7 @@ router.get('/:id/pdf',
         if (!res.headersSent) res.status(500).json({ error: 'Error generando PDF' })
       })
 
-      const fmtDate = (ts) => ts ? new Date(ts).toLocaleString('es-MX', { timeZone: TZ }) : '-'
+      const fmtDate = (ts) => ts ? new Date(ts).toLocaleString('es-MX', { timeZone: tz }) : '-'
       const generadoEn = fmtDate(new Date())
       const guias = guiasRes.rows
       const PW = doc.page.width   // 612

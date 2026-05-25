@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -71,11 +71,32 @@ export default function DropScanDashboard() {
   const [showCustom, setShowCustom] = useState(false)
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  const [currentDay, setCurrentDay] = useState(getToday)
+
+  useEffect(() => {
+    const syncCurrentDay = () => setCurrentDay(day => {
+      const today = getToday()
+      return day === today ? day : today
+    })
+    const syncWhenVisible = () => {
+      if (document.visibilityState === 'visible') syncCurrentDay()
+    }
+
+    window.addEventListener('focus', syncCurrentDay)
+    document.addEventListener('visibilitychange', syncWhenVisible)
+    const intervalId = window.setInterval(syncCurrentDay, 60_000)
+
+    return () => {
+      window.removeEventListener('focus', syncCurrentDay)
+      document.removeEventListener('visibilitychange', syncWhenVisible)
+      window.clearInterval(intervalId)
+    }
+  }, [])
 
   const dateRange = useMemo(() => {
     if (activePreset === 'custom' && customFrom && customTo) return { from: customFrom, to: customTo }
     return getDateRange(activePreset)
-  }, [activePreset, customFrom, customTo])
+  }, [activePreset, customFrom, customTo, currentDay])
 
   const activeLabel = activePreset === 'custom'
     ? `${customFrom} — ${customTo}`

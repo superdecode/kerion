@@ -33,6 +33,14 @@ export function dateInTZ(col, tz = DEFAULT_TZ) {
   return `(${col} AT TIME ZONE 'UTC' AT TIME ZONE '${tz}')::DATE`
 }
 
+/**
+ * SQL expression to convert a TIMESTAMPTZ instant to a calendar date in a timezone.
+ * Unlike TIMESTAMP columns, TIMESTAMPTZ already identifies an absolute instant.
+ */
+export function instantDateInTZ(col, tz = DEFAULT_TZ) {
+  return `(${col} AT TIME ZONE '${tz}')::DATE`
+}
+
 /** @deprecated Use dateInTZ() instead */
 export const dateMX = (col) => dateInTZ(col, DEFAULT_TZ)
 

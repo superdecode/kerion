@@ -30,9 +30,6 @@ const ESTADO_COLORS = {
   COMPLETADO: 'bg-primary-100 text-primary-700',
 }
 
-// Always use Mexico City TZ for FEP wizard dates — matches backend's hardcoded TZ
-const getMXToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date())
-
 export default function Folios() {
   const qc = useQueryClient()
   const toast = useToastStore.getState()
@@ -75,13 +72,46 @@ export default function Folios() {
   // Wizard state
   const [wizStep, setWizStep] = useState(1)
   const [wizParams, setWizParams] = useState({
-    empresa_id: '', canales: [], fecha_desde: getMXToday(), fecha_hasta: getMXToday(), estatus_tarima: 'FINALIZADA'
+    empresa_id: '', canales: [], fecha_desde: getToday(), fecha_hasta: getToday(), estatus_tarima: 'FINALIZADA'
   })
   const [wizTarimaPage, setWizTarimaPage] = useState(1)
   const [selectedTarimas, setSelectedTarimas] = useState([])
   const [expandedTarima, setExpandedTarima] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [createdFolio, setCreatedFolio] = useState(null)
+  const autoFilterEndRef = useRef(defaultEnd)
+  const isRollingDateRangeRef = useRef(true)
+
+  const syncRollingDateRange = useCallback(() => {
+    const previousEnd = autoFilterEndRef.current
+    const today = getToday()
+    if (today === previousEnd) return
+
+    if (isRollingDateRangeRef.current) {
+      setFilters(current => ({
+        ...current,
+        fecha_desde: subtractDays(today, 30),
+        fecha_fin: today,
+      }))
+    }
+    autoFilterEndRef.current = today
+  }, [])
+
+  useEffect(() => {
+    const syncWhenVisible = () => {
+      if (document.visibilityState === 'visible') syncRollingDateRange()
+    }
+
+    window.addEventListener('focus', syncRollingDateRange)
+    document.addEventListener('visibilitychange', syncWhenVisible)
+    const intervalId = window.setInterval(syncRollingDateRange, 60_000)
+
+    return () => {
+      window.removeEventListener('focus', syncRollingDateRange)
+      document.removeEventListener('visibilitychange', syncWhenVisible)
+      window.clearInterval(intervalId)
+    }
+  }, [syncRollingDateRange])
 
   // Catalogs
   const { data: empresasData } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: getEmpresas })
@@ -214,7 +244,10 @@ export default function Folios() {
   const wizPagination = wizData?.pagination || { page: 1, pages: 1, total: 0 }
 
   const clearFilters = () => {
-    setFilters({ empresa_ids: [], estados: [], fecha_desde: defaultStart, fecha_fin: defaultEnd })
+    const today = getToday()
+    autoFilterEndRef.current = today
+    isRollingDateRangeRef.current = true
+    setFilters({ empresa_ids: [], estados: [], fecha_desde: subtractDays(today, 30), fecha_fin: today })
     setFolioSearch(''); setFolioSearchInput(''); setPage(1); setSortBy('created_at'); setSortDir('desc')
   }
   const hasActiveFilters = !!(filters.empresa_ids.length || filters.estados.length || folioSearch)
@@ -312,7 +345,7 @@ export default function Folios() {
 
   const openWizard = () => {
     setWizStep(1)
-    setWizParams({ empresa_id: '', canales: [], fecha_desde: getMXToday(), fecha_hasta: getMXToday(), estatus_tarima: 'FINALIZADA' })
+    setWizParams({ empresa_id: '', canales: [], fecha_desde: getToday(), fecha_hasta: getToday(), estatus_tarima: 'FINALIZADA' })
     setSelectedTarimas([]); setWizTarimaPage(1); setExpandedTarima(null); setCreatedFolio(null)
     setShowWizard(true)
   }
@@ -383,16 +416,18 @@ export default function Folios() {
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5">
               <Clock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
               <input type="date" value={filters.fecha_desde}
-                onChange={e => { setFilters(f => ({ ...f, fecha_desde: e.target.value })); setPage(1) }}
+                onChange={e => { isRollingDateRangeRef.current = false; setFilters(f => ({ ...f, fecha_desde: e.target.value })); setPage(1) }}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
               <span className="text-warm-300 text-xs">→</span>
               <input type="date" value={filters.fecha_fin}
-                onChange={e => { setFilters(f => ({ ...f, fecha_fin: e.target.value })); setPage(1) }}
+                onChange={e => { isRollingDateRangeRef.current = false; setFilters(f => ({ ...f, fecha_fin: e.target.value })); setPage(1) }}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
             </div>
             {[{ label: t('shortcut.today'), d: 0 }, { label: t('shortcut.7days'), d: 7 }, { label: t('shortcut.30days'), d: 30 }].map(({ label, d }) => (
               <button key={label} onClick={() => {
                 const today = getToday()
+                autoFilterEndRef.current = today
+                isRollingDateRangeRef.current = true
                 setFilters(f => ({ ...f, fecha_desde: d === 0 ? today : subtractDays(today, d), fecha_fin: today }))
                 setPage(1)
               }} className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors">

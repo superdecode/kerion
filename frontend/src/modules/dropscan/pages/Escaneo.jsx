@@ -229,8 +229,29 @@ export default function Escaneo() {
   const hasNoConfig = configLoaded && (empresas.length === 0 || allCanales.filter(c => c.activo !== false).length === 0)
   const planLimitReached = guideUsage?.at_limit === true
 
+  // Today's lists must roll over even when the scanner screen remains open.
+  const [todayStr, setTodayStr] = useState(getTodayDateStr)
+  useEffect(() => {
+    const syncToday = () => setTodayStr(day => {
+      const today = getTodayDateStr()
+      return day === today ? day : today
+    })
+    const syncWhenVisible = () => {
+      if (document.visibilityState === 'visible') syncToday()
+    }
+
+    window.addEventListener('focus', syncToday)
+    document.addEventListener('visibilitychange', syncWhenVisible)
+    const intervalId = window.setInterval(syncToday, 60_000)
+
+    return () => {
+      window.removeEventListener('focus', syncToday)
+      document.removeEventListener('visibilitychange', syncWhenVisible)
+      window.clearInterval(intervalId)
+    }
+  }, [])
+
   // Today's history (shown when no tabs)
-  const todayStr = getTodayDateStr()
   const { data: todayHistoryData } = useQuery({
     queryKey: ['dropscan-today-history', todayStr],
     queryFn: () => ds.getTarimas({ fecha_inicio: todayStr, fecha_fin: todayStr }),
@@ -1666,12 +1687,11 @@ export default function Escaneo() {
 
 /* ── plan limit blocking modal ───────────────────────── */
 const UPGRADE_KEY = 'kirion_upgrade_req'
-const todayStr = () => new Date().toISOString().slice(0, 10)
 
 function getPreviousRequest() {
   try {
     const stored = JSON.parse(localStorage.getItem(UPGRADE_KEY) || 'null')
-    if (stored?.date === todayStr()) return stored
+    if (stored?.date === getToday()) return stored
   } catch {}
   return null
 }
@@ -1700,7 +1720,7 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose
         })
       )
       const reqData = {
-        date: todayStr(),
+        date: getToday(),
         email: user?.email || '',
         name: user?.nombre_completo || '',
         plan: planName,
