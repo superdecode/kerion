@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import Header from '../core/components/layout/Header'
 import { fmtTimeShort, fmtDateShort } from '../core/utils/dateFormat'
 import {
-  ScanBarcode, Package, Truck, CheckSquare, ArrowRight,
+  ScanBarcode, Package, RotateCcw, ArrowRight,
   Activity, Users, Clock
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -12,43 +12,32 @@ import { Link } from 'react-router-dom'
 const getModules = (t) => [
   {
     id: 'dropscan',
-    name: 'DropScan',
+    name: t('globalDash.dropscanTitle'),
     description: t('globalDash.dropscanDesc'),
     icon: ScanBarcode,
     path: '/dropscan',
     color: 'from-primary-500 to-primary-700',
     glow: 'group-hover:shadow-glow',
-    active: true,
+    actionLabel: t('globalDash.enterModule'),
+    variant: 'link',
+  },
+  {
+    id: 'returns',
+    name: t('globalDash.returns'),
+    description: t('globalDash.returnsDesc'),
+    icon: RotateCcw,
+    color: 'from-rose-500 to-orange-600',
+    glow: 'group-hover:shadow-glow',
+    variant: 'preview',
   },
   {
     id: 'inventory',
     name: t('globalDash.inventory'),
     description: t('globalDash.inventoryDesc'),
     icon: Package,
-    path: '/inventory',
     color: 'from-accent-500 to-accent-700',
     glow: 'group-hover:shadow-glow-cyan',
-    active: false,
-  },
-  {
-    id: 'dispatch',
-    name: t('globalDash.dispatch'),
-    description: t('globalDash.dispatchDesc'),
-    icon: Truck,
-    path: '/dispatch',
-    color: 'from-warning-400 to-warning-600',
-    glow: '',
-    active: false,
-  },
-  {
-    id: 'validate',
-    name: t('globalDash.validate'),
-    description: t('globalDash.validateDesc'),
-    icon: CheckSquare,
-    path: '/validate',
-    color: 'from-violet-500 to-violet-700',
-    glow: 'group-hover:shadow-glow',
-    active: false,
+    variant: 'preview',
   },
 ]
 
@@ -65,6 +54,7 @@ export default function GlobalDashboard() {
   const { user } = useAuthStore()
   const { t } = useI18nStore()
   const modules = getModules(t)
+  const activeModules = modules.filter(mod => mod.variant === 'link').length
 
   return (
     <div className="flex flex-col h-full">
@@ -101,7 +91,7 @@ export default function GlobalDashboard() {
 
             <div className="grid grid-cols-3 gap-5 mt-8">
               {[
-                { icon: Activity, value: '1', label: t('globalDash.activeModules'), delay: 0.3 },
+                { icon: Activity, value: String(activeModules), label: t('globalDash.activeModules'), delay: 0.3 },
                 { icon: Users, value: '—', label: t('globalDash.onlineUsers'), delay: 0.4 },
                 { icon: Clock, value: fmtTimeShort(new Date()), label: fmtDateShort(new Date()), delay: 0.5 },
               ].map((stat, i) => (
@@ -130,9 +120,10 @@ export default function GlobalDashboard() {
         >
           {t('globalDash.systemModules')}
         </motion.h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {modules.map((mod, i) => {
             const Icon = mod.icon
+            const isPreview = mod.variant === 'preview'
             return (
               <motion.div
                 key={mod.id}
@@ -141,30 +132,25 @@ export default function GlobalDashboard() {
                 initial="hidden"
                 animate="visible"
                 className={`relative group card-interactive p-5 overflow-hidden
-                            ${!mod.active ? 'opacity-50 pointer-events-none' : ''}`}
+                            ${isPreview ? 'bg-white/70 border-dashed border-warm-200/80' : ''}`}
               >
                 {/* Decorative gradient blob */}
                 <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br ${mod.color} opacity-[0.06] group-hover:opacity-[0.12] group-hover:scale-125 transition-all duration-500`} />
 
-                {!mod.active && (
-                  <span className="absolute top-3 right-3 badge bg-warm-100 text-warm-500 text-[9px]">
-                    {t('globalDash.comingSoon')}
-                  </span>
-                )}
                 <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${mod.color} flex items-center justify-center mb-4 shadow-sm ${mod.glow} transition-shadow duration-300`}>
                   <Icon className="w-5 h-5 text-white" />
                 </div>
                 <h4 className="text-sm font-bold text-warm-800 mb-1">{mod.name}</h4>
                 <p className="text-xs text-warm-400 mb-4 line-clamp-2 leading-relaxed">{mod.description}</p>
-                {mod.active ? (
+                {mod.variant === 'link' ? (
                   <Link
                     to={mod.path}
                     className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 group/link"
                   >
-                    {t('globalDash.enterModule')} <ArrowRight className="w-3 h-3 transition-transform group-hover/link:translate-x-1" />
+                    {mod.actionLabel || t('globalDash.enterModule')} <ArrowRight className="w-3 h-3 transition-transform group-hover/link:translate-x-1" />
                   </Link>
                 ) : (
-                  <span className="text-xs text-warm-300">{t('globalDash.unavailable')}</span>
+                  <span className="text-xs font-medium text-warm-300">{t('globalDash.previewSoon')}</span>
                 )}
               </motion.div>
             )
