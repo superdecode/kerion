@@ -402,13 +402,16 @@ router.post('/:tarimaId/guias',
         return res.status(400).json({ error: 'codigo_guia requerido' })
       }
 
-      // Verify tarima exists
+      // Verify tarima exists and is not locked by a folio
       const tarimaRes = await req.tQuery(
-        'SELECT id, cantidad_guias FROM tarimas WHERE id = $1 AND tenant_id = $2',
+        'SELECT id, cantidad_guias, folio_asignado FROM tarimas WHERE id = $1 AND tenant_id = $2',
         [tarimaId, req.tenantId]
       )
       if (tarimaRes.rows.length === 0) {
         return res.status(404).json({ error: 'Tarima no encontrada' })
+      }
+      if (tarimaRes.rows[0].folio_asignado) {
+        return res.status(409).json({ error: 'FOLIO_BLOQUEADO', message: `Tarima bloqueada por folio ${tarimaRes.rows[0].folio_asignado}` })
       }
 
       // Check for duplicates
@@ -469,6 +472,18 @@ router.delete('/:tarimaId/guias/:guiaId',
   async (req, res) => {
     try {
       const { tarimaId, guiaId } = req.params
+
+      // Check tarima is not locked by a folio
+      const tarimaRes = await req.tQuery(
+        'SELECT folio_asignado FROM tarimas WHERE id = $1 AND tenant_id = $2',
+        [tarimaId, req.tenantId]
+      )
+      if (tarimaRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Tarima no encontrada' })
+      }
+      if (tarimaRes.rows[0].folio_asignado) {
+        return res.status(409).json({ error: 'FOLIO_BLOQUEADO', message: `Tarima bloqueada por folio ${tarimaRes.rows[0].folio_asignado}` })
+      }
 
       const guiaRes = await req.tQuery(
         'SELECT id FROM guias WHERE id = $1 AND tarima_id = $2 AND tenant_id = $3',

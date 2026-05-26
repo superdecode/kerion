@@ -60,6 +60,7 @@ export default function Tarimas() {
   const [selectedTarima, setSelectedTarima] = useState(null)
   const [deletingTarima, setDeletingTarima] = useState(null)
   const [blockedDeleteTarima, setBlockedDeleteTarima] = useState(null)
+  const [blockedEditTarima, setBlockedEditTarima] = useState(null)
   const [deletingGuia, setDeletingGuia] = useState(null)
   const [editMode, setEditMode] = useState(false)
   const [selectMode, setSelectMode] = useState(false)
@@ -864,7 +865,13 @@ export default function Tarimas() {
               </button>
             )}
             {canManageStatus && (
-              <button onClick={() => setEditMode(e => !e)}
+              <button onClick={() => {
+                if (detail.folio_asignado) {
+                  setBlockedEditTarima(detail)
+                } else {
+                  setEditMode(e => !e)
+                }
+              }}
                 className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl font-semibold transition-all ${
                   editMode ? 'bg-warning-100 text-warning-700 hover:bg-warning-200' : 'bg-warm-100 text-warm-600 hover:bg-warm-200'
                 }`}>
@@ -1196,6 +1203,45 @@ export default function Tarimas() {
                 .replace('{folio}', blockedDeleteTarima?.folio_asignado)}
             </p>
           </div>
+        </div>
+      </Modal>
+
+      {/* Blocked edit modal — tarima tiene folio activo */}
+      <Modal isOpen={!!blockedEditTarima} onClose={() => setBlockedEditTarima(null)}
+        title="Tarima bloqueada" icon={Lock} size="sm"
+        footer={<>
+          <button onClick={() => setBlockedEditTarima(null)} className="btn-ghost">Cerrar</button>
+          {blockedEditTarima?.folio_id && (
+            <button
+              onClick={() => { setBlockedEditTarima(null); navigate(`/dropscan/folios?folio_id=${blockedEditTarima.folio_id}`) }}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-semibold text-sm transition-all">
+              <ArrowRight className="w-4 h-4" />
+              Ir al folio
+            </button>
+          )}
+        </>}>
+        <div className="space-y-4">
+          <div className="p-4 rounded-xl bg-danger-50 border border-danger-200 flex items-start gap-3">
+            <Lock className="w-5 h-5 text-danger-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-danger-800">Esta tarima está bloqueada por un folio activo</p>
+              <p className="text-xs text-danger-600 mt-1">
+                No puedes agregar, eliminar o modificar guías mientras exista un folio asignado. Para editar la tarima, debes eliminar o cancelar el folio primero.
+              </p>
+            </div>
+          </div>
+          {blockedEditTarima && (
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-200 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-warm-500 font-medium">Tarima</span>
+                <span className="text-sm font-bold font-mono text-warm-800">{blockedEditTarima.codigo}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-warm-500 font-medium">Folio asignado</span>
+                <span className="text-sm font-bold text-primary-600">{blockedEditTarima.folio_asignado}</span>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 
