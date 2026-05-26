@@ -607,8 +607,9 @@ export default function Escaneo() {
     const tab = tabs.find(t => t.tabId === tabId)
     if (!tab) return
 
-    // Block if already scanning this tab
-    if (tab.isScanning) return
+    // Synchronous guard using ref — prevents race conditions from rapid scanner input
+    // (React state updates are batched; refs are synchronous)
+    if (scanInFlight.current.has(tabId)) return
 
     const code = tab.scanInput.trim()
     if (!code) return
@@ -631,11 +632,13 @@ export default function Escaneo() {
       return
     }
 
-    // Set scanning state BEFORE clearing input to prevent duplicates
+    // Lock synchronously before any await
+    scanInFlight.current.add(tabId)
     updateTab(tabId, { scanInput: '', isScanning: true })
     try {
       await performActualScan(tabId, code)
     } finally {
+      scanInFlight.current.delete(tabId)
       updateTab(tabId, { isScanning: false })
     }
   }, [tabs, soundEnabled, updateTab, performActualScan, pesoState, t, toast])
@@ -644,16 +647,17 @@ export default function Escaneo() {
   const handleConfirmSuspicious = useCallback(async () => {
     if (!suspiciousModal) return
     const { code, tabId } = suspiciousModal
-    const tab = tabs.find(t => t.tabId === tabId)
-    if (!tab || tab.isScanning) return
+    if (scanInFlight.current.has(tabId)) return
     setSuspiciousModal(null)
+    scanInFlight.current.add(tabId)
     updateTab(tabId, { scanInput: '', isScanning: true })
     try {
       await performActualScan(tabId, code)
     } finally {
+      scanInFlight.current.delete(tabId)
       updateTab(tabId, { isScanning: false })
     }
-  }, [suspiciousModal, updateTab, performActualScan, tabs])
+  }, [suspiciousModal, updateTab, performActualScan])
 
   /* ── peso submit ────────────────────────────────── */
   const handlePesoSubmit = useCallback(async (e, forceSubmit = false) => {

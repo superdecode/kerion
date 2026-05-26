@@ -428,6 +428,13 @@ export default function Tarimas() {
   const detailGuias = detailData?.guias || []
   const duplicados = duplicadosData?.duplicados || []
 
+  // If a loaded tarima has a folio, force-exit editMode regardless of how it was opened
+  useEffect(() => {
+    if (detail?.folio_asignado && editMode) {
+      setEditMode(false)
+    }
+  }, [detail?.folio_asignado, editMode])
+
   return (
     <div className="flex flex-col h-full">
       <Header title={t('history.title')} subtitle={t('history.subtitle')} showSearch />
@@ -754,7 +761,13 @@ export default function Tarimas() {
                               </button>
                               )}
                               {canManageStatus && (
-                                <button onClick={() => handleOpenDetail(row.id, true)}
+                                <button onClick={() => {
+                                  if (row.folio_asignado) {
+                                    setBlockedEditTarima(row)
+                                  } else {
+                                    handleOpenDetail(row.id, true)
+                                  }
+                                }}
                                   className="p-2 rounded-xl hover:bg-warning-50 text-warm-400 hover:text-warning-500 transition-all" title="Editar">
                                   <Pencil className="w-4 h-4" />
                                 </button>
@@ -1018,7 +1031,7 @@ export default function Tarimas() {
                               <td className="px-3 py-2 text-right font-mono text-warm-600">
                                 {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
                               </td>
-                              {editMode && (
+                              {editMode && !detail?.folio_asignado && (
                                 <td className="px-2 py-1.5">
                                   <button
                                     onClick={() => setDeletingGuia(g)}
@@ -1036,8 +1049,8 @@ export default function Tarimas() {
                   </div>
                 )}
 
-                {/* Add guide section (edit mode only) */}
-                {editMode && canManageStatus && (
+                {/* Add guide section (edit mode, only when no folio) */}
+                {editMode && canManageStatus && !detail?.folio_asignado && (
                   <div className="mt-5 p-4 rounded-xl bg-primary-50 border border-primary-200">
                     <p className="text-xs font-bold text-primary-700 mb-3 uppercase tracking-wider">{t('history.addNewGuide')}</p>
                     <form onSubmit={(e) => {
