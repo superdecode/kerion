@@ -57,6 +57,13 @@ const playSound = (type) => {
     else if (type === 'error') { osc.frequency.value = 220; osc.type = 'square'; osc.start(); osc.stop(ctx.currentTime + 0.3) }
     else if (type === 'complete') { osc.frequency.value = 1200; osc.type = 'sine'; osc.start(); setTimeout(() => { osc.frequency.value = 1500 }, 100); osc.stop(ctx.currentTime + 0.25) }
     else if (type === 'warning') { osc.frequency.value = 600; osc.type = 'triangle'; osc.start(); osc.stop(ctx.currentTime + 0.2) }
+    else if (type === 'peso') {
+      // two ascending notes: 660Hz → 880Hz — distinct "weight confirmed" vs single-note scan ding
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(660, ctx.currentTime)
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.09)
+      osc.start(); osc.stop(ctx.currentTime + 0.18)
+    }
     else if (type === 'suspicious') {
       // double-beep: two short pulses at 440Hz sawtooth — distinct "wait, check this" alert
       osc.frequency.value = 440; osc.type = 'sawtooth'
@@ -662,6 +669,7 @@ export default function Escaneo() {
         guias: t.guias.map(g => g.id === guiaId ? { ...g, peso_kg: pesoVal } : g),
         lastScan: t.lastScan ? { ...t.lastScan, peso_kg: pesoVal } : t.lastScan,
       }))
+      if (soundEnabled) playSound('peso')
     } catch { /* non-fatal — scan already registered */ }
     setPesoState(null)
     setTimeout(() => inputRef.current?.focus(), 80)
