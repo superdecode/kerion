@@ -36,6 +36,13 @@ export function scoreTrackingCode(rawCode) {
   if (len < 8) return { score: 0, level: 'low', reason: 'too_short', numRatio: 0, alphaRatio: 0, len }
   if (/\s/.test(code)) return { score: 5, level: 'low', reason: 'has_spaces', numRatio: 0, alphaRatio: 0, len }
 
+  // Reject codes with separators (pipe, comma, semicolon, etc) — indicates concatenated/merged codes
+  if (/[|,;:]/.test(code)) return { score: 0, level: 'low', reason: 'concatenated_codes', numRatio: 0, alphaRatio: 0, len }
+
+  // Reject codes with multiple carrier prefixes (e.g., JMX...JMX) — indicates duplicate scan
+  const prefixMatches = code.match(/(JMX|GC[0-9]|IM[0-9]|1Z|EC|LP|RR|CX|EE|RA|CP|ST[0-9]|DHL|UPS|FDX|MEX|EST|PAQ|RED|SND|BOR|FLX|JTM|NET|WEL|VEL|AGE|MXE|977[0-9])/gi) || []
+  if (prefixMatches.length > 1) return { score: 0, level: 'low', reason: 'duplicate_scan', numRatio: 0, alphaRatio: 0, len }
+
   const digits = (code.match(/\d/g) || []).length
   const letters = (code.match(/[A-Z]/g) || []).length
   const numRatio = digits / len

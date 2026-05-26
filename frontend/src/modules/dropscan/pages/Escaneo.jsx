@@ -119,6 +119,7 @@ const newTabState = (id) => ({
   empresa: null,           // full empresa object
   canal: null,             // full canal object
   isStarting: false,
+  isScanning: false,       // prevent concurrent scans
 })
 
 let tabCounter = 0
@@ -605,6 +606,10 @@ export default function Escaneo() {
     e.preventDefault()
     const tab = tabs.find(t => t.tabId === tabId)
     if (!tab) return
+
+    // Block if already scanning this tab
+    if (tab.isScanning) return
+
     const code = tab.scanInput.trim()
     if (!code) return
 
@@ -626,14 +631,12 @@ export default function Escaneo() {
       return
     }
 
-    const key = `${tabId}:${code}`
-    if (scanInFlight.current.has(key)) return
-    scanInFlight.current.add(key)
-    updateTab(tabId, { scanInput: '' })
+    // Set scanning state BEFORE clearing input to prevent duplicates
+    updateTab(tabId, { scanInput: '', isScanning: true })
     try {
       await performActualScan(tabId, code)
     } finally {
-      scanInFlight.current.delete(key)
+      updateTab(tabId, { isScanning: false })
     }
   }, [tabs, soundEnabled, updateTab, performActualScan, pesoState, t, toast])
 
@@ -641,10 +644,16 @@ export default function Escaneo() {
   const handleConfirmSuspicious = useCallback(async () => {
     if (!suspiciousModal) return
     const { code, tabId } = suspiciousModal
+    const tab = tabs.find(t => t.tabId === tabId)
+    if (!tab || tab.isScanning) return
     setSuspiciousModal(null)
-    updateTab(tabId, { scanInput: '' })
-    await performActualScan(tabId, code)
-  }, [suspiciousModal, updateTab, performActualScan])
+    updateTab(tabId, { scanInput: '', isScanning: true })
+    try {
+      await performActualScan(tabId, code)
+    } finally {
+      updateTab(tabId, { isScanning: false })
+    }
+  }, [suspiciousModal, updateTab, performActualScan, tabs])
 
   /* ── peso submit ────────────────────────────────── */
   const handlePesoSubmit = useCallback(async (e, forceSubmit = false) => {

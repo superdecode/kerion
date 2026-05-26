@@ -404,7 +404,12 @@ router.post('/:tarimaId/guias',
 
       // Verify tarima exists and is not locked by a folio
       const tarimaRes = await req.tQuery(
-        'SELECT id, cantidad_guias, folio_asignado FROM tarimas WHERE id = $1 AND tenant_id = $2',
+        `SELECT id, cantidad_guias,
+                (SELECT fe.folio_numero FROM folios_entrega_tarimas fet
+                 JOIN folios_entrega fe ON fe.id = fet.folio_id
+                 WHERE fet.tarima_id = $1 AND fet.eliminado_en IS NULL AND fe.estado = 'ACTIVO'
+                 LIMIT 1) AS folio_asignado
+         FROM tarimas WHERE id = $1 AND tenant_id = $2`,
         [tarimaId, req.tenantId]
       )
       if (tarimaRes.rows.length === 0) {
@@ -475,7 +480,11 @@ router.delete('/:tarimaId/guias/:guiaId',
 
       // Check tarima is not locked by a folio
       const tarimaRes = await req.tQuery(
-        'SELECT folio_asignado FROM tarimas WHERE id = $1 AND tenant_id = $2',
+        `SELECT (SELECT fe.folio_numero FROM folios_entrega_tarimas fet
+                 JOIN folios_entrega fe ON fe.id = fet.folio_id
+                 WHERE fet.tarima_id = $1 AND fet.eliminado_en IS NULL AND fe.estado = 'ACTIVO'
+                 LIMIT 1) AS folio_asignado
+         FROM tarimas WHERE id = $1 AND tenant_id = $2`,
         [tarimaId, req.tenantId]
       )
       if (tarimaRes.rows.length === 0) {
