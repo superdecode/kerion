@@ -33,7 +33,6 @@ import invTarimasRoutes from './modules/inventory/routes/tarimas.routes.js'
 
 // FEP module routes
 import fepFoliosRoutes from './modules/fep/routes/folios.routes.js'
-import { entradasRoutes, inventarioRoutes, salidasRoutes, utilsRoutes as devolucionesUtilsRoutes } from './modules/devoluciones/index.js'
 
 const app = express()
 
@@ -143,11 +142,6 @@ app.use('/api/inventory/historial', tenantContext, tenantDB, moduleGuard('invent
 // FEP — require dropscan module (FEP is part of dropscan)
 app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)
 
-// Devoluciones
-app.use('/api/devoluciones/entradas', tenantContext, tenantDB, moduleGuard('devoluciones'), entradasRoutes)
-app.use('/api/devoluciones/inventario', tenantContext, tenantDB, moduleGuard('devoluciones'), inventarioRoutes)
-app.use('/api/devoluciones/salidas', tenantContext, tenantDB, moduleGuard('devoluciones'), salidasRoutes)
-app.use('/api/devoluciones', tenantContext, tenantDB, moduleGuard('devoluciones'), devolucionesUtilsRoutes)
 
 // Auto-apply pending migrations (idempotent — each step is independent)
 async function runMigrations() {
