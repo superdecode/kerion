@@ -288,6 +288,7 @@ router.get('/export',
           g.codigo_guia,
           g.posicion,
           g.timestamp_escaneo,
+          g.peso_kg,
           COALESCE(ui_g.nombre, g.usuario_operador, gu.nombre_completo) as operador_guia
         FROM tarimas t
         JOIN configuraciones e ON t.empresa_id = e.id

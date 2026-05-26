@@ -33,6 +33,7 @@ import invTarimasRoutes from './modules/inventory/routes/tarimas.routes.js'
 
 // FEP module routes
 import fepFoliosRoutes from './modules/fep/routes/folios.routes.js'
+import { entradasRoutes, inventarioRoutes, salidasRoutes, utilsRoutes as devolucionesUtilsRoutes } from './modules/devoluciones/index.js'
 
 const app = express()
 
@@ -141,6 +142,12 @@ app.use('/api/inventory/historial', tenantContext, tenantDB, moduleGuard('invent
 
 // FEP — require dropscan module (FEP is part of dropscan)
 app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)
+
+// Devoluciones
+app.use('/api/devoluciones/entradas', tenantContext, tenantDB, moduleGuard('devoluciones'), entradasRoutes)
+app.use('/api/devoluciones/inventario', tenantContext, tenantDB, moduleGuard('devoluciones'), inventarioRoutes)
+app.use('/api/devoluciones/salidas', tenantContext, tenantDB, moduleGuard('devoluciones'), salidasRoutes)
+app.use('/api/devoluciones', tenantContext, tenantDB, moduleGuard('devoluciones'), devolucionesUtilsRoutes)
 
 // Auto-apply pending migrations (idempotent — each step is independent)
 async function runMigrations() {
@@ -359,6 +366,24 @@ async function runMigrations() {
     `CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id)`,
     `CREATE INDEX IF NOT EXISTS idx_audit_log_tenant ON audit_log(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)`,
+
+    // ── devoluciones v2 — per-SKU dimensions + multicaja + salida ref ─────
+    `ALTER TABLE dev_item_skus ADD COLUMN IF NOT EXISTS peso NUMERIC(10,3)`,
+    `ALTER TABLE dev_item_skus ADD COLUMN IF NOT EXISTS largo NUMERIC(10,2)`,
+    `ALTER TABLE dev_item_skus ADD COLUMN IF NOT EXISTS ancho NUMERIC(10,2)`,
+    `ALTER TABLE dev_item_skus ADD COLUMN IF NOT EXISTS alto NUMERIC(10,2)`,
+    `ALTER TABLE dev_items ADD COLUMN IF NOT EXISTS codigo_multicaja TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_dev_items_multicaja ON dev_items(tenant_id, codigo_multicaja) WHERE codigo_multicaja IS NOT NULL`,
+    `ALTER TABLE dev_inventario ADD COLUMN IF NOT EXISTS codigo_multicaja TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_dev_inventario_multicaja ON dev_inventario(tenant_id, codigo_multicaja) WHERE codigo_multicaja IS NOT NULL`,
+    `ALTER TABLE dev_salidas ADD COLUMN IF NOT EXISTS referencia TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_dev_salidas_referencia ON dev_salidas(tenant_id, referencia) WHERE referencia IS NOT NULL`,
+    // ── Fix 2: prefix codes AJU- for ajustes, SAL- for salidas ────────────
+    `ALTER TABLE dev_ajustes ADD COLUMN IF NOT EXISTS codigo TEXT`,
+    `CREATE INDEX IF NOT EXISTS idx_dev_ajustes_codigo ON dev_ajustes(tenant_id, codigo) WHERE codigo IS NOT NULL`,
+    // ── 036: peso por guía en dropscan ────────────────────────────────────
+    `ALTER TABLE guias ADD COLUMN IF NOT EXISTS peso_kg NUMERIC(10,3)`,
+    `CREATE INDEX IF NOT EXISTS idx_guias_peso_kg ON guias (tenant_id, tarima_id) WHERE peso_kg IS NOT NULL`,
   ]
   for (const sql of steps) {
     try {

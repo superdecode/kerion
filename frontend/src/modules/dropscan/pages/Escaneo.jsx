@@ -148,6 +148,8 @@ export default function Escaneo() {
   const [upgradeSent, setUpgradeSent] = useState(false)
 
   const inputRef = useRef(null)
+  const pesoInputRef = useRef(null)
+  const [pesoState, setPesoState] = useState(null) // { tabId, guiaId, guiaCodigo, guiaPos, value, alert }
   const scanInFlight = useRef(new Set()) // tracks tabId:code pairs currently in flight
   const location = useLocation()
   const navigate = useNavigate()
@@ -214,6 +216,7 @@ export default function Escaneo() {
   const { data: canalesData, isSuccess: canalesLoaded } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales })
   const { data: parametrosData } = useQuery({ queryKey: ['dropscan-parametros'], queryFn: ds.getParametros })
   const gpt = parametrosData?.guias_por_tarima || 100
+  const pesoHabilitado = parametrosData?.peso_habilitado === true
   const { data: guideUsage } = useQuery({
     queryKey: ['dropscan-guide-usage'],
     queryFn: ds.getGuideUsage,
@@ -548,6 +551,11 @@ export default function Escaneo() {
         }))
       }
       if (data.alerta) { if (soundEnabled) playSound('warning'); if (data.guia.posicion >= (gpt - 5)) toast.warning(data.alerta.message) }
+      if (pesoHabilitado && data.guia?.id && !data.tarima_completada) {
+        setPesoState({ tabId, guiaId: data.guia.id, guiaCodigo: data.guia.codigo_guia, guiaPos: data.guia.posicion, value: '', alert: null })
+        setTimeout(() => pesoInputRef.current?.focus(), 80)
+        return
+      }
     } catch (err) {
       const d = err.response?.data
       if (d?.error === 'DUPLICADO') {
@@ -583,7 +591,7 @@ export default function Escaneo() {
       }
     }
     setTimeout(() => updateTab(tabId, { flashType: null }), 500)
-  }, [tabs, soundEnabled, updateTab, t, toast])
+  }, [tabs, soundEnabled, updateTab, t, toast, pesoHabilitado])
 
   /* ── scan ─────────────────────────────────────────── */
   const handleScan = useCallback(async (e, tabId) => {
@@ -592,6 +600,15 @@ export default function Escaneo() {
     if (!tab) return
     const code = tab.scanInput.trim()
     if (!code) return
+
+    // Block new scans while peso is pending
+    if (pesoState && pesoState.tabId === tabId) {
+      if (soundEnabled) playSound('warning')
+      updateTab(tabId, { scanInput: '' })
+      toast.warning(t('scan.peso.pendingError').replace('{pos}', pesoState.guiaPos))
+      setTimeout(() => pesoInputRef.current?.focus(), 80)
+      return
+    }
 
     // Validate if the code looks like a real tracking guide
     const validation = scoreTrackingCode(code)
@@ -611,7 +628,7 @@ export default function Escaneo() {
     } finally {
       scanInFlight.current.delete(key)
     }
-  }, [tabs, soundEnabled, updateTab, performActualScan])
+  }, [tabs, soundEnabled, updateTab, performActualScan, pesoState, t, toast])
 
   /* ── confirm suspicious scan ────────────────────── */
   const handleConfirmSuspicious = useCallback(async () => {
@@ -621,6 +638,34 @@ export default function Escaneo() {
     updateTab(tabId, { scanInput: '' })
     await performActualScan(tabId, code)
   }, [suspiciousModal, updateTab, performActualScan])
+
+  /* ── peso submit ────────────────────────────────── */
+  const handlePesoSubmit = useCallback(async (e, forceSubmit = false) => {
+    if (e) e.preventDefault()
+    if (!pesoState) return
+    const { tabId, guiaId, value } = pesoState
+    const tab = tabs.find(t => t.tabId === tabId)
+    if (!tab) return
+    const raw = (value || '').trim()
+    if (!forceSubmit && /^\d{9,}$/.test(raw)) {
+      setPesoState(s => ({ ...s, alert: 'guia' }))
+      return
+    }
+    const pesoVal = parseFloat(raw)
+    if (!raw || isNaN(pesoVal) || pesoVal < 0.001 || pesoVal > 9999.999) {
+      toast.warning(t('scan.peso.invalid'))
+      return
+    }
+    try {
+      await ds.updateGuiaPeso(tab.session.id, guiaId, pesoVal)
+      updateTab(tabId, t => ({
+        guias: t.guias.map(g => g.id === guiaId ? { ...g, peso_kg: pesoVal } : g),
+        lastScan: t.lastScan ? { ...t.lastScan, peso_kg: pesoVal } : t.lastScan,
+      }))
+    } catch { /* non-fatal — scan already registered */ }
+    setPesoState(null)
+    setTimeout(() => inputRef.current?.focus(), 80)
+  }, [pesoState, tabs, updateTab, toast, t])
 
   /* ── delete guide (any position, supervisor flow) ── */
   const handleDeleteGuia = (tabId, guiaId) => {
@@ -1089,48 +1134,124 @@ export default function Escaneo() {
                 </div>
               </motion.div>
 
-              {/* Scan input */}
-              <form onSubmit={(e) => handleScan(e, activeTabId)} className="mb-5">
-                <div className="relative">
-                  <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={tab.scanInput}
-                    onChange={(e) => updateTab(activeTabId, { scanInput: e.target.value })}
-                    placeholder={canWrite('dropscan.escaneo') ? t('scan.placeholder') : 'Solo lectura — sin permiso para escanear'}
-                    autoComplete="off"
-                    disabled={!canWrite('dropscan.escaneo')}
-                    className={`w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warm-200 rounded-2xl
-                      focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
-                      transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide
-                      disabled:bg-warm-50 disabled:text-warm-400 disabled:cursor-not-allowed
-                      ${tab.flashType === 'success' ? 'animate-scan-success' : tab.flashType === 'error' ? 'animate-scan-error' : ''}`}
-                  />
-                </div>
-              </form>
+              {/* Scan input row (with optional inline peso field) */}
+              <div className="mb-5 space-y-2">
+                <div className="flex items-stretch gap-2">
+                  <form onSubmit={(e) => handleScan(e, activeTabId)} className="flex-1 min-w-0">
+                    <div className="relative">
+                      <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={tab.scanInput}
+                        onChange={(e) => updateTab(activeTabId, { scanInput: e.target.value })}
+                        placeholder={canWrite('dropscan.escaneo') ? t('scan.placeholder') : 'Solo lectura — sin permiso para escanear'}
+                        autoComplete="off"
+                        disabled={!canWrite('dropscan.escaneo')}
+                        className={`w-full pl-14 pr-5 py-5 text-xl bg-white border-2 rounded-2xl
+                          focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
+                          transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide
+                          disabled:bg-warm-50 disabled:text-warm-400 disabled:cursor-not-allowed
+                          ${pesoHabilitado && pesoState && pesoState.tabId === activeTabId ? 'border-warm-200 opacity-50' : 'border-warm-200'}
+                          ${tab.flashType === 'success' ? 'animate-scan-success' : tab.flashType === 'error' ? 'animate-scan-error' : ''}`}
+                      />
+                    </div>
+                  </form>
 
-              {/* Last scan feedback */}
-              <AnimatePresence mode="wait">
-                {tab.lastScan && (
-                  <motion.div
-                    key={tab.lastScan.code || tab.lastScan.message}
-                    initial={{ opacity: 0, y: -10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                    className={`mb-5 p-4 rounded-2xl flex items-center gap-3 ${
-                      tab.lastScan.type === 'success' ? 'bg-success-50/80 border border-success-200 backdrop-blur-sm' : 'bg-danger-50/80 border border-danger-200 backdrop-blur-sm'
-                    }`}>
-                    {tab.lastScan.type === 'success'
-                      ? <CheckCircle className="w-5 h-5 text-success-500 shrink-0" />
-                      : <XCircle className="w-5 h-5 text-danger-500 shrink-0" />}
-                    <p className={`text-sm font-semibold ${tab.lastScan.type === 'success' ? 'text-success-700' : 'text-danger-700'}`}>
-                      {tab.lastScan.type === 'success'
-                        ? `${t('scan.guideRegistered')} ${tab.lastScan.code} · ${t('scan.position')} ${tab.lastScan.pos}`
-                        : tab.lastScan.message}
-                    </p>
-                  </motion.div>
+                  {pesoHabilitado && pesoState && pesoState.tabId === activeTabId && (
+                    <form onSubmit={handlePesoSubmit} className="shrink-0">
+                      <div className="relative">
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
+                        </svg>
+                        <input
+                          ref={pesoInputRef}
+                          type="text"
+                          inputMode="decimal"
+                          value={pesoState.value}
+                          onChange={e => setPesoState(s => ({ ...s, value: e.target.value, alert: null }))}
+                          placeholder={t('scan.peso.placeholder')}
+                          autoComplete="off"
+                          className="w-32 pl-8 pr-9 py-5 text-xl bg-white border-2 border-primary-400 rounded-2xl
+                            focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
+                            transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-center"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-warm-400 pointer-events-none">kg</span>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
+                {pesoHabilitado && pesoState && pesoState.tabId === activeTabId && (
+                  <>
+                    {pesoState.alert === 'guia' && (
+                      <div className="p-3 rounded-xl bg-warning-50 border border-warning-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-warning-700 flex-1">{t('scan.peso.looksLikeGuide')}</p>
+                        <div className="flex gap-2 shrink-0">
+                          <button type="button" onClick={() => setPesoState(s => ({ ...s, value: '', alert: null }))}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-warm-100 text-warm-700 hover:bg-warm-200 transition-colors">
+                            {t('scan.peso.reject')}
+                          </button>
+                          <button type="button" onClick={() => handlePesoSubmit(null, true)}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-warning-500 text-white hover:bg-warning-600 transition-colors">
+                            {t('scan.peso.forceRegister')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
+              </div>
+
+              {/* Last scan feedback + peso prompt (consolidated) */}
+              <AnimatePresence mode="wait">
+                {(tab.lastScan || (pesoState && pesoState.tabId === activeTabId)) && (() => {
+                  const isPesoPending = pesoState && pesoState.tabId === activeTabId && tab.lastScan?.peso_kg == null
+                  const isSuccess = tab.lastScan?.type === 'success'
+                  const isError = tab.lastScan?.type === 'duplicate' || tab.lastScan?.type === 'error'
+                  const bannerClass = isPesoPending
+                    ? 'bg-primary-50/90 border border-primary-300 backdrop-blur-sm'
+                    : isSuccess
+                    ? 'bg-success-50/80 border border-success-200 backdrop-blur-sm'
+                    : 'bg-danger-50/80 border border-danger-200 backdrop-blur-sm'
+                  return (
+                    <motion.div
+                      key={tab.lastScan?.code || pesoState?.guiaId || tab.lastScan?.message}
+                      initial={{ opacity: 0, y: -10, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                      className={`mb-5 p-4 rounded-2xl flex items-center gap-3 ${bannerClass}`}>
+                      {isPesoPending
+                        ? <svg className="w-5 h-5 text-primary-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        : isSuccess
+                        ? <CheckCircle className="w-5 h-5 text-success-500 shrink-0" />
+                        : <XCircle className="w-5 h-5 text-danger-500 shrink-0" />}
+                      {isSuccess ? (
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className={`text-sm font-semibold ${isPesoPending ? 'text-primary-700' : 'text-success-700'}`}>
+                            {t('scan.guideRegistered')} <span className="font-mono">{tab.lastScan.code}</span>
+                          </span>
+                          <span className={`select-none ${isPesoPending ? 'text-primary-300' : 'text-success-300'}`}>·</span>
+                          <span className={`text-sm ${isPesoPending ? 'text-primary-600' : 'text-success-600'}`}>{t('scan.position')} <span className="font-bold">{tab.lastScan.pos}</span></span>
+                          {tab.lastScan.peso_kg != null && (
+                            <>
+                              <span className="text-success-300 select-none">|</span>
+                              <span className="text-sm font-bold text-success-700 font-mono">{Number(tab.lastScan.peso_kg).toFixed(3)} kg</span>
+                            </>
+                          )}
+                          {isPesoPending && (
+                            <>
+                              <span className="text-primary-300 select-none">→</span>
+                              <span className="text-sm font-bold text-primary-600">{t('scan.peso.inputPrompt')}</span>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm font-semibold text-danger-700">{tab.lastScan?.message}</p>
+                      )}
+                    </motion.div>
+                  )
+                })()}
               </AnimatePresence>
 
               {/* Guias / duplicados history */}
@@ -1164,7 +1285,15 @@ export default function Escaneo() {
                                 <span className="w-9 h-9 rounded-xl bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold shrink-0">{g.posicion}</span>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-mono font-semibold text-warm-700 truncate">{g.codigo_guia}</p>
-                                  <p className="text-[10px] text-warm-400 font-medium">{fmtTime(g.timestamp_escaneo)}</p>
+                                  <div className="flex items-center gap-2 text-[10px] text-warm-400 font-medium">
+                                    <span>{fmtTime(g.timestamp_escaneo)}</span>
+                                    {g.peso_kg != null && (
+                                      <>
+                                        <span className="text-warm-300">·</span>
+                                        <span className="font-mono text-primary-600">{Number(g.peso_kg).toFixed(3)} kg</span>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                                 {/* Last guide: any user with write permission can delete via modal */}
                                 {i === 0 && canWrite('dropscan.escaneo') && (

@@ -26,6 +26,9 @@ export const switchTarima = (sessionId, tarima_id) =>
 export const deleteGuia = (sessionId, guiaId) =>
   api.delete(`/dropscan/sessions/${sessionId}/guia/${guiaId}`).then(r => r.data)
 
+export const updateGuiaPeso = (sessionId, guiaId, peso_kg) =>
+  api.patch(`/dropscan/sessions/${sessionId}/guia/${guiaId}/peso`, { peso_kg }).then(r => r.data)
+
 // Tarimas
 export const getTarimas = (params) => {
   const p = { ...params }

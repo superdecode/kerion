@@ -850,6 +850,7 @@ function ParametrosTab({ canEdit }) {
   const { t } = useI18nStore()
   const qc = useQueryClient()
   const [guiasPorTarima, setGuiasPorTarima] = useState(null)
+  const [pesoHabilitado, setPesoHabilitado] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const toast = useToastStore.getState()
 
@@ -864,17 +865,20 @@ function ParametrosTab({ canEdit }) {
   useEffect(() => {
     if (parametros && guiasPorTarima === null) {
       setGuiasPorTarima(parametros.guias_por_tarima ?? 100)
+      setPesoHabilitado(parametros.peso_habilitado ?? false)
     }
   }, [parametros])
 
   const currentValue = parametros?.guias_por_tarima ?? 100
+  const currentPeso = parametros?.peso_habilitado ?? false
 
   const handleSave = async () => {
     if (!canEdit) return
     setIsSaving(true)
     try {
       const { data } = await api.put('/dropscan/config/parametros', {
-        guias_por_tarima: Number(guiasPorTarima)
+        guias_por_tarima: Number(guiasPorTarima),
+        peso_habilitado: pesoHabilitado ?? false,
       })
       qc.setQueryData(['dropscan-parametros'], data)
       toast.success(t('config.parametersSaved'))
@@ -884,6 +888,8 @@ function ParametrosTab({ canEdit }) {
       setIsSaving(false)
     }
   }
+
+  const hasChanges = Number(guiasPorTarima) !== currentValue || (pesoHabilitado ?? false) !== currentPeso
 
   if (isLoading) return <LoadingSpinner text={t('config.loadingParams')} />
 
@@ -908,59 +914,69 @@ function ParametrosTab({ canEdit }) {
           <div className="space-y-6">
             {/* Guias por tarima */}
             <div className="p-4 rounded-xl border border-warm-200 bg-warm-50/50">
+              <label className="block text-sm font-semibold text-warm-700 mb-1">
+                {t('config.guidesPerPallet')}
+              </label>
+              <p className="text-xs text-warm-500 mb-3">
+                {t('config.guidesPerPalletDesc')}
+                {' '}{t('config.currentValue')}: <span className="font-bold text-warm-700">{currentValue}</span>
+              </p>
+              {canEdit ? (
+                <input
+                  type="number"
+                  value={guiasPorTarima ?? ''}
+                  onChange={e => setGuiasPorTarima(e.target.value)}
+                  className="input-field w-32 text-center font-mono font-bold text-lg"
+                  min={1}
+                  max={10000}
+                  step={1}
+                />
+              ) : (
+                <div className="px-4 py-2.5 rounded-xl bg-white border border-warm-200 font-mono font-bold text-lg text-warm-700 w-32 text-center">
+                  {currentValue}
+                </div>
+              )}
+            </div>
+
+            {/* Bascula y peso */}
+            <div className="p-4 rounded-xl border border-warm-200 bg-warm-50/50">
+              <p className="text-xs font-bold text-warm-500 uppercase tracking-wider mb-3">{t('config.scaleSection')}</p>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-semibold text-warm-700 mb-1">
-                    {t('config.guidesPerPallet')}
-                  </label>
-                  <p className="text-xs text-warm-500 mb-3">
-                    {t('config.guidesPerPalletDesc')}
-                    {' '}{t('config.currentValue')}: <span className="font-bold text-warm-700">{currentValue}</span>
-                  </p>
-
-                  {canEdit ? (
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="number"
-                        value={guiasPorTarima ?? ''}
-                        onChange={e => setGuiasPorTarima(e.target.value)}
-                        className="input-field w-32 text-center font-mono font-bold text-lg"
-                        min={1}
-                        max={10000}
-                        step={1}
-                      />
-                      <motion.button
-                        onClick={handleSave}
-                        disabled={isSaving || Number(guiasPorTarima) === currentValue}
-                        className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                        whileHover={Number(guiasPorTarima) !== currentValue ? { scale: 1.02 } : {}}
-                        whileTap={Number(guiasPorTarima) !== currentValue ? { scale: 0.98 } : {}}
-                      >
-                        <Save className="w-4 h-4" />
-                        {isSaving ? t('config.saving') : t('config.saveParams')}
-                      </motion.button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <div className="px-4 py-2.5 rounded-xl bg-white border border-warm-200 font-mono font-bold text-lg text-warm-700 w-32 text-center">
-                        {currentValue}
-                      </div>
-                      <span className="text-xs text-warm-400 italic">
-                        {t('config.noChanges')}
-                      </span>
-                    </div>
-                  )}
+                  <p className="text-sm font-semibold text-warm-700 mb-1">{t('config.weightPerGuide')}</p>
+                  <p className="text-xs text-warm-500">{t('config.weightPerGuideDesc')}</p>
+                  <p className="text-xs text-warm-400 mt-1.5 italic">{t('config.weightPerGuideHint')}</p>
                 </div>
+                <button
+                  onClick={() => canEdit && setPesoHabilitado(v => !v)}
+                  disabled={!canEdit}
+                  className={`shrink-0 transition-colors ${!canEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  {pesoHabilitado
+                    ? <ToggleRight className="w-10 h-10 text-primary-500" />
+                    : <ToggleLeft className="w-10 h-10 text-warm-300" />}
+                </button>
               </div>
             </div>
 
             {!canEdit && (
               <div className="flex items-center gap-2 p-3 rounded-xl bg-warning-50 border border-warning-200">
                 <Settings className="w-4 h-4 text-warning-600 shrink-0" />
-                <p className="text-xs text-warning-700">
-                  {t('config.noChanges')}
-                </p>
+                <p className="text-xs text-warning-700">{t('config.noChanges')}</p>
               </div>
+            )}
+
+            {canEdit && (
+              <motion.button
+                onClick={handleSave}
+                disabled={isSaving || !hasChanges}
+                className="w-full btn-primary inline-flex items-center justify-center gap-2 px-4 py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={hasChanges ? { scale: 1.01 } : {}}
+                whileTap={hasChanges ? { scale: 0.99 } : {}}
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? t('config.saving') : t('config.saveParams')}
+              </motion.button>
             )}
           </div>
         </div>

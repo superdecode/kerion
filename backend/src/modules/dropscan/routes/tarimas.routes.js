@@ -186,7 +186,7 @@ router.get('/:id',
       }
 
       const guiasRes = await req.tQuery(
-        `SELECT g.id, g.codigo_guia, g.posicion, g.timestamp_escaneo,
+        `SELECT g.id, g.codigo_guia, g.posicion, g.timestamp_escaneo, g.peso_kg,
                 COALESCE(ui.nombre, g.usuario_operador, u.nombre_completo) as operador_nombre
          FROM guias g
          JOIN usuarios u ON g.operador_id = u.id

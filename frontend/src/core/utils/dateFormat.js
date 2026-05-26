@@ -6,11 +6,11 @@
  * Call setTimezone() when the user logs in or changes their preference.
  */
 
-let _tz = 'America/Mexico_City'
+let _tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City'
 const LOCALE = 'es-MX'
 
 /** Set the active timezone for all formatting functions. */
-export const setTimezone = (tz) => { _tz = tz }
+export const setTimezone = (tz) => { _tz = tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City' }
 
 /** Get the current active timezone. */
 export const getTimezone = () => _tz

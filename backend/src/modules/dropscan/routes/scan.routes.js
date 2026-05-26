@@ -784,4 +784,44 @@ router.delete('/sessions/:sessionId/guia/:guiaId',
   }
 )
 
+// PATCH /api/dropscan/sessions/:sessionId/guia/:guiaId/peso
+router.patch('/sessions/:sessionId/guia/:guiaId/peso',
+  authenticateToken, loadFullUser,
+  requirePermission('dropscan.escaneo', 'crear'),
+  async (req, res) => {
+    if (!req.tenantId) return res.status(400).json({ error: 'Contexto de tenant no disponible' })
+    try {
+      const { sessionId, guiaId } = req.params
+      const { peso_kg } = req.body
+
+      const pesoVal = parseFloat(peso_kg)
+      if (isNaN(pesoVal) || pesoVal < 0.001 || pesoVal > 9999.999) {
+        return res.status(400).json({ error: 'peso_kg debe estar entre 0.001 y 9999.999' })
+      }
+
+      // Verify session belongs to this operator
+      const sesionRes = await req.tQuery(
+        'SELECT id FROM sesiones_escaneo WHERE id = $1 AND operador_id = $2 AND activa = true AND tenant_id = $3',
+        [sessionId, req.user.id, req.tenantId]
+      )
+      if (sesionRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Sesión no encontrada o inactiva' })
+      }
+
+      const result = await req.tQuery(
+        'UPDATE guias SET peso_kg = $1 WHERE id = $2 AND tenant_id = $3 RETURNING id, peso_kg',
+        [pesoVal, guiaId, req.tenantId]
+      )
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Guía no encontrada' })
+      }
+
+      res.json({ success: true, peso_kg: result.rows[0].peso_kg })
+    } catch (error) {
+      console.error('Update peso error:', error)
+      res.status(500).json({ error: 'Error guardando peso' })
+    }
+  }
+)
+
 export default router

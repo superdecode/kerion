@@ -353,7 +353,7 @@ router.get('/:id',
       )
 
       const guiasRes = await req.tQuery(
-        `SELECT g.codigo_guia, g.posicion, g.timestamp_escaneo, t.codigo AS tarima_codigo,
+        `SELECT g.codigo_guia, g.posicion, g.timestamp_escaneo, g.peso_kg, t.codigo AS tarima_codigo,
                 c.nombre AS canal_nombre
          FROM folios_entrega_tarimas fet
          JOIN guias g ON g.tarima_id = fet.tarima_id
@@ -569,7 +569,7 @@ router.get('/:id/pdf',
       const folio = folioRes.rows[0]
 
       const guiasRes = await req.tQuery(
-        `SELECT g.codigo_guia, g.posicion, g.timestamp_escaneo,
+        `SELECT g.codigo_guia, g.posicion, g.timestamp_escaneo, g.peso_kg,
                 t.codigo AS tarima_codigo, c.nombre AS canal_nombre
          FROM folios_entrega_tarimas fet
          JOIN guias g ON g.tarima_id = fet.tarima_id

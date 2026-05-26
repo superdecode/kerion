@@ -108,7 +108,7 @@ export default function FolioDetalle() {
         ['Total guías', folio.total_guias],
         ...(folio.motivo_cancelacion ? [['Motivo cancelación', folio.motivo_cancelacion]] : []),
         [],
-        ['#', 'Código Guía', 'Tarima', 'Canal', 'Posición', 'Hora Escaneo'],
+        ['#', 'Código Guía', 'Tarima', 'Canal', 'Posición', 'Hora Escaneo', 'Peso (kg)'],
         ...guias.map((g, i) => [
           i + 1,
           g.codigo_guia,
@@ -116,10 +116,11 @@ export default function FolioDetalle() {
           g.canal_nombre,
           g.posicion,
           g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '',
+          g.peso_kg != null ? Number(g.peso_kg) : '',
         ]),
       ]
       const ws = XLSX.utils.aoa_to_sheet(wsData)
-      ws['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 22 }]
+      ws['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 22 }, { wch: 10 }]
       XLSX.utils.book_append_sheet(wb, ws, 'Folio')
       XLSX.writeFile(wb, `${folio.folio_numero}_${getToday()}.xlsx`)
     } catch {
@@ -217,6 +218,21 @@ export default function FolioDetalle() {
               </div>
             ))}
           </div>
+          {(() => {
+            const guiasConPeso = guias.filter(g => g.peso_kg != null)
+            if (guiasConPeso.length === 0) return null
+            const total = guiasConPeso.reduce((s, g) => s + Number(g.peso_kg), 0)
+            const parcial = guiasConPeso.length < guias.length
+            return (
+              <div className="card p-3 flex items-center justify-between gap-3">
+                <p className="text-[10px] text-primary-400 uppercase tracking-wider font-bold">Peso total registrado</p>
+                <p className="text-sm font-bold text-primary-700 font-mono">
+                  {total.toFixed(3)} kg
+                  {parcial && <span className="ml-1.5 text-[10px] font-semibold text-primary-400 normal-case">(peso parcial)</span>}
+                </p>
+              </div>
+            )
+          })()}
 
           {/* Tabs */}
           <div className="card overflow-hidden">
@@ -268,6 +284,7 @@ export default function FolioDetalle() {
                                 <th className="table-header">Canal</th>
                                 <th className="table-header text-center">Pos.</th>
                                 <th className="table-header">Hora Escaneo</th>
+                                <th className="table-header text-right">Peso (kg)</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-warm-50">
@@ -282,6 +299,9 @@ export default function FolioDetalle() {
                                   <td className="table-cell text-center text-warm-500">{g.posicion}</td>
                                   <td className="table-cell text-warm-400 text-xs">
                                     {g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '—'}
+                                  </td>
+                                  <td className="table-cell text-right font-mono text-warm-600 text-xs">
+                                    {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
                                   </td>
                                 </tr>
                               ))}
@@ -386,6 +406,7 @@ export default function FolioDetalle() {
                                               <th className="text-left py-1.5 pr-4 font-semibold">#</th>
                                               <th className="text-left pr-4 font-semibold">Guía</th>
                                               <th className="text-left font-semibold">Hora Escaneo</th>
+                                              <th className="text-right font-semibold">Peso (kg)</th>
                                             </tr>
                                           </thead>
                                           <tbody>
@@ -394,6 +415,9 @@ export default function FolioDetalle() {
                                                 <td className="py-1 pr-4 text-warm-400">{i + 1}</td>
                                                 <td className="font-mono pr-4 text-warm-700">{g.codigo_guia}</td>
                                                 <td className="text-warm-400">{g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '—'}</td>
+                                                <td className="text-right font-mono text-warm-600">
+                                                  {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
+                                                </td>
                                               </tr>
                                             ))}
                                           </tbody>

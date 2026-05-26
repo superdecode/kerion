@@ -336,10 +336,10 @@ router.get('/parametros',
         [req.tenantId]
       )
       if (result.rows.length === 0) {
-        return res.json({ guias_por_tarima: 100 })
+        return res.json({ guias_por_tarima: 100, peso_habilitado: false })
       }
       const cfg = result.rows[0].config_json || {}
-      res.json({ guias_por_tarima: cfg.guias_por_tarima ?? 100 })
+      res.json({ guias_por_tarima: cfg.guias_por_tarima ?? 100, peso_habilitado: cfg.peso_habilitado ?? false })
     } catch (error) {
       console.error('Get parametros error:', error)
       res.status(500).json({ error: 'Error obteniendo parametros' })
@@ -353,19 +353,27 @@ router.put('/parametros',
   requirePermission('dropscan.configuracion', 'editar'),
   async (req, res) => {
     try {
-      const { guias_por_tarima } = req.body
+      const { guias_por_tarima, peso_habilitado } = req.body
       const gpt = parseInt(guias_por_tarima)
       if (!gpt || gpt < 1 || gpt > 9999) {
         return res.status(400).json({ error: 'guias_por_tarima debe ser entre 1 y 9999' })
       }
+      const pesoHab = peso_habilitado === true || peso_habilitado === 'true'
+      const existingRes = await req.tQuery(
+        `SELECT config_json FROM configuraciones
+         WHERE modulo = 'dropscan' AND tipo = 'parametros' AND codigo = 'default' AND tenant_id = $1 LIMIT 1`,
+        [req.tenantId]
+      )
+      const existingCfg = existingRes.rows[0]?.config_json || {}
+      const newCfg = { ...existingCfg, guias_por_tarima: gpt, peso_habilitado: pesoHab }
       await req.tQuery(
         `INSERT INTO configuraciones (modulo, tipo, codigo, nombre, config_json, tenant_id)
          VALUES ('dropscan', 'parametros', 'default', 'Parametros', $1, $2)
          ON CONFLICT (tenant_id, modulo, tipo, codigo) DO UPDATE
          SET config_json = $1, updated_at = NOW()`,
-        [JSON.stringify({ guias_por_tarima: gpt }), req.tenantId]
+        [JSON.stringify(newCfg), req.tenantId]
       )
-      res.json({ guias_por_tarima: gpt })
+      res.json({ guias_por_tarima: gpt, peso_habilitado: pesoHab })
     } catch (error) {
       console.error('Update parametros error:', error)
       res.status(500).json({ error: 'Error actualizando parametros' })

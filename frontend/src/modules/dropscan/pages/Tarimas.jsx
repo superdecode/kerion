@@ -366,12 +366,13 @@ export default function Tarimas() {
         ['Cierre', detail.fecha_cierre ? fmtDateTime(detail.fecha_cierre) : '--'],
         ['Duración', detail.tiempo_armado_segundos ? `${Math.round(detail.tiempo_armado_segundos / 60)} min` : '--'],
         [],
-        ['#', 'Código Guía', 'Operador', 'Hora Escaneo'],
+        ['#', 'Código Guía', 'Operador', 'Hora Escaneo', 'Peso (kg)'],
         ...detailGuias.map(g => [
           g.posicion,
           g.codigo_guia,
           g.operador_nombre,
-          fmtDateTime(g.timestamp_escaneo)
+          fmtDateTime(g.timestamp_escaneo),
+          g.peso_kg != null ? Number(g.peso_kg) : ''
         ])
       ]
       const ws = XLSX.utils.aoa_to_sheet(wsData)
@@ -399,20 +400,20 @@ export default function Tarimas() {
         [...selectedIds].map(id => ds.getTarimaDetail(id))
       )
       const wb = XLSX.utils.book_new()
-      const rows = [['Tarima', 'Empresa', 'Canal', 'Operador', 'Estado', 'Guías', 'Inicio', 'Cierre', 'Duración (min)', 'Código Guía', 'Posición', 'Fecha Escaneo', 'Operador Escaneo']]
+      const rows = [['Tarima', 'Empresa', 'Canal', 'Operador', 'Estado', 'Guías', 'Inicio', 'Cierre', 'Duración (min)', 'Código Guía', 'Posición', 'Fecha Escaneo', 'Operador Escaneo', 'Peso (kg)']]
       for (const d of details) {
         const t = d.tarima
         const guias = d.guias || []
         if (guias.length === 0) {
-          rows.push([t.codigo, t.empresa_nombre, t.canal_nombre, t.operador_nombre, t.estado, t.cantidad_guias, t.fecha_inicio ? fmtDateTime(t.fecha_inicio) : '', t.fecha_cierre ? fmtDateTime(t.fecha_cierre) : '', t.tiempo_armado_segundos ? Math.round(t.tiempo_armado_segundos / 60) : '', '', '', '', ''])
+          rows.push([t.codigo, t.empresa_nombre, t.canal_nombre, t.operador_nombre, t.estado, t.cantidad_guias, t.fecha_inicio ? fmtDateTime(t.fecha_inicio) : '', t.fecha_cierre ? fmtDateTime(t.fecha_cierre) : '', t.tiempo_armado_segundos ? Math.round(t.tiempo_armado_segundos / 60) : '', '', '', '', '', ''])
         } else {
           for (const g of guias) {
-            rows.push([t.codigo, t.empresa_nombre, t.canal_nombre, t.operador_nombre, t.estado, t.cantidad_guias, t.fecha_inicio ? fmtDateTime(t.fecha_inicio) : '', t.fecha_cierre ? fmtDateTime(t.fecha_cierre) : '', t.tiempo_armado_segundos ? Math.round(t.tiempo_armado_segundos / 60) : '', g.codigo_guia, g.posicion, g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '', g.operador_nombre || ''])
+            rows.push([t.codigo, t.empresa_nombre, t.canal_nombre, t.operador_nombre, t.estado, t.cantidad_guias, t.fecha_inicio ? fmtDateTime(t.fecha_inicio) : '', t.fecha_cierre ? fmtDateTime(t.fecha_cierre) : '', t.tiempo_armado_segundos ? Math.round(t.tiempo_armado_segundos / 60) : '', g.codigo_guia, g.posicion, g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '', g.operador_nombre || '', g.peso_kg != null ? Number(g.peso_kg) : ''])
           }
         }
       }
       const ws = XLSX.utils.aoa_to_sheet(rows)
-      ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 20 }, { wch: 20 }]
+      ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 10 }]
       XLSX.utils.book_append_sheet(wb, ws, 'Tarimas')
       XLSX.writeFile(wb, `tarimas_${getToday()}.xlsx`)
       toast.success('Exportación completada')
@@ -895,6 +896,23 @@ export default function Tarimas() {
               ))}
             </div>
 
+            {/* Peso total */}
+            {(() => {
+              const guiasConPeso = detailGuias.filter(g => g.peso_kg != null)
+              if (guiasConPeso.length === 0) return null
+              const total = guiasConPeso.reduce((s, g) => s + Number(g.peso_kg), 0)
+              const parcial = guiasConPeso.length < detailGuias.length
+              return (
+                <div className="p-3 rounded-xl bg-primary-50 border border-primary-100/50 flex items-center justify-between gap-3">
+                  <p className="text-[10px] text-primary-400 uppercase tracking-wider font-bold">Peso total registrado</p>
+                  <p className="text-sm font-bold text-primary-700 font-mono">
+                    {total.toFixed(3)} kg
+                    {parcial && <span className="ml-1.5 text-[10px] font-semibold text-primary-400 normal-case">(peso parcial)</span>}
+                  </p>
+                </div>
+              )
+            })()}
+
             {/* Force-close banner */}
             {detail.forzado_cierre && (
               <div className="bg-warning-50 border border-warning-200 rounded-xl p-3 flex items-center gap-2.5">
@@ -959,6 +977,7 @@ export default function Tarimas() {
                           <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.guideCode')}</th>
                           <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.operator')}</th>
                           <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.scanTime')}</th>
+                          <th className="text-right px-3 py-2.5 font-bold text-warm-500">Peso (kg)</th>
                           {editMode && <th className="w-8"></th>}
                         </tr>
                       </thead>
@@ -989,6 +1008,9 @@ export default function Tarimas() {
                               </td>
                               <td className="px-3 py-2 text-warm-500">{g.operador_nombre}</td>
                               <td className="px-3 py-2 text-warm-400">{fmtTime(g.timestamp_escaneo)}</td>
+                              <td className="px-3 py-2 text-right font-mono text-warm-600">
+                                {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
+                              </td>
                               {editMode && (
                                 <td className="px-2 py-1.5">
                                   <button
@@ -1120,39 +1142,37 @@ export default function Tarimas() {
 
       {/* Delete confirmation modal */}
       <Modal isOpen={!!deletingTarima} onClose={() => setDeletingTarima(null)}
-        title="Eliminar Tarima" icon={Trash2} size="sm"
+        title={t('history.deleteGuide')} icon={Trash2} size="sm"
         footer={<>
-          <button onClick={() => setDeletingTarima(null)} className="btn-ghost">Cancelar</button>
+          <button onClick={() => setDeletingTarima(null)} className="btn-ghost">{t('history.cancel')}</button>
           <button
             onClick={() => { deleteMutation.mutate(deletingTarima.id); setDeletingTarima(null) }}
             disabled={deleteMutation.isPending}
             className="btn-danger inline-flex items-center gap-2">
             <Trash2 className="w-4 h-4" />
-            {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar permanentemente'}
+            {deleteMutation.isPending ? t('history.deleting') : t('history.delete')}
           </button>
         </>}>
         <div className="space-y-4">
           <div className="p-4 rounded-xl bg-danger-50 border border-danger-200 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-danger-500 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-bold text-danger-800">Esta acción no se puede revertir</p>
-              <p className="text-xs text-danger-600 mt-1">
-                Se eliminarán permanentemente la tarima y todas sus guías escaneadas.
-              </p>
+              <p className="text-sm font-bold text-danger-800">{t('history.irreversible')}</p>
+              <p className="text-xs text-danger-600 mt-1">{t('history.palletWillBeDeleted')}</p>
             </div>
           </div>
           {deletingTarima && (
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-200 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-warm-500 font-medium">Tarima</span>
+                <span className="text-xs text-warm-500 font-medium">{t('history.pallet')}</span>
                 <span className="text-sm font-bold font-mono text-warm-800">{deletingTarima.codigo}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-warm-500 font-medium">Empresa</span>
+                <span className="text-xs text-warm-500 font-medium">{t('history.company')}</span>
                 <span className="text-sm font-semibold text-warm-700">{deletingTarima.empresa_nombre}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-warm-500 font-medium">Guías</span>
+                <span className="text-xs text-warm-500 font-medium">{t('history.guides')}</span>
                 <span className="text-sm font-semibold text-warm-700">{deletingTarima.cantidad_guias}</span>
               </div>
             </div>
@@ -1162,18 +1182,18 @@ export default function Tarimas() {
 
       {/* Blocked delete modal — tarima tiene folio activo */}
       <Modal isOpen={!!blockedDeleteTarima} onClose={() => setBlockedDeleteTarima(null)}
-        title="No se puede eliminar" icon={AlertTriangle} size="sm"
+        title={t('history.cannotDelete')} icon={AlertTriangle} size="sm"
         footer={
-          <button onClick={() => setBlockedDeleteTarima(null)} className="btn-ghost">Entendido</button>
+          <button onClick={() => setBlockedDeleteTarima(null)} className="btn-ghost">{t('history.understood')}</button>
         }>
         <div className="p-4 rounded-xl bg-warning-50 border border-warning-200 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-warning-500 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-bold text-warning-800">Tarima incluida en folio activo</p>
+            <p className="text-sm font-bold text-warning-800">{t('history.palletInActiveFolio')}</p>
             <p className="text-xs text-warning-600 mt-1">
-              La tarima <span className="font-bold font-mono">{blockedDeleteTarima?.codigo}</span> está
-              incluida en el folio <span className="font-bold">{blockedDeleteTarima?.folio_asignado}</span>.
-              Para eliminarla, primero elimina o cancela el folio correspondiente.
+              {t('history.palletInFolioDesc')
+                .replace('{codigo}', blockedDeleteTarima?.codigo)
+                .replace('{folio}', blockedDeleteTarima?.folio_asignado)}
             </p>
           </div>
         </div>
@@ -1181,9 +1201,9 @@ export default function Tarimas() {
 
       {/* Delete individual guide confirmation modal */}
       <Modal isOpen={!!deletingGuia} onClose={() => setDeletingGuia(null)}
-        title="Eliminar Guía" icon={Trash2} size="sm"
+        title={t('history.deleteGuide')} icon={Trash2} size="sm"
         footer={<>
-          <button onClick={() => setDeletingGuia(null)} className="btn-ghost">Cancelar</button>
+          <button onClick={() => setDeletingGuia(null)} className="btn-ghost">{t('history.cancel')}</button>
           <button
             onClick={() => {
               deleteGuiaMutation.mutate({ tarimaId: detail.id, guiaId: deletingGuia.id })
@@ -1192,7 +1212,7 @@ export default function Tarimas() {
             disabled={deleteGuiaMutation.isPending}
             className="btn-danger inline-flex items-center gap-2">
             <Trash2 className="w-4 h-4" />
-            {deleteGuiaMutation.isPending ? 'Eliminando...' : 'Eliminar guía'}
+            {deleteGuiaMutation.isPending ? t('history.deleting') : t('history.delete')}
           </button>
         </>}>
         <div className="space-y-4">

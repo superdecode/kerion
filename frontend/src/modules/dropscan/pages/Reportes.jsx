@@ -176,17 +176,18 @@ export default function Reportes() {
       const registros = exportData?.registros || []
       const wb = XLSX.utils.book_new()
       const detalleData = [
-        ['Tarima', 'Empresa', 'Canal', 'Operador', 'Estado', 'Guías', 'Inicio', 'Cierre', 'Duración (min)', 'Código Guía', 'Posición', 'Fecha Escaneo', 'Operador Escaneo'],
+        ['Tarima', 'Empresa', 'Canal', 'Operador', 'Estado', 'Guías', 'Inicio', 'Cierre', 'Duración (min)', 'Código Guía', 'Posición', 'Fecha Escaneo', 'Operador Escaneo', 'Peso (kg)'],
         ...registros.map(r => [
           r.tarima_codigo, r.empresa, r.canal, r.operador, r.estado, r.cantidad_guias,
           r.fecha_inicio ? fmtDateTime(r.fecha_inicio) : '',
           r.fecha_cierre ? fmtDateTime(r.fecha_cierre) : '',
           r.duracion_min || '', r.codigo_guia || '', r.posicion || '',
-          r.timestamp_escaneo ? fmtDateTime(r.timestamp_escaneo) : '', r.operador_guia || ''
+          r.timestamp_escaneo ? fmtDateTime(r.timestamp_escaneo) : '', r.operador_guia || '',
+          r.peso_kg != null ? Number(r.peso_kg) : ''
         ])
       ]
       const ws = XLSX.utils.aoa_to_sheet(detalleData)
-      ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 20 }, { wch: 20 }]
+      ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 10 }]
       XLSX.utils.book_append_sheet(wb, ws, 'Detalle Guías')
       XLSX.writeFile(wb, `reporte-dropscan-${fechaInicio}-${fechaFin}.xlsx`)
     } catch { /* silent */ }
