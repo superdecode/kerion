@@ -549,7 +549,7 @@ export default function Escaneo() {
           }
         })
         if (soundEnabled) playSound('complete')
-        setCompletionPrompt({ tabId, tarima: data.tarima, nuevaTarima: data.nueva_tarima })
+        if (!pesoHabilitado || !data.guia?.id) setCompletionPrompt({ tabId, tarima: data.tarima, nuevaTarima: data.nueva_tarima })
       } else {
         updateTab(tabId, (t) => ({
           tarima: data.tarima,
@@ -559,8 +559,11 @@ export default function Escaneo() {
         }))
       }
       if (data.alerta) { if (soundEnabled) playSound('warning'); if (data.guia.posicion >= (gpt - 5)) toast.warning(data.alerta.message) }
-      if (pesoHabilitado && data.guia?.id && !data.tarima_completada) {
-        setPesoState({ tabId, guiaId: data.guia.id, guiaCodigo: data.guia.codigo_guia, guiaPos: data.guia.posicion, value: '', alert: null })
+      if (pesoHabilitado && data.guia?.id) {
+        const pendingCompletion = data.tarima_completada
+          ? { tabId, tarima: data.tarima, nuevaTarima: data.nueva_tarima }
+          : null
+        setPesoState({ tabId, guiaId: data.guia.id, guiaCodigo: data.guia.codigo_guia, guiaPos: data.guia.posicion, value: '', alert: null, pendingCompletion })
         setTimeout(() => pesoInputRef.current?.focus(), 80)
         return
       }
@@ -676,6 +679,7 @@ export default function Escaneo() {
       toast.warning(t('scan.peso.invalid'))
       return
     }
+    const pendingCompletion = pesoState.pendingCompletion || null
     try {
       await ds.updateGuiaPeso(tab.session.id, guiaId, pesoVal)
       updateTab(tabId, t => ({
@@ -685,6 +689,10 @@ export default function Escaneo() {
       if (soundEnabled) playSound('peso')
     } catch { /* non-fatal — scan already registered */ }
     setPesoState(null)
+    if (pendingCompletion) {
+      setCompletionPrompt(pendingCompletion)
+      return
+    }
     setTimeout(() => inputRef.current?.focus(), 80)
   }, [pesoState, tabs, updateTab, toast, t])
 
