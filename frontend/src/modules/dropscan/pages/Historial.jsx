@@ -738,7 +738,7 @@ export default function Historial() {
                                 <Eye className="w-4 h-4" />
                               </button>
                               )}
-                              {canManageStatus && (
+                              {canManageStatus && !row.folio_asignado && (
                                 <button onClick={() => handleOpenDetail(row.id, true)}
                                   className="p-2 rounded-xl hover:bg-warning-50 text-warm-400 hover:text-warning-500 transition-all" title="Editar">
                                   <Pencil className="w-4 h-4" />
@@ -849,7 +849,7 @@ export default function Historial() {
                 <Lock className="w-4 h-4" /> {t('history.finalize')}
               </button>
             )}
-            {canManageStatus && (
+            {canManageStatus && !detail.folio_asignado && (
               <button onClick={() => setEditMode(e => !e)}
                 className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl font-semibold transition-all ${
                   editMode ? 'bg-warning-100 text-warning-700 hover:bg-warning-200' : 'bg-warm-100 text-warm-600 hover:bg-warm-200'
