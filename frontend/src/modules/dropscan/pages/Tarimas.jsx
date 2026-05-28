@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import api from '../../../core/services/api'
+import { deleteFolio } from '../../fep/services/fepService'
 import * as XLSX from 'xlsx'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -61,6 +62,7 @@ export default function Tarimas() {
   const [deletingTarima, setDeletingTarima] = useState(null)
   const [blockedDeleteTarima, setBlockedDeleteTarima] = useState(null)
   const [blockedEditTarima, setBlockedEditTarima] = useState(null)
+  const [confirmingFolioDelete, setConfirmingFolioDelete] = useState(false)
   const [deletingGuia, setDeletingGuia] = useState(null)
   const [editMode, setEditMode] = useState(false)
   const [selectMode, setSelectMode] = useState(false)
@@ -76,6 +78,7 @@ export default function Tarimas() {
   const tarimasLevel = getPermissionLevel('dropscan.tarimas')
   const canManageStatus = user.rol_nombre === 'Administrador' || tarimasLevel === 'actualizar'  // ONLY actualizar role
   const canExportTarimas = hasPermission('dropscan.tarimas', 'exportar') // actualizar+
+  const canDeleteFolio = hasPermission('fep.folios', 'eliminar')
   const toast = useToastStore.getState()
   const { t } = useI18nStore()
   const qc = useQueryClient()
@@ -285,6 +288,23 @@ export default function Tarimas() {
       qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail', selectedTarima] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error'))
+  })
+
+  const deleteFolioMutation = useMutation({
+    mutationFn: (folioId) => deleteFolio(folioId),
+    onSuccess: () => {
+      toast.success(`Folio eliminado — tarima liberada`)
+      qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] })
+      qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail'] })
+      const tarima = blockedEditTarima
+      setBlockedEditTarima(null)
+      setConfirmingFolioDelete(false)
+      if (tarima?.id) handleOpenDetail(tarima.id, true)
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.error || t('toast.error'))
+      setConfirmingFolioDelete(false)
+    },
   })
 
   const estadoColors = {
@@ -1220,29 +1240,64 @@ export default function Tarimas() {
       </Modal>
 
       {/* Blocked edit modal — tarima tiene folio activo */}
-      <Modal isOpen={!!blockedEditTarima} onClose={() => setBlockedEditTarima(null)}
+      <Modal isOpen={!!blockedEditTarima} onClose={() => { setBlockedEditTarima(null); setConfirmingFolioDelete(false) }}
         title="Tarima bloqueada" icon={Lock} size="sm"
-        footer={<>
-          <button onClick={() => setBlockedEditTarima(null)} className="btn-ghost">Cerrar</button>
-          {blockedEditTarima?.folio_id && (
-            <button
-              onClick={() => { setBlockedEditTarima(null); navigate(`/dropscan/folios?folio_id=${blockedEditTarima.folio_id}`) }}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-semibold text-sm transition-all">
-              <ArrowRight className="w-4 h-4" />
-              Ir al folio
-            </button>
-          )}
-        </>}>
+        footer={
+          confirmingFolioDelete ? (
+            <>
+              <button onClick={() => setConfirmingFolioDelete(false)} className="btn-ghost" disabled={deleteFolioMutation.isPending}>Cancelar</button>
+              <button
+                onClick={() => deleteFolioMutation.mutate(blockedEditTarima.folio_id)}
+                disabled={deleteFolioMutation.isPending}
+                className="btn-danger inline-flex items-center gap-2">
+                <Trash2 className="w-4 h-4" />
+                {deleteFolioMutation.isPending ? 'Eliminando...' : `Confirmar eliminación`}
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => { setBlockedEditTarima(null); setConfirmingFolioDelete(false) }} className="btn-ghost">Cerrar</button>
+              {canDeleteFolio && blockedEditTarima?.folio_id && (
+                <button
+                  onClick={() => setConfirmingFolioDelete(true)}
+                  className="btn-danger inline-flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Eliminar folio {blockedEditTarima.folio_asignado}
+                </button>
+              )}
+              {!canDeleteFolio && blockedEditTarima?.folio_id && (
+                <button
+                  onClick={() => { setBlockedEditTarima(null); navigate(`/dropscan/folios?folio_id=${blockedEditTarima.folio_id}`) }}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-semibold text-sm transition-all">
+                  <ArrowRight className="w-4 h-4" />
+                  Ir al folio
+                </button>
+              )}
+            </>
+          )
+        }>
         <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-danger-50 border border-danger-200 flex items-start gap-3">
-            <Lock className="w-5 h-5 text-danger-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-bold text-danger-800">Esta tarima está bloqueada por un folio activo</p>
-              <p className="text-xs text-danger-600 mt-1">
-                No puedes agregar, eliminar o modificar guías mientras exista un folio asignado. Para editar la tarima, debes eliminar o cancelar el folio primero.
-              </p>
+          {confirmingFolioDelete ? (
+            <div className="p-4 rounded-xl bg-danger-50 border border-danger-200 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-danger-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-danger-800">¿Eliminar el folio {blockedEditTarima?.folio_asignado}?</p>
+                <p className="text-xs text-danger-600 mt-1">
+                  El folio será eliminado permanentemente y la tarima quedará disponible para edición.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-4 rounded-xl bg-danger-50 border border-danger-200 flex items-start gap-3">
+              <Lock className="w-5 h-5 text-danger-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-danger-800">Esta tarima está bloqueada por un folio activo</p>
+                <p className="text-xs text-danger-600 mt-1">
+                  Para editar la tarima debes eliminar el folio <span className="font-bold">{blockedEditTarima?.folio_asignado}</span> primero.
+                </p>
+              </div>
+            </div>
+          )}
           {blockedEditTarima && (
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-200 space-y-1">
               <div className="flex items-center justify-between">
