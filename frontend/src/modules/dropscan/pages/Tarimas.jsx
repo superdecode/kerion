@@ -783,14 +783,11 @@ export default function Tarimas() {
                               </button>
                               )}
                               {canManageStatus && (
-                                <button onClick={() => {
-                                  if (row.folio_asignado) {
-                                    setBlockedEditTarima(row)
-                                  } else {
-                                    handleOpenDetail(row.id, true)
-                                  }
-                                }}
-                                  className="p-2 rounded-xl hover:bg-warning-50 text-warm-400 hover:text-warning-500 transition-all" title="Editar">
+                                <button
+                                  onClick={() => !row.folio_asignado && handleOpenDetail(row.id, true)}
+                                  disabled={!!row.folio_asignado}
+                                  className={`p-2 rounded-xl transition-all ${row.folio_asignado ? 'opacity-30 cursor-not-allowed' : 'hover:bg-warning-50 text-warm-400 hover:text-warning-500'}`}
+                                  title={row.folio_asignado ? `Bloqueado — folio ${row.folio_asignado}` : 'Editar'}>
                                   <Pencil className="w-4 h-4" />
                                 </button>
                               )}
