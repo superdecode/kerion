@@ -851,6 +851,7 @@ function ParametrosTab({ canEdit }) {
   const qc = useQueryClient()
   const [guiasPorTarima, setGuiasPorTarima] = useState(null)
   const [pesoHabilitado, setPesoHabilitado] = useState(null)
+  const [unidadPeso, setUnidadPeso] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const toast = useToastStore.getState()
 
@@ -866,11 +867,13 @@ function ParametrosTab({ canEdit }) {
     if (parametros && guiasPorTarima === null) {
       setGuiasPorTarima(parametros.guias_por_tarima ?? 100)
       setPesoHabilitado(parametros.peso_habilitado ?? false)
+      setUnidadPeso(parametros.unidad_peso ?? 'kg')
     }
   }, [parametros])
 
   const currentValue = parametros?.guias_por_tarima ?? 100
   const currentPeso = parametros?.peso_habilitado ?? false
+  const currentUnidad = parametros?.unidad_peso ?? 'kg'
 
   const handleSave = async () => {
     if (!canEdit) return
@@ -879,6 +882,7 @@ function ParametrosTab({ canEdit }) {
       const { data } = await api.put('/dropscan/config/parametros', {
         guias_por_tarima: Number(guiasPorTarima),
         peso_habilitado: pesoHabilitado ?? false,
+        unidad_peso: unidadPeso ?? 'kg',
       })
       qc.setQueryData(['dropscan-parametros'], data)
       toast.success(t('config.parametersSaved'))
@@ -889,7 +893,7 @@ function ParametrosTab({ canEdit }) {
     }
   }
 
-  const hasChanges = Number(guiasPorTarima) !== currentValue || (pesoHabilitado ?? false) !== currentPeso
+  const hasChanges = Number(guiasPorTarima) !== currentValue || (pesoHabilitado ?? false) !== currentPeso || (unidadPeso ?? 'kg') !== currentUnidad
 
   if (isLoading) return <LoadingSpinner text={t('config.loadingParams')} />
 
@@ -939,8 +943,8 @@ function ParametrosTab({ canEdit }) {
             </div>
 
             {/* Bascula y peso */}
-            <div className="p-4 rounded-xl border border-warm-200 bg-warm-50/50">
-              <p className="text-xs font-bold text-warm-500 uppercase tracking-wider mb-3">{t('config.scaleSection')}</p>
+            <div className="p-4 rounded-xl border border-warm-200 bg-warm-50/50 space-y-4">
+              <p className="text-xs font-bold text-warm-500 uppercase tracking-wider">{t('config.scaleSection')}</p>
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-warm-700 mb-1">{t('config.weightPerGuide')}</p>
@@ -957,6 +961,29 @@ function ParametrosTab({ canEdit }) {
                     : <ToggleLeft className="w-10 h-10 text-warm-300" />}
                 </button>
               </div>
+
+              {pesoHabilitado && (
+                <div className="pt-3 border-t border-warm-200">
+                  <p className="text-sm font-semibold text-warm-700 mb-1">{t('config.weightUnit')}</p>
+                  <p className="text-xs text-warm-500 mb-3">{t('config.weightUnitDesc')}</p>
+                  <div className="flex gap-2">
+                    {['kg', 'g', 'lb'].map(unit => (
+                      <button
+                        key={unit}
+                        onClick={() => canEdit && setUnidadPeso(unit)}
+                        disabled={!canEdit}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all border-2 ${
+                          (unidadPeso ?? 'kg') === unit
+                            ? 'bg-primary-500 text-white border-primary-500 shadow-sm'
+                            : 'bg-white text-warm-600 border-warm-200 hover:border-primary-300 hover:text-primary-600'
+                        } ${!canEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                      >
+                        {t(`config.weightUnit.${unit}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {!canEdit && (

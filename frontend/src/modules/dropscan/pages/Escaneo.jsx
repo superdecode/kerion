@@ -225,6 +225,20 @@ export default function Escaneo() {
   const { data: parametrosData } = useQuery({ queryKey: ['dropscan-parametros'], queryFn: ds.getParametros })
   const gpt = parametrosData?.guias_por_tarima || 100
   const pesoHabilitado = parametrosData?.peso_habilitado === true
+  const unidadPeso = parametrosData?.unidad_peso || 'kg'
+
+  // Convert user-entered value (in unidadPeso) to kg for backend storage
+  const toKg = (val) => {
+    if (unidadPeso === 'g') return val / 1000
+    if (unidadPeso === 'lb') return val * 0.453592
+    return val
+  }
+  // Validation range in the selected unit
+  const pesoRange = unidadPeso === 'g'
+    ? { min: 0.1, max: 9999999, label: '0.1 g – 9,999,999 g' }
+    : unidadPeso === 'lb'
+    ? { min: 0.001, max: 22046, label: '0.001 lb – 22,046 lb' }
+    : { min: 0.001, max: 9999.999, label: '0.001 kg – 9,999.999 kg' }
   const { data: guideUsage } = useQuery({
     queryKey: ['dropscan-guide-usage'],
     queryFn: ds.getGuideUsage,
@@ -536,20 +550,42 @@ export default function Escaneo() {
     try {
       const data = await ds.scanGuia(tab.session.id, code, tab.tarima?.id)
       if (soundEnabled) playSound('success')
+      if (data.alerta) { if (soundEnabled) playSound('warning'); if (data.guia.posicion >= (gpt - 5)) toast.warning(data.alerta.message) }
+
       if (data.tarima_completada) {
-        updateTab(tabId, (t) => {
-          const completedCount = data.tarima?.cantidad_guias || (t.tarima?.cantidad_guias || 0) + 1
-          return {
-            tarima: data.nueva_tarima,
-            guias: [],
+        if (pesoHabilitado && data.guia?.id) {
+          // Keep showing the completed tarima while waiting for weight on last guide
+          updateTab(tabId, (t) => ({
+            tarima: data.tarima,
+            guias: [data.guia, ...t.guias],
             lastScan: { type: 'success', code: data.guia.codigo_guia, pos: data.guia.posicion },
             flashType: 'success',
-            guiasCount: (t.guiasCount || 0) + completedCount,
-            completedTarimas: [{ ...data.tarima, estado: 'FINALIZADA', completedAt: new Date() }, ...t.completedTarimas],
-          }
-        })
-        if (soundEnabled) playSound('complete')
-        setCompletionPrompt({ tabId, tarima: data.tarima, nuevaTarima: data.nueva_tarima })
+          }))
+          setPesoState({
+            tabId, guiaId: data.guia.id, guiaCodigo: data.guia.codigo_guia, guiaPos: data.guia.posicion,
+            value: '', alert: null,
+            pendingCompletion: {
+              tarima: data.tarima,
+              nuevaTarima: data.nueva_tarima,
+              completedCount: data.tarima?.cantidad_guias,
+            },
+          })
+          setTimeout(() => pesoInputRef.current?.focus(), 80)
+        } else {
+          updateTab(tabId, (t) => {
+            const completedCount = data.tarima?.cantidad_guias || (t.tarima?.cantidad_guias || 0) + 1
+            return {
+              tarima: data.nueva_tarima,
+              guias: [],
+              lastScan: { type: 'success', code: data.guia.codigo_guia, pos: data.guia.posicion },
+              flashType: 'success',
+              guiasCount: (t.guiasCount || 0) + completedCount,
+              completedTarimas: [{ ...data.tarima, estado: 'FINALIZADA', completedAt: new Date() }, ...t.completedTarimas],
+            }
+          })
+          if (soundEnabled) playSound('complete')
+          setCompletionPrompt({ tabId, tarima: data.tarima, nuevaTarima: data.nueva_tarima })
+        }
       } else {
         updateTab(tabId, (t) => ({
           tarima: data.tarima,
@@ -557,12 +593,10 @@ export default function Escaneo() {
           lastScan: { type: 'success', code: data.guia.codigo_guia, pos: data.guia.posicion },
           flashType: 'success',
         }))
-      }
-      if (data.alerta) { if (soundEnabled) playSound('warning'); if (data.guia.posicion >= (gpt - 5)) toast.warning(data.alerta.message) }
-      if (pesoHabilitado && data.guia?.id && !data.tarima_completada) {
-        setPesoState({ tabId, guiaId: data.guia.id, guiaCodigo: data.guia.codigo_guia, guiaPos: data.guia.posicion, value: '', alert: null })
-        setTimeout(() => pesoInputRef.current?.focus(), 80)
-        return
+        if (pesoHabilitado && data.guia?.id) {
+          setPesoState({ tabId, guiaId: data.guia.id, guiaCodigo: data.guia.codigo_guia, guiaPos: data.guia.posicion, value: '', alert: null })
+          setTimeout(() => pesoInputRef.current?.focus(), 80)
+        }
       }
     } catch (err) {
       const d = err.response?.data
@@ -671,22 +705,40 @@ export default function Escaneo() {
       setPesoState(s => ({ ...s, alert: 'guia' }))
       return
     }
-    const pesoVal = parseFloat(raw)
-    if (!raw || isNaN(pesoVal) || pesoVal < 0.001 || pesoVal > 9999.999) {
-      toast.warning(t('scan.peso.invalid'))
+    const rawVal = parseFloat(raw)
+    if (!raw || isNaN(rawVal) || rawVal < pesoRange.min || rawVal > pesoRange.max) {
+      toast.warning(`${t('scan.peso.invalid')} (${pesoRange.label})`)
       return
     }
+    const pesoKg = toKg(rawVal)
     try {
-      await ds.updateGuiaPeso(tab.session.id, guiaId, pesoVal)
+      await ds.updateGuiaPeso(tab.session.id, guiaId, pesoKg)
       updateTab(tabId, t => ({
-        guias: t.guias.map(g => g.id === guiaId ? { ...g, peso_kg: pesoVal } : g),
-        lastScan: t.lastScan ? { ...t.lastScan, peso_kg: pesoVal } : t.lastScan,
+        guias: t.guias.map(g => g.id === guiaId ? { ...g, peso_kg: pesoKg } : g),
+        lastScan: t.lastScan ? { ...t.lastScan, peso_kg: pesoKg } : t.lastScan,
       }))
       if (soundEnabled) playSound('peso')
     } catch { /* non-fatal — scan already registered */ }
+
+    const pendingCompletion = pesoState.pendingCompletion
     setPesoState(null)
-    setTimeout(() => inputRef.current?.focus(), 80)
-  }, [pesoState, tabs, updateTab, toast, t])
+
+    if (pendingCompletion) {
+      // Deferred tarima completion: now switch to new tarima
+      updateTab(tabId, (t) => ({
+        tarima: pendingCompletion.nuevaTarima,
+        guias: [],
+        lastScan: t.lastScan,
+        flashType: null,
+        guiasCount: (t.guiasCount || 0) + (pendingCompletion.completedCount || 0),
+        completedTarimas: [{ ...pendingCompletion.tarima, estado: 'FINALIZADA', completedAt: new Date() }, ...t.completedTarimas],
+      }))
+      if (soundEnabled) playSound('complete')
+      setCompletionPrompt({ tabId, tarima: pendingCompletion.tarima, nuevaTarima: pendingCompletion.nuevaTarima })
+    } else {
+      setTimeout(() => inputRef.current?.focus(), 80)
+    }
+  }, [pesoState, tabs, updateTab, toast, t, toKg, pesoRange])
 
   /* ── delete guide (any position, supervisor flow) ── */
   const handleDeleteGuia = (tabId, guiaId) => {
@@ -1197,7 +1249,7 @@ export default function Escaneo() {
                             focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
                             transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-center"
                         />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-warm-400 pointer-events-none">kg</span>
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-warm-400 pointer-events-none">{unidadPeso}</span>
                       </div>
                     </form>
                   )}
