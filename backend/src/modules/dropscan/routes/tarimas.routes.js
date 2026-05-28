@@ -396,10 +396,14 @@ router.post('/:tarimaId/guias',
   async (req, res) => {
     try {
       const { tarimaId } = req.params
-      const { codigo_guia } = req.body
+      const { codigo_guia, peso_kg } = req.body
 
       if (!codigo_guia || typeof codigo_guia !== 'string') {
         return res.status(400).json({ error: 'codigo_guia requerido' })
+      }
+      const pesoVal = peso_kg != null ? parseFloat(peso_kg) : null
+      if (pesoVal !== null && (isNaN(pesoVal) || pesoVal < 0.001 || pesoVal > 9999.999)) {
+        return res.status(400).json({ error: 'peso_kg debe estar entre 0.001 y 9999.999' })
       }
 
       // Verify tarima exists and is not locked by a folio
@@ -437,10 +441,10 @@ router.post('/:tarimaId/guias',
 
       // Insert new guide
       const guiaRes = await req.tQuery(
-        `INSERT INTO guias (tarima_id, codigo_guia, posicion, operador_id, timestamp_escaneo, tenant_id)
-         VALUES ($1, $2, $3, $4, NOW(), $5)
-         RETURNING id, codigo_guia, posicion, timestamp_escaneo, operador_id`,
-        [tarimaId, codigo_guia, nextPos, req.fullUser.id, req.tenantId]
+        `INSERT INTO guias (tarima_id, codigo_guia, posicion, operador_id, timestamp_escaneo, peso_kg, tenant_id)
+         VALUES ($1, $2, $3, $4, NOW(), $5, $6)
+         RETURNING id, codigo_guia, posicion, timestamp_escaneo, operador_id, peso_kg`,
+        [tarimaId, codigo_guia, nextPos, req.fullUser.id, pesoVal, req.tenantId]
       )
       const newGuia = guiaRes.rows[0]
 
@@ -460,6 +464,7 @@ router.post('/:tarimaId/guias',
           posicion: newGuia.posicion,
           timestamp_escaneo: newGuia.timestamp_escaneo,
           operador_nombre: operadorNombre,
+          peso_kg: newGuia.peso_kg,
         },
         cantidad_guias: newCount,
       })

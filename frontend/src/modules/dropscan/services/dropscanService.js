@@ -63,8 +63,8 @@ export const adoptTarima = (id) =>
 export const deleteTarima = (id) =>
   api.delete(`/dropscan/tarimas/${id}`).then(r => r.data)
 
-export const addGuiaToTarima = (tarimaId, codigo_guia) =>
-  api.post(`/dropscan/tarimas/${tarimaId}/guias`, { codigo_guia }).then(r => r.data)
+export const addGuiaToTarima = (tarimaId, codigo_guia, peso_kg = null) =>
+  api.post(`/dropscan/tarimas/${tarimaId}/guias`, { codigo_guia, ...(peso_kg != null ? { peso_kg } : {}) }).then(r => r.data)
 
 export const deleteGuiaFromTarima = (tarimaId, guiaId) =>
   api.delete(`/dropscan/tarimas/${tarimaId}/guias/${guiaId}`).then(r => r.data)

@@ -69,6 +69,7 @@ export default function Historial() {
   const [sortDir, setSortDir] = useState('desc')
   const [detailTab, setDetailTab] = useState('guias')
   const [newGuiaCode, setNewGuiaCode] = useState('')
+  const [newGuiaPeso, setNewGuiaPeso] = useState('')
   const [showFilters, setShowFilters] = useState(true)
   const { canDelete, canView, hasPermission, user, getPermissionLevel } = useAuthStore()
   const canViewDetails = canView('dropscan.historial')           // ver+
@@ -112,6 +113,10 @@ export default function Historial() {
   }, [syncRollingDateRange])
 
   // Fetch empresas/canales/escaneadores for filters
+  const { data: parametrosData } = useQuery({ queryKey: ['dropscan-parametros'], queryFn: ds.getParametros })
+  const pesoHabilitado = parametrosData?.peso_habilitado ?? false
+  const unidadPeso = parametrosData?.unidad_peso || 'kg'
+
   const { data: empresasData } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas })
   const { data: canalesData } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales })
   const { data: escaneadoresListData } = useQuery({
@@ -250,10 +255,11 @@ export default function Historial() {
   })
 
   const addGuiaMutation = useMutation({
-    mutationFn: ({ tarimaId, codigo_guia }) => ds.addGuiaToTarima(tarimaId, codigo_guia),
-    onSuccess: (data) => {
+    mutationFn: ({ tarimaId, codigo_guia, peso_kg }) => ds.addGuiaToTarima(tarimaId, codigo_guia, peso_kg),
+    onSuccess: () => {
       toast.success('Guía agregada correctamente')
       setNewGuiaCode('')
+      setNewGuiaPeso('')
       qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail', selectedTarima] })
       qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] })
     },
@@ -1031,18 +1037,32 @@ export default function Historial() {
                     <p className="text-xs font-bold text-primary-700 mb-3 uppercase tracking-wider">{t('history.addNewGuide')}</p>
                     <form onSubmit={(e) => {
                       e.preventDefault()
-                      if (newGuiaCode.trim()) {
-                        addGuiaMutation.mutate({ tarimaId: detail.id, codigo_guia: newGuiaCode.trim() })
-                      }
-                    }} className="flex gap-2">
+                      if (!newGuiaCode.trim()) return
+                      const pesoRaw = newGuiaPeso.trim()
+                      const pesoVal = pesoRaw ? parseFloat(pesoRaw) : null
+                      if (pesoRaw && (isNaN(pesoVal) || pesoVal <= 0)) return
+                      addGuiaMutation.mutate({ tarimaId: detail.id, codigo_guia: newGuiaCode.trim(), peso_kg: pesoVal })
+                    }} className="flex gap-2 flex-wrap">
                       <input
                         type="text"
                         value={newGuiaCode}
                         onChange={(e) => setNewGuiaCode(e.target.value)}
                         placeholder={t('history.guideCode')}
                         disabled={addGuiaMutation.isPending}
-                        className="flex-1 px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 disabled:opacity-50"
+                        className="flex-1 min-w-[160px] px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 disabled:opacity-50"
                       />
+                      {pesoHabilitado && (
+                        <input
+                          type="number"
+                          step="0.001"
+                          min="0.001"
+                          value={newGuiaPeso}
+                          onChange={(e) => setNewGuiaPeso(e.target.value)}
+                          placeholder={`Peso (${unidadPeso})`}
+                          disabled={addGuiaMutation.isPending}
+                          className="w-32 px-3 py-2 text-sm bg-white border border-primary-200 rounded-lg outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 disabled:opacity-50"
+                        />
+                      )}
                       <button
                         type="submit"
                         disabled={addGuiaMutation.isPending || !newGuiaCode.trim()}
