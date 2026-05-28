@@ -448,10 +448,12 @@ export default function Tarimas() {
   const detailGuias = detailData?.guias || []
   const duplicados = duplicadosData?.duplicados || []
 
-  // If a loaded tarima has a folio, force-exit editMode regardless of how it was opened
+  // If a loaded tarima has a folio, block edit mode and show the blocked modal
   useEffect(() => {
     if (detail?.folio_asignado && editMode) {
       setEditMode(false)
+      setSelectedTarima(null)
+      setBlockedEditTarima({ ...detail })
     }
   }, [detail?.folio_asignado, editMode])
 
@@ -900,7 +902,9 @@ export default function Tarimas() {
             {canManageStatus && (
               <button onClick={() => {
                 if (detail.folio_asignado) {
-                  setBlockedEditTarima(detail)
+                  setSelectedTarima(null)
+                  setEditMode(false)
+                  setBlockedEditTarima({ ...detail })
                 } else {
                   setEditMode(e => !e)
                 }
