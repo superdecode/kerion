@@ -97,12 +97,12 @@ export const useAuthStore = create(
           // Subdomain redirect: if on main domain and slug available, redirect to tenant subdomain
           const slug = data.user?.slug
           const hostname = window.location.hostname
-          const mainDomains = ['kirion.vercel.app', 'kirion.app', 'localhost', '127.0.0.1']
+          const tenantBase = import.meta.env.VITE_TENANT_BASE_DOMAIN || 'kirion.co'
+          const mainDomains = [tenantBase, `www.${tenantBase}`, 'kirion.vercel.app', 'localhost', '127.0.0.1']
           const isMainDomain = mainDomains.some(h => hostname === h)
 
           if (slug && isMainDomain && !hostname.includes('localhost')) {
-            // Redirect to subdomain with token in URL for bootstrap
-            window.location.href = `https://${slug}.kirion.app?token=${data.token}`
+            window.location.href = `https://${slug}.${tenantBase}?token=${data.token}`
             return { success: true, redirecting: true }
           }
 
