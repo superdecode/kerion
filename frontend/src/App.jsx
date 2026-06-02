@@ -48,6 +48,18 @@ import InventarioDevoluciones from './modules/devoluciones/pages/Inventario'
 import Salidas from './modules/devoluciones/pages/Salidas'
 import SalidaDetalle from './modules/devoluciones/pages/SalidaDetalle'
 
+// Inventario Module
+import InventarioRegistros from './modules/inventario/pages/Registros'
+import InventarioEscaneo from './modules/inventario/pages/Escaneo'
+
+// Surtido Module
+import SurtidoOrdenes from './modules/surtido/pages/Ordenes'
+import SurtidoEscaneo from './modules/surtido/pages/Escaneo'
+import SurtidoRegistros from './modules/surtido/pages/Registros'
+
+// WMS Hub Module
+import WMSHubConfiguracion from './modules/wmshub/pages/Configuracion'
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -72,6 +84,15 @@ const MODULE_ROUTES = [
   { module: 'devoluciones.salidas', path: '/devoluciones/salidas' },
   { module: 'global.wms', path: '/wms' },
   { module: 'global.administracion', path: '/admin' },
+  { module: 'devoluciones.entradas', path: '/devoluciones/entradas' },
+  { module: 'devoluciones.inventario', path: '/devoluciones/inventario' },
+  { module: 'devoluciones.salidas', path: '/devoluciones/salidas' },
+  { module: 'upapex.inventario', path: '/inventario/escaneo' },
+  { module: 'upapex.inventario', path: '/inventario/registros' },
+  { module: 'upapex.surtido', path: '/surtido' },
+  { module: 'upapex.surtido', path: '/surtido/escaneo' },
+  { module: 'upapex.surtido', path: '/surtido/registros' },
+  { module: 'upapex.hub', path: '/wmshub' },
 ]
 
 function SmartRedirect() {
@@ -176,6 +197,11 @@ function AppRoutes() {
           <PermissionRoute module="fep.folios"><ErrorBoundary><FolioDetalle /></ErrorBoundary></PermissionRoute>
         } />
 
+        {/* WMS Hub */}
+        <Route path="wmshub" element={
+          <PermissionRoute module="upapex.hub"><ErrorBoundary><WMSHubConfiguracion /></ErrorBoundary></PermissionRoute>
+        } />
+
         {/* Devoluciones */}
         <Route path="devoluciones/entradas" element={
           <PermissionRoute module="devoluciones.entradas"><ErrorBoundary><Entradas /></ErrorBoundary></PermissionRoute>
@@ -197,6 +223,30 @@ function AppRoutes() {
         <Route path="wms" element={
           <PermissionRoute module="global.wms"><ErrorBoundary><WmsHub /></ErrorBoundary></PermissionRoute>
         } />
+
+        {/* Inventario Module */}
+        <Route path="inventario" element={<Navigate to="/inventario/registros" replace />} />
+        <Route path="inventario/registros" element={
+          <PermissionRoute module="upapex.inventario"><ErrorBoundary><InventarioRegistros /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="inventario/escaneo" element={
+          <PermissionRoute module="upapex.inventario"><ErrorBoundary><InventarioEscaneo /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="inventario/stock" element={<Navigate to="/inventario/registros" replace />} />
+        <Route path="inventario/historial" element={<Navigate to="/inventario/registros" replace />} />
+
+        {/* Surtido Module */}
+        <Route path="surtido" element={
+          <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoOrdenes /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="surtido/escaneo" element={
+          <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoEscaneo /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="surtido/registros" element={
+          <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoRegistros /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="surtido/validacion" element={<Navigate to="/surtido/escaneo" replace />} />
+        <Route path="surtido/historial" element={<Navigate to="/surtido/registros" replace />} />
 
         {/* Administration */}
         <Route path="admin" element={

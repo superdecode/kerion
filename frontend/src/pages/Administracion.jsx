@@ -38,6 +38,15 @@ const MODULE_GROUPS = [
     ]
   },
   {
+    group: 'Upapex WMS',
+    groupKey: 'perm.group.upapex',
+    modules: [
+      { key: 'upapex.hub',       label: 'Conexión',       labelKey: 'perm.sub.upapex.hub' },
+      { key: 'upapex.inventario',label: 'Inventario WMS', labelKey: 'perm.sub.upapex.inventario' },
+      { key: 'upapex.surtido',   label: 'Surtido',        labelKey: 'perm.sub.upapex.surtido' },
+    ]
+  },
+  {
     group: 'Sistema',
     groupKey: 'admin.group.sistema',
     modules: [

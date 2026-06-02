@@ -40,6 +40,9 @@ import devInventarioRoutes from './modules/devoluciones/routes/inventario.routes
 import devSalidasRoutes from './modules/devoluciones/routes/salidas.routes.js'
 import devUtilsRoutes from './modules/devoluciones/routes/utils.routes.js'
 
+// Upapex module routes
+import upapexRoutes from './modules/upapex/routes/upapex.routes.js'
+
 const app = express()
 
 function isAllowedDevOrigin(origin) {
@@ -154,6 +157,8 @@ app.use('/api/devoluciones/inventario', tenantContext, tenantDB, devInventarioRo
 app.use('/api/devoluciones/salidas', tenantContext, tenantDB, devSalidasRoutes)
 app.use('/api/devoluciones', tenantContext, tenantDB, devUtilsRoutes)
 
+// Upapex module
+app.use('/api/upapex', tenantContext, tenantDB, upapexRoutes)
 
 // Auto-apply pending migrations (idempotent — each step is independent)
 async function runMigrations() {
@@ -390,6 +395,145 @@ async function runMigrations() {
     // ── 036: peso por guía en dropscan ────────────────────────────────────
     `ALTER TABLE guias ADD COLUMN IF NOT EXISTS peso_kg NUMERIC(10,3)`,
     `CREATE INDEX IF NOT EXISTS idx_guias_peso_kg ON guias (tenant_id, tarima_id) WHERE peso_kg IS NOT NULL`,
+
+    // ── 039: Rename upapex_* tables to domain-neutral identifiers ────────
+    `ALTER TABLE IF EXISTS upapex_config RENAME TO wms_config`,
+    `ALTER TABLE IF EXISTS upapex_scan_sessions RENAME TO pick_sessions`,
+    `ALTER TABLE IF EXISTS upapex_scan_events RENAME TO pick_events`,
+    `ALTER TABLE IF EXISTS upapex_inventory_sessions RENAME TO inv_sessions`,
+    `ALTER TABLE IF EXISTS upapex_inventory_scans RENAME TO inv_scans`,
+    `ALTER TABLE IF EXISTS upapex_surtidores RENAME TO pick_surtidores`,
+    `ALTER TABLE IF EXISTS upapex_order_tracking RENAME TO pick_order_tracking`,
+
+    // ── 037: WMS Hub config ───────────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS wms_config (
+       id SERIAL PRIMARY KEY,
+       tenant_id UUID REFERENCES tenants(id) NOT NULL,
+       app_key TEXT NOT NULL,
+       base_url TEXT NOT NULL DEFAULT 'https://api.xlwms.com/openapi',
+       is_active BOOLEAN DEFAULT true,
+       last_verified_at TIMESTAMPTZ,
+       created_at TIMESTAMPTZ DEFAULT now(),
+       updated_at TIMESTAMPTZ DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_wms_config_tenant ON wms_config(tenant_id)`,
+
+    // ── 037: Picking scan sessions ────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS pick_sessions (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       tenant_id UUID REFERENCES tenants(id) NOT NULL,
+       outbound_order_no TEXT NOT NULL,
+       third_order_no TEXT,
+       operator_id INTEGER REFERENCES usuarios(id),
+       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','complete','with_discrepancies')),
+       started_at TIMESTAMPTZ DEFAULT now(),
+       completed_at TIMESTAMPTZ,
+       total_expected INTEGER DEFAULT 0,
+       total_scanned INTEGER DEFAULT 0,
+       notes TEXT,
+       created_at TIMESTAMPTZ DEFAULT now(),
+       updated_at TIMESTAMPTZ DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_sessions_tenant ON pick_sessions(tenant_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_sessions_status ON pick_sessions(tenant_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_sessions_operator ON pick_sessions(operator_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_sessions_order ON pick_sessions(tenant_id, outbound_order_no)`,
+
+    // ── 037: Picking scan events ──────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS pick_events (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       session_id UUID REFERENCES pick_sessions(id) ON DELETE CASCADE NOT NULL,
+       scanned_code TEXT NOT NULL,
+       normalized_code TEXT NOT NULL,
+       matched_sku TEXT,
+       matched_box_type TEXT,
+       scan_result TEXT NOT NULL CHECK (scan_result IN ('ok','unexpected','duplicate','not_found')),
+       quantity INTEGER DEFAULT 1,
+       scanned_at TIMESTAMPTZ DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_events_session ON pick_events(session_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_events_result ON pick_events(session_id, scan_result)`,
+
+    // ── 037: Upapex permissions on existing roles ─────────────────────────
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{upapex}',
+       '{"hub":"eliminar","inventario":"eliminar","surtido":"eliminar"}'::jsonb, true)
+     WHERE nombre = 'Administrador' AND NOT (permisos ? 'upapex')`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{upapex}',
+       '{"hub":"ver","inventario":"actualizar","surtido":"actualizar"}'::jsonb, true)
+     WHERE nombre = 'Jefe' AND NOT (permisos ? 'upapex')`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{upapex}',
+       '{"hub":"ver","inventario":"ver","surtido":"crear"}'::jsonb, true)
+     WHERE nombre = 'Operador' AND NOT (permisos ? 'upapex')`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{upapex}',
+       '{"hub":"sin_acceso","inventario":"ver","surtido":"ver"}'::jsonb, true)
+     WHERE nombre NOT IN ('Administrador','Jefe','Operador') AND NOT (permisos ? 'upapex')`,
+
+    // ── 038: Inventario WMS sessions ──────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS inv_sessions (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       tenant_id UUID REFERENCES tenants(id) NOT NULL,
+       operator_id INTEGER REFERENCES usuarios(id),
+       scan_type TEXT NOT NULL DEFAULT 'unificado' CHECK (scan_type IN ('unificado','clasificacion')),
+       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','saved')),
+       started_at TIMESTAMPTZ DEFAULT now(),
+       completed_at TIMESTAMPTZ,
+       notes TEXT,
+       total_scans INTEGER DEFAULT 0,
+       total_ok INTEGER DEFAULT 0,
+       total_blocked INTEGER DEFAULT 0,
+       total_nowms INTEGER DEFAULT 0,
+       created_at TIMESTAMPTZ DEFAULT now(),
+       updated_at TIMESTAMPTZ DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_inv_sessions_tenant ON inv_sessions(tenant_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_inv_sessions_status ON inv_sessions(tenant_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_inv_sessions_operator ON inv_sessions(operator_id)`,
+
+    // ── 038: Inventario WMS scans ─────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS inv_scans (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       session_id UUID REFERENCES inv_sessions(id) ON DELETE CASCADE NOT NULL,
+       scanned_code TEXT NOT NULL,
+       normalized_code TEXT NOT NULL,
+       code2 TEXT,
+       was_swapped BOOLEAN DEFAULT false,
+       scan_status TEXT NOT NULL CHECK (scan_status IN ('ok','blocked','nowms')),
+       sku TEXT,
+       product_name TEXT,
+       cell_no TEXT,
+       group_assignment TEXT DEFAULT 'auto',
+       scanned_at TIMESTAMPTZ DEFAULT now()
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_inv_scans_session ON inv_scans(session_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_inv_scans_status ON inv_scans(session_id, scan_status)`,
+
+    // ── 038: Pickers list ─────────────────────────────────────────────────
+    `CREATE TABLE IF NOT EXISTS pick_surtidores (
+       id SERIAL PRIMARY KEY,
+       tenant_id UUID REFERENCES tenants(id) NOT NULL,
+       nombre TEXT NOT NULL,
+       activo BOOLEAN DEFAULT true,
+       created_at TIMESTAMPTZ DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_pick_surtidores_tenant_nombre ON pick_surtidores(tenant_id, nombre) WHERE activo = true`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_surtidores_tenant ON pick_surtidores(tenant_id)`,
+
+    // ── 038: Order tracking (local status pipeline for WMS outbound orders)
+    `CREATE TABLE IF NOT EXISTS pick_order_tracking (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       tenant_id UUID REFERENCES tenants(id) NOT NULL,
+       outbound_order_no TEXT NOT NULL,
+       third_order_no TEXT,
+       surtidor_id INTEGER REFERENCES pick_surtidores(id) ON DELETE SET NULL,
+       surtidor_nombre TEXT,
+       status TEXT NOT NULL DEFAULT 'pending_assignment' CHECK (status IN ('pending_assignment','assigned','sorting','pending_validation','validating','complete')),
+       notes TEXT,
+       created_at TIMESTAMPTZ DEFAULT now(),
+       updated_at TIMESTAMPTZ DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_pick_order_tracking_unique ON pick_order_tracking(tenant_id, outbound_order_no)`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_tenant ON pick_order_tracking(tenant_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_status ON pick_order_tracking(tenant_id, status)`,
   ]
   for (const sql of steps) {
     try {

@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { WifiOff, Wifi, Upload, AlertCircle } from 'lucide-react'
+import { CloudOff, RefreshCw, Upload, AlertCircle, PlugZap } from 'lucide-react'
 import { useOfflineStore } from '../../stores/offlineStore'
 import { useToastStore } from '../../stores/toastStore'
 import { syncOfflineQueue } from '../../services/offlineSync'
@@ -42,19 +42,19 @@ export default function ConnectionBanner() {
           animate={{ height: 'auto', opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
           transition={{ duration: 0.3 }}
-          className="overflow-hidden"
+          className="overflow-hidden px-3 pt-3"
         >
-          <div className={`flex items-center justify-between gap-3 px-4 py-2 text-sm font-semibold ${
+          <div className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-2.5 text-sm font-semibold shadow-lg backdrop-blur-sm ${
             status === 'offline'
-              ? 'bg-danger-500 text-white'
+              ? 'border-red-300/35 bg-gradient-to-r from-red-950/85 via-red-800/72 to-rose-500/60 text-white shadow-red-950/20'
               : syncError
-                ? 'bg-warning-400 text-warning-900'
-                : 'bg-primary-500 text-white'
+                ? 'border-amber-300/60 bg-gradient-to-r from-amber-200 via-orange-200 to-amber-100 text-amber-950'
+                : 'border-emerald-300/45 bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-500 text-white shadow-emerald-950/20'
           }`}>
             <div className="flex items-center gap-2">
               {status === 'offline' ? (
                 <>
-                  <WifiOff className="w-4 h-4 animate-pulse" />
+                  <CloudOff className="w-4 h-4 animate-pulse" />
                   <span>Sin conexion — los escaneos se guardan localmente</span>
                 </>
               ) : syncError ? (
@@ -64,7 +64,7 @@ export default function ConnectionBanner() {
                 </>
               ) : (
                 <>
-                  <Wifi className="w-4 h-4" />
+                  <PlugZap className="w-4 h-4" />
                   <span>Conexion restaurada</span>
                 </>
               )}
@@ -83,7 +83,7 @@ export default function ConnectionBanner() {
                   onClick={handleSync}
                   className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-xs font-bold"
                 >
-                  <Upload className="w-3.5 h-3.5" /> Sincronizar
+                  <RefreshCw className="w-3.5 h-3.5" /> Sincronizar
                 </button>
               )}
               {syncing && (

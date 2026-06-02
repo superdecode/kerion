@@ -1,0 +1,128 @@
+import { query } from '../../../config/database.js'
+
+const BASE_URL = 'https://api.xlwms.com/openapi'
+
+// In-memory config cache per tenant (2 min TTL)
+const _configCache = new Map()
+const CONFIG_TTL_MS = 2 * 60 * 1000
+
+// In-flight request deduplication (500ms window)
+const _inFlight = new Map()
+
+function makeReqTime() {
+  const d = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`
+}
+
+async function getConfig(tenantId) {
+  const cached = _configCache.get(tenantId)
+  if (cached && Date.now() - cached.at < CONFIG_TTL_MS) return cached.config
+
+  const res = await query(
+    'SELECT app_key FROM wms_config WHERE tenant_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1',
+    [tenantId]
+  )
+  const config = res.rows[0] || null
+  _configCache.set(tenantId, { config, at: Date.now() })
+  return config
+}
+
+export function invalidateConfigCache(tenantId) {
+  if (tenantId) _configCache.delete(tenantId)
+  else _configCache.clear()
+}
+
+async function upapexPost(tenantId, endpoint, data) {
+  const config = await getConfig(tenantId)
+  if (!config) {
+    const err = new Error('Upapex WMS no configurado')
+    err.code = 'UPAPEX_NOT_CONFIGURED'
+    throw err
+  }
+
+  const reqTime = makeReqTime()
+  const body = JSON.stringify({ appKey: config.app_key, reqTime, data })
+  const url = `${BASE_URL}${endpoint}`
+
+  let lastErr
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(12000),
+      })
+      if (!res.ok) throw new Error(`WMS HTTP ${res.status}`)
+      const json = await res.json()
+      if (json.code !== 200) {
+        const err = new Error(json.msg || `WMS error code ${json.code}`)
+        err.wmsCode = json.code
+        err.wmsMsg = json.msg
+        throw err
+      }
+      return json.data
+    } catch (err) {
+      if (err.code === 'UPAPEX_NOT_CONFIGURED' || err.wmsCode) throw err
+      lastErr = err
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 2000))
+    }
+  }
+  throw lastErr
+}
+
+function dedupKey(tenantId, endpoint, data) {
+  return `${tenantId}:${endpoint}:${JSON.stringify(data)}`
+}
+
+async function upapexPostDedup(tenantId, endpoint, data) {
+  const key = dedupKey(tenantId, endpoint, data)
+  const existing = _inFlight.get(key)
+  if (existing) return existing
+
+  const promise = upapexPost(tenantId, endpoint, data).finally(() => {
+    _inFlight.delete(key)
+  })
+  _inFlight.set(key, promise)
+  setTimeout(() => _inFlight.delete(key), 500)
+  return promise
+}
+
+// ── Public API functions ───────────────────────────────────────────────────
+
+export async function testConnection(tenantId) {
+  return upapexPost(tenantId, '/v1/integratedInventory/pageOpen', { page: 1, pageSize: 1 })
+}
+
+export async function getBoxStock(tenantId, params = {}) {
+  const { page = 1, pageSize = 25, ...rest } = params
+  return upapexPostDedup(tenantId, '/v1/boxStock/page', { page, pageSize, ...rest })
+}
+
+export async function getIntegratedInventory(tenantId, params = {}) {
+  const { page = 1, pageSize = 25, ...rest } = params
+  return upapexPostDedup(tenantId, '/v1/integratedInventory/pageOpen', {
+    page,
+    pageSize,
+    timeType: 'operateTime',
+    ...rest,
+  })
+}
+
+export async function getBigOutboundList(tenantId, params = {}) {
+  const { page = 1, pageSize = 25, ...rest } = params
+  return upapexPostDedup(tenantId, '/v1/outboundOrder/big/pageList', {
+    page,
+    pageSize,
+    timeType: 'orderCreateTime',
+    ...rest,
+  })
+}
+
+export async function getBigOutboundDetail(tenantId, outboundOrderNoList) {
+  const list = Array.isArray(outboundOrderNoList) ? outboundOrderNoList : [outboundOrderNoList]
+  return upapexPost(tenantId, '/v1/outboundOrder/big/detail', { outboundOrderNoList: list })
+}
+
+export { getConfig as _getConfig }

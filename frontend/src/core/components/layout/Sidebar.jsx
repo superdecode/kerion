@@ -15,7 +15,10 @@ import {
   Boxes,
   PackagePlus,
   PackageMinus,
+  Package,
+  ListChecks,
   Wifi,
+  ClipboardList,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
@@ -40,6 +43,30 @@ const getNavItems = (t) => [
       { path: '/devoluciones/entradas',   tourId: 'nav-dev-entradas',   label: t('nav.dev.entradas'),   icon: PackagePlus,  permission: 'devoluciones.entradas' },
       { path: '/devoluciones/inventario', tourId: 'nav-dev-inventario', label: t('nav.dev.inventario'), icon: Boxes,        permission: 'devoluciones.inventario' },
       { path: '/devoluciones/salidas',    tourId: 'nav-dev-salidas',    label: t('nav.dev.salidas'),    icon: PackageMinus, permission: 'devoluciones.salidas' },
+    ],
+  },
+  {
+    id: 'inventario',
+    label: t('nav.inventario'),
+    items: [
+      { path: '/inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode, permission: 'upapex.inventario' },
+      { path: '/inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: ClipboardList, permission: 'upapex.inventario' },
+    ],
+  },
+  {
+    id: 'surtido',
+    label: t('nav.surtido'),
+    items: [
+      { path: '/surtido',              tourId: 'nav-sur-ordenes',   label: t('nav.sur.ordenes'),   icon: ListChecks,  permission: 'upapex.surtido' },
+      { path: '/surtido/escaneo',      tourId: 'nav-sur-escaneo',   label: t('nav.sur.escaneo'),   icon: ScanBarcode, permission: 'upapex.surtido' },
+      { path: '/surtido/registros',    tourId: 'nav-sur-registros', label: t('nav.sur.registros'), icon: History,     permission: 'upapex.surtido' },
+    ],
+  },
+  {
+    id: 'wmshub',
+    label: 'Conexión',
+    items: [
+      { path: '/wmshub', tourId: 'nav-wmshub', label: t('nav.wms.config'), icon: Wifi, permission: 'upapex.hub' },
     ],
   },
 ]
