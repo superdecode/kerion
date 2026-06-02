@@ -65,6 +65,7 @@ function normalizeRow(raw, idx) {
     guia1: String(pickField(raw, ['guia1', 'guía1', 'guia_1', 'guía_1', 'tracking1']) || '').trim(),
     guia2: String(pickField(raw, ['guia2', 'guía2', 'guia_2', 'guía_2', 'tracking2']) || '').trim(),
     multicaja: String(pickField(raw, ['multicaja', 'multi_caja', 'box_id']) || '').trim(),
+    observacion: String(pickField(raw, ['observacion', 'observación', 'comment', 'comentario', 'obs']) || '').trim(),
   }
 }
 
@@ -112,12 +113,12 @@ function validateRow(row, inventario, tipoImport) {
 
 function downloadTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([
-    ['sku', 'cantidad', 'tipo_ajuste', 'descripcion', 'ubicacion', 'guia1', 'guia2', 'multicaja'],
-    ['SKU-EJEMPLO-01', 10, 'set', 'Ajuste fisico mensual', 'A-01', 'GUIA-A-123', '', ''],
-    ['SKU-EJEMPLO-02', 5, 'add', 'Ingreso adicional', '', 'GUIA-B-456', 'GUIA-B-789', 'MC-100'],
-    ['SKU-EJEMPLO-03', 2, 'subtract', 'Merma detectada', 'B-02', '', '', ''],
+    ['sku', 'cantidad', 'tipo_ajuste', 'descripcion', 'ubicacion', 'guia1', 'guia2', 'multicaja', 'observacion'],
+    ['SKU-EJEMPLO-01', 10, 'set', 'Ajuste fisico mensual', 'A-01', 'GUIA-A-123', '', '', 'Conteo anual'],
+    ['SKU-EJEMPLO-02', 5, 'add', 'Ingreso adicional', '', 'GUIA-B-456', 'GUIA-B-789', 'MC-100', 'Entrada extra'],
+    ['SKU-EJEMPLO-03', 2, 'subtract', 'Merma detectada', 'B-02', '', '', '', 'Dañado'],
   ])
-  ws['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 18 }, { wch: 28 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }]
+  ws['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 18 }, { wch: 28 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 20 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Importacion')
   XLSX.writeFile(wb, 'plantilla_importacion_inventario.xlsx')
@@ -224,6 +225,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
           guia1: r.guia1 || null,
           guia2: r.guia2 || null,
           multicaja: r.multicaja || null,
+          observacion: r.observacion || null,
         })),
       })
       setImportResult(result)
@@ -376,7 +378,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                 />
               </motion.label>
               <p className="text-[11px] text-warm-400 mt-1.5">
-                Columnas opcionales: <span className="font-mono">tipo_ajuste</span>, <span className="font-mono">descripcion</span>, <span className="font-mono">ubicacion</span>, <span className="font-mono">guia1</span>, <span className="font-mono">guia2</span>, <span className="font-mono">multicaja</span>
+                Columnas opcionales: <span className="font-mono">tipo_ajuste</span>, <span className="font-mono">descripcion</span>, <span className="font-mono">ubicacion</span>, <span className="font-mono">guia1</span>, <span className="font-mono">guia2</span>, <span className="font-mono">multicaja</span>, <span className="font-mono">observacion</span>
               </p>
             </div>
           </motion.div>

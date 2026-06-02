@@ -111,6 +111,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
       _disponible: inv.cantidad_disponible,
       cantidad_nueva: inv.cantidad_disponible,
       motivo: '',
+      observacion: '',
     }])
     setSearchAjuste('')
   }
@@ -164,6 +165,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
           inventario_id: r.inventario_id,
           cantidad_nueva: parseInt(r.cantidad_nueva, 10),
           motivo: r.motivo || descripcion || 'Ajuste manual',
+          observacion: r.observacion || descripcion || 'Ajuste manual',
         })),
       })
     } else {
@@ -173,6 +175,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
         inventario: selectedIds.map(id => ({
           inventario_id: id,
           cantidad: cantidades[id] ?? inventario.find(i => i.id === id)?.cantidad_disponible,
+          observacion: descripcion || 'Traslado manual',
         })),
         ubicacion_destino_id: destinoId,
       })
@@ -293,7 +296,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
                       <th className="px-3 py-2.5">Ubicación</th>
                       <th className="px-3 py-2.5 text-right w-20">Actual</th>
                       <th className="px-3 py-2.5 w-28">Cantidad real</th>
-                      <th className="px-3 py-2.5">Motivo</th>
+                      <th className="px-3 py-2.5">Observación</th>
                       <th className="px-3 py-2.5 w-8" />
                     </tr>
                   </thead>
@@ -323,8 +326,8 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
                             </div>
                           </td>
                           <td className="px-3 py-2.5">
-                            <input value={row.motivo} onChange={e => updateRow(i, 'motivo', e.target.value)}
-                              placeholder={descripcion || 'Motivo...'}
+                            <input value={row.observacion} onChange={e => updateRow(i, 'observacion', e.target.value)}
+                              placeholder={descripcion || 'Nota...'}
                               className="w-full px-2 py-1.5 rounded-lg border border-warm-200 text-xs focus:outline-none focus:ring-2 focus:ring-primary-200"
                             />
                           </td>

@@ -393,6 +393,7 @@ async function runMigrations() {
     `ALTER TABLE dev_inventario ALTER COLUMN item_id DROP NOT NULL`,
     `ALTER TABLE dev_inventario ALTER COLUMN sesion_id DROP NOT NULL`,
     `ALTER TABLE dev_inventario ALTER COLUMN codigo_trazabilidad DROP NOT NULL`,
+    `ALTER TABLE dev_movimientos ADD COLUMN IF NOT EXISTS observacion TEXT`,
     // ── Fix 2: prefix codes AJU- for ajustes, KOT- for salidas ────────────
     `ALTER TABLE dev_ajustes ADD COLUMN IF NOT EXISTS codigo TEXT`,
     `CREATE INDEX IF NOT EXISTS idx_dev_ajustes_codigo ON dev_ajustes(tenant_id, codigo) WHERE codigo IS NOT NULL`,

@@ -218,7 +218,7 @@ export default function Inventario() {
   const exportHistorial = () => {
     const movs = movimientos
     if (!movs.length) return
-    const headers = ['Fecha', 'Tipo', 'Código', 'SKU', 'Cant. Anterior', 'Cant. Nueva', 'Cambio', 'Ubicación', 'Usuario']
+    const headers = ['Fecha', 'Tipo', 'Código', 'SKU', 'Cant. Anterior', 'Cant. Nueva', 'Cambio', 'Ubicación', 'Observación', 'Usuario']
     const rows = movs.map(r => {
       const delta = (r.cantidad_anterior != null && r.cantidad_nueva != null)
         ? r.cantidad_nueva - r.cantidad_anterior : ''
@@ -227,7 +227,7 @@ export default function Inventario() {
         fmtDateTime(r.created_at), r.tipo, r.codigo_trazabilidad || '', r.sku || '',
         r.cantidad_anterior ?? '', r.cantidad_nueva ?? '',
         delta !== '' ? (delta >= 0 ? `+${delta}` : delta) : '',
-        ubicacion || '', r.usuario_nombre || '',
+        ubicacion || '', r.observacion || '', r.usuario_nombre || '',
       ]
     })
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -256,6 +256,7 @@ export default function Inventario() {
       m.ubicacion_codigo?.toLowerCase().includes(q) ||
       m.ubicacion_anterior_codigo?.toLowerCase().includes(q) ||
       m.ubicacion_nueva_codigo?.toLowerCase().includes(q) ||
+      m.observacion?.toLowerCase().includes(q) ||
       m.usuario_nombre?.toLowerCase().includes(q)
     )
   }, [allMovimientos, historialQ])
@@ -645,6 +646,7 @@ export default function Inventario() {
                         <th className="table-header text-right">Nueva</th>
                         <th className="table-header text-right">Cambio</th>
                         <th className="table-header">Ubicación</th>
+                        <th className="table-header">Observación</th>
                         <th className="table-header">Usuario</th>
                       </tr>
                     </thead>
@@ -688,6 +690,9 @@ export default function Inventario() {
 
                             <td className="table-cell text-xs text-warm-500">
                               {getMovimientoUbicacion(row) || '—'}
+                            </td>
+                            <td className="table-cell text-xs text-warm-500 max-w-[200px] truncate" title={row.observacion}>
+                              {row.observacion || '—'}
                             </td>
                             <td className="table-cell text-xs text-warm-500">{row.usuario_nombre || '—'}</td>
                           </tr>

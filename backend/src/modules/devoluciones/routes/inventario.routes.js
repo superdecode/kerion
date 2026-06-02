@@ -97,7 +97,8 @@ router.get('/historial',
                   WHEN m.tipo = 'traslado' THEN COALESCE(ub_prev.codigo, ub_new.codigo)
                   ELSE COALESCE(ub_new.codigo, ub_prev.codigo)
                 END AS ubicacion_codigo,
-                u.nombre_completo AS usuario_nombre
+                u.nombre_completo AS usuario_nombre,
+                m.observacion
          FROM dev_movimientos m
          LEFT JOIN dev_inventario i ON i.id = m.inventario_id
          LEFT JOIN dev_ubicaciones ub_prev ON ub_prev.id = COALESCE(m.ubicacion_anterior_id, i.ubicacion_id)
@@ -171,6 +172,7 @@ router.post('/ajustes',
         }
         if (tipo === 'ajuste') {
           const nuevaCantidad = Number(row.cantidad_nueva)
+          const observacion = row.observacion || descripcion || 'Ajuste manual'
           await client.query(
             `UPDATE dev_inventario
              SET cantidad_disponible = $1, updated_at = now()
@@ -180,12 +182,13 @@ router.post('/ajustes',
           await client.query(
             `INSERT INTO dev_movimientos
                (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
-                referencia_id, referencia_tipo, usuario_id, motivo, tenant_id)
-             VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9)`,
-            [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad, current.ubicacion_id, ajusteRes.rows[0].id, req.user.id, descripcion || 'Ajuste manual', req.tenantId]
+                referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+             VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+            [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad, current.ubicacion_id, ajusteRes.rows[0].id, req.user.id, descripcion || 'Ajuste manual', observacion, req.tenantId]
           )
         } else {
           const cantidadTraslado = row.cantidad ? Number(row.cantidad) : current.cantidad_disponible
+          const observacion = row.observacion || descripcion || 'Traslado manual'
           if (cantidadTraslado <= 0 || cantidadTraslado > current.cantidad_disponible) {
             await client.query('ROLLBACK')
             return res.status(400).json({ error: `Cantidad inválida para traslado de ${current.sku || current.id}` })
@@ -202,8 +205,8 @@ router.post('/ajustes',
           await client.query(
             `INSERT INTO dev_movimientos
                (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_anterior_id,
-                referencia_id, referencia_tipo, usuario_id, motivo, tenant_id)
-             VALUES ('salida', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9)`,
+                referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+             VALUES ('salida', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
             [
               current.id,
               current.item_id,
@@ -213,6 +216,7 @@ router.post('/ajustes',
               ajusteRes.rows[0].id,
               req.user.id,
               descripcion || 'Traslado — salida origen',
+              observacion,
               req.tenantId,
             ]
           )
@@ -259,8 +263,8 @@ router.post('/ajustes',
             await client.query(
               `INSERT INTO dev_movimientos
                  (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
-                  referencia_id, referencia_tipo, usuario_id, motivo, tenant_id)
-               VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9)`,
+                  referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+               VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
               [
                 target.id,
                 target.item_id,
@@ -270,6 +274,7 @@ router.post('/ajustes',
                 ajusteRes.rows[0].id,
                 req.user.id,
                 descripcion || 'Traslado — entrada destino',
+                observacion,
                 req.tenantId,
               ]
             )
@@ -302,8 +307,8 @@ router.post('/ajustes',
             await client.query(
               `INSERT INTO dev_movimientos
                  (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
-                  referencia_id, referencia_tipo, usuario_id, motivo, tenant_id)
-               VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'ajuste', $6, $7, $8)`,
+                  referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+               VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'ajuste', $6, $7, $8, $9)`,
               [
                 newInv.id,
                 newInv.item_id,
@@ -312,6 +317,7 @@ router.post('/ajustes',
                 ajusteRes.rows[0].id,
                 req.user.id,
                 descripcion || 'Traslado — entrada destino',
+                observacion,
                 req.tenantId,
               ]
             )
@@ -404,7 +410,7 @@ router.post('/importar',
         const {
           sku, cantidad, tipo_ajuste = 'set', inventario_id,
           descripcion: filDesc, ubicacion_codigo,
-          guia1, guia2, multicaja
+          guia1, guia2, multicaja, observacion: filObs
         } = fila
 
         let ubicacionId = null
@@ -415,6 +421,8 @@ router.post('/importar',
           )
           if (ubRes.rows.length) ubicacionId = ubRes.rows[0].id
         }
+
+        const movementObs = filObs || descripcion || 'Importación'
 
         if (inventario_id) {
           const invRes = await client.query(
@@ -443,21 +451,31 @@ router.post('/importar',
           await client.query(
             `INSERT INTO dev_movimientos
                (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
-                ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, tenant_id)
-             VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9)`,
+                ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+             VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
             [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad,
              ubicacionId || current.ubicacion_id, ajusteId, req.user.id,
-             filDesc || descripcion || 'Importación', req.tenantId]
+             filDesc || descripcion || 'Importación', movementObs, req.tenantId]
           )
           procesados++
         } else if (tipo === 'importacion') {
+          // Look up SKU description if not provided
+          let finalDesc = filDesc
+          if (!finalDesc && sku) {
+            const skuRes = await client.query(
+              `SELECT descripcion FROM dev_item_skus WHERE sku = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT 1`,
+              [sku, req.tenantId]
+            )
+            if (skuRes.rows.length) finalDesc = skuRes.rows[0].descripcion
+          }
+
           const invRes = await client.query(
             `INSERT INTO dev_inventario
                (sku, descripcion, cantidad_disponible, cantidad_original, ubicacion_id,
                 embalaje1, embalaje2, codigo_multicaja, tenant_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
             [
-              sku, filDesc || null, Number(cantidad), Number(cantidad), ubicacionId,
+              sku, finalDesc || null, Number(cantidad), Number(cantidad), ubicacionId,
               guia1 || null, guia2 || null, multicaja || null, req.tenantId
             ]
           )
@@ -465,10 +483,10 @@ router.post('/importar',
           await client.query(
             `INSERT INTO dev_movimientos
                (tipo, inventario_id, cantidad_anterior, cantidad_nueva,
-                ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, tenant_id)
-             VALUES ('entrada', $1, 0, $2, $3, $4, 'ajuste', $5, $6, $7)`,
+                ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+             VALUES ('entrada', $1, 0, $2, $3, $4, 'ajuste', $5, $6, $7, $8)`,
             [newInv.id, Number(cantidad), ubicacionId, ajusteId,
-             req.user.id, filDesc || descripcion || 'Importación', req.tenantId]
+             req.user.id, filDesc || descripcion || 'Importación', movementObs, req.tenantId]
           )
           procesados++
         } else {
