@@ -29,12 +29,21 @@ const MODULE_GROUPS = [
     ]
   },
   {
+    group: 'Devoluciones',
+    groupKey: 'perm.group.devoluciones',
+    modules: [
+      { key: 'devoluciones.entradas',   label: 'Entradas',   labelKey: 'perm.sub.dev.entradas' },
+      { key: 'devoluciones.inventario', label: 'Inventario', labelKey: 'perm.sub.dev.inventario' },
+      { key: 'devoluciones.salidas',    label: 'Salidas',    labelKey: 'perm.sub.dev.salidas' },
+    ]
+  },
+  {
     group: 'Sistema',
     groupKey: 'admin.group.sistema',
     modules: [
       { key: 'global.inicio',        label: 'Inicio',          labelKey: 'perm.sub.inicio' },
       { key: 'global.administracion',label: 'Administración',  labelKey: 'perm.sub.administracion' },
-      { key: 'global.wms',           label: 'WMS Hub',         labelKey: 'perm.sub.wms' },
+      { key: 'global.wms',           label: 'Conexión',        labelKey: 'perm.sub.wms' },
     ]
   },
 ]

@@ -12,6 +12,10 @@ import {
   BarChart3,
   FileText,
   Settings,
+  Boxes,
+  PackagePlus,
+  PackageMinus,
+  Wifi,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
@@ -29,9 +33,19 @@ const getNavItems = (t) => [
       { path: '/dropscan/configuracion',tourId: 'nav-configuracion',  label: t('nav.configuration'), icon: Settings,        permission: 'dropscan.configuracion' },
     ],
   },
+  {
+    id: 'devoluciones',
+    label: t('nav.devoluciones'),
+    items: [
+      { path: '/devoluciones/entradas',   tourId: 'nav-dev-entradas',   label: t('nav.dev.entradas'),   icon: PackagePlus,  permission: 'devoluciones.entradas' },
+      { path: '/devoluciones/inventario', tourId: 'nav-dev-inventario', label: t('nav.dev.inventario'), icon: Boxes,        permission: 'devoluciones.inventario' },
+      { path: '/devoluciones/salidas',    tourId: 'nav-dev-salidas',    label: t('nav.dev.salidas'),    icon: PackageMinus, permission: 'devoluciones.salidas' },
+    ],
+  },
 ]
 
 const getAdminNav = (t) => [
+  { path: '/wms', tourId: 'nav-wms', label: t('wms.title'), icon: Wifi, permission: 'global.wms' },
   { path: '/admin', tourId: 'nav-admin', label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
 ]
 

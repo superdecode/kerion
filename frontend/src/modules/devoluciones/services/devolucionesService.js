@@ -6,6 +6,7 @@ export const getEntrada = async (id) => (await api.get(`/devoluciones/entradas/$
 export const updateEntrada = async (id, payload) => (await api.put(`/devoluciones/entradas/${id}`, payload)).data
 export const confirmEntrada = async (id) => (await api.post(`/devoluciones/entradas/${id}/confirmar`)).data
 export const cancelEntrada = async (id) => (await api.post(`/devoluciones/entradas/${id}/cancelar`)).data
+export const deleteEntrada = async (id) => (await api.delete(`/devoluciones/entradas/${id}`)).data
 export const createEntradaItem = async (id, payload) => (await api.post(`/devoluciones/entradas/${id}/items`, payload)).data
 export const updateEntradaItem = async (id, itemId, payload) => (await api.put(`/devoluciones/entradas/${id}/items/${itemId}`, payload)).data
 export const deleteEntradaItem = async (id, itemId) => (await api.delete(`/devoluciones/entradas/${id}/items/${itemId}`)).data
@@ -33,10 +34,15 @@ export const getSalida = async (id) => (await api.get(`/devoluciones/salidas/${i
 export const updateSalida = async (id, payload) => (await api.put(`/devoluciones/salidas/${id}`, payload)).data
 export const completarSalida = async (id, payload) => (await api.post(`/devoluciones/salidas/${id}/completar`, payload)).data
 export const cancelarSalida = async (id) => (await api.post(`/devoluciones/salidas/${id}/cancelar`)).data
+export const deleteSalida = async (id) => (await api.delete(`/devoluciones/salidas/${id}`)).data
 export const importarSalida = async (payload) => {
   const isFormData = typeof FormData !== 'undefined' && payload instanceof FormData
   return (await api.post('/devoluciones/salidas/importar', payload, isFormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {})).data
 }
+export const previewImportarSalida = async (rows) => (await api.post('/devoluciones/salidas/importar-preview', { rows })).data
+
+export const importarInventario = async (payload) =>
+  (await api.post('/devoluciones/inventario/importar', payload)).data
 
 export const skuAutocomplete = async (q) => (await api.get('/devoluciones/sku-autocomplete', { params: { q } })).data
 

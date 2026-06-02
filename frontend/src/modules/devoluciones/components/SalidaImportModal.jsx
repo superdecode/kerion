@@ -1,9 +1,39 @@
 import { useState, useRef } from 'react'
-import { Upload, FileSpreadsheet, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import { Upload, FileSpreadsheet, CheckCircle, XCircle, AlertCircle, Tag } from 'lucide-react'
 import { motion } from 'framer-motion'
 import Modal from '../../../core/components/common/Modal'
-import { importarSalida } from '../services/devolucionesService'
+import { previewImportarSalida } from '../services/devolucionesService'
 import { useToastStore } from '../../../core/stores/toastStore'
+
+function normalizeKey(k) {
+  return String(k).toLowerCase().trim().replace(/[^a-z0-9]/g, '')
+}
+
+function parseExcelRows(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const raw = XLSX.utils.sheet_to_json(ws, { defval: '' })
+        const rows = raw.map(r => {
+          const out = {}
+          for (const [k, v] of Object.entries(r)) out[normalizeKey(k)] = v
+          const sku = out.sku || out.codigo || out.guia || out.embalaje || out.embalaje1 || ''
+          const cantidad = Number(out.cantidad || out.qty || out.piezas || 0)
+          return { sku: String(sku).trim(), cantidad }
+        }).filter(r => r.sku && r.cantidad > 0)
+        resolve(rows)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = reject
+    reader.readAsArrayBuffer(file)
+  })
+}
 
 export default function SalidaImportModal({ isOpen, onClose, onImport }) {
   const toast = useToastStore()
@@ -19,6 +49,7 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
     setEncontrados([])
     setNoEncontrados([])
     setChecked([])
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   const handleFile = async (e) => {
@@ -26,11 +57,14 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
     if (!file) return
     setLoading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await importarSalida(fd)
-      const enc = res.data?.encontrados || res.encontrados || []
-      const noEnc = res.data?.no_encontrados || res.no_encontrados || []
+      const rows = await parseExcelRows(file)
+      if (rows.length === 0) {
+        toast.error('El archivo no contiene filas válidas (columnas: sku, cantidad)')
+        return
+      }
+      const res = await previewImportarSalida(rows)
+      const enc = res.encontrados || []
+      const noEnc = res.no_encontrados || []
       setEncontrados(enc)
       setNoEncontrados(noEnc)
       setChecked(enc.map((_, i) => i))
@@ -80,7 +114,9 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
       {step === 'upload' && (
         <div className="py-6 text-center space-y-4">
           <div className="text-sm text-warm-600">
-            El archivo Excel debe tener columnas: <span className="font-mono bg-warm-100 px-1.5 py-0.5 rounded text-xs">sku</span> y <span className="font-mono bg-warm-100 px-1.5 py-0.5 rounded text-xs">cantidad</span>
+            El archivo Excel debe tener columnas: <span className="font-mono bg-warm-100 px-1.5 py-0.5 rounded text-xs">sku</span> y <span className="font-mono bg-warm-100 px-1.5 py-0.5 rounded text-xs">cantidad</span>.
+            <br />
+            <span className="text-warm-400 text-xs mt-1 block">Si el SKU no se encuentra, se buscará por número de guía (embalaje1).</span>
           </div>
           <motion.label
             whileHover={{ scale: 1.01 }}
@@ -101,20 +137,25 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
 
       {step === 'review' && (
         <div className="space-y-5">
-          {/* Encontrados */}
           {encontrados.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <CheckCircle className="w-4 h-4 text-success-600" />
                 <span className="text-sm font-semibold text-success-700">{encontrados.length} coincidencias encontradas</span>
+                {encontrados.some(r => r.match_type === 'guia') && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-100 text-accent-700 text-[10px] font-semibold">
+                    <Tag className="w-3 h-3" /> incluye coincidencias por guía
+                  </span>
+                )}
               </div>
-              <div className="border border-warm-100 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+              <div className="border border-warm-100 rounded-xl overflow-hidden max-h-60 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-[10px] uppercase text-warm-400 border-b border-warm-100 bg-warm-50">
                       <th className="px-3 py-2 w-8" />
                       <th className="px-3 py-2">SKU</th>
                       <th className="px-3 py-2">Código</th>
+                      <th className="px-3 py-2">Coincidencia</th>
                       <th className="px-3 py-2 text-right">Disp.</th>
                       <th className="px-3 py-2 text-right">Solicitada</th>
                     </tr>
@@ -122,15 +163,25 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
                   <tbody>
                     {encontrados.map((row, i) => {
                       const insuficiente = row.cantidad_solicitada > row.cantidad_disponible
+                      const byGuia = row.match_type === 'guia'
                       return (
                         <tr
                           key={i}
-                          className={`border-b border-warm-50 cursor-pointer transition-colors ${checked.includes(i) ? 'bg-success-50/50' : 'hover:bg-warm-50'}`}
+                          className={`border-b border-warm-50 cursor-pointer transition-colors ${checked.includes(i) ? (byGuia ? 'bg-accent-50/50' : 'bg-success-50/50') : 'hover:bg-warm-50'}`}
                           onClick={() => toggleCheck(i)}
                         >
                           <td className="px-3 py-2"><input type="checkbox" readOnly checked={checked.includes(i)} className="rounded" /></td>
                           <td className="px-3 py-2 font-medium text-warm-800">{row.sku}</td>
-                          <td className="px-3 py-2 font-mono">{row.codigo_trazabilidad || '—'}</td>
+                          <td className="px-3 py-2 font-mono text-warm-500">{row.codigo_trazabilidad || '—'}</td>
+                          <td className="px-3 py-2">
+                            {byGuia ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-accent-100 text-accent-700 text-[10px] font-semibold">
+                                <Tag className="w-2.5 h-2.5" /> Guía: {row.guia_buscada}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-warm-400">SKU directo</span>
+                            )}
+                          </td>
                           <td className={`px-3 py-2 text-right font-medium ${insuficiente ? 'text-warning-600' : 'text-success-700'}`}>
                             {row.cantidad_disponible}
                           </td>
@@ -144,7 +195,6 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
             </div>
           )}
 
-          {/* No encontrados */}
           {noEncontrados.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -155,7 +205,7 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-[10px] uppercase text-warm-400 border-b border-warm-100 bg-warm-50">
-                      <th className="px-3 py-2">SKU</th>
+                      <th className="px-3 py-2">SKU / Guía</th>
                       <th className="px-3 py-2 text-right">Cantidad</th>
                       <th className="px-3 py-2">Motivo</th>
                     </tr>
@@ -177,7 +227,7 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
           {encontrados.length === 0 && (
             <div className="flex items-center gap-2 text-sm text-warning-700 bg-warning-50 rounded-xl p-3">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              No se encontró ningún SKU en inventario disponible.
+              No se encontró ningún SKU ni guía en inventario disponible.
             </div>
           )}
         </div>

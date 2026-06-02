@@ -31,6 +31,7 @@ async function reseedDatabase() {
           global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
           dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
           inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
+          devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
         }
       },
       {
@@ -40,6 +41,7 @@ async function reseedDatabase() {
           global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'ver' },
           dropscan: { dashboard: 'ver', escaneo: 'actualizar', tarimas: 'actualizar', reportes: 'crear', configuracion: 'ver', folios: 'actualizar' },
           inventory: { escaneo: 'actualizar', tarimas: 'actualizar', reportes: 'crear' },
+          devoluciones: { entradas: 'actualizar', inventario: 'actualizar', salidas: 'actualizar' },
         }
       },
       {
@@ -49,6 +51,7 @@ async function reseedDatabase() {
           global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'sin_acceso' },
           dropscan: { dashboard: 'ver', escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso', configuracion: 'sin_acceso', folios: 'crear' },
           inventory: { escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso' },
+          devoluciones: { entradas: 'crear', inventario: 'ver', salidas: 'crear' },
         }
       },
       {
@@ -58,6 +61,7 @@ async function reseedDatabase() {
           global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'sin_acceso' },
           dropscan: { dashboard: 'ver', escaneo: 'sin_acceso', tarimas: 'ver', reportes: 'ver', configuracion: 'sin_acceso', folios: 'ver' },
           inventory: { escaneo: 'sin_acceso', tarimas: 'ver', reportes: 'ver' },
+          devoluciones: { entradas: 'ver', inventario: 'ver', salidas: 'ver' },
         }
       }
     ]

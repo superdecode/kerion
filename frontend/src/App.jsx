@@ -30,6 +30,7 @@ import NotFound from './pages/NotFound'
 // Pages
 import GlobalDashboard from './pages/GlobalDashboard'
 import Administracion from './pages/Administracion'
+import WmsHub from './pages/WmsHub'
 
 // DropScan Module
 import DropScanDashboard from './modules/dropscan/pages/Dashboard'
@@ -41,6 +42,11 @@ import Configuracion from './modules/dropscan/pages/Configuracion'
 // FEP Module
 import Folios from './modules/fep/pages/Folios'
 import FolioDetalle from './modules/fep/pages/FolioDetalle'
+import Entradas from './modules/devoluciones/pages/Entradas'
+import EntradaDetalle from './modules/devoluciones/pages/EntradaDetalle'
+import InventarioDevoluciones from './modules/devoluciones/pages/Inventario'
+import Salidas from './modules/devoluciones/pages/Salidas'
+import SalidaDetalle from './modules/devoluciones/pages/SalidaDetalle'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -61,6 +67,10 @@ const MODULE_ROUTES = [
   { module: 'dropscan.reportes', path: '/dropscan/reportes' },
   { module: 'dropscan.configuracion', path: '/dropscan/configuracion' },
   { module: 'fep.folios', path: '/dropscan/folios' },
+  { module: 'devoluciones.entradas', path: '/devoluciones/entradas' },
+  { module: 'devoluciones.inventario', path: '/devoluciones/inventario' },
+  { module: 'devoluciones.salidas', path: '/devoluciones/salidas' },
+  { module: 'global.wms', path: '/wms' },
   { module: 'global.administracion', path: '/admin' },
 ]
 
@@ -166,8 +176,27 @@ function AppRoutes() {
           <PermissionRoute module="fep.folios"><ErrorBoundary><FolioDetalle /></ErrorBoundary></PermissionRoute>
         } />
 
-        {/* WMS Hub — future module, redirect to main */}
-        <Route path="wms" element={<Navigate to="/" replace />} />
+        {/* Devoluciones */}
+        <Route path="devoluciones/entradas" element={
+          <PermissionRoute module="devoluciones.entradas"><ErrorBoundary><Entradas /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="devoluciones/entradas/:id" element={
+          <PermissionRoute module="devoluciones.entradas"><ErrorBoundary><EntradaDetalle /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="devoluciones/inventario" element={
+          <PermissionRoute module="devoluciones.inventario"><ErrorBoundary><InventarioDevoluciones /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="devoluciones/salidas" element={
+          <PermissionRoute module="devoluciones.salidas"><ErrorBoundary><Salidas /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="devoluciones/salidas/:id" element={
+          <PermissionRoute module="devoluciones.salidas"><ErrorBoundary><SalidaDetalle /></ErrorBoundary></PermissionRoute>
+        } />
+
+        {/* WMS connection module */}
+        <Route path="wms" element={
+          <PermissionRoute module="global.wms"><ErrorBoundary><WmsHub /></ErrorBoundary></PermissionRoute>
+        } />
 
         {/* Administration */}
         <Route path="admin" element={

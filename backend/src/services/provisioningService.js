@@ -135,6 +135,7 @@ export async function provisionTenant(requestId, approvedByAdminId) {
             dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
             fep: { folios: 'eliminar' },
             inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
+            devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
           })]
         )
         const roleId = roleRes.rows[0].id

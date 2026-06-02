@@ -34,6 +34,12 @@ import invTarimasRoutes from './modules/inventory/routes/tarimas.routes.js'
 // FEP module routes
 import fepFoliosRoutes from './modules/fep/routes/folios.routes.js'
 
+// Devoluciones module routes
+import devEntradasRoutes from './modules/devoluciones/routes/entradas.routes.js'
+import devInventarioRoutes from './modules/devoluciones/routes/inventario.routes.js'
+import devSalidasRoutes from './modules/devoluciones/routes/salidas.routes.js'
+import devUtilsRoutes from './modules/devoluciones/routes/utils.routes.js'
+
 const app = express()
 
 function isAllowedDevOrigin(origin) {
@@ -98,8 +104,8 @@ const loginLimiter = rateLimit({
   message: { error: 'Demasiados intentos, intenta más tarde' }
 })
 
-// Body parsing — 1mb is sufficient for all API payloads
-app.use(express.json({ limit: '1mb' }))
+// Body parsing — evidence uploads travel as base64 JSON, so allow enough headroom for 2 MB files.
+app.use(express.json({ limit: '5mb' }))
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -141,6 +147,12 @@ app.use('/api/inventory/historial', tenantContext, tenantDB, moduleGuard('invent
 
 // FEP — require dropscan module (FEP is part of dropscan)
 app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)
+
+// Devoluciones module
+app.use('/api/devoluciones/entradas', tenantContext, tenantDB, devEntradasRoutes)
+app.use('/api/devoluciones/inventario', tenantContext, tenantDB, devInventarioRoutes)
+app.use('/api/devoluciones/salidas', tenantContext, tenantDB, devSalidasRoutes)
+app.use('/api/devoluciones', tenantContext, tenantDB, devUtilsRoutes)
 
 
 // Auto-apply pending migrations (idempotent — each step is independent)
