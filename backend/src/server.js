@@ -534,6 +534,22 @@ async function runMigrations() {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_pick_order_tracking_unique ON pick_order_tracking(tenant_id, outbound_order_no)`,
     `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_tenant ON pick_order_tracking(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_status ON pick_order_tracking(tenant_id, status)`,
+
+    // ── 040: Enable RLS on every public-schema table ──────────────────────
+    // Blocks all access through Supabase REST/anon key (deny-by-default: no
+    // policies = no access for anon/authenticated roles).
+    // The backend connects as the postgres superuser which has BYPASSRLS and
+    // is completely unaffected. Idempotent: re-enabling already-enabled RLS
+    // is a no-op.
+    `DO $$
+     DECLARE rec RECORD;
+     BEGIN
+       FOR rec IN
+         SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+       LOOP
+         EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', rec.tablename);
+       END LOOP;
+     END $$`,
   ]
   for (const sql of steps) {
     try {

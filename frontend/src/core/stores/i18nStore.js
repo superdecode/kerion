@@ -712,7 +712,7 @@ const translations = {
     'perm.sub.historial': '托盘',
     'perm.sub.tarimas': '托盘',
     'perm.sub.configuracion': '配置',
-    'perm.sub.wms': 'WMS 连接',
+    'perm.sub.wms': '连接',
     'perm.group.devoluciones': '退货',
     'perm.sub.dev.entradas': '入库',
     'perm.sub.dev.inventario': '库存',
