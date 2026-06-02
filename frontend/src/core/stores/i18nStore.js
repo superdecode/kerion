@@ -1114,8 +1114,8 @@ const translations = {
     // ── Nav additions ─────────────────────────────────────────────────────
     'nav.inv.escaneo':   '扫描',
     'nav.inv.registros': '记录',
-    'nav.sur.escaneo':   '扫描',
-    'nav.sur.registros': '记录',
+    'nav.sur.validacion': '验证',
+    'nav.sur.registros':  '记录',
 
     // ── Inventario registros ───────────────────────────────────────────────
     'inventario.registros.title':          '库存记录',
@@ -2350,8 +2350,8 @@ const translations = {
     // ── Nav additions ─────────────────────────────────────────────────────
     'nav.inv.escaneo':   'Escaneo',
     'nav.inv.registros': 'Registros',
-    'nav.sur.escaneo':   'Escaneo',
-    'nav.sur.registros': 'Registros',
+    'nav.sur.validacion': 'Validación',
+    'nav.sur.registros':  'Registros',
 
     // ── Inventario registros ───────────────────────────────────────────────
     'inventario.registros.title':          'Registros de inventario',

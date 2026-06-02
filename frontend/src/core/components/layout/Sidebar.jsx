@@ -17,6 +17,7 @@ import {
   PackageMinus,
   Package,
   ListChecks,
+  BadgeCheck,
   Wifi,
   ClipboardList,
 } from 'lucide-react'
@@ -49,31 +50,24 @@ const getNavItems = (t) => [
     id: 'inventario',
     label: t('nav.inventario'),
     items: [
-      { path: '/inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode, permission: 'upapex.inventario' },
-      { path: '/inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: ClipboardList, permission: 'upapex.inventario' },
+      { path: '/inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode,  permission: 'inventario.escaneo' },
+      { path: '/inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: ClipboardList, permission: 'inventario.registros' },
     ],
   },
   {
     id: 'surtido',
     label: t('nav.surtido'),
     items: [
-      { path: '/surtido',              tourId: 'nav-sur-ordenes',   label: t('nav.sur.ordenes'),   icon: ListChecks,  permission: 'upapex.surtido' },
-      { path: '/surtido/escaneo',      tourId: 'nav-sur-escaneo',   label: t('nav.sur.escaneo'),   icon: ScanBarcode, permission: 'upapex.surtido' },
-      { path: '/surtido/registros',    tourId: 'nav-sur-registros', label: t('nav.sur.registros'), icon: History,     permission: 'upapex.surtido' },
-    ],
-  },
-  {
-    id: 'wmshub',
-    label: 'Conexión',
-    items: [
-      { path: '/wmshub', tourId: 'nav-wmshub', label: t('nav.wms.config'), icon: Wifi, permission: 'upapex.hub' },
+      { path: '/surtido',            tourId: 'nav-sur-ordenes',   label: t('nav.sur.ordenes'),   icon: ListChecks,  permission: 'surtido.ordenes' },
+      { path: '/surtido/escaneo',    tourId: 'nav-sur-escaneo',   label: t('nav.sur.escaneo'),   icon: ScanBarcode, permission: 'surtido.escaneo' },
+      { path: '/surtido/registros',  tourId: 'nav-sur-registros', label: t('nav.sur.registros'), icon: History,     permission: 'surtido.registros' },
     ],
   },
 ]
 
 const getAdminNav = (t) => [
-  { path: '/wms', tourId: 'nav-wms', label: t('wms.title'), icon: Wifi, permission: 'global.wms' },
-  { path: '/admin', tourId: 'nav-admin', label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
+  { path: '/wmshub', tourId: 'nav-wmshub', label: t('nav.wms.config'), icon: Wifi, permission: 'sistema.wms' },
+  { path: '/admin',  tourId: 'nav-admin',  label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
 ]
 
 export default function Sidebar() {
@@ -181,7 +175,7 @@ export default function Sidebar() {
           <div className="mt-3 pt-3 border-t border-blue-900/30">
             {!collapsed && (
               <p className="px-3 text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest mb-1.5">
-                {t('nav.administration')}
+                {t('nav.system')}
               </p>
             )}
             <div className="space-y-0.5">

@@ -30,7 +30,6 @@ import NotFound from './pages/NotFound'
 // Pages
 import GlobalDashboard from './pages/GlobalDashboard'
 import Administracion from './pages/Administracion'
-import WmsHub from './pages/WmsHub'
 
 // DropScan Module
 import DropScanDashboard from './modules/dropscan/pages/Dashboard'
@@ -54,7 +53,7 @@ import InventarioEscaneo from './modules/inventario/pages/Escaneo'
 
 // Surtido Module
 import SurtidoOrdenes from './modules/surtido/pages/Ordenes'
-import SurtidoEscaneo from './modules/surtido/pages/Escaneo'
+import SurtidoEscaneo from './modules/surtido/pages/Validacion'
 import SurtidoRegistros from './modules/surtido/pages/Registros'
 
 // WMS Hub Module
@@ -90,7 +89,7 @@ const MODULE_ROUTES = [
   { module: 'upapex.inventario', path: '/inventario/escaneo' },
   { module: 'upapex.inventario', path: '/inventario/registros' },
   { module: 'upapex.surtido', path: '/surtido' },
-  { module: 'upapex.surtido', path: '/surtido/escaneo' },
+  { module: 'upapex.surtido', path: '/surtido/validacion' },
   { module: 'upapex.surtido', path: '/surtido/registros' },
   { module: 'upapex.hub', path: '/wmshub' },
 ]
@@ -239,13 +238,13 @@ function AppRoutes() {
         <Route path="surtido" element={
           <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoOrdenes /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="surtido/escaneo" element={
-          <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoEscaneo /></ErrorBoundary></PermissionRoute>
+        <Route path="surtido/validacion" element={
+          <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoValidacion /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="surtido/registros" element={
           <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoRegistros /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="surtido/validacion" element={<Navigate to="/surtido/escaneo" replace />} />
+        <Route path="surtido/escaneo" element={<Navigate to="/surtido/validacion" replace />} />
         <Route path="surtido/historial" element={<Navigate to="/surtido/registros" replace />} />
 
         {/* Administration */}

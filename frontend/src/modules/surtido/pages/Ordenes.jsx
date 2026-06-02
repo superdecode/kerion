@@ -429,7 +429,7 @@ export default function Ordenes() {
                           <td className="table-cell text-right">
                             <button
                               className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-800 px-2.5 py-1.5 rounded-lg hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
-                              onClick={e => { e.stopPropagation(); navigate(`/surtido/escaneo?obc=${encodeURIComponent(obc)}`) }}
+                              onClick={e => { e.stopPropagation(); navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`) }}
                             >
                               <Play size={11} /> Validar
                             </button>
