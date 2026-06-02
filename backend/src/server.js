@@ -536,6 +536,85 @@ async function runMigrations() {
     `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_tenant ON pick_order_tracking(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_status ON pick_order_tracking(tenant_id, status)`,
 
+    // ── 041: Migrate upapex.* permissions to domain-specific permission sets ─
+    // Inventario module: escaneo, registros, admin
+    `UPDATE roles
+     SET permisos = permisos
+       || jsonb_build_object('inventario', jsonb_build_object(
+            'escaneo',   COALESCE(permisos->'upapex'->>'inventario', 'sin_acceso'),
+            'registros', COALESCE(permisos->'upapex'->>'inventario', 'sin_acceso'),
+            'admin',     CASE WHEN COALESCE(permisos->'upapex'->>'inventario','') = 'eliminar' THEN 'eliminar' ELSE 'sin_acceso' END
+          ))
+     WHERE permisos ? 'upapex' AND NOT (permisos ? 'inventario')`,
+
+    // Surtido module: ordenes, escaneo, registros, assign, admin
+    `UPDATE roles
+     SET permisos = permisos
+       || jsonb_build_object('surtido', jsonb_build_object(
+            'ordenes',   COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso'),
+            'escaneo',   COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso'),
+            'registros', COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso'),
+            'assign',    CASE WHEN COALESCE(permisos->'upapex'->>'surtido','') IN ('actualizar','eliminar')
+                              THEN COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso')
+                              ELSE 'sin_acceso' END,
+            'admin',     CASE WHEN COALESCE(permisos->'upapex'->>'surtido','') = 'eliminar' THEN 'eliminar' ELSE 'sin_acceso' END
+          ))
+     WHERE permisos ? 'upapex' AND NOT (permisos ? 'surtido')`,
+
+    // Sistema module: wms (takes best of upapex.hub and global.wms)
+    `UPDATE roles
+     SET permisos = permisos
+       || jsonb_build_object('sistema', jsonb_build_object(
+            'wms', COALESCE(
+              NULLIF(COALESCE(permisos->'upapex'->>'hub',''), 'sin_acceso'),
+              NULLIF(COALESCE(permisos->'global'->>'wms',''), 'sin_acceso'),
+              'sin_acceso'
+            )
+          ))
+     WHERE NOT (permisos ? 'sistema')`,
+
+    // Ensure existing roles without upapex still get inventario/surtido/sistema defaults
+    `UPDATE roles
+     SET permisos = permisos
+       || jsonb_build_object('inventario', jsonb_build_object(
+            'escaneo','sin_acceso','registros','sin_acceso','admin','sin_acceso'))
+     WHERE NOT (permisos ? 'inventario')`,
+    `UPDATE roles
+     SET permisos = permisos
+       || jsonb_build_object('surtido', jsonb_build_object(
+            'ordenes','sin_acceso','escaneo','sin_acceso','registros','sin_acceso',
+            'assign','sin_acceso','admin','sin_acceso'))
+     WHERE NOT (permisos ? 'surtido')`,
+    `UPDATE roles
+     SET permisos = permisos
+       || jsonb_build_object('sistema', jsonb_build_object('wms','sin_acceso'))
+     WHERE NOT (permisos ? 'sistema')`,
+
+    // Backfill Administrador and Jefe with full inventario/surtido/sistema.wms access
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{inventario}',
+       '{"escaneo":"eliminar","registros":"eliminar","admin":"eliminar"}'::jsonb, true)
+     WHERE nombre = 'Administrador'`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{surtido}',
+       '{"ordenes":"eliminar","escaneo":"eliminar","registros":"eliminar","assign":"eliminar","admin":"eliminar"}'::jsonb, true)
+     WHERE nombre = 'Administrador'`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{sistema}',
+       '{"wms":"eliminar"}'::jsonb, true)
+     WHERE nombre = 'Administrador'`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{inventario}',
+       '{"escaneo":"actualizar","registros":"actualizar","admin":"sin_acceso"}'::jsonb, true)
+     WHERE nombre = 'Jefe' AND (permisos->'inventario'->>'escaneo' = 'sin_acceso' OR NOT (permisos->'inventario' ? 'escaneo'))`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{surtido}',
+       '{"ordenes":"actualizar","escaneo":"actualizar","registros":"actualizar","assign":"actualizar","admin":"sin_acceso"}'::jsonb, true)
+     WHERE nombre = 'Jefe' AND (permisos->'surtido'->>'ordenes' = 'sin_acceso' OR NOT (permisos->'surtido' ? 'ordenes'))`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{sistema,wms}', '"ver"', true)
+     WHERE nombre = 'Jefe' AND permisos->'sistema'->>'wms' = 'sin_acceso'`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{inventario}',
+       '{"escaneo":"crear","registros":"ver","admin":"sin_acceso"}'::jsonb, true)
+     WHERE nombre = 'Operador' AND (permisos->'inventario'->>'escaneo' = 'sin_acceso' OR NOT (permisos->'inventario' ? 'escaneo'))`,
+    `UPDATE roles SET permisos = jsonb_set(permisos, '{surtido}',
+       '{"ordenes":"ver","escaneo":"crear","registros":"ver","assign":"sin_acceso","admin":"sin_acceso"}'::jsonb, true)
+     WHERE nombre = 'Operador' AND (permisos->'surtido'->>'ordenes' = 'sin_acceso' OR NOT (permisos->'surtido' ? 'ordenes'))`,
+
     // ── 040: Enable RLS on every public-schema table ──────────────────────
     // Blocks all access through Supabase REST/anon key (deny-by-default: no
     // policies = no access for anon/authenticated roles).

@@ -121,7 +121,7 @@ export default function InventarioRegistros() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.registros.title')} subtitle="Inventario WMS" />
+        <Header title={t('inventario.registros.title')} subtitle="Inventario" />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -129,7 +129,7 @@ export default function InventarioRegistros() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.registros.title')} subtitle="Inventario WMS" />
+      <Header title={t('inventario.registros.title')} subtitle="Inventario" />
 
       <div className="flex-1 overflow-y-auto p-4">
         {records.length === 0 ? (

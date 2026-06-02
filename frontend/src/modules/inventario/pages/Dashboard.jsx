@@ -75,7 +75,7 @@ export default function InventarioDashboard() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.dashboard.title')} subtitle="Inventario WMS" />
+        <Header title={t('inventario.dashboard.title')} subtitle="Inventario" />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -83,7 +83,7 @@ export default function InventarioDashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.dashboard.title')} subtitle="Inventario WMS" />
+      <Header title={t('inventario.dashboard.title')} subtitle="Inventario" />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* KPI Cards */}

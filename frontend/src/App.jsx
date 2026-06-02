@@ -81,17 +81,13 @@ const MODULE_ROUTES = [
   { module: 'devoluciones.entradas', path: '/devoluciones/entradas' },
   { module: 'devoluciones.inventario', path: '/devoluciones/inventario' },
   { module: 'devoluciones.salidas', path: '/devoluciones/salidas' },
-  { module: 'global.wms', path: '/wms' },
   { module: 'global.administracion', path: '/admin' },
-  { module: 'devoluciones.entradas', path: '/devoluciones/entradas' },
-  { module: 'devoluciones.inventario', path: '/devoluciones/inventario' },
-  { module: 'devoluciones.salidas', path: '/devoluciones/salidas' },
-  { module: 'upapex.inventario', path: '/inventario/escaneo' },
-  { module: 'upapex.inventario', path: '/inventario/registros' },
-  { module: 'upapex.surtido', path: '/surtido' },
-  { module: 'upapex.surtido', path: '/surtido/validacion' },
-  { module: 'upapex.surtido', path: '/surtido/registros' },
-  { module: 'upapex.hub', path: '/wmshub' },
+  { module: 'inventario.escaneo', path: '/inventario/escaneo' },
+  { module: 'inventario.registros', path: '/inventario/registros' },
+  { module: 'surtido.ordenes', path: '/surtido' },
+  { module: 'surtido.escaneo', path: '/surtido/escaneo' },
+  { module: 'surtido.registros', path: '/surtido/registros' },
+  { module: 'sistema.wms', path: '/wmshub' },
 ]
 
 function SmartRedirect() {
@@ -196,9 +192,9 @@ function AppRoutes() {
           <PermissionRoute module="fep.folios"><ErrorBoundary><FolioDetalle /></ErrorBoundary></PermissionRoute>
         } />
 
-        {/* WMS Hub */}
+        {/* WMS Hub — Sistema section */}
         <Route path="wmshub" element={
-          <PermissionRoute module="upapex.hub"><ErrorBoundary><WMSHubConfiguracion /></ErrorBoundary></PermissionRoute>
+          <PermissionRoute module="sistema.wms"><ErrorBoundary><WMSHubConfiguracion /></ErrorBoundary></PermissionRoute>
         } />
 
         {/* Devoluciones */}
@@ -218,33 +214,28 @@ function AppRoutes() {
           <PermissionRoute module="devoluciones.salidas"><ErrorBoundary><SalidaDetalle /></ErrorBoundary></PermissionRoute>
         } />
 
-        {/* WMS connection module */}
-        <Route path="wms" element={
-          <PermissionRoute module="global.wms"><ErrorBoundary><WmsHub /></ErrorBoundary></PermissionRoute>
-        } />
-
         {/* Inventario Module */}
         <Route path="inventario" element={<Navigate to="/inventario/registros" replace />} />
         <Route path="inventario/registros" element={
-          <PermissionRoute module="upapex.inventario"><ErrorBoundary><InventarioRegistros /></ErrorBoundary></PermissionRoute>
+          <PermissionRoute module="inventario.registros"><ErrorBoundary><InventarioRegistros /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="inventario/escaneo" element={
-          <PermissionRoute module="upapex.inventario"><ErrorBoundary><InventarioEscaneo /></ErrorBoundary></PermissionRoute>
+          <PermissionRoute module="inventario.escaneo"><ErrorBoundary><InventarioEscaneo /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="inventario/stock" element={<Navigate to="/inventario/registros" replace />} />
         <Route path="inventario/historial" element={<Navigate to="/inventario/registros" replace />} />
 
         {/* Surtido Module */}
         <Route path="surtido" element={
-          <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoOrdenes /></ErrorBoundary></PermissionRoute>
+          <PermissionRoute module="surtido.ordenes"><ErrorBoundary><SurtidoOrdenes /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="surtido/validacion" element={
-          <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoValidacion /></ErrorBoundary></PermissionRoute>
+        <Route path="surtido/escaneo" element={
+          <PermissionRoute module="surtido.escaneo"><ErrorBoundary><SurtidoEscaneo /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="surtido/registros" element={
-          <PermissionRoute module="upapex.surtido"><ErrorBoundary><SurtidoRegistros /></ErrorBoundary></PermissionRoute>
+          <PermissionRoute module="surtido.registros"><ErrorBoundary><SurtidoRegistros /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="surtido/escaneo" element={<Navigate to="/surtido/validacion" replace />} />
+        <Route path="surtido/validacion" element={<Navigate to="/surtido/escaneo" replace />} />
         <Route path="surtido/historial" element={<Navigate to="/surtido/registros" replace />} />
 
         {/* Administration */}

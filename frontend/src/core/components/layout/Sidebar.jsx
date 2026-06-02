@@ -50,7 +50,7 @@ const getNavItems = (t) => [
     id: 'inventario',
     label: t('nav.inventario'),
     items: [
-      { path: '/inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode,  permission: 'inventario.escaneo' },
+      { path: '/inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode,   permission: 'inventario.escaneo' },
       { path: '/inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: ClipboardList, permission: 'inventario.registros' },
     ],
   },
@@ -58,15 +58,15 @@ const getNavItems = (t) => [
     id: 'surtido',
     label: t('nav.surtido'),
     items: [
-      { path: '/surtido',            tourId: 'nav-sur-ordenes',   label: t('nav.sur.ordenes'),   icon: ListChecks,  permission: 'surtido.ordenes' },
-      { path: '/surtido/escaneo',    tourId: 'nav-sur-escaneo',   label: t('nav.sur.escaneo'),   icon: ScanBarcode, permission: 'surtido.escaneo' },
-      { path: '/surtido/registros',  tourId: 'nav-sur-registros', label: t('nav.sur.registros'), icon: History,     permission: 'surtido.registros' },
+      { path: '/surtido',            tourId: 'nav-sur-ordenes',   label: t('nav.sur.ordenes'),      icon: ListChecks,  permission: 'surtido.ordenes' },
+      { path: '/surtido/escaneo',    tourId: 'nav-sur-escaneo',   label: t('nav.sur.validacion'),   icon: BadgeCheck,  permission: 'surtido.escaneo' },
+      { path: '/surtido/registros',  tourId: 'nav-sur-registros', label: t('nav.sur.registros'),    icon: History,     permission: 'surtido.registros' },
     ],
   },
 ]
 
 const getAdminNav = (t) => [
-  { path: '/wmshub', tourId: 'nav-wmshub', label: t('nav.wms.config'), icon: Wifi, permission: 'sistema.wms' },
+  { path: '/wmshub', tourId: 'nav-wmshub', label: t('nav.wms.config'), icon: Wifi,     permission: 'sistema.wms' },
   { path: '/admin',  tourId: 'nav-admin',  label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
 ]
 
@@ -100,7 +100,7 @@ export default function Sidebar() {
       <NavLink
         key={item.path}
         to={item.path}
-        end={item.path === '/dropscan'}
+        end={item.path === '/dropscan' || item.path === '/surtido'}
         data-tour={item.tourId}
         className={({ isActive }) =>
           `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
@@ -170,7 +170,7 @@ export default function Sidebar() {
           )
         })}
 
-        {/* Admin section */}
+        {/* Sistema section — Conexión WMS separate from Administración */}
         {adminNav.some(item => canView(item.permission)) && (
           <div className="mt-3 pt-3 border-t border-blue-900/30">
             {!collapsed && (
@@ -179,7 +179,7 @@ export default function Sidebar() {
               </p>
             )}
             <div className="space-y-0.5">
-              {adminNav.map(renderLink)}
+              {adminNav.filter(item => canView(item.permission)).map(renderLink)}
             </div>
           </div>
         )}

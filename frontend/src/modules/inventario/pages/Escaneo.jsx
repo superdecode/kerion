@@ -430,7 +430,7 @@ export default function Escaneo() {
   if (tabs.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.escaneo.title')} subtitle="Inventario WMS" />
+        <Header title={t('inventario.escaneo.title')} subtitle="Inventario" />
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-2xl mx-auto">
             <motion.div className="text-center mb-8"
@@ -497,7 +497,7 @@ export default function Escaneo() {
   /* ─── ACTIVE TABS VIEW ────────────────────────────────── */
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.escaneo.title')} subtitle="Inventario WMS"
+      <Header title={t('inventario.escaneo.title')} subtitle="Inventario"
         actions={
           <div className="flex items-center gap-1.5">
             {pendingCount > 0 && (

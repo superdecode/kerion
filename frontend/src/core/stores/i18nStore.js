@@ -1114,7 +1114,8 @@ const translations = {
     // ── Nav additions ─────────────────────────────────────────────────────
     'nav.inv.escaneo':   '扫描',
     'nav.inv.registros': '记录',
-    'nav.sur.validacion': '验证',
+    'nav.sur.escaneo':   '复核',
+    'nav.sur.validacion': '复核',
     'nav.sur.registros':  '记录',
 
     // ── Inventario registros ───────────────────────────────────────────────
@@ -1197,6 +1198,17 @@ const translations = {
     'perm.sub.upapex.hub':       '连接',
     'perm.sub.upapex.inventario':'库存',
     'perm.sub.upapex.surtido':   '分拣',
+    'perm.group.inventario':          '库存盘点',
+    'perm.sub.inventario.escaneo':    '扫描',
+    'perm.sub.inventario.registros':  '记录',
+    'perm.sub.inventario.admin':      '管理',
+    'perm.group.surtido':             '分拣',
+    'perm.sub.surtido.ordenes':       '出库单',
+    'perm.sub.surtido.escaneo':       '复核扫描',
+    'perm.sub.surtido.registros':     '记录',
+    'perm.sub.surtido.assign':        '分配',
+    'perm.sub.surtido.admin':         '管理员',
+    'perm.sub.sistema.wms':           'WMS 连接',
 
     // ── Common additions ───────────────────────────────────────────────────
     'common.saving':   '保存中...',
@@ -1328,7 +1340,7 @@ const translations = {
     'nav.dev.entradas': 'Entradas',
     'nav.dev.inventario': 'Inventario',
     'nav.dev.salidas': 'Salidas',
-    'nav.inventario': 'Inventario WMS',
+    'nav.inventario': 'Inventario',
     'nav.inv.stock': 'Stock',
     'nav.surtido': 'Surtido',
     'nav.sur.ordenes': 'Órdenes',
@@ -2282,7 +2294,7 @@ const translations = {
     'wmshub.config.sync_never': 'Nunca sincronizado',
 
     // ── Inventario ────────────────────────────────────────────────────────
-    'inventario.dashboard.title': 'Inventario WMS',
+    'inventario.dashboard.title': 'Inventario',
     'inventario.dashboard.total_scanned': 'Total escaneado',
     'inventario.dashboard.open_tabs': 'Sesiones abiertas',
     'inventario.dashboard.blocked': 'Bloqueados',
@@ -2350,6 +2362,7 @@ const translations = {
     // ── Nav additions ─────────────────────────────────────────────────────
     'nav.inv.escaneo':   'Escaneo',
     'nav.inv.registros': 'Registros',
+    'nav.sur.escaneo':   'Validación',
     'nav.sur.validacion': 'Validación',
     'nav.sur.registros':  'Registros',
 
@@ -2433,6 +2446,17 @@ const translations = {
     'perm.sub.upapex.hub':       'Conexión',
     'perm.sub.upapex.inventario':'Inventario WMS',
     'perm.sub.upapex.surtido':   'Surtido',
+    'perm.group.inventario':          'Inventario',
+    'perm.sub.inventario.escaneo':    'Escaneo',
+    'perm.sub.inventario.registros':  'Registros',
+    'perm.sub.inventario.admin':      'Admin',
+    'perm.group.surtido':             'Surtido',
+    'perm.sub.surtido.ordenes':       'Órdenes',
+    'perm.sub.surtido.escaneo':       'Validación',
+    'perm.sub.surtido.registros':     'Registros',
+    'perm.sub.surtido.assign':        'Asignación',
+    'perm.sub.surtido.admin':         'Administración total',
+    'perm.sub.sistema.wms':           'Conexión WMS',
 
     // ── Common additions ───────────────────────────────────────────────────
     'common.saving':   'Guardando...',

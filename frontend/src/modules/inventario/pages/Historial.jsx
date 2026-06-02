@@ -32,7 +32,7 @@ export default function InventarioHistorial() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.historial.title')} subtitle="Inventario WMS" />
+        <Header title={t('inventario.historial.title')} subtitle="Inventario" />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -40,7 +40,7 @@ export default function InventarioHistorial() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.historial.title')} subtitle="Inventario WMS" />
+      <Header title={t('inventario.historial.title')} subtitle="Inventario" />
 
       {/* Filter bar */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-warm-100 px-4 py-3">

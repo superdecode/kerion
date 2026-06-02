@@ -18,7 +18,7 @@ const router = Router()
 // GET /api/upapex/config
 router.get('/config',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.hub', 'ver'),
+  requirePermission('sistema.wms', 'ver'),
   async (req, res) => {
     try {
       const result = await req.tQuery(
@@ -49,7 +49,7 @@ router.get('/config',
 // POST /api/upapex/config — save or update app key
 router.post('/config',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.hub', 'editar'),
+  requirePermission('sistema.wms', 'editar'),
   async (req, res) => {
     try {
       const { app_key } = req.body
@@ -87,7 +87,7 @@ router.post('/config',
 // POST /api/upapex/test-connection
 router.post('/test-connection',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.hub', 'ver'),
+  requirePermission('sistema.wms', 'ver'),
   async (req, res) => {
     try {
       await testConnection(req.tenantId)
@@ -112,7 +112,7 @@ router.post('/test-connection',
 // GET /api/upapex/box-stock
 router.get('/box-stock',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.inventario', 'ver'),
+  requirePermission('inventario.escaneo', 'ver'),
   async (req, res) => {
     try {
       const { page, pageSize, boxTypeList, skuList, isHideInventory, stockCountKind, startValue, endValue, whCodeList } = req.query
@@ -141,7 +141,7 @@ router.get('/box-stock',
 // GET /api/upapex/integrated-inventory
 router.get('/integrated-inventory',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.inventario', 'ver'),
+  requirePermission('inventario.escaneo', 'ver'),
   async (req, res) => {
     try {
       const { page, pageSize, skuList, whCodeList, startTime, endTime, stockType } = req.query
@@ -168,7 +168,7 @@ router.get('/integrated-inventory',
 // GET /api/upapex/outbound-list
 router.get('/outbound-list',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'ver'),
+  requirePermission('surtido.ordenes', 'ver'),
   async (req, res) => {
     try {
       const { page, pageSize, outboundOrderNos, startTime, endTime } = req.query
@@ -193,7 +193,7 @@ router.get('/outbound-list',
 // GET /api/upapex/outbound-detail/:orderNo
 router.get('/outbound-detail/:orderNo',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'ver'),
+  requirePermission('surtido.ordenes', 'ver'),
   async (req, res) => {
     try {
       const { orderNo } = req.params
@@ -212,7 +212,7 @@ router.get('/outbound-detail/:orderNo',
 // POST /api/upapex/scan-session — create new scan session
 router.post('/scan-session',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'crear'),
+  requirePermission('surtido.escaneo', 'crear'),
   async (req, res) => {
     try {
       const { outbound_order_no, third_order_no, total_expected } = req.body
@@ -236,7 +236,7 @@ router.post('/scan-session',
 // GET /api/upapex/scan-sessions — list with pagination
 router.get('/scan-sessions',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'ver'),
+  requirePermission('surtido.registros', 'ver'),
   async (req, res) => {
     try {
       const { page = 1, pageSize = 20, status, operator_id, fecha_inicio, fecha_fin } = req.query
@@ -288,7 +288,7 @@ router.get('/scan-sessions',
 // GET /api/upapex/scan-session/:id
 router.get('/scan-session/:id',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'ver'),
+  requirePermission('surtido.registros', 'ver'),
   async (req, res) => {
     try {
       const [sessionRes, eventsRes] = await Promise.all([
@@ -320,7 +320,7 @@ router.get('/scan-session/:id',
 // PUT /api/upapex/scan-session/:id — update (complete, add notes, update counts)
 router.put('/scan-session/:id',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'crear'),
+  requirePermission('surtido.escaneo', 'crear'),
   async (req, res) => {
     try {
       const { status, notes, total_scanned } = req.body
@@ -363,7 +363,7 @@ router.put('/scan-session/:id',
 // POST /api/upapex/scan-event — add scan event
 router.post('/scan-event',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'crear'),
+  requirePermission('surtido.escaneo', 'crear'),
   async (req, res) => {
     try {
       const { session_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity } = req.body
@@ -416,7 +416,7 @@ router.post('/scan-event',
 // POST /api/upapex/inventory-session — create session with all scans (batch save)
 router.post('/inventory-session',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.inventario', 'crear'),
+  requirePermission('inventario.escaneo', 'crear'),
   async (req, res) => {
     try {
       const { scan_type, scans = [], notes } = req.body
@@ -473,7 +473,7 @@ router.post('/inventory-session',
 // GET /api/upapex/inventory-sessions
 router.get('/inventory-sessions',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.inventario', 'ver'),
+  requirePermission('inventario.registros', 'ver'),
   async (req, res) => {
     try {
       const { page = 1, pageSize = 20 } = req.query
@@ -509,7 +509,7 @@ router.get('/inventory-sessions',
 // GET /api/upapex/inventory-session/:id — with all scans
 router.get('/inventory-session/:id',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.inventario', 'ver'),
+  requirePermission('inventario.registros', 'ver'),
   async (req, res) => {
     try {
       const [sessionRes, scansRes] = await Promise.all([
@@ -537,7 +537,7 @@ router.get('/inventory-session/:id',
 // DELETE /api/upapex/inventory-session/:id — only most recent allowed
 router.delete('/inventory-session/:id',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.inventario', 'eliminar'),
+  requirePermission('inventario.admin', 'eliminar'),
   async (req, res) => {
     try {
       const mostRecent = await req.tQuery(
@@ -565,7 +565,7 @@ router.delete('/inventory-session/:id',
 
 router.get('/surtidores',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'ver'),
+  requirePermission('surtido.ordenes', 'ver'),
   async (req, res) => {
     try {
       const rows = await req.tQuery(
@@ -581,7 +581,7 @@ router.get('/surtidores',
 
 router.post('/surtidores',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'crear'),
+  requirePermission('surtido.assign', 'crear'),
   async (req, res) => {
     try {
       const { nombre } = req.body
@@ -600,7 +600,7 @@ router.post('/surtidores',
 
 router.delete('/surtidores/:id',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'eliminar'),
+  requirePermission('surtido.admin', 'eliminar'),
   async (req, res) => {
     try {
       await req.tQuery(
@@ -618,7 +618,7 @@ router.delete('/surtidores/:id',
 
 router.get('/order-tracking',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'ver'),
+  requirePermission('surtido.ordenes', 'ver'),
   async (req, res) => {
     try {
       const rows = await req.tQuery(
@@ -643,7 +643,7 @@ router.get('/order-tracking',
 
 router.get('/order-tracking/:obc',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'ver'),
+  requirePermission('surtido.ordenes', 'ver'),
   async (req, res) => {
     try {
       const row = await req.tQuery(
@@ -662,7 +662,7 @@ router.get('/order-tracking/:obc',
 
 router.put('/order-tracking/:obc',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'crear'),
+  requirePermission('surtido.assign', 'crear'),
   async (req, res) => {
     try {
       const { surtidor_id, status, notes, third_order_no } = req.body
@@ -715,7 +715,7 @@ router.put('/order-tracking/:obc',
 // DELETE scan session events (for recount)
 router.delete('/scan-session/:id/events',
   authenticateToken, loadFullUser,
-  requirePermission('upapex.surtido', 'crear'),
+  requirePermission('surtido.escaneo', 'crear'),
   async (req, res) => {
     try {
       const sessionRes = await req.tQuery(

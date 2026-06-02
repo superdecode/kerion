@@ -38,21 +38,32 @@ const MODULE_GROUPS = [
     ]
   },
   {
-    group: 'Upapex WMS',
-    groupKey: 'perm.group.upapex',
+    group: 'Inventario',
+    groupKey: 'perm.group.inventario',
     modules: [
-      { key: 'upapex.hub',       label: 'Conexión',       labelKey: 'perm.sub.upapex.hub' },
-      { key: 'upapex.inventario',label: 'Inventario WMS', labelKey: 'perm.sub.upapex.inventario' },
-      { key: 'upapex.surtido',   label: 'Surtido',        labelKey: 'perm.sub.upapex.surtido' },
+      { key: 'inventario.escaneo',   label: 'Escaneo',      labelKey: 'perm.sub.inventario.escaneo' },
+      { key: 'inventario.registros', label: 'Registros',    labelKey: 'perm.sub.inventario.registros' },
+      { key: 'inventario.admin',     label: 'Admin',        labelKey: 'perm.sub.inventario.admin' },
+    ]
+  },
+  {
+    group: 'Surtido',
+    groupKey: 'perm.group.surtido',
+    modules: [
+      { key: 'surtido.ordenes',   label: 'Órdenes',    labelKey: 'perm.sub.surtido.ordenes' },
+      { key: 'surtido.escaneo',   label: 'Escaneo',    labelKey: 'perm.sub.surtido.escaneo' },
+      { key: 'surtido.registros', label: 'Registros',  labelKey: 'perm.sub.surtido.registros' },
+      { key: 'surtido.assign',    label: 'Asignación', labelKey: 'perm.sub.surtido.assign' },
+      { key: 'surtido.admin',     label: 'Administración total', labelKey: 'perm.sub.surtido.admin' },
     ]
   },
   {
     group: 'Sistema',
     groupKey: 'admin.group.sistema',
     modules: [
-      { key: 'global.inicio',        label: 'Inicio',          labelKey: 'perm.sub.inicio' },
-      { key: 'global.administracion',label: 'Administración',  labelKey: 'perm.sub.administracion' },
-      { key: 'global.wms',           label: 'Conexión',        labelKey: 'perm.sub.wms' },
+      { key: 'global.inicio',        label: 'Inicio',         labelKey: 'perm.sub.inicio' },
+      { key: 'global.administracion',label: 'Administración', labelKey: 'perm.sub.administracion' },
+      { key: 'sistema.wms',          label: 'Conexión WMS',   labelKey: 'perm.sub.sistema.wms' },
     ]
   },
 ]
