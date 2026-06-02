@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, CheckCircle2, XCircle, AlertCircle, Loader2, Wifi, WifiOff,
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
-  ScanBarcode, Square, Timer, Zap, ChevronRight,
+  ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -96,7 +96,7 @@ function SearchStep({ onFound }) {
             initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.15, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
             whileHover={{ scale: 1.05, rotate: 3 }}>
-            <ScanBarcode className="w-12 h-12 text-white" />
+            <BadgeCheck className="w-12 h-12 text-white" />
           </motion.div>
           <h2 className="text-2xl font-bold text-warm-800 mb-2">{t('surtido.escaneo.search_title')}</h2>
           <p className="text-sm text-warm-500 mb-8 leading-relaxed">{t('surtido.escaneo.search_placeholder')}</p>
