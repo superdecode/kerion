@@ -57,6 +57,7 @@ function pickField(raw, candidates) {
 function normalizeRow(raw, idx) {
   return {
     _rowId: idx,
+    _sheetRowNumber: idx + 2,
     sku: String(pickField(raw, ['sku', 'codigo', 'code']) || '').trim(),
     cantidad: pickField(raw, ['cantidad', 'qty', 'quantity', 'stock']),
     tipo_ajuste: String(pickField(raw, ['tipo_ajuste', 'tipo', 'type', 'ajuste', 'operacion']) || '').toLowerCase().trim() || 'set',
@@ -77,7 +78,7 @@ function computeExpected(row, stockActual) {
   return cant
 }
 
-function validateRow(row, inventario, tipoImport) {
+function validateRow(row, inventario, tipoImport, ubicaciones = []) {
   const errors = []
   if (!row.sku) errors.push('SKU requerido')
 
@@ -90,9 +91,19 @@ function validateRow(row, inventario, tipoImport) {
 
   const tipoAj = ['set', 'add', 'subtract'].includes(row.tipo_ajuste) ? row.tipo_ajuste : 'set'
   const match = inventario.find(i => i.sku?.toLowerCase() === row.sku?.toLowerCase())
+  const normalizedUbicacion = row.ubicacion?.trim().toLowerCase()
+  const ubicacionExiste = normalizedUbicacion
+    ? ubicaciones.some(u => u.codigo?.trim().toLowerCase() === normalizedUbicacion)
+    : false
 
   if (!match && tipoImport === 'ajuste') {
     errors.push('SKU no encontrado en inventario')
+  }
+  if (row.ubicacion && !ubicacionExiste) {
+    errors.push('Ubicación no encontrada')
+  }
+  if (tipoImport === 'importacion' && !match && !row.ubicacion) {
+    errors.push('Ubicación requerida para SKU nuevo')
   }
 
   const stockActual = match?.cantidad_disponible ?? null
@@ -107,6 +118,7 @@ function validateRow(row, inventario, tipoImport) {
     _stockActual: stockActual,
     _expected: expected,
     _errors: errors,
+    _serverErrors: [],
     _valid: errors.length === 0,
   }
 }
@@ -130,7 +142,7 @@ const FILTER_TABS = [
   { id: 'valid', label: 'Válidos' },
 ]
 
-export default function ImportarInventarioModal({ isOpen, onClose, inventario = [], onImported }) {
+export default function ImportarInventarioModal({ isOpen, onClose, inventario = [], ubicaciones = [], onImported }) {
   const toast = useToastStore()
   const fileRef = useRef(null)
   const [step, setStep] = useState('config')
@@ -151,6 +163,21 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
     setImportResult(null)
   }
 
+  const applyServerErrors = (currentRows, serverErrors = []) => {
+    if (!serverErrors.length) return currentRows
+    const errorMap = new Map(serverErrors.map(err => [Number(err.row), err.error]))
+    return currentRows.map(row => {
+      const serverError = errorMap.get(row._sheetRowNumber)
+      if (!serverError) return { ...row, _serverErrors: [] }
+      return {
+        ...row,
+        _errors: [...row._errors, serverError],
+        _serverErrors: [serverError],
+        _valid: false,
+      }
+    })
+  }
+
   const handleFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -161,12 +188,14 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
       const processed = rawRows
         .map((r, i) => normalizeRow(r, i))
         .filter(r => r.sku || String(r.cantidad).trim() !== '')
-        .map(r => validateRow(r, inventario, tipoImport))
+        .map(r => validateRow(r, inventario, tipoImport, ubicaciones))
       if (!processed.length) { toast.error('No se encontraron filas con datos'); return }
       setRows(processed)
       setFilterMode('all')
+      setImportResult(null)
       setStep('review')
-    } catch {
+    } catch (err) {
+      console.error('Error leyendo archivo de inventario:', err)
       toast.error('Error al leer el archivo. Verifica que sea .xlsx o .xls')
     } finally {
       setLoading(false)
@@ -216,6 +245,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
         tipo: tipoImport,
         descripcion: descripcion || `Importación masiva - ${new Date().toLocaleDateString()}`,
         filas: validRows.map(r => ({
+          row_number: r._sheetRowNumber,
           sku: r.sku,
           cantidad: r.cantidad,
           tipo_ajuste: r.tipo_ajuste,
@@ -229,9 +259,17 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
         })),
       })
       setImportResult(result)
-      setStep('success')
       onImported?.()
+      if ((result.summary?.fallidos || 0) > 0) {
+        setRows(prev => applyServerErrors(prev, result.errors || []))
+        setFilterMode('errors')
+        setStep('review')
+        toast.warning?.(`Importación parcial: ${result.summary?.creados || 0} creados, ${result.summary?.actualizados || 0} actualizados, ${result.summary?.fallidos || 0} fallidos`)
+        return
+      }
+      setStep('success')
     } catch (err) {
+      console.error('Error importando inventario:', err.response?.data || err)
       toast.error(err.response?.data?.error || 'Error al importar')
     } finally {
       setImporting(false)
@@ -442,6 +480,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-warm-50 border-b border-warm-100 text-warm-500 text-left text-[10px] uppercase">
                         <th className="px-3 py-2.5 w-7" />
+                        <th className="px-3 py-2.5 w-12">Fila</th>
                         <th className="px-3 py-2.5">SKU</th>
                         <th className="px-3 py-2.5 w-24">Cantidad</th>
                         <th className="px-3 py-2.5 w-32">Operación</th>
@@ -473,6 +512,10 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                                 ? <CheckCircle className="w-3.5 h-3.5 text-success-500" />
                                 : <XCircle className="w-3.5 h-3.5 text-danger-500" />
                               }
+                            </td>
+
+                            <td className="px-3 py-2.5 text-[11px] font-mono text-warm-400">
+                              {row._sheetRowNumber}
                             </td>
 
                             {/* SKU */}
@@ -536,7 +579,12 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                                   ))}
                                 </div>
                               ) : (
-                                <span className="text-[11px] text-warm-400 truncate block">{row.descripcion || '—'}</span>
+                                <div className="space-y-0.5">
+                                  <span className="text-[11px] text-warm-400 truncate block">{row.descripcion || '—'}</span>
+                                  {row.observacion && (
+                                    <span className="text-[10px] text-warm-300 truncate block">Obs: {row.observacion}</span>
+                                  )}
+                                </div>
                               )}
                             </td>
 
@@ -565,6 +613,23 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                 {stats.errors} fila{stats.errors !== 1 ? 's' : ''} con error{stats.errors !== 1 ? 'es' : ''} serán omitida{stats.errors !== 1 ? 's' : ''} al importar. Puedes eliminarlas o corregir el archivo.
               </div>
             )}
+
+            {importResult?.summary && (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl border border-success-200 bg-success-50 px-3 py-2 text-center">
+                  <p className="text-lg font-bold text-success-700">{importResult.summary.creados || 0}</p>
+                  <p className="text-[10px] text-success-700">Creados</p>
+                </div>
+                <div className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-center">
+                  <p className="text-lg font-bold text-primary-700">{importResult.summary.actualizados || 0}</p>
+                  <p className="text-[10px] text-primary-700">Actualizados</p>
+                </div>
+                <div className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-center">
+                  <p className="text-lg font-bold text-danger-700">{importResult.summary.fallidos || 0}</p>
+                  <p className="text-[10px] text-danger-700">Fallidos</p>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -587,15 +652,17 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
             {importResult && (
               <div className="flex items-center gap-6 bg-warm-50 rounded-2xl px-8 py-4 border border-warm-100">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-success-700">{importResult.procesados ?? 0}</p>
-                  <p className="text-xs text-warm-500 mt-0.5">Registros procesados</p>
+                  <p className="text-2xl font-bold text-success-700">{importResult.summary?.creados ?? 0}</p>
+                  <p className="text-xs text-warm-500 mt-0.5">Creados</p>
                 </div>
-                {importResult.errores > 0 && (
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-danger-600">{importResult.errores}</p>
-                    <p className="text-xs text-warm-500 mt-0.5">Con errores</p>
-                  </div>
-                )}
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-primary-700">{importResult.summary?.actualizados ?? 0}</p>
+                  <p className="text-xs text-warm-500 mt-0.5">Actualizados</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-danger-600">{importResult.summary?.fallidos ?? 0}</p>
+                  <p className="text-xs text-warm-500 mt-0.5">Fallidos</p>
+                </div>
               </div>
             )}
           </motion.div>

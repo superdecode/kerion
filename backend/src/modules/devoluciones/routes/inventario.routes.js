@@ -5,6 +5,98 @@ import { generateDevCodigo } from '../utils/codigos.js'
 
 const router = Router()
 
+function normalizeText(value) {
+  if (value === undefined || value === null) return null
+  const trimmed = String(value).trim()
+  return trimmed ? trimmed : null
+}
+
+function buildRowError(rowNumber, sku, error) {
+  return {
+    row: rowNumber ?? null,
+    sku: sku || null,
+    error: error instanceof Error ? error.message : String(error),
+  }
+}
+
+async function assertTenantExists(client, tenantId) {
+  const tenantRes = await client.query(
+    'SELECT 1 FROM tenants WHERE id = $1 LIMIT 1',
+    [tenantId]
+  )
+  if (!tenantRes.rows.length) {
+    throw new Error('Tenant no encontrado o inválido')
+  }
+}
+
+async function resolveUbicacionId(client, tenantId, ubicacionCodigo) {
+  const codigo = normalizeText(ubicacionCodigo)
+  if (!codigo) return null
+
+  const ubRes = await client.query(
+    `SELECT id
+     FROM dev_ubicaciones
+     WHERE codigo = $1 AND tenant_id = $2
+     LIMIT 1`,
+    [codigo, tenantId]
+  )
+
+  if (!ubRes.rows.length) {
+    throw new Error(`Ubicación no encontrada: ${codigo}`)
+  }
+
+  return ubRes.rows[0].id
+}
+
+async function assertUbicacionIdExists(client, tenantId, ubicacionId) {
+  const result = await client.query(
+    `SELECT id
+     FROM dev_ubicaciones
+     WHERE id = $1 AND tenant_id = $2
+     LIMIT 1`,
+    [ubicacionId, tenantId]
+  )
+
+  if (!result.rows.length) {
+    throw new Error(`Ubicación destino no encontrada: ${ubicacionId}`)
+  }
+}
+
+async function resolveSkuCatalogData(client, tenantId, sku) {
+  const normalizedSku = normalizeText(sku)
+  if (!normalizedSku) return null
+
+  const result = await client.query(
+    `SELECT sk.sku,
+            sk.sku2,
+            COALESCE(sk.descripcion, i.descripcion) AS descripcion,
+            i.id AS item_id,
+            i.sesion_id,
+            i.codigo_trazabilidad,
+            i.embalaje1,
+            i.embalaje2,
+            i.ubicacion_id,
+            i.codigo_multicaja
+     FROM dev_item_skus sk
+     JOIN dev_items i ON i.id = sk.item_id AND i.tenant_id = sk.tenant_id
+     WHERE sk.sku = $1
+       AND sk.tenant_id = $2
+     ORDER BY sk.created_at DESC, i.updated_at DESC NULLS LAST, i.created_at DESC
+     LIMIT 1`,
+    [normalizedSku, tenantId]
+  )
+
+  return result.rows[0] || null
+}
+
+async function resolveDescripcionFallback(client, tenantId, sku, currentDescription = null) {
+  const directValue = normalizeText(currentDescription)
+  if (directValue) return directValue
+
+  const skuData = await resolveSkuCatalogData(client, tenantId, sku)
+  return normalizeText(skuData?.descripcion)
+}
+
 router.get('/',
   authenticateToken, loadFullUser,
   requirePermission('devoluciones.inventario', 'ver'),
@@ -152,6 +244,13 @@ router.post('/ajustes',
       if (!Array.isArray(inventario) || inventario.length === 0) {
         return res.status(400).json({ error: 'Debe seleccionar inventario' })
       }
+      await assertTenantExists(client, req.tenantId)
+      if (tipo === 'movimiento' && !ubicacion_destino_id) {
+        return res.status(400).json({ error: 'Debe seleccionar una ubicación destino' })
+      }
+      if (tipo === 'movimiento') {
+        await assertUbicacionIdExists(client, req.tenantId, ubicacion_destino_id)
+      }
 
       const ajusteCodigo = await generateDevCodigo(client, req.tenantId, 'AJU-', 'dev_ajustes', req.fullUser?.zona_horaria)
       const ajusteRes = await client.query(
@@ -161,171 +260,238 @@ router.post('/ajustes',
         [ajusteCodigo, tipo, descripcion || null, req.user.id, req.tenantId]
       )
 
-      for (const row of inventario) {
-        const invRes = await client.query(
-          `SELECT * FROM dev_inventario WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
-          [row.inventario_id, req.tenantId]
-        )
-        const current = invRes.rows[0]
-        if (!current) {
-          return res.status(404).json({ error: 'Inventario no encontrado' })
-        }
-        if (tipo === 'ajuste') {
-          const nuevaCantidad = Number(row.cantidad_nueva)
-          const observacion = row.observacion || descripcion || 'Ajuste manual'
-          await client.query(
-            `UPDATE dev_inventario
-             SET cantidad_disponible = $1, updated_at = now()
-             WHERE id = $2 AND tenant_id = $3`,
-            [nuevaCantidad, current.id, req.tenantId]
+      const summary = { total: inventario.length, creados: 0, actualizados: 0, fallidos: 0 }
+      const erroresDetalle = []
+
+      for (let index = 0; index < inventario.length; index++) {
+        const row = inventario[index]
+        const rowNumber = Number(row.row_number) || index + 1
+        const savepoint = `sp_ajuste_${index + 1}`
+
+        await client.query(`SAVEPOINT ${savepoint}`)
+        try {
+          const invRes = await client.query(
+            `SELECT * FROM dev_inventario WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+            [row.inventario_id, req.tenantId]
           )
-          await client.query(
-            `INSERT INTO dev_movimientos
-               (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
-                referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-             VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
-            [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad, current.ubicacion_id, ajusteRes.rows[0].id, req.user.id, descripcion || 'Ajuste manual', observacion, req.tenantId]
-          )
-        } else {
-          const cantidadTraslado = row.cantidad ? Number(row.cantidad) : current.cantidad_disponible
-          const observacion = row.observacion || descripcion || 'Traslado manual'
-          if (cantidadTraslado <= 0 || cantidadTraslado > current.cantidad_disponible) {
-            await client.query('ROLLBACK')
-            return res.status(400).json({ error: `Cantidad inválida para traslado de ${current.sku || current.id}` })
+          const current = invRes.rows[0]
+          if (!current) {
+            throw new Error('Inventario no encontrado')
           }
-          const cantidadRestante = current.cantidad_disponible - cantidadTraslado
 
-          await client.query(
-            `UPDATE dev_inventario
-             SET cantidad_disponible = $1, updated_at = now()
-             WHERE id = $2 AND tenant_id = $3`,
-            [cantidadRestante, current.id, req.tenantId]
-          )
+          if (tipo === 'ajuste') {
+            const nuevaCantidad = Number(row.cantidad_nueva)
+            if (!Number.isFinite(nuevaCantidad) || nuevaCantidad < 0) {
+              throw new Error('Cantidad nueva inválida')
+            }
 
-          await client.query(
-            `INSERT INTO dev_movimientos
-               (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_anterior_id,
-                referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-             VALUES ('salida', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
-            [
-              current.id,
-              current.item_id,
-              current.cantidad_disponible,
-              cantidadRestante,
-              current.ubicacion_id,
-              ajusteRes.rows[0].id,
-              req.user.id,
-              descripcion || 'Traslado — salida origen',
-              observacion,
-              req.tenantId,
-            ]
-          )
+            const observacion = row.observacion || descripcion || 'Ajuste manual'
+            await client.query(
+              `UPDATE dev_inventario
+               SET cantidad_disponible = $1,
+                   descripcion = COALESCE($2, descripcion),
+                   updated_at = now()
+               WHERE id = $3 AND tenant_id = $4`,
+              [
+                nuevaCantidad,
+                await resolveDescripcionFallback(client, req.tenantId, current.sku, current.descripcion),
+                current.id,
+                req.tenantId,
+              ]
+            )
+            await client.query(
+              `INSERT INTO dev_movimientos
+                 (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
+                  referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+               VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+              [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad, current.ubicacion_id, ajusteRes.rows[0].id, req.user.id, row.motivo || descripcion || 'Ajuste manual', observacion, req.tenantId]
+            )
+            summary.actualizados++
+          } else {
+            const cantidadTraslado = row.cantidad ? Number(row.cantidad) : current.cantidad_disponible
+            const observacion = row.observacion || descripcion || 'Traslado manual'
+            if (!Number.isFinite(cantidadTraslado) || cantidadTraslado <= 0 || cantidadTraslado > current.cantidad_disponible) {
+              throw new Error(`Cantidad inválida para traslado de ${current.sku || current.id}`)
+            }
 
-          const targetRes = await client.query(
-            `SELECT *
-             FROM dev_inventario
-             WHERE tenant_id = $1
-               AND ubicacion_id = $2
-               AND item_id = $3
-               AND sku = $4
-               AND COALESCE(sku2, '') = COALESCE($5, '')
-               AND codigo_trazabilidad = $6
-               AND COALESCE(embalaje1, '') = COALESCE($7, '')
-               AND COALESCE(embalaje2, '') = COALESCE($8, '')
-               AND COALESCE(codigo_multicaja, '') = COALESCE($9, '')
-             LIMIT 1
-             FOR UPDATE`,
-            [
-              req.tenantId,
-              ubicacion_destino_id,
-              current.item_id,
-              current.sku,
-              current.sku2,
-              current.codigo_trazabilidad,
-              current.embalaje1,
-              current.embalaje2,
-              current.codigo_multicaja,
-            ]
-          )
+            if (Number(current.ubicacion_id) === Number(ubicacion_destino_id)) {
+              throw new Error('La ubicación destino no puede ser igual a la ubicación origen')
+            }
 
-          if (targetRes.rows[0]) {
-            const target = targetRes.rows[0]
-            const nuevaCantidadDestino = Number(target.cantidad_disponible) + cantidadTraslado
-            const nuevaCantidadOriginal = Number(target.cantidad_original || 0) + cantidadTraslado
+            const cantidadRestante = current.cantidad_disponible - cantidadTraslado
 
             await client.query(
               `UPDATE dev_inventario
-               SET cantidad_disponible = $1, cantidad_original = $2, updated_at = now()
+               SET cantidad_disponible = $1,
+                   descripcion = COALESCE($2, descripcion),
+                   updated_at = now()
                WHERE id = $3 AND tenant_id = $4`,
-              [nuevaCantidadDestino, nuevaCantidadOriginal, target.id, req.tenantId]
+              [
+                cantidadRestante,
+                await resolveDescripcionFallback(client, req.tenantId, current.sku, current.descripcion),
+                current.id,
+                req.tenantId,
+              ]
             )
 
             await client.query(
               `INSERT INTO dev_movimientos
-                 (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
+                 (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_anterior_id,
                   referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-               VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+               VALUES ('salida', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
               [
-                target.id,
-                target.item_id,
-                target.cantidad_disponible,
-                nuevaCantidadDestino,
-                ubicacion_destino_id,
+                current.id,
+                current.item_id,
+                current.cantidad_disponible,
+                cantidadRestante,
+                current.ubicacion_id,
                 ajusteRes.rows[0].id,
                 req.user.id,
-                descripcion || 'Traslado — entrada destino',
+                descripcion || 'Traslado - salida origen',
                 observacion,
                 req.tenantId,
               ]
             )
-          } else {
-            const newInvRes = await client.query(
-              `INSERT INTO dev_inventario
-                 (sku, sku2, descripcion, codigo_trazabilidad, embalaje1, embalaje2,
-                  cantidad_disponible, cantidad_original, ubicacion_id, sesion_id,
-                  codigo_multicaja, item_id, tenant_id)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-               RETURNING *`,
+
+            const targetRes = await client.query(
+              `SELECT *
+               FROM dev_inventario
+               WHERE tenant_id = $1
+                 AND ubicacion_id = $2
+                 AND item_id = $3
+                 AND sku = $4
+                 AND COALESCE(sku2, '') = COALESCE($5, '')
+                 AND codigo_trazabilidad = $6
+                 AND COALESCE(embalaje1, '') = COALESCE($7, '')
+                 AND COALESCE(embalaje2, '') = COALESCE($8, '')
+                 AND COALESCE(codigo_multicaja, '') = COALESCE($9, '')
+               LIMIT 1
+               FOR UPDATE`,
               [
+                req.tenantId,
+                ubicacion_destino_id,
+                current.item_id,
                 current.sku,
                 current.sku2,
-                current.descripcion,
                 current.codigo_trazabilidad,
                 current.embalaje1,
                 current.embalaje2,
-                cantidadTraslado,
-                cantidadTraslado,
-                ubicacion_destino_id,
-                current.sesion_id,
                 current.codigo_multicaja,
-                current.item_id,
-                req.tenantId,
               ]
             )
-            const newInv = newInvRes.rows[0]
 
-            await client.query(
-              `INSERT INTO dev_movimientos
-                 (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
-                  referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-               VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'ajuste', $6, $7, $8, $9)`,
-              [
-                newInv.id,
-                newInv.item_id,
-                cantidadTraslado,
-                ubicacion_destino_id,
-                ajusteRes.rows[0].id,
-                req.user.id,
-                descripcion || 'Traslado — entrada destino',
-                observacion,
-                req.tenantId,
-              ]
-            )
+            if (targetRes.rows[0]) {
+              const target = targetRes.rows[0]
+              const nuevaCantidadDestino = Number(target.cantidad_disponible) + cantidadTraslado
+              const nuevaCantidadOriginal = Number(target.cantidad_original || 0) + cantidadTraslado
+
+              await client.query(
+                `UPDATE dev_inventario
+                 SET cantidad_disponible = $1,
+                     cantidad_original = $2,
+                     descripcion = COALESCE($3, descripcion),
+                     updated_at = now()
+                 WHERE id = $4 AND tenant_id = $5`,
+                [
+                  nuevaCantidadDestino,
+                  nuevaCantidadOriginal,
+                  await resolveDescripcionFallback(client, req.tenantId, target.sku, target.descripcion),
+                  target.id,
+                  req.tenantId,
+                ]
+              )
+
+              await client.query(
+                `INSERT INTO dev_movimientos
+                   (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
+                    referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+                 VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+                [
+                  target.id,
+                  target.item_id,
+                  target.cantidad_disponible,
+                  nuevaCantidadDestino,
+                  ubicacion_destino_id,
+                  ajusteRes.rows[0].id,
+                  req.user.id,
+                  descripcion || 'Traslado - entrada destino',
+                  observacion,
+                  req.tenantId,
+                ]
+              )
+              summary.actualizados++
+            } else {
+              const newInvRes = await client.query(
+                `INSERT INTO dev_inventario
+                   (sku, sku2, descripcion, codigo_trazabilidad, embalaje1, embalaje2,
+                    cantidad_disponible, cantidad_original, ubicacion_id, sesion_id,
+                    codigo_multicaja, item_id, tenant_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 RETURNING *`,
+                [
+                  current.sku,
+                  current.sku2,
+                  await resolveDescripcionFallback(client, req.tenantId, current.sku, current.descripcion),
+                  current.codigo_trazabilidad,
+                  current.embalaje1,
+                  current.embalaje2,
+                  cantidadTraslado,
+                  cantidadTraslado,
+                  ubicacion_destino_id,
+                  current.sesion_id,
+                  current.codigo_multicaja,
+                  current.item_id,
+                  req.tenantId,
+                ]
+              )
+              const newInv = newInvRes.rows[0]
+
+              await client.query(
+                `INSERT INTO dev_movimientos
+                   (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
+                    referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+                 VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'ajuste', $6, $7, $8, $9)`,
+                [
+                  newInv.id,
+                  newInv.item_id,
+                  cantidadTraslado,
+                  ubicacion_destino_id,
+                  ajusteRes.rows[0].id,
+                  req.user.id,
+                  descripcion || 'Traslado - entrada destino',
+                  observacion,
+                  req.tenantId,
+                ]
+              )
+              summary.creados++
+            }
           }
+
+          await client.query(`RELEASE SAVEPOINT ${savepoint}`)
+        } catch (rowError) {
+          await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`)
+          await client.query(`RELEASE SAVEPOINT ${savepoint}`)
+          summary.fallidos++
+          erroresDetalle.push(buildRowError(rowNumber, row?._sku || row?.sku || null, rowError))
         }
       }
+
+      if (summary.creados === 0 && summary.actualizados === 0) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({
+          error: 'No se pudo procesar ningún ajuste',
+          summary,
+          errors: erroresDetalle,
+        })
+      }
+
       await client.query('COMMIT')
-      res.status(201).json({ ajuste: ajusteRes.rows[0] })
+      const statusCode = summary.fallidos > 0 ? 207 : 201
+      res.status(statusCode).json({
+        ajuste: ajusteRes.rows[0],
+        summary,
+        errors: erroresDetalle,
+      })
     } catch (error) {
       if (client) try { await client.query('ROLLBACK') } catch {}
       console.error('Create ajuste error:', error)
@@ -394,6 +560,7 @@ router.post('/importar',
       if (!Array.isArray(filas) || filas.length === 0) {
         return res.status(400).json({ error: 'No hay filas para importar' })
       }
+      await assertTenantExists(client, req.tenantId)
 
       const importCodigo = await generateDevCodigo(client, req.tenantId, 'AJU-', 'dev_ajustes', req.fullUser?.zona_horaria)
       const ajusteRes = await client.query(
@@ -403,99 +570,230 @@ router.post('/importar',
       )
       const ajusteId = ajusteRes.rows[0].id
 
-      let procesados = 0
-      let errores = 0
+      const summary = { total: filas.length, creados: 0, actualizados: 0, fallidos: 0 }
+      const erroresDetalle = []
 
-      for (const fila of filas) {
-        const {
-          sku, cantidad, tipo_ajuste = 'set', inventario_id,
-          descripcion: filDesc, ubicacion_codigo,
-          guia1, guia2, multicaja, observacion: filObs
-        } = fila
+      for (let index = 0; index < filas.length; index++) {
+        const fila = filas[index]
+        const savepoint = `sp_import_${index + 1}`
+        const rowNumber = Number(fila.row_number) || index + 1
 
-        let ubicacionId = null
-        if (ubicacion_codigo) {
-          const ubRes = await client.query(
-            `SELECT id FROM dev_ubicaciones WHERE codigo = $1 AND tenant_id = $2 LIMIT 1`,
-            [ubicacion_codigo, req.tenantId]
-          )
-          if (ubRes.rows.length) ubicacionId = ubRes.rows[0].id
-        }
+        await client.query(`SAVEPOINT ${savepoint}`)
+        try {
+          const {
+            sku,
+            cantidad,
+            tipo_ajuste = 'set',
+            inventario_id,
+            descripcion: filDesc,
+            ubicacion_codigo,
+            guia1,
+            guia2,
+            multicaja,
+            observacion: filObs,
+          } = fila
 
-        const movementObs = filObs || descripcion || 'Importación'
-
-        if (inventario_id) {
-          const invRes = await client.query(
-            `SELECT * FROM dev_inventario WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
-            [inventario_id, req.tenantId]
-          )
-          const current = invRes.rows[0]
-          if (!current) { errores++; continue }
-
+          const normalizedSku = normalizeText(sku)
+          const movementObs = filObs || descripcion || 'Importación'
           const cantNum = Number(cantidad)
-          let nuevaCantidad
-          if (tipo_ajuste === 'add') nuevaCantidad = current.cantidad_disponible + cantNum
-          else if (tipo_ajuste === 'subtract') nuevaCantidad = Math.max(0, current.cantidad_disponible - cantNum)
-          else nuevaCantidad = cantNum
-
-          await client.query(
-            `UPDATE dev_inventario
-             SET cantidad_disponible = $1,
-                 embalaje1 = COALESCE($2, embalaje1),
-                 embalaje2 = COALESCE($3, embalaje2),
-                 codigo_multicaja = COALESCE($4, codigo_multicaja),
-                 updated_at = now()
-             WHERE id = $5 AND tenant_id = $6`,
-            [nuevaCantidad, guia1 || null, guia2 || null, multicaja || null, current.id, req.tenantId]
-          )
-          await client.query(
-            `INSERT INTO dev_movimientos
-               (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
-                ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-             VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
-            [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad,
-             ubicacionId || current.ubicacion_id, ajusteId, req.user.id,
-             filDesc || descripcion || 'Importación', movementObs, req.tenantId]
-          )
-          procesados++
-        } else if (tipo === 'importacion') {
-          // Look up SKU description if not provided
-          let finalDesc = filDesc
-          if (!finalDesc && sku) {
-            const skuRes = await client.query(
-              `SELECT descripcion FROM dev_item_skus WHERE sku = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT 1`,
-              [sku, req.tenantId]
-            )
-            if (skuRes.rows.length) finalDesc = skuRes.rows[0].descripcion
+          if (!normalizedSku) {
+            throw new Error('SKU requerido')
+          }
+          if (!Number.isFinite(cantNum) || cantNum < 0) {
+            throw new Error('Cantidad inválida')
           }
 
-          const invRes = await client.query(
-            `INSERT INTO dev_inventario
-               (sku, descripcion, cantidad_disponible, cantidad_original, ubicacion_id,
-                embalaje1, embalaje2, codigo_multicaja, tenant_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [
-              sku, finalDesc || null, Number(cantidad), Number(cantidad), ubicacionId,
-              guia1 || null, guia2 || null, multicaja || null, req.tenantId
-            ]
-          )
-          const newInv = invRes.rows[0]
-          await client.query(
-            `INSERT INTO dev_movimientos
-               (tipo, inventario_id, cantidad_anterior, cantidad_nueva,
-                ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-             VALUES ('entrada', $1, 0, $2, $3, $4, 'ajuste', $5, $6, $7, $8)`,
-            [newInv.id, Number(cantidad), ubicacionId, ajusteId,
-             req.user.id, filDesc || descripcion || 'Importación', movementObs, req.tenantId]
-          )
-          procesados++
-        } else {
-          errores++
+          const ubicacionId = await resolveUbicacionId(client, req.tenantId, ubicacion_codigo)
+
+          if (inventario_id) {
+            const invRes = await client.query(
+              `SELECT * FROM dev_inventario WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+              [inventario_id, req.tenantId]
+            )
+            const current = invRes.rows[0]
+            if (!current) {
+              throw new Error('Inventario no encontrado')
+            }
+
+            let nuevaCantidad
+            if (tipo_ajuste === 'add') nuevaCantidad = current.cantidad_disponible + cantNum
+            else if (tipo_ajuste === 'subtract') nuevaCantidad = Math.max(0, current.cantidad_disponible - cantNum)
+            else nuevaCantidad = cantNum
+
+            const finalDesc = await resolveDescripcionFallback(client, req.tenantId, normalizedSku, filDesc || current.descripcion)
+
+            await client.query(
+              `UPDATE dev_inventario
+               SET cantidad_disponible = $1,
+                   descripcion = COALESCE($2, descripcion),
+                   embalaje1 = COALESCE($3, embalaje1),
+                   embalaje2 = COALESCE($4, embalaje2),
+                   codigo_multicaja = COALESCE($5, codigo_multicaja),
+                   updated_at = now()
+               WHERE id = $6 AND tenant_id = $7`,
+              [nuevaCantidad, finalDesc, normalizeText(guia1), normalizeText(guia2), normalizeText(multicaja), current.id, req.tenantId]
+            )
+            await client.query(
+              `INSERT INTO dev_movimientos
+                 (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
+                  ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+               VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+              [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad,
+               ubicacionId || current.ubicacion_id, ajusteId, req.user.id,
+               finalDesc || descripcion || 'Importación', movementObs, req.tenantId]
+            )
+            summary.actualizados++
+          } else if (tipo === 'importacion') {
+            const skuData = await resolveSkuCatalogData(client, req.tenantId, normalizedSku)
+            if (!skuData?.item_id || !skuData?.sesion_id) {
+              throw new Error(`SKU inexistente o sin dependencias para alta: ${normalizedSku}`)
+            }
+
+            const finalDesc = await resolveDescripcionFallback(client, req.tenantId, normalizedSku, filDesc || skuData.descripcion)
+            const finalUbicacionId = ubicacionId || skuData.ubicacion_id
+            if (!finalUbicacionId) {
+              throw new Error('La fila requiere una ubicación válida para crear inventario')
+            }
+
+            const existingRes = await client.query(
+              `SELECT *
+               FROM dev_inventario
+               WHERE tenant_id = $1
+                 AND ubicacion_id = $2
+                 AND item_id = $3
+                 AND sku = $4
+                 AND COALESCE(sku2, '') = COALESCE($5, '')
+                 AND codigo_trazabilidad = $6
+               LIMIT 1
+               FOR UPDATE`,
+              [
+                req.tenantId,
+                finalUbicacionId,
+                skuData.item_id,
+                normalizedSku,
+                skuData.sku2,
+                skuData.codigo_trazabilidad,
+              ]
+            )
+
+            if (existingRes.rows[0]) {
+              const current = existingRes.rows[0]
+              const nuevaCantidad = Number(current.cantidad_disponible) + cantNum
+              const nuevaCantidadOriginal = Number(current.cantidad_original || 0) + cantNum
+
+              await client.query(
+                `UPDATE dev_inventario
+                 SET cantidad_disponible = $1,
+                     cantidad_original = $2,
+                     descripcion = COALESCE($3, descripcion),
+                     embalaje1 = COALESCE($4, embalaje1),
+                     embalaje2 = COALESCE($5, embalaje2),
+                     codigo_multicaja = COALESCE($6, codigo_multicaja),
+                     updated_at = now()
+                 WHERE id = $7 AND tenant_id = $8`,
+                [
+                  nuevaCantidad,
+                  nuevaCantidadOriginal,
+                  finalDesc,
+                  normalizeText(guia1) || skuData.embalaje1 || null,
+                  normalizeText(guia2) || skuData.embalaje2 || null,
+                  normalizeText(multicaja) || skuData.codigo_multicaja || null,
+                  current.id,
+                  req.tenantId,
+                ]
+              )
+
+              await client.query(
+                `INSERT INTO dev_movimientos
+                   (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
+                    ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+                 VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+                [
+                  current.id,
+                  current.item_id,
+                  current.cantidad_disponible,
+                  nuevaCantidad,
+                  finalUbicacionId,
+                  ajusteId,
+                  req.user.id,
+                  finalDesc || descripcion || 'Importación',
+                  movementObs,
+                  req.tenantId,
+                ]
+              )
+              summary.actualizados++
+            } else {
+              const invRes = await client.query(
+                `INSERT INTO dev_inventario
+                   (item_id, sesion_id, sku, sku2, descripcion, codigo_trazabilidad, embalaje1, embalaje2,
+                    cantidad_disponible, cantidad_original, ubicacion_id, codigo_multicaja, tenant_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                 RETURNING *`,
+                [
+                  skuData.item_id,
+                  skuData.sesion_id,
+                  normalizedSku,
+                  skuData.sku2 || null,
+                  finalDesc || null,
+                  skuData.codigo_trazabilidad,
+                  normalizeText(guia1) || skuData.embalaje1 || null,
+                  normalizeText(guia2) || skuData.embalaje2 || null,
+                  cantNum,
+                  cantNum,
+                  finalUbicacionId,
+                  normalizeText(multicaja) || skuData.codigo_multicaja || null,
+                  req.tenantId,
+                ]
+              )
+              const newInv = invRes.rows[0]
+              await client.query(
+                `INSERT INTO dev_movimientos
+                   (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
+                    ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
+                 VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'ajuste', $6, $7, $8, $9)`,
+                [
+                  newInv.id,
+                  newInv.item_id,
+                  cantNum,
+                  finalUbicacionId,
+                  ajusteId,
+                  req.user.id,
+                  finalDesc || descripcion || 'Importación',
+                  movementObs,
+                  req.tenantId,
+                ]
+              )
+              summary.creados++
+            }
+          } else {
+            throw new Error('Fila inválida para tipo ajuste')
+          }
+
+          await client.query(`RELEASE SAVEPOINT ${savepoint}`)
+        } catch (rowError) {
+          await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`)
+          await client.query(`RELEASE SAVEPOINT ${savepoint}`)
+          summary.fallidos++
+          erroresDetalle.push(buildRowError(rowNumber, fila?.sku || null, rowError))
         }
       }
 
+      if (summary.creados === 0 && summary.actualizados === 0) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({
+          error: 'No se pudo procesar ninguna fila',
+          summary,
+          errors: erroresDetalle,
+        })
+      }
+
       await client.query('COMMIT')
-      res.status(201).json({ procesados, errores, ajuste_id: ajusteId })
+      const statusCode = summary.fallidos > 0 ? 207 : 201
+      res.status(statusCode).json({
+        ajuste_id: ajusteId,
+        summary,
+        errors: erroresDetalle,
+      })
     } catch (error) {
       if (client) try { await client.query('ROLLBACK') } catch {}
       console.error('Import inventario error:', error)

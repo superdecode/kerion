@@ -138,6 +138,7 @@ export default function Inventario() {
   const [showImport, setShowImport] = useState(false)
   const [showImportUbicaciones, setShowImportUbicaciones] = useState(false)
   const [ajusteTipo, setAjusteTipo] = useState('ajuste')
+  const [ajusteFeedback, setAjusteFeedback] = useState(null)
   const [showColConfig, setShowColConfig] = useState(false)
   const [visibleCols, setVisibleCols] = useState([])
   const [stockPage, setStockPage] = useState(1)
@@ -178,13 +179,21 @@ export default function Inventario() {
 
   const ajusteMutation = useMutation({
     mutationFn: createAjuste,
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['dev-inventario'] })
       qc.invalidateQueries({ queryKey: ['dev-movimientos'] })
+      setAjusteFeedback(result)
+      if ((result?.summary?.fallidos || 0) > 0) {
+        toast.warning?.(`Resultado parcial: ${result.summary?.creados || 0} creados, ${result.summary?.actualizados || 0} actualizados, ${result.summary?.fallidos || 0} fallidos`)
+        return
+      }
       toast.success('Ajuste registrado')
       setShowAjuste(false)
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al guardar ajuste'),
+    onError: (e) => {
+      console.error('Error guardando ajuste:', e.response?.data || e)
+      toast.error(e.response?.data?.error || 'Error al guardar ajuste')
+    },
   })
 
   const copy = (text) => {
@@ -445,7 +454,7 @@ export default function Inventario() {
                 )}
                 {canCreate && (
                   <button
-                    onClick={() => { setAjusteTipo('movimiento'); setShowAjuste(true) }}
+                    onClick={() => { setAjusteFeedback(null); setAjusteTipo('movimiento'); setShowAjuste(true) }}
                     className="btn-ghost inline-flex items-center gap-1.5 border border-violet-400 text-violet-600 hover:bg-violet-50 hover:border-violet-500"
                   >
                     <ArrowLeftRight className="w-4 h-4" /> Mover
@@ -453,7 +462,7 @@ export default function Inventario() {
                 )}
                 {canCreate && (
                   <button
-                    onClick={() => { setAjusteTipo('ajuste'); setShowAjuste(true) }}
+                    onClick={() => { setAjusteFeedback(null); setAjusteTipo('ajuste'); setShowAjuste(true) }}
                     className="btn-primary inline-flex items-center gap-1.5"
                   >
                     <ClipboardList className="w-4 h-4" /> Inventario físico
@@ -726,12 +735,13 @@ export default function Inventario() {
       />
       <AjusteModal
         isOpen={showAjuste}
-        onClose={() => setShowAjuste(false)}
+        onClose={() => { setShowAjuste(false); setAjusteFeedback(null) }}
         initialTipo={ajusteTipo}
         inventario={inventario}
         ubicaciones={ubicaciones}
         onSubmit={(payload) => ajusteMutation.mutate(payload)}
         saving={ajusteMutation.isPending}
+        submitResult={ajusteFeedback}
       />
       <ImportarInventarioModal
         isOpen={showImport}

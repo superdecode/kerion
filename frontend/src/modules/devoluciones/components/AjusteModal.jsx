@@ -54,7 +54,7 @@ function LocationCombo({ ubicaciones, value, onChange, placeholder = 'Selecciona
   )
 }
 
-export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', inventario = [], ubicaciones = [], onSubmit, saving = false }) {
+export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', inventario = [], ubicaciones = [], onSubmit, saving = false, submitResult = null }) {
   const [tipo, setTipo] = useState(initialTipo)
   const [descripcion, setDescripcion] = useState('')
   const [ajustes, setAjustes] = useState([])
@@ -211,6 +211,24 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
       }
     >
       <div className="space-y-4">
+
+        {submitResult?.summary?.fallidos > 0 && (
+          <div className="rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-xs text-warning-800 space-y-1">
+            <div className="font-semibold">
+              Resultado parcial: {submitResult.summary.creados || 0} creados, {submitResult.summary.actualizados || 0} actualizados, {submitResult.summary.fallidos || 0} fallidos.
+            </div>
+            {Array.isArray(submitResult.errors) && submitResult.errors.length > 0 && (
+              <div className="space-y-1">
+                {submitResult.errors.slice(0, 4).map((err, index) => (
+                  <div key={`${err.row || 'row'}-${index}`} className="flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{err.row ? `Fila ${err.row}: ` : ''}{err.error}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tipo tabs */}
         <div className="flex gap-1 border-b border-warm-100 -mx-1">
