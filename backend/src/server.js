@@ -119,6 +119,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/public', publicRoutes)
 
 // Admin routes (super_admin auth, no tenant context)
+app.use('/api/admin/auth/login', loginLimiter)
 app.use('/api/admin', adminRoutes)
 
 // Cron routes (CRON_SECRET auth, no tenant context)

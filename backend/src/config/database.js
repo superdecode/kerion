@@ -3,6 +3,13 @@ import env from './env.js'
 
 const { Pool } = pg
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function assertTenantId(tenantId) {
+  if (!tenantId || !UUID_RE.test(tenantId)) {
+    throw new Error(`Invalid tenantId: ${String(tenantId).slice(0, 40)}`)
+  }
+}
+
 const pool = new Pool({
   host: env.DB_HOST,
   port: env.DB_PORT,
@@ -29,6 +36,7 @@ export async function tenantQuery(tenantId, text, params) {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    assertTenantId(tenantId)
     await client.query(`SET LOCAL app.tenant_id = '${tenantId}'`)
     const result = await client.query(text, params)
     await client.query('COMMIT')
@@ -47,6 +55,7 @@ export async function tenantTransaction(tenantId, cb) {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    assertTenantId(tenantId)
     await client.query(`SET LOCAL app.tenant_id = '${tenantId}'`)
     const result = await cb(client)
     await client.query('COMMIT')

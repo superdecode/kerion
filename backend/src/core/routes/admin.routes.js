@@ -568,8 +568,7 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
         to: contact_email.toLowerCase().trim(),
         tenant_name: legal_name,
         admin_name: contact_name,
-        temp_password: admin_password,
-        login_url: `https://${finalSlug}.kirion.app/login`,
+        login_url: `https://${finalSlug}.kirion.co/login`,
       })]
     ).catch(e => console.error('[admin/tenants POST] step 7 non-fatal:', e.message))
 
@@ -656,11 +655,11 @@ router.post('/tenants/:id/reset-password', authenticateAdmin, async (req, res) =
     await query(
       `INSERT INTO notifications_outbox (tenant_id, recipient_email, template_code, payload)
        VALUES ($1,$2,'password_reset',$3)`,
-      [id, user.email, JSON.stringify({ contact_name: user.nombre_completo, temp_password: pwd, tenant_name: tenantRes.rows[0]?.legal_name })]
+      [id, user.email, JSON.stringify({ contact_name: user.nombre_completo, tenant_name: tenantRes.rows[0]?.legal_name })]
     )
 
     adminAudit(req.admin.id, 'RESET_PASSWORD', 'usuario', user.id, { tenant_id: id })
-    res.json({ success: true, email: user.email, temp_password: pwd })
+    res.json({ success: true, email: user.email })
   } catch (err) {
     console.error('[admin/reset-password]', err)
     res.status(500).json({ error: 'Error interno' })

@@ -17,7 +17,8 @@ export async function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Token inválido o expirado' })
   }
 
-  // Check token blacklist (non-fatal — DB errors don't block auth)
+  // Check token blacklist — fatal on DB error: a revoked token must never
+  // silently pass through just because the blacklist table is unreachable.
   if (decoded.jti) {
     try {
       const blacklisted = await query(
@@ -28,7 +29,8 @@ export async function authenticateToken(req, res, next) {
         return res.status(401).json({ error: 'Token revocado' })
       }
     } catch (err) {
-      console.error('Token blacklist check failed (non-fatal):', err.message)
+      console.error('[auth] Token blacklist check failed:', err.message)
+      return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
     }
   }
 
@@ -59,12 +61,15 @@ export async function auditLog(req, action, entityType, entityId, details) {
 
 export async function loadFullUser(req, res, next) {
   try {
+    // Scope to the tenant from the JWT claim so a token from tenant A cannot
+    // load a user from tenant B even if both have the same numeric user id.
+    const tenantId = req.user.tenant_id || req.tenantId
     const result = await query(
       `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos
        FROM usuarios u
        LEFT JOIN roles r ON u.rol_id = r.id
-       WHERE u.id = $1 AND u.estado = 'ACTIVO'`,
-      [req.user.id]
+       WHERE u.id = $1 AND u.tenant_id = $2 AND u.estado = 'ACTIVO'`,
+      [req.user.id, tenantId]
     )
 
     if (result.rows.length === 0) {

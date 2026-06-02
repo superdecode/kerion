@@ -119,7 +119,7 @@ router.post('/track', trackLimiter, async (req, res) => {
 })
 
 // POST /api/public/renewal-request — tenant subscription renewal request
-router.post('/renewal-request', async (req, res) => {
+router.post('/renewal-request', signupLimiter, async (req, res) => {
   try {
     const { tenant_name, contact_name, contact_email, current_plan, message, tenant_id } = req.body
     if (!contact_email) return res.status(400).json({ error: 'Email requerido' })
