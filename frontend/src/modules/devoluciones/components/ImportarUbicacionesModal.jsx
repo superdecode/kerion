@@ -158,11 +158,23 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
           nombre: r.nombre,
         })),
       })
-      setImportResult(res.data || res)
-      setStep('success')
-      onImported?.()
+      
+      // La respuesta de importUbicaciones ya es la data (resumen + detalles_errores)
+      const data = res.data || res
+      setImportResult(data)
+      
+      if (data.resumen?.errores > 0 && data.resumen?.procesados === 0) {
+        toast.error('No se pudo importar ninguna ubicación. Revisa los detalles.')
+        setStep('review')
+        setFilterMode('errors')
+      } else {
+        setStep('success')
+        onImported?.()
+      }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error al importar')
+      console.error('Import error:', err)
+      const msg = err.response?.data?.error || err.response?.data || err.message || 'Error al importar'
+      toast.error(typeof msg === 'string' ? msg.slice(0, 100) : 'Error interno al importar')
     } finally {
       setImporting(false)
     }

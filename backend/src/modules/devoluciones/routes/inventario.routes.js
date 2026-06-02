@@ -621,7 +621,7 @@ router.post('/ubicaciones/importar',
         const numFila = i + 1
         const codigo = String(row.codigo || '').trim()
         const nombre = String(row.nombre || '').trim()
-        const descripcion = String(row.descripcion || '').trim()
+        const descripcion = row.descripcion !== undefined ? String(row.descripcion || '').trim() : null
 
         // Validaciones de errores comunes
         if (!codigo) {
@@ -655,10 +655,10 @@ router.post('/ubicaciones/importar',
              ON CONFLICT (codigo, tenant_id)
              DO UPDATE SET
                nombre = EXCLUDED.nombre,
-               descripcion = EXCLUDED.descripcion,
+               descripcion = COALESCE(EXCLUDED.descripcion, dev_ubicaciones.descripcion),
                updated_at = now()
              RETURNING (xmax = 0) AS es_nuevo`,
-            [codigo, nombre, descripcion || null, req.tenantId]
+            [codigo, nombre, descripcion, req.tenantId]
           )
           
           procesados.push({
@@ -667,7 +667,7 @@ router.post('/ubicaciones/importar',
           })
         } catch (dbError) {
           console.error(`Error DB en fila ${numFila}:`, dbError)
-          errores.push({ fila: numFila, codigo, error: 'Error interno al guardar en base de datos' })
+          errores.push({ fila: numFila, codigo, error: dbError.message || 'Error interno al guardar en base de datos' })
         }
       }
 
