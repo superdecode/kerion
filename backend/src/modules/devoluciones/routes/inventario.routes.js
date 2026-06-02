@@ -19,6 +19,7 @@ router.get('/',
           i.sku ILIKE $2 OR COALESCE(i.sku2, '') ILIKE $2 OR COALESCE(i.descripcion, '') ILIKE $2
           OR COALESCE(i.embalaje1, '') ILIKE $2 OR COALESCE(i.embalaje2, '') ILIKE $2
           OR i.codigo_trazabilidad ILIKE $2
+          OR COALESCE(i.codigo_multicaja, '') ILIKE $2
         )`
       }
       const result = await req.tQuery(
@@ -400,7 +401,11 @@ router.post('/importar',
       let errores = 0
 
       for (const fila of filas) {
-        const { sku, cantidad, tipo_ajuste = 'set', inventario_id, descripcion: filDesc, ubicacion_codigo } = fila
+        const {
+          sku, cantidad, tipo_ajuste = 'set', inventario_id,
+          descripcion: filDesc, ubicacion_codigo,
+          guia1, guia2, multicaja
+        } = fila
 
         let ubicacionId = null
         if (ubicacion_codigo) {
@@ -426,8 +431,14 @@ router.post('/importar',
           else nuevaCantidad = cantNum
 
           await client.query(
-            `UPDATE dev_inventario SET cantidad_disponible = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
-            [nuevaCantidad, current.id, req.tenantId]
+            `UPDATE dev_inventario
+             SET cantidad_disponible = $1,
+                 embalaje1 = COALESCE($2, embalaje1),
+                 embalaje2 = COALESCE($3, embalaje2),
+                 codigo_multicaja = COALESCE($4, codigo_multicaja),
+                 updated_at = now()
+             WHERE id = $5 AND tenant_id = $6`,
+            [nuevaCantidad, guia1 || null, guia2 || null, multicaja || null, current.id, req.tenantId]
           )
           await client.query(
             `INSERT INTO dev_movimientos
@@ -442,9 +453,13 @@ router.post('/importar',
         } else if (tipo === 'importacion') {
           const invRes = await client.query(
             `INSERT INTO dev_inventario
-               (sku, descripcion, cantidad_disponible, cantidad_original, ubicacion_id, tenant_id)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [sku, filDesc || null, Number(cantidad), Number(cantidad), ubicacionId, req.tenantId]
+               (sku, descripcion, cantidad_disponible, cantidad_original, ubicacion_id,
+                embalaje1, embalaje2, codigo_multicaja, tenant_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [
+              sku, filDesc || null, Number(cantidad), Number(cantidad), ubicacionId,
+              guia1 || null, guia2 || null, multicaja || null, req.tenantId
+            ]
           )
           const newInv = invRes.rows[0]
           await client.query(
@@ -576,25 +591,81 @@ router.post('/ubicaciones/importar',
     try {
       const { rows = [] } = req.body
       if (!Array.isArray(rows) || rows.length === 0) {
-        return res.status(400).json({ error: 'rows es requerido' })
+        return res.status(400).json({ error: 'rows es requerido y no puede estar vacío' })
       }
-      const inserted = []
-      for (const row of rows) {
-        if (!row.codigo || !row.nombre) continue
-        const result = await req.tQuery(
-          `INSERT INTO dev_ubicaciones (codigo, nombre, descripcion, tenant_id)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (codigo, tenant_id)
-           DO UPDATE SET nombre = EXCLUDED.nombre, descripcion = EXCLUDED.descripcion, updated_at = now()
-           RETURNING *`,
-          [row.codigo.trim(), row.nombre.trim(), row.descripcion || null, req.tenantId]
-        )
-        inserted.push(result.rows[0])
+
+      const procesados = []
+      const errores = []
+      const codigosVistos = new Set()
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        const numFila = i + 1
+        const codigo = String(row.codigo || '').trim()
+        const nombre = String(row.nombre || '').trim()
+        const descripcion = String(row.descripcion || '').trim()
+
+        // Validaciones de errores comunes
+        if (!codigo) {
+          errores.push({ fila: numFila, error: 'El código de ubicación es requerido' })
+          continue
+        }
+        if (codigo.length > 50) {
+          errores.push({ fila: numFila, codigo, error: 'El código excede los 50 caracteres permitidos' })
+          continue
+        }
+        if (!nombre) {
+          errores.push({ fila: numFila, codigo, error: 'El nombre de ubicación es requerido' })
+          continue
+        }
+        if (nombre.length > 200) {
+          errores.push({ fila: numFila, codigo, error: 'El nombre excede los 200 caracteres permitidos' })
+          continue
+        }
+
+        // Detectar duplicados en el mismo archivo
+        if (codigosVistos.has(codigo.toLowerCase())) {
+          errores.push({ fila: numFila, codigo, error: `Código duplicado dentro del archivo: ${codigo}` })
+          continue
+        }
+        codigosVistos.add(codigo.toLowerCase())
+
+        try {
+          const result = await req.tQuery(
+            `INSERT INTO dev_ubicaciones (codigo, nombre, descripcion, tenant_id)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (codigo, tenant_id)
+             DO UPDATE SET
+               nombre = EXCLUDED.nombre,
+               descripcion = EXCLUDED.descripcion,
+               updated_at = now()
+             RETURNING (xmax = 0) AS es_nuevo`,
+            [codigo, nombre, descripcion || null, req.tenantId]
+          )
+          
+          procesados.push({
+            codigo,
+            status: result.rows[0].es_nuevo ? 'creado' : 'actualizado'
+          })
+        } catch (dbError) {
+          console.error(`Error DB en fila ${numFila}:`, dbError)
+          errores.push({ fila: numFila, codigo, error: 'Error interno al guardar en base de datos' })
+        }
       }
-      res.json({ ubicaciones: inserted })
+
+      res.json({
+        resumen: {
+          total: rows.length,
+          procesados: procesados.length,
+          creados: procesados.filter(p => p.status === 'creado').length,
+          actualizados: procesados.filter(p => p.status === 'actualizado').length,
+          errores: errores.length
+        },
+        detalles_errores: errores
+      })
     } catch (error) {
       console.error('Import ubicaciones error:', error)
-      res.status(500).json({ error: 'Error importando ubicaciones' })
+      res.status(500).json({ error: 'Error crítico procesando la importación' })
     }
   }
 )

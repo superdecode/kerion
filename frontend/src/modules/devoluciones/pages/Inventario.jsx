@@ -13,6 +13,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import AjusteModal from '../components/AjusteModal'
 import InventarioUbicacionesModal from '../components/InventarioUbicacionesModal'
 import ImportarInventarioModal from '../components/ImportarInventarioModal'
+import ImportarUbicacionesModal from '../components/ImportarUbicacionesModal'
 import {
   listInventario, listMovimientos, listUbicaciones, createAjuste,
 } from '../services/devolucionesService'
@@ -135,6 +136,7 @@ export default function Inventario() {
   const [showUbicaciones, setShowUbicaciones] = useState(false)
   const [showAjuste, setShowAjuste] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showImportUbicaciones, setShowImportUbicaciones] = useState(false)
   const [ajusteTipo, setAjusteTipo] = useState('ajuste')
   const [showColConfig, setShowColConfig] = useState(false)
   const [visibleCols, setVisibleCols] = useState([])
@@ -715,6 +717,7 @@ export default function Inventario() {
         onClose={() => setShowUbicaciones(false)}
         ubicaciones={ubicaciones}
         onSaved={() => qc.invalidateQueries({ queryKey: ['dev-ubicaciones'] })}
+        onImportClick={() => setShowImportUbicaciones(true)}
       />
       <AjusteModal
         isOpen={showAjuste}
@@ -734,6 +737,12 @@ export default function Inventario() {
           qc.invalidateQueries({ queryKey: ['dev-inventario'] })
           qc.invalidateQueries({ queryKey: ['dev-movimientos'] })
         }}
+      />
+      <ImportarUbicacionesModal
+        isOpen={showImportUbicaciones}
+        onClose={() => setShowImportUbicaciones(false)}
+        existingUbicaciones={ubicaciones}
+        onImported={() => qc.invalidateQueries({ queryKey: ['dev-ubicaciones'] })}
       />
     </div>
   )

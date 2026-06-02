@@ -28,6 +28,7 @@ export default function InventarioUbicacionesModal({
   ubicaciones = [],
   onSaved,
   onSelect = null,
+  onImportClick = null,
   allowManagement = true,
   selectActionLabel = 'Seleccionar',
 }) {
@@ -140,17 +141,28 @@ export default function InventarioUbicacionesModal({
             <span className="font-semibold text-warm-700">{ubicaciones.length}</span> totales
           </div>
           {allowManagement && (
-            <button
-              onClick={() => setShowForm(v => !v)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                showForm
-                  ? 'bg-warm-100 text-warm-600 hover:bg-warm-200'
-                  : 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm hover:shadow-glow'
-              }`}
-            >
-              {showForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-              {showForm ? 'Cerrar' : 'Nueva'}
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => {
+                  onClose?.()
+                  onImportClick?.()
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-warm-200 bg-white text-warm-600 hover:bg-warm-100 cursor-pointer transition-all"
+              >
+                <Upload className="w-3.5 h-3.5" /> Importar
+              </button>
+              <button
+                onClick={() => setShowForm(v => !v)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  showForm
+                    ? 'bg-warm-100 text-warm-600 hover:bg-warm-200'
+                    : 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm hover:shadow-glow'
+                }`}
+              >
+                {showForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                {showForm ? 'Cerrar' : 'Nueva'}
+              </button>
+            </div>
           )}
         </div>
 
@@ -188,14 +200,8 @@ export default function InventarioUbicacionesModal({
                       {saving ? 'Guardando...' : 'Agregar'}
                     </button>
                   </div>
-                  <div className="pt-5">
-                    <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-warm-200 text-[11px] font-semibold text-warm-600 bg-white hover:bg-warm-50 cursor-pointer transition-colors">
-                      <Upload className="w-3.5 h-3.5" /> Excel
-                      <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} />
-                    </label>
-                  </div>
                 </div>
-                <p className="text-[10px] text-warm-400 mt-1.5">Columnas Excel: codigo (requerido), nombre, descripcion</p>
+                <p className="text-[10px] text-warm-400 mt-1.5">Completa el código y presiona Agregar. Para cargas masivas usa el botón Importar.</p>
               </div>
             </motion.div>
           )}

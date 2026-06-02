@@ -1,4 +1,6 @@
+import { createHmac } from 'crypto'
 import { query } from '../../../config/database.js'
+import { decrypt } from '../../../shared/services/wmsCredentials.js'
 
 const BASE_URL = 'https://api.xlwms.com/openapi'
 
@@ -15,15 +17,39 @@ function makeReqTime() {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`
 }
 
+/**
+ * HMAC-SHA256 authcode per xlwms docs:
+ * Sort keys of {appKey, data, reqTime} alphabetically (case-insensitive),
+ * concatenate as "key=value" pairs, then HMAC-SHA256 with appSecret.
+ */
+function buildAuthCode(appKey, appSecret, data, reqTime) {
+  const params = {
+    appKey,
+    data: JSON.stringify(data),
+    reqTime: String(reqTime),
+  }
+  const paramStr = Object.keys(params)
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    .map(k => `${k}=${params[k]}`)
+    .join('')
+  return createHmac('sha256', appSecret).update(paramStr).digest('hex')
+}
+
 async function getConfig(tenantId) {
   const cached = _configCache.get(tenantId)
   if (cached && Date.now() - cached.at < CONFIG_TTL_MS) return cached.config
 
   const res = await query(
-    'SELECT app_key FROM wms_config WHERE tenant_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1',
+    'SELECT app_key, app_secret_encrypted FROM wms_config WHERE tenant_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1',
     [tenantId]
   )
-  const config = res.rows[0] || null
+  const row = res.rows[0] || null
+  const config = row
+    ? {
+        app_key: row.app_key,
+        app_secret: row.app_secret_encrypted ? decrypt(row.app_secret_encrypted) : null,
+      }
+    : null
   _configCache.set(tenantId, { config, at: Date.now() })
   return config
 }
@@ -43,7 +69,12 @@ async function upapexPost(tenantId, endpoint, data) {
 
   const reqTime = makeReqTime()
   const body = JSON.stringify({ appKey: config.app_key, reqTime, data })
-  const url = `${BASE_URL}${endpoint}`
+
+  let url = `${BASE_URL}${endpoint}`
+  if (config.app_secret) {
+    const authcode = buildAuthCode(config.app_key, config.app_secret, data, reqTime)
+    url += `?authcode=${authcode}`
+  }
 
   let lastErr
   for (let attempt = 1; attempt <= 2; attempt++) {

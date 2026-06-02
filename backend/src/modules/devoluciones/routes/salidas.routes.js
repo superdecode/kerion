@@ -107,7 +107,7 @@ router.post('/',
     try {
       client = await req.tGetClient()
       const { notas = '', estado = 'borrador', referencia = null, items = [] } = req.body
-      const codigo = await generateDevCodigo(client, req.tenantId, 'SAL-', 'dev_salidas', req.fullUser.zona_horaria)
+      const codigo = await generateDevCodigo(client, req.tenantId, 'KOT-', 'dev_salidas', req.fullUser.zona_horaria)
       const result = await client.query(
         `INSERT INTO dev_salidas (codigo, estado, notas, referencia, responsable_id, tenant_id)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -390,7 +390,7 @@ router.post('/importar',
       if (!Array.isArray(rows) || rows.length === 0) {
         return res.status(400).json({ error: 'rows es requerido' })
       }
-      const codigo = await generateDevCodigo(client, req.tenantId, 'SAL-', 'dev_salidas', req.fullUser.zona_horaria)
+      const codigo = await generateDevCodigo(client, req.tenantId, 'KOT-', 'dev_salidas', req.fullUser.zona_horaria)
       const salidaRes = await client.query(
         `INSERT INTO dev_salidas (codigo, estado, notas, responsable_id, tenant_id)
          VALUES ($1, 'pendiente', $2, $3, $4)

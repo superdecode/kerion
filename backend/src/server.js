@@ -390,7 +390,10 @@ async function runMigrations() {
     `CREATE INDEX IF NOT EXISTS idx_dev_inventario_multicaja ON dev_inventario(tenant_id, codigo_multicaja) WHERE codigo_multicaja IS NOT NULL`,
     `ALTER TABLE dev_salidas ADD COLUMN IF NOT EXISTS referencia TEXT`,
     `CREATE INDEX IF NOT EXISTS idx_dev_salidas_referencia ON dev_salidas(tenant_id, referencia) WHERE referencia IS NOT NULL`,
-    // ── Fix 2: prefix codes AJU- for ajustes, SAL- for salidas ────────────
+    `ALTER TABLE dev_inventario ALTER COLUMN item_id DROP NOT NULL`,
+    `ALTER TABLE dev_inventario ALTER COLUMN sesion_id DROP NOT NULL`,
+    `ALTER TABLE dev_inventario ALTER COLUMN codigo_trazabilidad DROP NOT NULL`,
+    // ── Fix 2: prefix codes AJU- for ajustes, KOT- for salidas ────────────
     `ALTER TABLE dev_ajustes ADD COLUMN IF NOT EXISTS codigo TEXT`,
     `CREATE INDEX IF NOT EXISTS idx_dev_ajustes_codigo ON dev_ajustes(tenant_id, codigo) WHERE codigo IS NOT NULL`,
     // ── 036: peso por guía en dropscan ────────────────────────────────────
@@ -614,6 +617,9 @@ async function runMigrations() {
     `UPDATE roles SET permisos = jsonb_set(permisos, '{surtido}',
        '{"ordenes":"ver","escaneo":"crear","registros":"ver","assign":"sin_acceso","admin":"sin_acceso"}'::jsonb, true)
      WHERE nombre = 'Operador' AND (permisos->'surtido'->>'ordenes' = 'sin_acceso' OR NOT (permisos->'surtido' ? 'ordenes'))`,
+
+    // ── 042: Add app_secret_encrypted to wms_config ──────────────────────
+    `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS app_secret_encrypted TEXT`,
 
     // ── 040: Enable RLS on every public-schema table ──────────────────────
     // Blocks all access through Supabase REST/anon key (deny-by-default: no
