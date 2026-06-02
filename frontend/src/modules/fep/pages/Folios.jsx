@@ -943,7 +943,8 @@ export default function Folios() {
                                         <tr className="text-warm-400 border-b border-warm-100">
                                           <th className="text-left py-1.5 pr-3 font-semibold">#</th>
                                           <th className="text-left pr-3 font-semibold">{t('fep.detail.guiaCol')}</th>
-                                          <th className="text-left font-semibold">{t('fep.detail.hora')}</th>
+                                          <th className="text-right pr-3 font-semibold">{t('fep.detail.weightKg')}</th>
+                                          <th className="text-left font-semibold">{t('history.scanTime')}</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -951,6 +952,9 @@ export default function Folios() {
                                           <tr key={g.codigo_guia + i} className="border-b border-warm-50 last:border-0">
                                             <td className="py-1 pr-3 text-warm-400">{i + 1}</td>
                                             <td className="font-mono pr-3 text-warm-700">{g.codigo_guia}</td>
+                                            <td className="text-right pr-3 font-mono text-warm-600">
+                                              {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
+                                            </td>
                                             <td className="text-warm-400">{g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '—'}</td>
                                           </tr>
                                         ))}

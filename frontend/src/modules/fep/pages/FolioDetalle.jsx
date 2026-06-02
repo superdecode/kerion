@@ -12,6 +12,7 @@ import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getFolio, getFolioLog, downloadPdf } from '../services/fepService'
 import { fmtDate, fmtDateTime, getToday } from '../../../core/utils/dateFormat'
 
@@ -34,6 +35,7 @@ export default function FolioDetalle() {
   const navigate = useNavigate()
   const toast = useToastStore.getState()
   const { getPermissionLevel } = useAuthStore()
+  const { t } = useI18nStore()
 
   const [activeTab, setActiveTab] = useState('guias')
   const [expandedTarima, setExpandedTarima] = useState(null)
@@ -225,10 +227,10 @@ export default function FolioDetalle() {
             const parcial = guiasConPeso.length < guias.length
             return (
               <div className="card p-3 flex items-center justify-between gap-3">
-                <p className="text-[10px] text-primary-400 uppercase tracking-wider font-bold">Peso total registrado</p>
+                <p className="text-[10px] text-primary-400 uppercase tracking-wider font-bold">{t('fep.detail.totalWeight')}</p>
                 <p className="text-sm font-bold text-primary-700 font-mono">
                   {total.toFixed(3)} kg
-                  {parcial && <span className="ml-1.5 text-[10px] font-semibold text-primary-400 normal-case">(peso parcial)</span>}
+                  {parcial && <span className="ml-1.5 text-[10px] font-semibold text-primary-400 normal-case">({t('fep.detail.partialWeight')})</span>}
                 </p>
               </div>
             )
@@ -283,8 +285,8 @@ export default function FolioDetalle() {
                                 <th className="table-header">Tarima</th>
                                 <th className="table-header">Canal</th>
                                 <th className="table-header text-center">Pos.</th>
-                                <th className="table-header">Hora Escaneo</th>
                                 <th className="table-header text-right">Peso (kg)</th>
+                                <th className="table-header">{t('history.scanTime')}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-warm-50">
@@ -297,11 +299,11 @@ export default function FolioDetalle() {
                                   <td className="table-cell font-mono text-warm-600 text-xs">{g.tarima_codigo}</td>
                                   <td className="table-cell text-warm-500">{g.canal_nombre}</td>
                                   <td className="table-cell text-center text-warm-500">{g.posicion}</td>
-                                  <td className="table-cell text-warm-400 text-xs">
-                                    {g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '—'}
-                                  </td>
                                   <td className="table-cell text-right font-mono text-warm-600 text-xs">
                                     {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
+                                  </td>
+                                  <td className="table-cell text-warm-400 text-xs">
+                                    {g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '—'}
                                   </td>
                                 </tr>
                               ))}
@@ -405,8 +407,8 @@ export default function FolioDetalle() {
                                             <tr className="text-warm-400 border-b border-warm-100">
                                               <th className="text-left py-1.5 pr-4 font-semibold">#</th>
                                               <th className="text-left pr-4 font-semibold">Guía</th>
-                                              <th className="text-left font-semibold">Hora Escaneo</th>
                                               <th className="text-right font-semibold">Peso (kg)</th>
+                                              <th className="text-left font-semibold">{t('history.scanTime')}</th>
                                             </tr>
                                           </thead>
                                           <tbody>
@@ -414,10 +416,10 @@ export default function FolioDetalle() {
                                               <tr key={g.codigo_guia + i} className="border-b border-warm-50 last:border-0">
                                                 <td className="py-1 pr-4 text-warm-400">{i + 1}</td>
                                                 <td className="font-mono pr-4 text-warm-700">{g.codigo_guia}</td>
-                                                <td className="text-warm-400">{g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '—'}</td>
                                                 <td className="text-right font-mono text-warm-600">
                                                   {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
                                                 </td>
+                                                <td className="text-warm-400">{g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '—'}</td>
                                               </tr>
                                             ))}
                                           </tbody>
@@ -440,7 +442,7 @@ export default function FolioDetalle() {
                   <div className="p-5 space-y-5">
                     {/* Summary */}
                     <div className="space-y-3">
-                      <h3 className="text-xs font-bold text-warm-500 uppercase tracking-wider">Registro del folio</h3>
+                      <h3 className="text-xs font-bold text-warm-500 uppercase tracking-wider">{t('fep.detail.record')}</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {[
                           { label: 'Creado por', value: folio.creado_por_nombre || '—', icon: User },
