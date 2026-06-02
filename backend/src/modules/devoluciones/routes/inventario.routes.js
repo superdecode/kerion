@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
-import { generateDevCodigo } from '../utils/codigos.js'
+import { generateDevCodigo, generateImportTrazabilidad } from '../utils/codigos.js'
 
 const router = Router()
 
@@ -637,7 +637,7 @@ router.post('/importar',
               `INSERT INTO dev_movimientos
                  (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
                   ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-               VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+               VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'importacion', $7, $8, $9, $10)`,
               [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad,
                ubicacionId || current.ubicacion_id, ajusteId, req.user.id,
                finalDesc || descripcion || 'Importación', movementObs, req.tenantId]
@@ -663,7 +663,6 @@ router.post('/importar',
                  AND item_id = $3
                  AND sku = $4
                  AND COALESCE(sku2, '') = COALESCE($5, '')
-                 AND codigo_trazabilidad = $6
                LIMIT 1
                FOR UPDATE`,
               [
@@ -672,7 +671,6 @@ router.post('/importar',
                 skuData.item_id,
                 normalizedSku,
                 skuData.sku2,
-                skuData.codigo_trazabilidad,
               ]
             )
 
@@ -707,7 +705,7 @@ router.post('/importar',
                 `INSERT INTO dev_movimientos
                    (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
                     ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-                 VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+                 VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'importacion', $7, $8, $9, $10)`,
                 [
                   current.id,
                   current.item_id,
@@ -723,6 +721,7 @@ router.post('/importar',
               )
               summary.actualizados++
             } else {
+              const codigoImportacion = await generateImportTrazabilidad(client, req.tenantId, req.fullUser?.zona_horaria)
               const invRes = await client.query(
                 `INSERT INTO dev_inventario
                    (item_id, sesion_id, sku, sku2, descripcion, codigo_trazabilidad, embalaje1, embalaje2,
@@ -735,7 +734,7 @@ router.post('/importar',
                   normalizedSku,
                   skuData.sku2 || null,
                   finalDesc || null,
-                  skuData.codigo_trazabilidad,
+                  codigoImportacion,
                   normalizeText(guia1) || skuData.embalaje1 || null,
                   normalizeText(guia2) || skuData.embalaje2 || null,
                   cantNum,
@@ -750,7 +749,7 @@ router.post('/importar',
                 `INSERT INTO dev_movimientos
                    (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
                     ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-                 VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'ajuste', $6, $7, $8, $9)`,
+                 VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'importacion', $6, $7, $8, $9)`,
                 [
                   newInv.id,
                   newInv.item_id,

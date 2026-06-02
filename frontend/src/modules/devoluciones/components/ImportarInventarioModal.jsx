@@ -486,7 +486,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                         <th className="px-3 py-2.5 w-32">Operación</th>
                         <th className="px-3 py-2.5 w-20 text-right">Stock actual</th>
                         <th className="px-3 py-2.5 w-20 text-right">Resultado</th>
-                        <th className="px-3 py-2.5">Motivo / Errores</th>
+                        <th className="px-3 py-2.5">Descripción</th>
                         <th className="px-3 py-2.5 w-8" />
                       </tr>
                     </thead>
@@ -567,7 +567,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                               ) : <span className="text-warm-300">—</span>}
                             </td>
 
-                            {/* Motivo / Errores */}
+                            {/* Descripción */}
                             <td className="px-3 py-2.5 max-w-[180px]">
                               {!row._valid ? (
                                 <div className="space-y-0.5">

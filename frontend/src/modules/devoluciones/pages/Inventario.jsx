@@ -48,6 +48,11 @@ const getMovimientoUbicacion = (row) => {
   return row?.ubicacion_nueva_codigo || row?.ubicacion_anterior_codigo || ''
 }
 
+const getMovimientoTipoLabel = (row) => {
+  if (row?.referencia_tipo === 'importacion') return 'Importación'
+  return TIPO_LABELS[row?.tipo] || row?.tipo || '—'
+}
+
 /* ─── Ubicacion combobox para filtro ─── */
 function UbicacionFilter({ ubicaciones, value, onChange }) {
   const [q, setQ] = useState('')
@@ -233,7 +238,7 @@ export default function Inventario() {
         ? r.cantidad_nueva - r.cantidad_anterior : ''
       const ubicacion = getMovimientoUbicacion(r)
       return [
-        fmtDateTime(r.created_at), r.tipo, r.codigo_trazabilidad || '', r.sku || '',
+        fmtDateTime(r.created_at), getMovimientoTipoLabel(r), r.codigo_trazabilidad || '', r.sku || '',
         r.cantidad_anterior ?? '', r.cantidad_nueva ?? '',
         delta !== '' ? (delta >= 0 ? `+${delta}` : delta) : '',
         ubicacion || '', r.observacion || '', r.usuario_nombre || '',
@@ -672,7 +677,7 @@ export default function Inventario() {
                             <td className="table-cell text-xs text-warm-500">{fmtDateTime(row.created_at)}</td>
                             <td className="table-cell">
                               <span className={`badge text-[10px] ${TIPO_COLORS[row.tipo] || 'bg-warm-100 text-warm-600'}`}>
-                                {TIPO_LABELS[row.tipo] || row.tipo}
+                                {getMovimientoTipoLabel(row)}
                               </span>
                             </td>
                             <td className="table-cell font-mono text-xs text-warm-600">{row.codigo_trazabilidad || '—'}</td>

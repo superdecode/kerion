@@ -50,3 +50,21 @@ export async function generateItemTrazabilidad(client, tenantId, sesionId, sesio
   const next = current ? Number.parseInt(current.slice(base.length), 10) + 1 : 1
   return `${base}${String(next).padStart(3, '0')}`
 }
+
+export async function generateImportTrazabilidad(client, tenantId, tenantTimezone = 'America/Mexico_City') {
+  const tenantDate = getToday(tenantTimezone)
+  const date = buildUtcDateFromTenantDay(tenantDate)
+  const base = `IMP${formatYMD(date)}${dayLetter(date)}`
+  const { rows } = await client.query(
+    `SELECT codigo_trazabilidad
+     FROM dev_inventario
+     WHERE tenant_id = $1 AND codigo_trazabilidad LIKE $2
+     ORDER BY codigo_trazabilidad DESC
+     LIMIT 1
+     FOR UPDATE`,
+    [tenantId, `${base}%`]
+  )
+  const current = rows[0]?.codigo_trazabilidad
+  const next = current ? Number.parseInt(current.slice(base.length), 10) + 1 : 1
+  return `${base}${String(next).padStart(3, '0')}`
+}
