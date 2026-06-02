@@ -845,7 +845,8 @@ export default function Folios() {
                             <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('fep.detail.tarimaCol')}</th>
                             <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('fep.detail.canalCol')}</th>
                             <th className="text-center px-3 py-2.5 font-bold text-warm-500">{t('fep.detail.posicion')}</th>
-                            <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('fep.detail.hora')}</th>
+                            <th className="text-right px-3 py-2.5 font-bold text-warm-500">{t('fep.detail.weightKg')}</th>
+                            <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('history.scanTime')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-warm-50">
@@ -856,6 +857,9 @@ export default function Folios() {
                               <td className="px-3 py-2 font-mono text-warm-500 text-[11px]">{g.tarima_codigo}</td>
                               <td className="px-3 py-2 text-warm-500">{g.canal_nombre}</td>
                               <td className="px-3 py-2 text-center text-warm-500">{g.posicion}</td>
+                              <td className="px-3 py-2 text-right font-mono text-warm-600">
+                                {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
+                              </td>
                               <td className="px-3 py-2 text-warm-400">{g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '—'}</td>
                             </tr>
                           ))}
