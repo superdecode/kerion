@@ -269,8 +269,15 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
       }
       setStep('success')
     } catch (err) {
-      console.error('Error importando inventario:', err.response?.data || err)
-      toast.error(err.response?.data?.error || 'Error al importar')
+      const serverData = err.response?.data
+      console.error('Error importando inventario:', serverData || err)
+      if (serverData?.errors?.length) {
+        setImportResult(serverData)
+        setRows(prev => applyServerErrors(prev, serverData.errors))
+        setFilterMode('errors')
+        setStep('review')
+      }
+      toast.error(serverData?.error || 'Error al importar')
     } finally {
       setImporting(false)
     }

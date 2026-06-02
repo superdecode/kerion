@@ -645,34 +645,30 @@ router.post('/importar',
             summary.actualizados++
           } else if (tipo === 'importacion') {
             const skuData = await resolveSkuCatalogData(client, req.tenantId, normalizedSku)
-            if (!skuData?.item_id || !skuData?.sesion_id) {
-              throw new Error(`SKU inexistente o sin dependencias para alta: ${normalizedSku}`)
-            }
+            const finalDesc = await resolveDescripcionFallback(client, req.tenantId, normalizedSku, filDesc || skuData?.descripcion)
+            const finalUbicacionId = ubicacionId || skuData?.ubicacion_id || null
 
-            const finalDesc = await resolveDescripcionFallback(client, req.tenantId, normalizedSku, filDesc || skuData.descripcion)
-            const finalUbicacionId = ubicacionId || skuData.ubicacion_id
-            if (!finalUbicacionId) {
-              throw new Error('La fila requiere una ubicación válida para crear inventario')
+            let existingRes = { rows: [] }
+            if (finalUbicacionId && skuData?.item_id) {
+              existingRes = await client.query(
+                `SELECT *
+                 FROM dev_inventario
+                 WHERE tenant_id = $1
+                   AND ubicacion_id = $2
+                   AND item_id = $3
+                   AND sku = $4
+                   AND COALESCE(sku2, '') = COALESCE($5, '')
+                 LIMIT 1
+                 FOR UPDATE`,
+                [
+                  req.tenantId,
+                  finalUbicacionId,
+                  skuData.item_id,
+                  normalizedSku,
+                  skuData.sku2,
+                ]
+              )
             }
-
-            const existingRes = await client.query(
-              `SELECT *
-               FROM dev_inventario
-               WHERE tenant_id = $1
-                 AND ubicacion_id = $2
-                 AND item_id = $3
-                 AND sku = $4
-                 AND COALESCE(sku2, '') = COALESCE($5, '')
-               LIMIT 1
-               FOR UPDATE`,
-              [
-                req.tenantId,
-                finalUbicacionId,
-                skuData.item_id,
-                normalizedSku,
-                skuData.sku2,
-              ]
-            )
 
             if (existingRes.rows[0]) {
               const current = existingRes.rows[0]
@@ -693,9 +689,9 @@ router.post('/importar',
                   nuevaCantidad,
                   nuevaCantidadOriginal,
                   finalDesc,
-                  normalizeText(guia1) || skuData.embalaje1 || null,
-                  normalizeText(guia2) || skuData.embalaje2 || null,
-                  normalizeText(multicaja) || skuData.codigo_multicaja || null,
+                  normalizeText(guia1) || skuData?.embalaje1 || null,
+                  normalizeText(guia2) || skuData?.embalaje2 || null,
+                  normalizeText(multicaja) || skuData?.codigo_multicaja || null,
                   current.id,
                   req.tenantId,
                 ]
@@ -722,28 +718,48 @@ router.post('/importar',
               summary.actualizados++
             } else {
               const codigoImportacion = await generateImportTrazabilidad(client, req.tenantId, req.fullUser?.zona_horaria)
-              const invRes = await client.query(
-                `INSERT INTO dev_inventario
-                   (item_id, sesion_id, sku, sku2, descripcion, codigo_trazabilidad, embalaje1, embalaje2,
-                    cantidad_disponible, cantidad_original, ubicacion_id, codigo_multicaja, tenant_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-                 RETURNING *`,
-                [
-                  skuData.item_id,
-                  skuData.sesion_id,
-                  normalizedSku,
-                  skuData.sku2 || null,
-                  finalDesc || null,
-                  codigoImportacion,
-                  normalizeText(guia1) || skuData.embalaje1 || null,
-                  normalizeText(guia2) || skuData.embalaje2 || null,
-                  cantNum,
-                  cantNum,
-                  finalUbicacionId,
-                  normalizeText(multicaja) || skuData.codigo_multicaja || null,
-                  req.tenantId,
-                ]
-              )
+              const invRes = (skuData?.item_id && skuData?.sesion_id)
+                ? await client.query(
+                    `INSERT INTO dev_inventario
+                       (item_id, sesion_id, sku, sku2, descripcion, codigo_trazabilidad, embalaje1, embalaje2,
+                        cantidad_disponible, cantidad_original, ubicacion_id, codigo_multicaja, tenant_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                     RETURNING *`,
+                    [
+                      skuData.item_id,
+                      skuData.sesion_id,
+                      normalizedSku,
+                      skuData.sku2 || null,
+                      finalDesc || null,
+                      codigoImportacion,
+                      normalizeText(guia1) || skuData.embalaje1 || null,
+                      normalizeText(guia2) || skuData.embalaje2 || null,
+                      cantNum,
+                      cantNum,
+                      finalUbicacionId,
+                      normalizeText(multicaja) || skuData.codigo_multicaja || null,
+                      req.tenantId,
+                    ]
+                  )
+                : await client.query(
+                    `INSERT INTO dev_inventario
+                       (sku, descripcion, codigo_trazabilidad, cantidad_disponible, cantidad_original, ubicacion_id,
+                        embalaje1, embalaje2, codigo_multicaja, tenant_id)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                     RETURNING *`,
+                    [
+                      normalizedSku,
+                      finalDesc || null,
+                      codigoImportacion,
+                      cantNum,
+                      cantNum,
+                      finalUbicacionId,
+                      normalizeText(guia1) || null,
+                      normalizeText(guia2) || null,
+                      normalizeText(multicaja) || null,
+                      req.tenantId,
+                    ]
+                  )
               const newInv = invRes.rows[0]
               await client.query(
                 `INSERT INTO dev_movimientos
@@ -752,7 +768,7 @@ router.post('/importar',
                  VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'importacion', $6, $7, $8, $9)`,
                 [
                   newInv.id,
-                  newInv.item_id,
+                  newInv.item_id || null,
                   cantNum,
                   finalUbicacionId,
                   ajusteId,
