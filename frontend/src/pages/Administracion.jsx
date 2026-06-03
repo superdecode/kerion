@@ -51,7 +51,7 @@ const MODULE_GROUPS = [
     groupKey: 'perm.group.surtido',
     modules: [
       { key: 'surtido.ordenes',   label: 'Órdenes',    labelKey: 'perm.sub.surtido.ordenes' },
-      { key: 'surtido.escaneo',   label: 'Escaneo',    labelKey: 'perm.sub.surtido.escaneo' },
+      { key: 'surtido.validacion', label: 'Validación', labelKey: 'perm.sub.surtido.validacion' },
       { key: 'surtido.registros', label: 'Registros',  labelKey: 'perm.sub.surtido.registros' },
       { key: 'surtido.assign',    label: 'Asignación', labelKey: 'perm.sub.surtido.assign' },
       { key: 'surtido.admin',     label: 'Administración total', labelKey: 'perm.sub.surtido.admin' },

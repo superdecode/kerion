@@ -555,13 +555,13 @@ async function runMigrations() {
     `UPDATE roles
      SET permisos = permisos
        || jsonb_build_object('surtido', jsonb_build_object(
-            'ordenes',   COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso'),
-            'escaneo',   COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso'),
-            'registros', COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso'),
-            'assign',    CASE WHEN COALESCE(permisos->'upapex'->>'surtido','') IN ('actualizar','eliminar')
-                              THEN COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso')
-                              ELSE 'sin_acceso' END,
-            'admin',     CASE WHEN COALESCE(permisos->'upapex'->>'surtido','') = 'eliminar' THEN 'eliminar' ELSE 'sin_acceso' END
+            'ordenes',    COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso'),
+            'validacion', COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso'),
+            'registros',  COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso'),
+            'assign',     CASE WHEN COALESCE(permisos->'upapex'->>'surtido','') IN ('actualizar','eliminar')
+                               THEN COALESCE(permisos->'upapex'->>'surtido', 'sin_acceso')
+                               ELSE 'sin_acceso' END,
+            'admin',      CASE WHEN COALESCE(permisos->'upapex'->>'surtido','') = 'eliminar' THEN 'eliminar' ELSE 'sin_acceso' END
           ))
      WHERE permisos ? 'upapex' AND NOT (permisos ? 'surtido')`,
 
@@ -586,7 +586,7 @@ async function runMigrations() {
     `UPDATE roles
      SET permisos = permisos
        || jsonb_build_object('surtido', jsonb_build_object(
-            'ordenes','sin_acceso','escaneo','sin_acceso','registros','sin_acceso',
+            'ordenes','sin_acceso','validacion','sin_acceso','registros','sin_acceso',
             'assign','sin_acceso','admin','sin_acceso'))
      WHERE NOT (permisos ? 'surtido')`,
     `UPDATE roles
@@ -599,7 +599,7 @@ async function runMigrations() {
        '{"escaneo":"eliminar","registros":"eliminar","admin":"eliminar"}'::jsonb, true)
      WHERE nombre = 'Administrador'`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{surtido}',
-       '{"ordenes":"eliminar","escaneo":"eliminar","registros":"eliminar","assign":"eliminar","admin":"eliminar"}'::jsonb, true)
+       '{"ordenes":"eliminar","validacion":"eliminar","registros":"eliminar","assign":"eliminar","admin":"eliminar"}'::jsonb, true)
      WHERE nombre = 'Administrador'`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{sistema}',
        '{"wms":"eliminar"}'::jsonb, true)
@@ -608,7 +608,7 @@ async function runMigrations() {
        '{"escaneo":"actualizar","registros":"actualizar","admin":"sin_acceso"}'::jsonb, true)
      WHERE nombre = 'Jefe' AND (permisos->'inventario'->>'escaneo' = 'sin_acceso' OR NOT (permisos->'inventario' ? 'escaneo'))`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{surtido}',
-       '{"ordenes":"actualizar","escaneo":"actualizar","registros":"actualizar","assign":"actualizar","admin":"sin_acceso"}'::jsonb, true)
+       '{"ordenes":"actualizar","validacion":"actualizar","registros":"actualizar","assign":"actualizar","admin":"sin_acceso"}'::jsonb, true)
      WHERE nombre = 'Jefe' AND (permisos->'surtido'->>'ordenes' = 'sin_acceso' OR NOT (permisos->'surtido' ? 'ordenes'))`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{sistema,wms}', '"ver"', true)
      WHERE nombre = 'Jefe' AND permisos->'sistema'->>'wms' = 'sin_acceso'`,
@@ -616,11 +616,20 @@ async function runMigrations() {
        '{"escaneo":"crear","registros":"ver","admin":"sin_acceso"}'::jsonb, true)
      WHERE nombre = 'Operador' AND (permisos->'inventario'->>'escaneo' = 'sin_acceso' OR NOT (permisos->'inventario' ? 'escaneo'))`,
     `UPDATE roles SET permisos = jsonb_set(permisos, '{surtido}',
-       '{"ordenes":"ver","escaneo":"crear","registros":"ver","assign":"sin_acceso","admin":"sin_acceso"}'::jsonb, true)
+       '{"ordenes":"ver","validacion":"crear","registros":"ver","assign":"sin_acceso","admin":"sin_acceso"}'::jsonb, true)
      WHERE nombre = 'Operador' AND (permisos->'surtido'->>'ordenes' = 'sin_acceso' OR NOT (permisos->'surtido' ? 'ordenes'))`,
 
     // ── 042: Add app_secret_encrypted to wms_config ──────────────────────
     `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS app_secret_encrypted TEXT`,
+
+    // ── 045: Rename surtido.escaneo → surtido.validacion in roles.permisos ─
+    `UPDATE roles
+     SET permisos = jsonb_set(
+       permisos #- '{surtido,escaneo}',
+       '{surtido,validacion}',
+       COALESCE(permisos->'surtido'->'escaneo', '"sin_acceso"'::jsonb)
+     )
+     WHERE permisos->'surtido' ? 'escaneo'`,
 
     // ── 043: modulo_uso filter on ubicaciones ─────────────────────────────
     `ALTER TABLE dev_ubicaciones ADD COLUMN IF NOT EXISTS modulo_uso TEXT[] DEFAULT ARRAY['todos']`,

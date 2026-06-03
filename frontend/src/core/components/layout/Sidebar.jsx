@@ -59,7 +59,7 @@ const getNavItems = (t) => [
     label: t('nav.surtido'),
     items: [
       { path: '/surtido',            tourId: 'nav-sur-ordenes',   label: t('nav.sur.ordenes'),      icon: ListChecks,  permission: 'surtido.ordenes' },
-      { path: '/surtido/escaneo',    tourId: 'nav-sur-escaneo',   label: t('nav.sur.validacion'),   icon: BadgeCheck,  permission: 'surtido.escaneo' },
+      { path: '/surtido/validacion',  tourId: 'nav-sur-validacion', label: t('nav.sur.validacion'),   icon: BadgeCheck,  permission: 'surtido.validacion' },
       { path: '/surtido/registros',  tourId: 'nav-sur-registros', label: t('nav.sur.registros'),    icon: History,     permission: 'surtido.registros' },
     ],
   },

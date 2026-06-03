@@ -53,7 +53,7 @@ import InventarioEscaneo from './modules/inventario/pages/Escaneo'
 
 // Surtido Module
 import SurtidoOrdenes from './modules/surtido/pages/Ordenes'
-import SurtidoEscaneo from './modules/surtido/pages/Validacion'
+import SurtidoValidacion from './modules/surtido/pages/Validacion'
 import SurtidoRegistros from './modules/surtido/pages/Registros'
 
 // WMS Hub Module
@@ -85,7 +85,7 @@ const MODULE_ROUTES = [
   { module: 'inventario.escaneo', path: '/inventario/escaneo' },
   { module: 'inventario.registros', path: '/inventario/registros' },
   { module: 'surtido.ordenes', path: '/surtido' },
-  { module: 'surtido.escaneo', path: '/surtido/escaneo' },
+  { module: 'surtido.validacion', path: '/surtido/validacion' },
   { module: 'surtido.registros', path: '/surtido/registros' },
   { module: 'sistema.wms', path: '/wmshub' },
 ]
@@ -229,13 +229,13 @@ function AppRoutes() {
         <Route path="surtido" element={
           <PermissionRoute module="surtido.ordenes"><ErrorBoundary><SurtidoOrdenes /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="surtido/escaneo" element={
-          <PermissionRoute module="surtido.escaneo"><ErrorBoundary><SurtidoEscaneo /></ErrorBoundary></PermissionRoute>
+        <Route path="surtido/validacion" element={
+          <PermissionRoute module="surtido.validacion"><ErrorBoundary><SurtidoValidacion /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="surtido/registros" element={
           <PermissionRoute module="surtido.registros"><ErrorBoundary><SurtidoRegistros /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="surtido/validacion" element={<Navigate to="/surtido/escaneo" replace />} />
+        <Route path="surtido/escaneo" element={<Navigate to="/surtido/validacion" replace />} />
         <Route path="surtido/historial" element={<Navigate to="/surtido/registros" replace />} />
 
         {/* Administration */}

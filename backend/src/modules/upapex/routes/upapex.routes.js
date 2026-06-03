@@ -220,7 +220,7 @@ router.get('/outbound-detail/:orderNo',
 // POST /api/upapex/scan-session — create new scan session
 router.post('/scan-session',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.escaneo', 'crear'),
+  requirePermission('surtido.validacion', 'crear'),
   async (req, res) => {
     try {
       const { outbound_order_no, third_order_no, total_expected } = req.body
@@ -328,7 +328,7 @@ router.get('/scan-session/:id',
 // PUT /api/upapex/scan-session/:id — update (complete, add notes, update counts)
 router.put('/scan-session/:id',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.escaneo', 'crear'),
+  requirePermission('surtido.validacion', 'crear'),
   async (req, res) => {
     try {
       const { status, notes, total_scanned, ubicacion_id } = req.body
@@ -372,7 +372,7 @@ router.put('/scan-session/:id',
 // POST /api/upapex/scan-event — add scan event
 router.post('/scan-event',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.escaneo', 'crear'),
+  requirePermission('surtido.validacion', 'crear'),
   async (req, res) => {
     try {
       const { session_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity } = req.body
@@ -724,7 +724,7 @@ router.put('/order-tracking/:obc',
 // DELETE scan session events (for recount)
 router.delete('/scan-session/:id/events',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.escaneo', 'crear'),
+  requirePermission('surtido.validacion', 'crear'),
   async (req, res) => {
     try {
       const sessionRes = await req.tQuery(
