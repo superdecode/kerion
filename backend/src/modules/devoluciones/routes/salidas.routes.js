@@ -303,9 +303,9 @@ router.post('/:id/completar',
         )
         await client.query(
           `INSERT INTO dev_movimientos
-             (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_anterior_id, referencia_id, referencia_tipo, usuario_id, motivo, tenant_id)
-           VALUES ('salida', $1, $2, $3, $4, $5, $6, 'salida', $7, $8, $9)`,
-          [line.inventario_id, line.item_id, line.cantidad_disponible, nuevaCantidad, line.ubicacion_id, req.params.id, req.user.id, 'Confirmacion de surtido', req.tenantId]
+             (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_anterior_id, referencia_id, referencia_tipo, usuario_id, descripcion, documento, tenant_id)
+           VALUES ('salida', $1, $2, $3, $4, $5, $6, 'salida', $7, $8, $9, $10)`,
+          [line.inventario_id, line.item_id, line.cantidad_disponible, nuevaCantidad, line.ubicacion_id, req.params.id, req.user.id, 'Confirmacion de surtido', salida.codigo, req.tenantId]
         )
       }
 

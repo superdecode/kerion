@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
-import { generateDevCodigo, generateImportTrazabilidad } from '../utils/codigos.js'
+import { generateDevCodigo, generateImportDocumento, generateImportTrazabilidad } from '../utils/codigos.js'
 
 const router = Router()
 
@@ -120,13 +120,13 @@ router.get('/',
                 ub.nombre AS ubicacion_nombre,
                 s_user.nombre_completo AS responsable_nombre,
                 lm_user.nombre_completo AS ultimo_usuario_nombre,
-                COALESCE(sal.referencia, sal.codigo) AS ultima_referencia
+                COALESCE(lm.documento, sal.referencia, sal.codigo, ses.codigo, aju.codigo) AS ultima_referencia
          FROM dev_inventario i
          LEFT JOIN dev_ubicaciones ub ON ub.id = i.ubicacion_id
          LEFT JOIN dev_sesiones s ON s.id = i.sesion_id
          LEFT JOIN usuarios s_user ON s_user.id = s.responsable_id
          LEFT JOIN LATERAL (
-           SELECT m.usuario_id, m.referencia_id, m.referencia_tipo
+           SELECT m.usuario_id, m.referencia_id, m.referencia_tipo, m.documento
            FROM dev_movimientos m
            WHERE m.inventario_id = i.id AND m.tenant_id = i.tenant_id
            ORDER BY m.created_at DESC
@@ -134,6 +134,8 @@ router.get('/',
          ) lm ON true
          LEFT JOIN usuarios lm_user ON lm_user.id = lm.usuario_id
          LEFT JOIN dev_salidas sal ON sal.id = lm.referencia_id AND lm.referencia_tipo = 'salida'
+         LEFT JOIN dev_sesiones ses ON ses.id = lm.referencia_id AND lm.referencia_tipo = 'sesion'
+         LEFT JOIN dev_ajustes aju ON aju.id = lm.referencia_id AND lm.referencia_tipo IN ('ajuste', 'importacion')
          WHERE i.tenant_id = $1
            AND i.cantidad_disponible > 0
            ${filter}
@@ -181,6 +183,7 @@ router.get('/historial',
                 i.sku,
                 i.sku2,
                 i.codigo_trazabilidad,
+                COALESCE(m.documento, sal.referencia, sal.codigo, ses.codigo, aju.codigo) AS documento,
                 ub_prev.codigo AS ubicacion_anterior_codigo,
                 ub_new.codigo AS ubicacion_nueva_codigo,
                 CASE
@@ -193,6 +196,9 @@ router.get('/historial',
                 m.observacion
          FROM dev_movimientos m
          LEFT JOIN dev_inventario i ON i.id = m.inventario_id
+         LEFT JOIN dev_salidas sal ON sal.id = m.referencia_id AND m.referencia_tipo = 'salida'
+         LEFT JOIN dev_sesiones ses ON ses.id = m.referencia_id AND m.referencia_tipo = 'sesion'
+         LEFT JOIN dev_ajustes aju ON aju.id = m.referencia_id AND m.referencia_tipo IN ('ajuste', 'importacion')
          LEFT JOIN dev_ubicaciones ub_prev ON ub_prev.id = COALESCE(m.ubicacion_anterior_id, i.ubicacion_id)
          LEFT JOIN dev_ubicaciones ub_new ON ub_new.id = COALESCE(m.ubicacion_nueva_id, i.ubicacion_id)
          LEFT JOIN usuarios u ON u.id = m.usuario_id
@@ -302,9 +308,9 @@ router.post('/ajustes',
             await client.query(
               `INSERT INTO dev_movimientos
                  (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
-                  referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-               VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
-              [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad, current.ubicacion_id, ajusteRes.rows[0].id, req.user.id, row.motivo || descripcion || 'Ajuste manual', observacion, req.tenantId]
+                  referencia_id, referencia_tipo, usuario_id, descripcion, observacion, documento, tenant_id)
+               VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10, $11)`,
+              [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad, current.ubicacion_id, ajusteRes.rows[0].id, req.user.id, row.motivo || descripcion || 'Ajuste manual', observacion, ajusteCodigo, req.tenantId]
             )
             summary.actualizados++
           } else {
@@ -337,8 +343,8 @@ router.post('/ajustes',
             await client.query(
               `INSERT INTO dev_movimientos
                  (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_anterior_id,
-                  referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-               VALUES ('salida', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+                  referencia_id, referencia_tipo, usuario_id, descripcion, observacion, documento, tenant_id)
+               VALUES ('salida', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10, $11)`,
               [
                 current.id,
                 current.item_id,
@@ -349,6 +355,7 @@ router.post('/ajustes',
                 req.user.id,
                 descripcion || 'Traslado - salida origen',
                 observacion,
+                ajusteCodigo,
                 req.tenantId,
               ]
             )
@@ -404,8 +411,8 @@ router.post('/ajustes',
               await client.query(
                 `INSERT INTO dev_movimientos
                    (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
-                    referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-                 VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10)`,
+                    referencia_id, referencia_tipo, usuario_id, descripcion, observacion, documento, tenant_id)
+                 VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'ajuste', $7, $8, $9, $10, $11)`,
                 [
                   target.id,
                   target.item_id,
@@ -416,6 +423,7 @@ router.post('/ajustes',
                   req.user.id,
                   descripcion || 'Traslado - entrada destino',
                   observacion,
+                  ajusteCodigo,
                   req.tenantId,
                 ]
               )
@@ -449,8 +457,8 @@ router.post('/ajustes',
               await client.query(
                 `INSERT INTO dev_movimientos
                    (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
-                    referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-                 VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'ajuste', $6, $7, $8, $9)`,
+                    referencia_id, referencia_tipo, usuario_id, descripcion, observacion, documento, tenant_id)
+                 VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'ajuste', $6, $7, $8, $9, $10)`,
                 [
                   newInv.id,
                   newInv.item_id,
@@ -460,6 +468,7 @@ router.post('/ajustes',
                   req.user.id,
                   descripcion || 'Traslado - entrada destino',
                   observacion,
+                  ajusteCodigo,
                   req.tenantId,
                 ]
               )
@@ -563,6 +572,7 @@ router.post('/importar',
       await assertTenantExists(client, req.tenantId)
 
       const importCodigo = await generateDevCodigo(client, req.tenantId, 'AJU-', 'dev_ajustes', req.fullUser?.zona_horaria)
+      const importDocumento = await generateImportDocumento(client, req.tenantId, req.fullUser?.zona_horaria)
       const ajusteRes = await client.query(
         `INSERT INTO dev_ajustes (codigo, tipo, descripcion, usuario_id, tenant_id)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -636,11 +646,11 @@ router.post('/importar',
             await client.query(
               `INSERT INTO dev_movimientos
                  (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
-                  ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-               VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'importacion', $7, $8, $9, $10)`,
+                  ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, descripcion, observacion, documento, tenant_id)
+               VALUES ('ajuste', $1, $2, $3, $4, $5, $6, 'importacion', $7, $8, $9, $10, $11)`,
               [current.id, current.item_id, current.cantidad_disponible, nuevaCantidad,
                ubicacionId || current.ubicacion_id, ajusteId, req.user.id,
-               finalDesc || descripcion || 'Importación', movementObs, req.tenantId]
+               finalDesc || descripcion || 'Importación', movementObs, importDocumento, req.tenantId]
             )
             summary.actualizados++
           } else if (tipo === 'importacion') {
@@ -700,8 +710,8 @@ router.post('/importar',
               await client.query(
                 `INSERT INTO dev_movimientos
                    (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
-                    ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-                 VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'importacion', $7, $8, $9, $10)`,
+                    ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, descripcion, observacion, documento, tenant_id)
+                 VALUES ('entrada', $1, $2, $3, $4, $5, $6, 'importacion', $7, $8, $9, $10, $11)`,
                 [
                   current.id,
                   current.item_id,
@@ -712,6 +722,7 @@ router.post('/importar',
                   req.user.id,
                   finalDesc || descripcion || 'Importación',
                   movementObs,
+                  importDocumento,
                   req.tenantId,
                 ]
               )
@@ -764,8 +775,8 @@ router.post('/importar',
               await client.query(
                 `INSERT INTO dev_movimientos
                    (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva,
-                    ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, motivo, observacion, tenant_id)
-                 VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'importacion', $6, $7, $8, $9)`,
+                    ubicacion_nueva_id, referencia_id, referencia_tipo, usuario_id, descripcion, observacion, documento, tenant_id)
+                 VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'importacion', $6, $7, $8, $9, $10)`,
                 [
                   newInv.id,
                   newInv.item_id || null,
@@ -775,6 +786,7 @@ router.post('/importar',
                   req.user.id,
                   finalDesc || descripcion || 'Importación',
                   movementObs,
+                  importDocumento,
                   req.tenantId,
                 ]
               )

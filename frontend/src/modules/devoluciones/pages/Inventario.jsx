@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -51,6 +52,12 @@ const getMovimientoUbicacion = (row) => {
 const getMovimientoTipoLabel = (row) => {
   if (row?.referencia_tipo === 'importacion') return 'Importación'
   return TIPO_LABELS[row?.tipo] || row?.tipo || '—'
+}
+
+const getMovimientoReferenciaHref = (row) => {
+  if (row?.referencia_tipo === 'sesion' && row?.referencia_id) return `/devoluciones/entradas/${row.referencia_id}`
+  if (row?.referencia_tipo === 'salida' && row?.referencia_id) return `/devoluciones/salidas/${row.referencia_id}`
+  return null
 }
 
 /* ─── Ubicacion combobox para filtro ─── */
@@ -127,6 +134,7 @@ function UbicacionFilter({ ubicaciones, value, onChange }) {
 }
 
 export default function Inventario() {
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
   const toast = useToastStore()
@@ -232,13 +240,13 @@ export default function Inventario() {
   const exportHistorial = () => {
     const movs = movimientos
     if (!movs.length) return
-    const headers = ['Fecha', 'Tipo', 'Código', 'SKU', 'Cant. Anterior', 'Cant. Nueva', 'Cambio', 'Ubicación', 'Observación', 'Usuario']
+    const headers = ['Fecha', 'Tipo', 'Referencia', 'Código', 'SKU', 'Cant. Anterior', 'Cant. Nueva', 'Cambio', 'Ubicación', 'Observación', 'Usuario']
     const rows = movs.map(r => {
       const delta = (r.cantidad_anterior != null && r.cantidad_nueva != null)
         ? r.cantidad_nueva - r.cantidad_anterior : ''
       const ubicacion = getMovimientoUbicacion(r)
       return [
-        fmtDateTime(r.created_at), getMovimientoTipoLabel(r), r.codigo_trazabilidad || '', r.sku || '',
+        fmtDateTime(r.created_at), getMovimientoTipoLabel(r), r.documento || '', r.codigo_trazabilidad || '', r.sku || '',
         r.cantidad_anterior ?? '', r.cantidad_nueva ?? '',
         delta !== '' ? (delta >= 0 ? `+${delta}` : delta) : '',
         ubicacion || '', r.observacion || '', r.usuario_nombre || '',
@@ -654,11 +662,12 @@ export default function Inventario() {
                       <tr className="bg-warm-50 border-b border-warm-100">
                         <th className="table-header">Fecha</th>
                         <th className="table-header">Tipo</th>
+                        <th className="table-header">Referencia</th>
                         <th className="table-header">Código</th>
                         <th className="table-header">SKU</th>
-                        <th className="table-header text-right">Anterior</th>
-                        <th className="table-header text-right">Nueva</th>
-                        <th className="table-header text-right">Cambio</th>
+                        <th className="table-header text-right w-[68px] whitespace-nowrap px-2">Anterior</th>
+                        <th className="table-header text-right w-[68px] whitespace-nowrap px-2">Nueva</th>
+                        <th className="table-header text-right w-[76px] whitespace-nowrap px-2">Cambio</th>
                         <th className="table-header">Ubicación</th>
                         <th className="table-header">Observación</th>
                         <th className="table-header">Usuario</th>
@@ -668,6 +677,7 @@ export default function Inventario() {
                       {paginatedMovimientos.map(row => {
                         const cantAnterior = row.cantidad_anterior
                         const cantNueva = row.cantidad_nueva
+                        const referenciaHref = getMovimientoReferenciaHref(row)
                         const delta = (cantAnterior != null && cantNueva != null)
                           ? cantNueva - cantAnterior
                           : null
@@ -680,17 +690,33 @@ export default function Inventario() {
                                 {getMovimientoTipoLabel(row)}
                               </span>
                             </td>
+                            <td className="table-cell text-xs">
+                              {row.documento ? (
+                                referenciaHref ? (
+                                  <button
+                                    onClick={() => navigate(referenciaHref)}
+                                    className="font-mono text-primary-700 hover:text-primary-800 hover:underline"
+                                  >
+                                    {row.documento}
+                                  </button>
+                                ) : (
+                                  <span className="font-mono text-warm-600">{row.documento}</span>
+                                )
+                              ) : (
+                                <span className="text-warm-300">—</span>
+                              )}
+                            </td>
                             <td className="table-cell font-mono text-xs text-warm-600">{row.codigo_trazabilidad || '—'}</td>
                             <td className="table-cell text-xs font-medium text-warm-800">{row.sku || '—'}</td>
-                            <td className="table-cell text-right text-xs text-warm-500">
+                            <td className="table-cell text-right text-xs text-warm-500 whitespace-nowrap px-2">
                               {cantAnterior ?? <span className="text-warm-300">—</span>}
                             </td>
-                            <td className="table-cell text-right text-xs font-semibold text-warm-800">
+                            <td className="table-cell text-right text-xs font-semibold text-warm-800 whitespace-nowrap px-2">
                               {cantNueva ?? <span className="text-warm-300">—</span>}
                             </td>
-                            <td className="table-cell text-right">
+                            <td className="table-cell text-right whitespace-nowrap px-2">
                               {delta !== null ? (
-                                <span className={`inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-lg ${
+                                <span className={`inline-flex items-center justify-center min-w-[52px] text-xs font-bold px-1.5 py-0.5 rounded-md ${
                                   delta > 0
                                     ? 'bg-success-100 text-success-700'
                                     : delta < 0

@@ -68,3 +68,21 @@ export async function generateImportTrazabilidad(client, tenantId, tenantTimezon
   const next = current ? Number.parseInt(current.slice(base.length), 10) + 1 : 1
   return `${base}${String(next).padStart(3, '0')}`
 }
+
+export async function generateImportDocumento(client, tenantId, tenantTimezone = 'America/Mexico_City') {
+  const tenantDate = getToday(tenantTimezone)
+  const date = buildUtcDateFromTenantDay(tenantDate)
+  const base = `IMP-DOC${formatYMD(date)}`
+  const { rows } = await client.query(
+    `SELECT documento
+     FROM dev_movimientos
+     WHERE tenant_id = $1 AND documento LIKE $2
+     ORDER BY documento DESC
+     LIMIT 1
+     FOR UPDATE`,
+    [tenantId, `${base}%`]
+  )
+  const current = rows[0]?.documento
+  const next = current ? Number.parseInt(current.slice(base.length), 10) + 1 : 1
+  return `${base}${String(next).padStart(2, '0')}`
+}

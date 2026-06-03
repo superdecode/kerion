@@ -272,8 +272,8 @@ router.post('/:id/confirmar',
           await client.query(
             `INSERT INTO dev_movimientos
                (tipo, inventario_id, item_id, cantidad_anterior, cantidad_nueva, ubicacion_nueva_id,
-                referencia_id, referencia_tipo, usuario_id, motivo, tenant_id)
-             VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'sesion', $6, $7, $8)`,
+                referencia_id, referencia_tipo, usuario_id, descripcion, documento, tenant_id)
+             VALUES ('entrada', $1, $2, 0, $3, $4, $5, 'sesion', $6, $7, $8, $9)`,
             [
               invRes.rows[0].id,
               item.id,
@@ -282,6 +282,7 @@ router.post('/:id/confirmar',
               req.params.id,
               req.user.id,
               'Confirmacion de entrada',
+              sesion.codigo,
               req.tenantId,
             ]
           )
