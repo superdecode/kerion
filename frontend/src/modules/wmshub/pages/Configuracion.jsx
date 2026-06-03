@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import {
   Eye, EyeOff, Plug, RefreshCw, CheckCircle2, XCircle,
   Loader2, Save, Wifi, WifiOff, Key, Clock, Zap,
-  ArrowUpDown,
+  ArrowUpDown, ShieldCheck, ShieldAlert,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -20,7 +20,9 @@ export default function Configuracion() {
   const { lastTest, lastSync, recordTest } = useWmsHubStore()
 
   const [appKey, setAppKey] = useState('')
+  const [appSecret, setAppSecret] = useState('')
   const [showKey, setShowKey] = useState(false)
+  const [showSecret, setShowSecret] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [testStart, setTestStart] = useState(null)
 
@@ -32,12 +34,13 @@ export default function Configuracion() {
 
   const config = configData?.data
   const isConnected = lastTest?.ok === true
+  const canSave = appKey.trim().length > 0 && appSecret.trim().length > 0
 
   const saveMut = useMutation({
-    mutationFn: () => saveConfig(appKey),
+    mutationFn: () => saveConfig({ app_key: appKey, app_secret: appSecret }),
     onSuccess: () => {
       toast.success(t('wmshub.config.saved'))
-      setAppKey(''); setConfirmOpen(false)
+      setAppKey(''); setAppSecret(''); setConfirmOpen(false)
       qc.invalidateQueries({ queryKey: ['upapex-config'] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
@@ -76,11 +79,7 @@ export default function Configuracion() {
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-                  config && isConnected
-                    ? 'bg-white/20'
-                    : config
-                      ? 'bg-white/20'
-                      : 'bg-red-950/25 border border-red-200/30'
+                  config ? 'bg-white/20' : 'bg-red-950/25 border border-red-200/30'
                 }`}>
                   {config && isConnected ? <Wifi className="w-6 h-6" /> :
                    config               ? <WifiOff className="w-6 h-6" /> :
@@ -138,6 +137,28 @@ export default function Configuracion() {
                 </div>
               ) : (
                 <div className="space-y-4">
+
+                  {/* Current config status */}
+                  {config && (
+                    <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-warm-50 border border-warm-100">
+                      <div className="flex items-center gap-2 text-xs">
+                        <ShieldCheck className="w-3.5 h-3.5 text-success-500 shrink-0" />
+                        <span className="text-warm-500">{t('wmshub.config.appkey_label')}:</span>
+                        <span className="font-mono text-warm-700">{config.app_key_masked}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        {config.has_secret
+                          ? <ShieldCheck className="w-3.5 h-3.5 text-success-500 shrink-0" />
+                          : <ShieldAlert className="w-3.5 h-3.5 text-warning-500 shrink-0" />}
+                        <span className="text-warm-500">{t('wmshub.config.appsecret_label')}:</span>
+                        <span className={config.has_secret ? 'font-mono text-warm-700' : 'text-warning-600 font-medium'}>
+                          {config.has_secret ? '••••••••' : t('wmshub.config.appsecret_not_set')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* App Key input */}
                   <div>
                     <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">
                       {t('wmshub.config.appkey_label')}
@@ -146,7 +167,7 @@ export default function Configuracion() {
                       <input
                         type={showKey ? 'text' : 'password'}
                         className="input-field pr-10 font-mono"
-                        placeholder={t('wmshub.config.appkey_placeholder')}
+                        placeholder={config ? t('wmshub.config.appkey_placeholder_update') : t('wmshub.config.appkey_placeholder')}
                         value={appKey}
                         onChange={e => setAppKey(e.target.value)}
                         autoComplete="off"
@@ -161,10 +182,35 @@ export default function Configuracion() {
                     </div>
                   </div>
 
+                  {/* App Secret input */}
+                  <div>
+                    <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">
+                      {t('wmshub.config.appsecret_label')}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showSecret ? 'text' : 'password'}
+                        className="input-field pr-10 font-mono"
+                        placeholder={t('wmshub.config.appsecret_placeholder')}
+                        value={appSecret}
+                        onChange={e => setAppSecret(e.target.value)}
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-warm-400 hover:text-warm-600 transition-colors"
+                        onClick={() => setShowSecret(v => !v)}
+                        tabIndex={-1}>
+                        {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[11px] text-warm-400">{t('wmshub.config.appsecret_hint')}</p>
+                  </div>
+
                   <div className="flex justify-end">
                     <button
                       className="btn-primary inline-flex items-center gap-2"
-                      disabled={!appKey.trim() || saveMut.isPending}
+                      disabled={!canSave || saveMut.isPending}
                       onClick={() => setConfirmOpen(true)}>
                       {saveMut.isPending
                         ? <><Loader2 size={14} className="animate-spin" /> {t('common.saving')}</>
@@ -196,7 +242,7 @@ export default function Configuracion() {
                 <button
                   className="btn-primary inline-flex items-center gap-2"
                   onClick={() => testMut.mutate()}
-                  disabled={testMut.isPending || !config}>
+                  disabled={testMut.isPending || !config || !config.has_secret}>
                   {testMut.isPending
                     ? <><Loader2 size={14} className="animate-spin" /> {t('wmshub.config.testing')}</>
                     : <><RefreshCw size={14} /> {t('wmshub.config.test_btn')}</>}
@@ -221,6 +267,11 @@ export default function Configuracion() {
               {!config && !configLoading && (
                 <p className="mt-3 text-xs text-warning-600 bg-warning-50 rounded-xl px-3 py-2">
                   {t('wmshub.config.no_config_warning')}
+                </p>
+              )}
+              {config && !config.has_secret && (
+                <p className="mt-3 text-xs text-warning-600 bg-warning-50 rounded-xl px-3 py-2">
+                  {t('wmshub.config.no_secret_warning')}
                 </p>
               )}
             </div>

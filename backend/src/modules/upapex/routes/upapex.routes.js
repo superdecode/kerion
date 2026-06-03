@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { query } from '../../../config/database.js'
+import { encrypt } from '../../../shared/services/wmsCredentials.js'
 import {
   testConnection,
   getBoxStock,
@@ -22,7 +23,9 @@ router.get('/config',
   async (req, res) => {
     try {
       const result = await req.tQuery(
-        'SELECT id, base_url, is_active, last_verified_at, created_at, updated_at, app_key FROM wms_config WHERE tenant_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1',
+        `SELECT id, base_url, is_active, last_verified_at, created_at, updated_at,
+                app_key, app_secret_encrypted
+         FROM wms_config WHERE tenant_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1`,
         [req.tenantId]
       )
       if (result.rows.length === 0) return res.json({ success: true, data: null })
@@ -37,6 +40,7 @@ router.get('/config',
           created_at: row.created_at,
           updated_at: row.updated_at,
           app_key_masked: row.app_key ? `****${row.app_key.slice(-4)}` : null,
+          has_secret: !!row.app_secret_encrypted,
         },
       })
     } catch (err) {
@@ -46,17 +50,21 @@ router.get('/config',
   }
 )
 
-// POST /api/upapex/config — save or update app key
+// POST /api/upapex/config — save or update credentials
 router.post('/config',
   authenticateToken, loadFullUser,
   requirePermission('sistema.wms', 'editar'),
   async (req, res) => {
     try {
-      const { app_key } = req.body
+      const { app_key, app_secret } = req.body
       if (!app_key || !app_key.trim()) {
         return res.status(400).json({ success: false, error: 'app_key es requerido' })
       }
+      if (!app_secret || !app_secret.trim()) {
+        return res.status(400).json({ success: false, error: 'app_secret es requerido' })
+      }
       const key = app_key.trim()
+      const secretEncrypted = encrypt(app_secret.trim())
 
       const existing = await req.tQuery(
         'SELECT id FROM wms_config WHERE tenant_id = $1 LIMIT 1',
@@ -64,13 +72,13 @@ router.post('/config',
       )
       if (existing.rows.length > 0) {
         await req.tQuery(
-          'UPDATE wms_config SET app_key = $1, updated_at = now() WHERE tenant_id = $2',
-          [key, req.tenantId]
+          'UPDATE wms_config SET app_key = $1, app_secret_encrypted = $2, updated_at = now() WHERE tenant_id = $3',
+          [key, secretEncrypted, req.tenantId]
         )
       } else {
         await req.tQuery(
-          'INSERT INTO wms_config (tenant_id, app_key) VALUES ($1, $2)',
-          [req.tenantId, key]
+          'INSERT INTO wms_config (tenant_id, app_key, app_secret_encrypted) VALUES ($1, $2, $3)',
+          [req.tenantId, key, secretEncrypted]
         )
       }
 

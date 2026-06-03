@@ -1044,6 +1044,12 @@ const translations = {
     'wmshub.config.sync_box_stock': '箱库存',
     'wmshub.config.sync_outbound': '出库单',
     'wmshub.config.sync_never': '从未同步',
+    'wmshub.config.appsecret_label': 'App Secret',
+    'wmshub.config.appsecret_placeholder': '输入 WMS App Secret',
+    'wmshub.config.appsecret_hint': '用于请求签名，存储时加密',
+    'wmshub.config.appsecret_not_set': '未配置',
+    'wmshub.config.no_secret_warning': '保存 App Secret 后才能测试连接',
+    'wmshub.config.appkey_placeholder_update': '输入新 App Key',
 
     // ── Inventario ────────────────────────────────────────────────────────
     'inventario.dashboard.title': 'WMS 库存',
@@ -2292,6 +2298,12 @@ const translations = {
     'wmshub.config.sync_box_stock': 'Box Stock',
     'wmshub.config.sync_outbound': 'Órdenes de salida',
     'wmshub.config.sync_never': 'Nunca sincronizado',
+    'wmshub.config.appsecret_label': 'App Secret',
+    'wmshub.config.appsecret_placeholder': 'Ingresa el App Secret del WMS',
+    'wmshub.config.appsecret_hint': 'Usado para firmar las solicitudes. Se guarda cifrado.',
+    'wmshub.config.appsecret_not_set': 'No configurado',
+    'wmshub.config.no_secret_warning': 'Configura el App Secret antes de probar la conexión',
+    'wmshub.config.appkey_placeholder_update': 'Ingresa el nuevo App Key',
 
     // ── Inventario ────────────────────────────────────────────────────────
     'inventario.dashboard.title': 'Inventario',
