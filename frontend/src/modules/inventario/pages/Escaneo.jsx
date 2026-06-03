@@ -18,7 +18,7 @@ import { findCodeInInventory } from '../../_shared/wms/findCodeInInventory'
 import { classifyItem, resolveSwap } from '../utils/classify'
 import { playSound, initAudio } from '../../_shared/wms/playSound'
 import { saveInventorySession } from '../services/inventarioService'
-import { getConfig } from '../../wmshub/services/wmsHubService'
+import { getConfig, getUbicaciones } from '../../wmshub/services/wmsHubService'
 
 const STATUS_META = {
   ok:      { label: 'Disponible', bg: 'bg-success-100 text-success-700',  icon: CheckCircle2, border: 'border-l-success-400', dot: 'bg-success-400', flash: 'bg-success-50/80 border-success-200' },
@@ -119,7 +119,7 @@ function MoveItemModal({ isOpen, onClose, onMove }) {
   )
 }
 
-function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving }) {
+function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicaciones, ubicacionId, setUbicacionId }) {
   const { t } = useI18nStore()
   if (!tab) return null
   const counts = tab.items.reduce((a, i) => { a[i.status] = (a[i.status] || 0) + 1; return a }, {})
@@ -164,6 +164,22 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving }) {
           <span className="text-warm-700">Total</span>
           <span className="font-bold text-primary-700 text-lg">{tab.items.length}</span>
         </div>
+        {ubicaciones && ubicaciones.length > 0 && (
+          <div>
+            <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">
+              {t('inventario.escaneo.ubicacion_label')}
+            </label>
+            <select
+              className="input-field"
+              value={ubicacionId || ''}
+              onChange={e => setUbicacionId(e.target.value || null)}>
+              <option value="">{t('inventario.escaneo.ubicacion_placeholder')}</option>
+              {ubicaciones.map(u => (
+                <option key={u.id} value={u.id}>{u.codigo} — {u.nombre}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
     </Modal>
   )
@@ -322,9 +338,15 @@ export default function Escaneo() {
   const [moveTarget, setMoveTarget] = useState(null)
   const [lastScan, setLastScan] = useState(null) // { status: 'ok'|'blocked'|'nowms'|'duplicate', code }
   const [wmsConfigured, setWmsConfigured] = useState(true)
+  const [ubicacionId, setUbicacionId] = useState(null)
 
   const { data: configData } = useQuery({
     queryKey: ['upapex-config'], queryFn: getConfig, staleTime: 60000,
+  })
+  const { data: ubicacionesData } = useQuery({
+    queryKey: ['upapex-ubicaciones', 'inventario'],
+    queryFn: () => getUbicaciones('inventario'),
+    staleTime: 120000,
   })
   useEffect(() => {
     if (configData !== undefined) setWmsConfigured(!!configData?.data)
@@ -347,6 +369,7 @@ export default function Escaneo() {
       if (!tab) throw new Error('No active tab')
       return saveInventorySession({
         scan_type: tab.scanType,
+        ubicacion_id: ubicacionId || null,
         scans: tab.items.map(item => ({
           scanned_code: item.raw, normalized_code: item.code, code2: item.code2 || null,
           was_swapped: item.wasSwapped || false, scan_status: item.status,
@@ -356,7 +379,7 @@ export default function Escaneo() {
       })
     },
     onSuccess: () => {
-      closeTab(activeTabId); setShowSummaryModal(false)
+      closeTab(activeTabId); setShowSummaryModal(false); setUbicacionId(null)
       toast.success(t('inventario.escaneo.session_started'))
       navigate('/inventario/registros')
     },
@@ -467,7 +490,7 @@ export default function Escaneo() {
               transition={{ delay: 0.2, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
               <div className="px-5 py-3.5 border-b border-warm-100 flex items-center justify-between bg-warm-50/50">
                 <h4 className="text-sm font-bold text-warm-700 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-warm-400" /> Tipos de sesión
+                  <Clock className="w-4 h-4 text-warm-400" /> {t('inventario.escaneo.session_types_card')}
                 </h4>
               </div>
               <div className="divide-y divide-warm-50">
@@ -579,28 +602,28 @@ export default function Escaneo() {
                 <div className="text-right shrink-0">
                   <p className="text-3xl font-black text-warm-800 tracking-tighter leading-none">
                     {activeTab.items.length}
-                    <span className="text-xs font-medium text-warm-400 ml-1">escaneos</span>
+                    <span className="text-xs font-medium text-warm-400 ml-1">{t('inventario.escaneo.scans_label')}</span>
                   </p>
                 </div>
               </div>
               <div className="grid grid-cols-4 gap-2 pt-2 border-t border-warm-100">
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-success-50">
                   <p className="text-lg font-extrabold text-success-600 leading-none">{summary.ok}</p>
-                  <p className="text-[9px] text-success-600 uppercase tracking-wider font-bold leading-tight">Disp.</p>
+                  <p className="text-[9px] text-success-600 uppercase tracking-wider font-bold leading-tight">{t('inventario.escaneo.ok_abbr')}</p>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-warning-50">
                   <p className="text-lg font-extrabold text-warning-600 leading-none">{summary.blocked}</p>
-                  <p className="text-[9px] text-warning-600 uppercase tracking-wider font-bold leading-tight">Bloq.</p>
+                  <p className="text-[9px] text-warning-600 uppercase tracking-wider font-bold leading-tight">{t('inventario.escaneo.blocked_abbr')}</p>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-danger-50">
                   <p className="text-lg font-extrabold text-danger-600 leading-none">{summary.nowms}</p>
-                  <p className="text-[9px] text-danger-600 uppercase tracking-wider font-bold leading-tight">Sin WMS</p>
+                  <p className="text-[9px] text-danger-600 uppercase tracking-wider font-bold leading-tight">{t('inventario.escaneo.nowms_abbr')}</p>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/60">
                   <Timer className="w-3.5 h-3.5 text-warm-400 shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-warm-700 font-mono leading-none">{fmtElapsed(sessionElapsed)}</p>
-                    <p className="text-[8px] text-warm-400 uppercase tracking-wider font-bold">Tiempo</p>
+                    <p className="text-[8px] text-warm-400 uppercase tracking-wider font-bold">{t('inventario.escaneo.time_label')}</p>
                   </div>
                 </div>
               </div>
@@ -671,7 +694,7 @@ export default function Escaneo() {
                    lastScan.status === 'duplicate'? <AlertCircle className="w-5 h-5 text-warning-500 shrink-0" /> :
                    <Ban className="w-5 h-5 text-danger-500 shrink-0" />}
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium opacity-70">Último escaneo</p>
+                    <p className="text-xs font-medium opacity-70">{t('inventario.escaneo.last_scan')}</p>
                     <p className="font-mono font-bold text-warm-800 truncate">{lastScan.code}</p>
                   </div>
                   <span className={`text-sm font-semibold shrink-0 ${
@@ -709,7 +732,10 @@ export default function Escaneo() {
       <SessionSummaryModal isOpen={showSummaryModal} tab={activeTab}
         onSave={() => saveSessionMut.mutate()}
         onContinue={() => setShowSummaryModal(false)}
-        isSaving={saveSessionMut.isPending} />
+        isSaving={saveSessionMut.isPending}
+        ubicaciones={ubicacionesData?.data ?? []}
+        ubicacionId={ubicacionId}
+        setUbicacionId={setUbicacionId} />
       <DuplicateModal isOpen={!!duplicatePending} code={duplicatePending?.code}
         onConfirm={() => {
           if (duplicatePending?.newItem) doAddItem(duplicatePending.newItem)

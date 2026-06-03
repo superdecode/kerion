@@ -8,3 +8,6 @@ export const saveConfig = ({ app_key, app_secret }) =>
 
 export const testConnection = () =>
   api.post('/upapex/test-connection').then(r => r.data)
+
+export const getUbicaciones = (modulo) =>
+  api.get('/upapex/ubicaciones', { params: { modulo } }).then(r => r.data)

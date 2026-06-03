@@ -18,6 +18,7 @@ import {
   createScanSession, updateScanSession, addScanEvent, clearSessionEvents,
   upsertOrderTracking,
 } from '../services/surtidoService'
+import { getUbicaciones } from '../../wmshub/services/wmsHubService'
 
 const SCANNER_THRESHOLD_MS = 500
 
@@ -337,6 +338,7 @@ export default function SurtidoValidacion() {
   const [showMissing, setShowMissing] = useState(false)
   const [showFinalize, setShowFinalize] = useState(false)
   const [finalNotes, setFinalNotes] = useState('')
+  const [finalUbicacionId, setFinalUbicacionId] = useState(null)
   const [activeTab, setActiveTab] = useState('cajas')
 
   const sessionElapsed = useSessionTimer(sessionStart)
@@ -362,6 +364,11 @@ export default function SurtidoValidacion() {
     queryFn: () => getOutboundDetail(obc),
     enabled: !!obc && step !== 'search',
     staleTime: 60000,
+  })
+  const { data: ubicacionesData } = useQuery({
+    queryKey: ['upapex-ubicaciones', 'surtido'],
+    queryFn: () => getUbicaciones('surtido'),
+    staleTime: 120000,
   })
 
   const { packageMap, productMap } = useMemo(() => {
@@ -503,7 +510,7 @@ export default function SurtidoValidacion() {
     onSuccess: () => {
       setHistory([]); setCounts({ ok: 0, rejected: 0 }); setItemCounts(new Map())
       setLastScan(null); setShowRecount(false)
-      toast.success('Reconteo reiniciado')
+      toast.success(t('surtido.escaneo.recount_success'))
       setTimeout(() => scanRef.current?.focus(), 80)
     },
     onError: () => toast.error(t('toast.error')),
@@ -513,13 +520,13 @@ export default function SurtidoValidacion() {
     mutationFn: () => {
       const total = allItems.reduce((s, i) => s + (i.expectedQty || 1), 0)
       const status = counts.ok < total ? 'with_discrepancies' : 'complete'
-      return updateScanSession(sessionId, { status, notes: finalNotes, total_scanned: counts.ok })
+      return updateScanSession(sessionId, { status, notes: finalNotes, total_scanned: counts.ok, ubicacion_id: finalUbicacionId || null })
     },
     onSuccess: () => {
       upsertOrderTracking(obc, { status: 'complete' }).catch(() => {})
       toast.success(t('surtido.escaneo.session_saved'))
       qc.invalidateQueries({ queryKey: ['upapex-scan-sessions'] })
-      clearSession(); setShowFinalize(false)
+      clearSession(); setShowFinalize(false); setFinalUbicacionId(null)
     },
     onError: () => toast.error(t('toast.error')),
   })
@@ -599,7 +606,7 @@ export default function SurtidoValidacion() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-warm-800 truncate leading-tight font-mono">{obc}</p>
-                  <p className="text-[10px] text-warm-500 leading-tight">Validación en curso</p>
+                  <p className="text-[10px] text-warm-500 leading-tight">{t('surtido.validacion.in_progress')}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-3xl font-black text-warm-800 tracking-tighter leading-none">
@@ -621,21 +628,21 @@ export default function SurtidoValidacion() {
               <div className="grid grid-cols-4 gap-2 pt-2 border-t border-warm-100">
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-success-50">
                   <p className="text-lg font-extrabold text-success-600 leading-none">{counts.ok}</p>
-                  <p className="text-[9px] text-success-600 uppercase tracking-wider font-bold leading-tight">Valid.</p>
+                  <p className="text-[9px] text-success-600 uppercase tracking-wider font-bold leading-tight">{t('surtido.validacion.valid_abbr')}</p>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-warning-50">
                   <p className="text-lg font-extrabold text-warning-600 leading-none">{Math.max(0, totalExpected - counts.ok)}</p>
-                  <p className="text-[9px] text-warning-600 uppercase tracking-wider font-bold leading-tight">Pend.</p>
+                  <p className="text-[9px] text-warning-600 uppercase tracking-wider font-bold leading-tight">{t('surtido.validacion.pending_abbr')}</p>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-danger-50">
                   <p className="text-lg font-extrabold text-danger-600 leading-none">{counts.rejected}</p>
-                  <p className="text-[9px] text-danger-600 uppercase tracking-wider font-bold leading-tight">Rech.</p>
+                  <p className="text-[9px] text-danger-600 uppercase tracking-wider font-bold leading-tight">{t('surtido.validacion.rejected_abbr')}</p>
                 </div>
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/60">
                   <Timer className="w-3.5 h-3.5 text-warm-400 shrink-0" />
                   <div>
                     <p className="text-sm font-bold text-warm-700 font-mono leading-none">{fmtElapsed(sessionElapsed)}</p>
-                    <p className="text-[8px] text-warm-400 uppercase tracking-wider font-bold">Tiempo</p>
+                    <p className="text-[8px] text-warm-400 uppercase tracking-wider font-bold">{t('surtido.validacion.time_label')}</p>
                   </div>
                 </div>
               </div>
@@ -725,12 +732,12 @@ export default function SurtidoValidacion() {
         <div className="hidden lg:flex flex-col w-56 shrink-0 border-l border-warm-100 bg-warm-50/60">
           <div className="px-4 py-3 border-b border-warm-100 bg-white">
             <h3 className="text-xs font-bold text-warm-600 uppercase tracking-wide flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5" /> Últimos escaneos
+              <Clock className="w-3.5 h-3.5" /> {t('surtido.validacion.history_title')}
             </h3>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {history.length === 0 ? (
-              <p className="text-xs text-warm-400 text-center py-6">Sin escaneos aún</p>
+              <p className="text-xs text-warm-400 text-center py-6">{t('surtido.validacion.history_empty')}</p>
             ) : (
               history.map((e, i) => (
                 <div key={i} className={`px-2.5 py-2 rounded-xl text-xs flex items-center gap-2 ${
@@ -768,7 +775,7 @@ export default function SurtidoValidacion() {
           {missingItems.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-6">
               <CheckCircle2 size={28} className="text-success-500" />
-              <p className="text-sm text-success-600 font-medium">Todo completo</p>
+              <p className="text-sm text-success-600 font-medium">{t('surtido.validacion.all_complete')}</p>
             </div>
           ) : (
             missingItems.map((item, i) => {
@@ -817,6 +824,22 @@ export default function SurtidoValidacion() {
             value={finalNotes}
             onChange={e => setFinalNotes(e.target.value)}
           />
+          {ubicacionesData?.data?.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">
+                {t('surtido.validacion.ubicacion_label')}
+              </label>
+              <select
+                className="input-field"
+                value={finalUbicacionId || ''}
+                onChange={e => setFinalUbicacionId(e.target.value || null)}>
+                <option value="">{t('surtido.validacion.ubicacion_placeholder')}</option>
+                {ubicacionesData.data.map(u => (
+                  <option key={u.id} value={u.id}>{u.codigo} — {u.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </Modal>
     </div>

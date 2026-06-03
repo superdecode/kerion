@@ -331,7 +331,7 @@ router.put('/scan-session/:id',
   requirePermission('surtido.escaneo', 'crear'),
   async (req, res) => {
     try {
-      const { status, notes, total_scanned } = req.body
+      const { status, notes, total_scanned, ubicacion_id } = req.body
       const sessionRes = await req.tQuery(
         'SELECT * FROM pick_sessions WHERE id = $1 AND tenant_id = $2',
         [req.params.id, req.tenantId]
@@ -349,6 +349,7 @@ router.put('/scan-session/:id',
       if (status !== undefined) { fields.push(`status = $${p++}`); params.push(status) }
       if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(notes) }
       if (total_scanned !== undefined) { fields.push(`total_scanned = $${p++}`); params.push(total_scanned) }
+      if (ubicacion_id !== undefined) { fields.push(`ubicacion_id = $${p++}`); params.push(ubicacion_id || null) }
       if (status === 'complete' || status === 'with_discrepancies') {
         fields.push(`completed_at = $${p++}`)
         params.push(new Date().toISOString())
@@ -427,7 +428,7 @@ router.post('/inventory-session',
   requirePermission('inventario.escaneo', 'crear'),
   async (req, res) => {
     try {
-      const { scan_type, scans = [], notes } = req.body
+      const { scan_type, scans = [], notes, ubicacion_id } = req.body
       if (!scan_type || !['unificado', 'clasificacion'].includes(scan_type)) {
         return res.status(400).json({ success: false, error: 'scan_type inválido' })
       }
@@ -442,11 +443,11 @@ router.post('/inventory-session',
 
       const sessionRes = await req.tQuery(
         `INSERT INTO inv_sessions
-           (tenant_id, operator_id, scan_type, status, completed_at, notes,
+           (tenant_id, operator_id, scan_type, status, completed_at, notes, ubicacion_id,
             total_scans, total_ok, total_blocked, total_nowms)
-         VALUES ($1, $2, $3, 'saved', now(), $4, $5, $6, $7, $8)
+         VALUES ($1, $2, $3, 'saved', now(), $4, $5, $6, $7, $8, $9)
          RETURNING *`,
-        [req.tenantId, req.user.id, scan_type, notes || null,
+        [req.tenantId, req.user.id, scan_type, notes || null, ubicacion_id || null,
          totals.total, totals.ok, totals.blocked, totals.nowms]
       )
       const session = sessionRes.rows[0]
@@ -740,6 +741,30 @@ router.delete('/scan-session/:id/events',
       res.json({ success: true })
     } catch (err) {
       res.status(500).json({ success: false, error: 'Error reiniciando conteo' })
+    }
+  }
+)
+
+// GET /api/upapex/ubicaciones?modulo= — shared ubicaciones for Inventario and Surtido
+router.get('/ubicaciones',
+  authenticateToken, loadFullUser,
+  async (req, res) => {
+    try {
+      const { modulo } = req.query
+      const params = [req.tenantId]
+      let filter = ''
+      if (modulo && modulo !== 'todos') {
+        filter = ` AND (modulo_uso @> ARRAY['todos'] OR modulo_uso @> ARRAY[$2])`
+        params.push(modulo)
+      }
+      const result = await req.tQuery(
+        `SELECT id, codigo, nombre FROM dev_ubicaciones WHERE tenant_id = $1 AND activo = true${filter} ORDER BY codigo ASC`,
+        params
+      )
+      res.json({ success: true, data: result.rows })
+    } catch (err) {
+      console.error('GET upapex/ubicaciones error:', err.message)
+      res.status(500).json({ success: false, error: 'Error obteniendo ubicaciones' })
     }
   }
 )

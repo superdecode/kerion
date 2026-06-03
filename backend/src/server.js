@@ -622,6 +622,13 @@ async function runMigrations() {
     // ── 042: Add app_secret_encrypted to wms_config ──────────────────────
     `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS app_secret_encrypted TEXT`,
 
+    // ── 043: modulo_uso filter on ubicaciones ─────────────────────────────
+    `ALTER TABLE dev_ubicaciones ADD COLUMN IF NOT EXISTS modulo_uso TEXT[] DEFAULT ARRAY['todos']`,
+
+    // ── 044: ubicacion_id on inventory and pick sessions ──────────────────
+    `ALTER TABLE inv_sessions  ADD COLUMN IF NOT EXISTS ubicacion_id UUID REFERENCES dev_ubicaciones(id)`,
+    `ALTER TABLE pick_sessions ADD COLUMN IF NOT EXISTS ubicacion_id UUID REFERENCES dev_ubicaciones(id)`,
+
     // ── 040: Enable RLS on every public-schema table ──────────────────────
     // Blocks all access through Supabase REST/anon key (deny-by-default: no
     // policies = no access for anon/authenticated roles).
