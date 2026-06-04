@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, UserCheck, Users, Plus, Trash2, X, ChevronDown, Play, Loader2,
   Package2, Truck, ScanBarcode, Copy, Check, Info, Activity,
@@ -510,6 +510,120 @@ function StatusChips({ selected, onChange, t }) {
   )
 }
 
+function QuickSidebar({ obc, wmsRecord, tracking, onClose, onAssign, onProgress, onValidate, onStatusChange, t }) {
+  const status = tracking?.status || 'pending_assignment'
+  const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
+  const [copied, setCopied] = useState(false)
+
+  const infoItems = [
+    { label: t('surtido.ordenes.cliente'),   value: wmsRecord?.customerCode || wmsRecord?.customerName },
+    { label: t('surtido.ordenes.surtidor'),  value: tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor') },
+    { label: t('surtido.ordenes.canal'),     value: wmsRecord?.logisticsChannel, span: true },
+    { label: t('surtido.ordenes.receiver'),  value: wmsRecord?.receiverName, span: true },
+    { label: t('surtido.ordenes.cajas'),     value: wmsRecord?.outboundBoxCount ?? wmsRecord?.packageCount ?? wmsRecord?.totalQty },
+  ].filter(i => i.value != null && i.value !== '')
+
+  const scanned = tracking?.total_scanned ?? 0
+  const expected = tracking?.total_expected ?? 0
+  const pct = expected > 0 ? Math.min(100, Math.round((scanned / expected) * 100)) : null
+
+  return (
+    <motion.div
+      initial={{ x: 320, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 320, opacity: 0 }}
+      transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+      className="w-72 border-l border-warm-200 flex-shrink-0 bg-white flex flex-col overflow-hidden">
+
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-warm-100 flex items-center justify-between gap-2 bg-warm-50/50">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="font-mono font-black text-warm-900 text-base leading-none truncate">{obc}</span>
+            <button
+              onClick={() => navigator.clipboard.writeText(obc).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })}
+              className="p-0.5 rounded text-warm-300 hover:text-primary-600 transition-colors shrink-0">
+              {copied ? <Check size={12} className="text-success-600" /> : <Copy size={12} />}
+            </button>
+          </div>
+          <span className={`badge text-[10px] font-semibold ${meta.cls}`}>{t(meta.labelKey)}</span>
+        </div>
+        <button onClick={onClose}
+          className="p-1.5 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition-colors shrink-0">
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        {/* Info grid */}
+        {infoItems.length > 0 && (
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {infoItems.map(item => (
+              <div key={item.label} className={`bg-warm-50 rounded-lg px-2.5 py-2 ${item.span ? 'col-span-2' : ''}`}>
+                <p className="text-warm-400 text-[10px] uppercase tracking-wide">{item.label}</p>
+                <p className="font-semibold text-warm-800 text-xs truncate">{String(item.value)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Quick status change */}
+        <div>
+          <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wider mb-2">{t('surtido.ordenes.status')}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_FILTER_KEYS.map(k => {
+              const sm = STATUS_META[k]
+              const active = status === k
+              return (
+                <button key={k}
+                  onClick={() => onStatusChange(k)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                    active ? `${sm.cls} border-current` : 'bg-white text-warm-500 border-warm-200 hover:border-warm-300 hover:text-warm-700'
+                  }`}>
+                  {t(sm.labelKey)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Progress */}
+        {tracking && pct !== null && (
+          <div className="bg-warm-50 rounded-xl p-3">
+            <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wider mb-2">Progreso</p>
+            <div className="flex justify-between text-xs font-semibold text-warm-700 mb-1.5">
+              <span>{scanned} escaneados</span>
+              <span className={pct >= 100 ? 'text-success-600' : 'text-warm-500'}>de {expected}</span>
+            </div>
+            <div className="h-2 bg-warm-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-success-500' : 'bg-primary-400'}`}
+                style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer actions */}
+      <div className="p-3 border-t border-warm-100 space-y-2">
+        <button className="w-full btn-primary text-xs flex items-center justify-center gap-1.5 py-2"
+          onClick={onValidate}>
+          <ScanBarcode size={13} /> {t('surtido.ordenes.validate_btn')}
+        </button>
+        <div className="flex gap-2">
+          <button className="flex-1 btn-ghost text-xs flex items-center justify-center gap-1 py-1.5"
+            onClick={onAssign}>
+            <UserCheck size={12} /> {t('surtido.ordenes.assign_surtidor')}
+          </button>
+          <button className="flex-1 btn-ghost text-xs flex items-center justify-center gap-1 py-1.5"
+            onClick={onProgress}>
+            <Activity size={12} /> Detalle
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 export default function Ordenes() {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
@@ -528,6 +642,7 @@ export default function Ordenes() {
   const [assignTarget, setAssignTarget] = useState(null)
   const [wmsDetailOrder, setWmsDetailOrder] = useState(null)
   const [progressObc, setProgressObc] = useState(null)
+  const [selectedObc, setSelectedObc] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
 
@@ -736,38 +851,60 @@ export default function Ordenes() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {pagedRecords.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400">
-            <Package2 size={40} className="opacity-30" />
-            <p className="text-sm">{t('common.noData')}</p>
-          </div>
-        ) : tab === 'wms' ? (
-          <WmsTable
-            records={pagedRecords} trackingMap={trackingMap}
-            onAssign={r => setAssignTarget(r)}
-            onDetail={obc => loadDetailMut.mutate(obc)}
-            isLoadingDetail={(obc) => loadDetailMut.isPending && loadDetailMut.variables === obc}
-            onProgress={obc => setProgressObc(obc)}
-            onValidate={obc => navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`)}
-            t={t}
-            page={page} totalPages={totalPages} pageSize={pageSize} total={total}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-          />
-        ) : (
-          <ValidacionTable
-            records={pagedRecords} wmsMap={wmsMap}
-            onProgress={obc => setProgressObc(obc)}
-            onValidate={obc => navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`)}
-            onStatusChange={(obcs, status) => statusMut.mutate({ obcs, status })}
-            t={t}
-            page={page} totalPages={totalPages} pageSize={pageSize} total={total}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-          />
-        )}
+      {/* Table + Quick sidebar */}
+      <div className="flex-1 flex min-h-0">
+        <div className="flex-1 overflow-y-auto p-4">
+          {pagedRecords.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400">
+              <Package2 size={40} className="opacity-30" />
+              <p className="text-sm">{t('common.noData')}</p>
+            </div>
+          ) : tab === 'wms' ? (
+            <WmsTable
+              records={pagedRecords} trackingMap={trackingMap}
+              onAssign={r => setAssignTarget(r)}
+              onDetail={obc => loadDetailMut.mutate(obc)}
+              isLoadingDetail={(obc) => loadDetailMut.isPending && loadDetailMut.variables === obc}
+              onSelect={obc => setSelectedObc(prev => prev === obc ? null : obc)}
+              selectedObc={selectedObc}
+              onProgress={obc => setProgressObc(obc)}
+              onValidate={obc => navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`)}
+              t={t}
+              page={page} totalPages={totalPages} pageSize={pageSize} total={total}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+            />
+          ) : (
+            <ValidacionTable
+              records={pagedRecords} wmsMap={wmsMap}
+              onSelect={obc => setSelectedObc(prev => prev === obc ? null : obc)}
+              selectedObc={selectedObc}
+              onProgress={obc => setProgressObc(obc)}
+              onValidate={obc => navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`)}
+              onStatusChange={(obcs, status) => statusMut.mutate({ obcs, status })}
+              t={t}
+              page={page} totalPages={totalPages} pageSize={pageSize} total={total}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+            />
+          )}
+        </div>
+
+        <AnimatePresence>
+          {selectedObc && (
+            <QuickSidebar
+              obc={selectedObc}
+              wmsRecord={wmsMap[selectedObc]}
+              tracking={trackingMap[selectedObc]}
+              onClose={() => setSelectedObc(null)}
+              onAssign={() => setAssignTarget(wmsMap[selectedObc] || { outboundOrderNo: selectedObc })}
+              onProgress={() => { setProgressObc(selectedObc); setSelectedObc(null) }}
+              onValidate={() => navigate(`/surtido/validacion?obc=${encodeURIComponent(selectedObc)}`)}
+              onStatusChange={status => statusMut.mutate({ obcs: [selectedObc], status })}
+              t={t}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
       <SurtidoresModal isOpen={showSurtidoresModal} onClose={() => setShowSurtidoresModal(false)} />
@@ -792,7 +929,7 @@ export default function Ordenes() {
   )
 }
 
-function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, onProgress, onValidate, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, onSelect, selectedObc, onProgress, onValidate, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
   return (
     <motion.div className="card overflow-hidden"
       initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
@@ -828,8 +965,8 @@ function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, o
 
               return (
                 <tr key={obc || i}
-                  onClick={() => onProgress(obc)}
-                  className={`transition-colors cursor-pointer hover:bg-primary-50/30 ${noSurtidor ? 'bg-warning-50/20' : ''}`}>
+                  onClick={() => onSelect(obc)}
+                  className={`transition-colors cursor-pointer hover:bg-primary-50/30 ${selectedObc === obc ? 'bg-primary-50/40 ring-1 ring-inset ring-primary-200' : noSurtidor ? 'bg-warning-50/20' : ''}`}>
 
                   <td className="table-cell"><CopyableObc obc={obc} /></td>
 
@@ -912,7 +1049,7 @@ function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, o
   )
 }
 
-function ValidacionTable({ records, wmsMap, onProgress, onValidate, onStatusChange, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+function ValidacionTable({ records, wmsMap, onSelect, selectedObc, onProgress, onValidate, onStatusChange, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
   const [selected, setSelected] = useState(new Set())
   const [editStatusObc, setEditStatusObc] = useState(null)
 
@@ -997,8 +1134,8 @@ function ValidacionTable({ records, wmsMap, onProgress, onValidate, onStatusChan
 
               return (
                 <tr key={obc || i}
-                  onClick={() => onProgress(obc)}
-                  className={`transition-colors cursor-pointer hover:bg-primary-50/30 ${isChecked ? 'bg-primary-50/20' : ''}`}>
+                  onClick={() => onSelect(obc)}
+                  className={`transition-colors cursor-pointer hover:bg-primary-50/30 ${selectedObc === obc ? 'bg-primary-50/40 ring-1 ring-inset ring-primary-200' : isChecked ? 'bg-primary-50/20' : ''}`}>
 
                   <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
                     <input type="checkbox"
