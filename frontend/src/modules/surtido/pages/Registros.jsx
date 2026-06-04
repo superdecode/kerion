@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Eye, X,
-  CheckCircle2, XCircle, AlertTriangle,
-  Clock, ScanBarcode, Package2,
+  X, CheckCircle2, XCircle, AlertTriangle, Copy, Check,
+  Clock, ScanBarcode, Package2, Activity, MapPin, User, Timer,
+  Loader2, AlertCircle,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -19,129 +19,238 @@ const STATUS_META = {
   cancelled:          { labelKey: 'surtido.registros.status.cancelled',          cls: 'bg-warm-100 text-warm-600' },
 }
 
-const RESULT_META = {
-  ok:        { labelKey: 'surtido.registros.result.ok',        icon: CheckCircle2, cls: 'text-success-600' },
-  rejected:  { labelKey: 'surtido.registros.result.rejected',  icon: XCircle,      cls: 'text-danger-600' },
-  duplicate: { labelKey: 'surtido.registros.result.duplicate', icon: AlertTriangle, cls: 'text-warning-600' },
-}
-
 function durationLabel(startedAt, endedAt) {
   if (!startedAt) return '—'
   const start = new Date(startedAt)
   const end = endedAt ? new Date(endedAt) : new Date()
-  const mins = Math.round((end - start) / 60000)
-  if (mins < 60) return `${mins} min`
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`
+  const secs = Math.max(0, Math.floor((end - start) / 1000))
+  const h = Math.floor(secs / 3600); const m = Math.floor((secs % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${secs % 60}s`
+  return `${secs}s`
+}
+
+function fmtDt(v) {
+  if (!v) return '—'
+  return String(v).slice(0, 16).replace('T', ' ')
+}
+
+function fmtTime(v) {
+  if (!v) return '—'
+  return String(v).slice(11, 19)
+}
+
+function ObcHeader({ obc, status, t }) {
+  const [copied, setCopied] = useState(false)
+  const meta = STATUS_META[status] ?? STATUS_META.open
+  return (
+    <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="font-mono font-black text-warm-900 text-xl leading-none truncate">{obc || '—'}</span>
+        {obc && (
+          <button
+            onClick={() => navigator.clipboard.writeText(obc).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })}
+            className="shrink-0 p-1 rounded-md text-warm-300 hover:text-primary-600 transition-colors">
+            {copied ? <Check size={14} className="text-success-600" /> : <Copy size={14} />}
+          </button>
+        )}
+      </div>
+      <span className={`badge text-[11px] font-semibold shrink-0 ${meta.cls}`}>{t(meta.labelKey)}</span>
+    </div>
+  )
+}
+
+function ScanTable({ events, showResult = false, t }) {
+  if (events.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-10 gap-2 text-warm-400">
+      <CheckCircle2 size={32} className="opacity-30" />
+      <p className="text-sm">{t('common.noData')}</p>
+    </div>
+  )
+  return (
+    <div className="max-h-80 overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
+      <table className="w-full text-xs">
+        <thead className="bg-warm-50 sticky top-0 z-10 border-b border-warm-100">
+          <tr>
+            <th className="text-left px-3 py-2.5 font-bold text-warm-500">#</th>
+            <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('surtido.validacion.code_header')}</th>
+            {showResult && <th className="text-left px-3 py-2.5 font-bold text-warm-500">Tipo</th>}
+            <th className="text-right px-3 py-2.5 font-bold text-warm-500">Hora</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-warm-50">
+          {events.map((e, i) => (
+            <tr key={e.id || i} className={`hover:bg-warm-50/50 transition-colors ${
+              e.scan_result === 'duplicate' ? 'bg-warning-50/30' : ''
+            }`}>
+              <td className="px-3 py-2 text-warm-400 tabular-nums font-bold">{i + 1}</td>
+              <td className="px-3 py-2 font-mono font-semibold text-warm-700">
+                {e.normalized_code || e.scanned_code || e.code}
+              </td>
+              {showResult && (
+                <td className="px-3 py-2">
+                  <span className={`badge text-[10px] ${
+                    e.scan_result === 'duplicate' ? 'bg-warning-100 text-warning-700' : 'bg-danger-100 text-danger-700'
+                  }`}>
+                    {e.scan_result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
+                  </span>
+                </td>
+              )}
+              <td className="px-3 py-2 text-right text-warm-400 tabular-nums">
+                {fmtTime(e.scanned_at || e.scan_time)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 function DetailModal({ sessionId, isOpen, onClose }) {
   const { t } = useI18nStore()
+  const [detailTab, setDetailTab] = useState('validados')
+
   const { data, isLoading } = useQuery({
     queryKey: ['surtido-session-detail', sessionId],
     queryFn: () => getScanSession(sessionId),
     enabled: isOpen && !!sessionId,
     staleTime: 30000,
+    onSuccess: () => setDetailTab('validados'),
   })
+
   const session = data?.data ?? {}
   const events = session.events ?? []
-  const totalOk  = events.filter(e => e.result === 'ok').length
-  const totalRej = events.filter(e => e.result === 'rejected').length
-  const totalDup = events.filter(e => e.result === 'duplicate').length
-  const notFound = [...new Set(events.filter(e => e.result === 'rejected').map(e => e.normalized_code || e.code))]
+
+  const validados  = events.filter(e => e.scan_result === 'ok')
+  const rechazados = events.filter(e => e.scan_result === 'not_found')
+  const duplicados = events.filter(e => e.scan_result === 'duplicate')
+
+  const totalExpected = session.total_expected ?? 0
+  const totalScanned  = session.total_scanned ?? validados.length
+  const progress      = totalExpected > 0 ? Math.min(100, Math.round((totalScanned / totalExpected) * 100)) : 0
+
+  const handleClose = () => { setDetailTab('validados'); onClose() }
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
-      title={session.outbound_order_no ? `OBC · ${session.outbound_order_no}` : t('surtido.registros.detail.title_fallback')}
-      icon={ScanBarcode}
-      footer={<button className="btn-ghost" onClick={onClose}><X size={14} /> {t('common.close')}</button>}
+      onClose={handleClose}
+      title={isLoading ? <span className="text-warm-400 text-sm">{t('common.loading')}</span> : (
+        <ObcHeader obc={session.outbound_order_no} status={session.status} t={t} />
+      )}
+      icon={Activity}
+      size="full"
+      footer={<button className="btn-ghost" onClick={handleClose}><X size={14} /> {t('common.close')}</button>}
     >
       {isLoading ? (
-        <div className="flex justify-center py-8"><LoadingSpinner /></div>
+        <div className="flex items-center justify-center py-16 gap-2 text-warm-400">
+          <Loader2 size={18} className="animate-spin" /> {t('common.loading')}
+        </div>
       ) : (
-        <div className="space-y-4">
-          {/* Header info */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="space-y-5">
+
+          {/* Info grid — row 1 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: t('surtido.registros.detail.operator'), value: session.operator_nombre },
-              { label: t('surtido.registros.detail.duration'), value: durationLabel(session.started_at, session.ended_at) },
-              { label: t('surtido.registros.detail.start'), value: session.started_at ? new Date(session.started_at).toLocaleString() : null },
-              { label: t('surtido.registros.detail.status'), value: STATUS_META[session.status]?.labelKey ? t(STATUS_META[session.status].labelKey) : null },
-            ].filter(i => i.value).map((item, i) => (
-              <div key={i} className="bg-warm-50 rounded-lg px-3 py-2">
-                <p className="text-warm-400 text-[10px] uppercase tracking-wide">{item.label}</p>
-                <p className="font-semibold text-warm-800 truncate">{item.value}</p>
+              { label: t('surtido.registros.operator'), value: session.operator_nombre || '—', icon: User },
+              { label: t('surtido.registros.duration'),  value: durationLabel(session.started_at, session.ended_at ?? session.completed_at), icon: Timer },
+              { label: t('surtido.registros.detail.start'), value: fmtDt(session.started_at), icon: Clock },
+              { label: 'Fin',                              value: fmtDt(session.ended_at ?? session.completed_at) || 'En curso', icon: Clock },
+            ].map(f => (
+              <div key={f.label} className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
+                <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
+                  <f.icon size={9} /> {f.label}
+                </p>
+                <p className="text-sm font-semibold text-warm-700 font-mono">{f.value}</p>
               </div>
             ))}
           </div>
 
-          {/* Counters */}
-          <div className="grid grid-cols-3 gap-2 text-xs text-center">
-            <div className="bg-success-50 rounded-xl py-3">
-              <p className="text-2xl font-bold text-success-600 leading-none">{totalOk}</p>
-              <p className="text-success-600 mt-1 font-medium">{t('surtido.registros.detail.validated')}</p>
-            </div>
-            <div className="bg-danger-50 rounded-xl py-3">
-              <p className="text-2xl font-bold text-danger-600 leading-none">{totalRej}</p>
-              <p className="text-danger-600 mt-1 font-medium">{t('surtido.registros.detail.rejected_count')}</p>
-            </div>
-            <div className="bg-warning-50 rounded-xl py-3">
-              <p className="text-2xl font-bold text-warning-600 leading-none">{totalDup}</p>
-              <p className="text-warning-600 mt-1 font-medium">{t('surtido.registros.detail.duplicated')}</p>
-            </div>
+          {/* Info grid — row 2 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: t('surtido.registros.expected'),  value: totalExpected },
+              { label: t('surtido.registros.validated'), value: totalScanned },
+              { label: t('surtido.registros.rejected'),  value: rechazados.length },
+              { label: t('surtido.escaneo.match_duplicate'), value: duplicados.length },
+            ].map(f => (
+              <div key={f.label} className="p-3 rounded-xl bg-warm-50 border border-warm-100/60 text-center">
+                <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1">{f.label}</p>
+                <p className="text-2xl font-black text-warm-700 leading-none">{f.value}</p>
+              </div>
+            ))}
           </div>
 
-          {/* Not found codes */}
-          {notFound.length > 0 && (
-            <div className="bg-danger-50 rounded-xl p-3">
-              <p className="text-xs font-semibold text-danger-700 mb-2">
-                {t('surtido.registros.detail.not_found')} ({notFound.length})
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {notFound.map((code, i) => (
-                  <span key={i} className="font-mono text-[10px] bg-white border border-danger-200 text-danger-700 rounded-md px-1.5 py-0.5">
-                    {code}
-                  </span>
-                ))}
+          {/* Progress bar */}
+          {totalExpected > 0 && (
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold">Progreso</p>
+                <span className={`text-sm font-black ${progress >= 100 ? 'text-success-600' : 'text-primary-600'}`}>{progress}%</span>
+              </div>
+              <div className="w-full h-2.5 bg-warm-100 rounded-full overflow-hidden border border-warm-200/50">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${
+                    progress >= 100 ? 'from-success-400 to-success-600' : 'from-primary-400 to-accent-500'
+                  }`}
+                  style={{ width: `${progress}%` }} />
               </div>
             </div>
           )}
 
           {/* Notes */}
           {session.notes && (
-            <div className="bg-warm-50 rounded-xl p-3">
-              <p className="text-[10px] font-semibold text-warm-400 uppercase tracking-wide mb-1">{t('surtido.registros.detail.notes')}</p>
+            <div className="bg-warm-50 rounded-xl px-3 py-2.5 border border-warm-100 flex items-start gap-2">
+              <AlertCircle size={13} className="text-warm-400 shrink-0 mt-0.5" />
               <p className="text-xs text-warm-700">{session.notes}</p>
             </div>
           )}
 
-          {/* Event timeline */}
-          <div>
-            <p className="text-[10px] font-semibold text-warm-500 uppercase tracking-wide mb-2">
-              {t('surtido.registros.detail.events')} ({events.length})
-            </p>
-            <div className="max-h-60 overflow-y-auto divide-y divide-warm-100 -mx-1 px-1">
-              {events.length === 0 ? (
-                <p className="text-xs text-warm-400 py-4 text-center">{t('surtido.registros.detail.no_events')}</p>
-              ) : (
-                events.map((ev, i) => {
-                  const meta = RESULT_META[ev.result] ?? RESULT_META.rejected
-                  const Icon = meta.icon
-                  return (
-                    <div key={i} className="flex items-center gap-2 py-2">
-                      <Icon size={12} className={`shrink-0 ${meta.cls}`} />
-                      <span className="font-mono text-xs flex-1 truncate text-warm-700">{ev.normalized_code || ev.code}</span>
-                      <span className={`text-[10px] font-semibold shrink-0 ${meta.cls}`}>{t(meta.labelKey)}</span>
-                      <span className="text-[10px] text-warm-400 shrink-0 tabular-nums">
-                        {ev.scan_time ? new Date(ev.scan_time).toLocaleTimeString() : ''}
-                      </span>
-                    </div>
-                  )
-                })
-              )}
+          {/* Discrepancy banner */}
+          {rechazados.length > 0 && (
+            <div className="bg-danger-50 border border-danger-200 rounded-xl p-3 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-danger-700">
+                {rechazados.length} {rechazados.length === 1 ? 'caja rechazada' : 'cajas rechazadas'} — no coinciden con los datos del pedido
+              </p>
             </div>
+          )}
+
+          {/* Tabs */}
+          <div className="sticky top-0 z-10 bg-white -mx-1 px-1 flex gap-1 border-b border-warm-100">
+            <button onClick={() => setDetailTab('validados')}
+              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
+                detailTab === 'validados' ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
+              }`}>
+              <CheckCircle2 size={12} /> {t('surtido.registros.detail.validated')}
+              <span className="bg-success-100 text-success-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{validados.length}</span>
+            </button>
+            <button onClick={() => setDetailTab('rechazados')}
+              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
+                detailTab === 'rechazados' ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
+              }`}>
+              <XCircle size={12} /> {t('surtido.escaneo.tab_rechazados')}
+              {rechazados.length > 0 && (
+                <span className="bg-danger-100 text-danger-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{rechazados.length}</span>
+              )}
+            </button>
+            <button onClick={() => setDetailTab('duplicados')}
+              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
+                detailTab === 'duplicados' ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
+              }`}>
+              <Copy size={12} /> Duplicados
+              {duplicados.length > 0 && (
+                <span className="bg-warning-100 text-warning-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{duplicados.length}</span>
+              )}
+            </button>
           </div>
+
+          {/* Tab content */}
+          {detailTab === 'validados'  && <ScanTable events={validados}  t={t} />}
+          {detailTab === 'rechazados' && <ScanTable events={rechazados} t={t} showResult />}
+          {detailTab === 'duplicados' && <ScanTable events={duplicados} t={t} showResult />}
+
         </div>
       )}
     </Modal>
@@ -186,7 +295,7 @@ export default function SurtidoRegistros() {
     <div className="flex flex-col h-full">
       <Header title={t('surtido.registros.title')} subtitle={t('nav.surtido_wms')} />
 
-      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-lg border-b border-warm-100 px-4 py-2.5 shadow-sm">
+      <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5">
         <div className="relative max-w-sm">
           <ScanBarcode size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400" />
           <input
@@ -212,7 +321,7 @@ export default function SurtidoRegistros() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-warm-50/60">
+                  <tr className="bg-warm-50 border-b border-warm-100">
                     <th className="table-header font-semibold">{t('surtido.registros.order_no')}</th>
                     <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.registros.operator')}</th>
                     <th className="table-header hidden md:table-cell font-semibold">{t('surtido.registros.date')}</th>
@@ -221,15 +330,19 @@ export default function SurtidoRegistros() {
                     <th className="table-header text-right font-semibold">{t('surtido.registros.validated')}</th>
                     <th className="table-header text-right hidden md:table-cell font-semibold">{t('surtido.registros.rejected')}</th>
                     <th className="table-header font-semibold">{t('surtido.registros.status')}</th>
-                    <th className="table-header" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
                   {filtered.map(r => {
-                    const meta = STATUS_META[r.status] ?? STATUS_META.cancelled
+                    const meta = STATUS_META[r.status] ?? STATUS_META.open
                     const rejected = Math.max(0, (r.total_expected ?? 0) - (r.total_scanned ?? 0))
+                    const pct = r.total_expected > 0
+                      ? Math.min(100, Math.round(((r.total_scanned ?? 0) / r.total_expected) * 100))
+                      : null
                     return (
-                      <tr key={r.id} className="hover:bg-primary-50/20 transition-colors">
+                      <tr key={r.id}
+                        onClick={() => setDetailId(r.id)}
+                        className="hover:bg-primary-50/20 transition-colors cursor-pointer">
                         <td className="table-cell">
                           <span className="font-mono font-bold text-primary-700 text-xs">{r.outbound_order_no || '—'}</span>
                         </td>
@@ -249,7 +362,15 @@ export default function SurtidoRegistros() {
                           <span className="text-warm-500 text-xs tabular-nums">{r.total_expected ?? 0}</span>
                         </td>
                         <td className="table-cell text-right">
-                          <span className="font-bold text-success-600 text-sm tabular-nums">{r.total_scanned ?? 0}</span>
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="font-bold text-success-600 text-sm tabular-nums">{r.total_scanned ?? 0}</span>
+                            {pct !== null && (
+                              <div className="w-12 h-1.5 bg-warm-100 rounded-full overflow-hidden hidden xl:block">
+                                <div className={`h-full rounded-full ${pct >= 100 ? 'bg-success-500' : 'bg-primary-400'}`}
+                                  style={{ width: `${pct}%` }} />
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="table-cell text-right hidden md:table-cell">
                           <span className={`font-bold text-xs tabular-nums ${rejected > 0 ? 'text-danger-600' : 'text-warm-300'}`}>
@@ -258,15 +379,6 @@ export default function SurtidoRegistros() {
                         </td>
                         <td className="table-cell">
                           <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
-                        </td>
-                        <td className="table-cell text-right">
-                          <button
-                            className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
-                            onClick={() => setDetailId(r.id)}
-                            title={t('common.show')}
-                          >
-                            <Eye size={13} />
-                          </button>
                         </td>
                       </tr>
                     )
