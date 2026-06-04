@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Search, UserCheck, Users, Plus, Trash2, X, ChevronDown, Play, Loader2,
   Package2, Calendar, Truck, ScanBarcode, Copy, Check, Info, Activity,
-  User, Clock, BarChart3,
+  User, Clock, BarChart3, RefreshCw,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -17,6 +17,7 @@ import {
   getSurtidores, createSurtidor, deleteSurtidor,
   getOrderTracking, upsertOrderTracking, getScanSessions,
 } from '../services/surtidoService'
+import { refreshSheet, getCacheTimestamp } from '../../wmshub/services/googleSheetsService'
 
 const STATUS_META = {
   pending_assignment: { labelKey: 'surtido.ordenes.status.pending_assignment', cls: 'bg-warm-100 text-warm-600' },
@@ -329,14 +330,24 @@ export default function Ordenes() {
   const [assignTarget, setAssignTarget] = useState(null)
   const [wmsDetailOrder, setWmsDetailOrder] = useState(null)
   const [progressObc, setProgressObc] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
 
-  const wmsParams = { page, pageSize }
-  if (search.trim()) wmsParams.outboundOrderNos = search.trim()
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      await refreshSheet('outbound')
+      setSheetTs(getCacheTimestamp('outbound'))
+      qc.invalidateQueries({ queryKey: ['upapex-outbound'] })
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const { data: wmsData, isLoading: wmsLoading } = useQuery({
-    queryKey: ['upapex-outbound', wmsParams],
-    queryFn: () => getOutboundList(wmsParams),
-    staleTime: 30000,
+    queryKey: ['upapex-outbound'],
+    queryFn: getOutboundList,
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: trackingData } = useQuery({
@@ -351,9 +362,7 @@ export default function Ordenes() {
     staleTime: 60000,
   })
 
-  const records = wmsData?.data?.records ?? wmsData?.data ?? []
-  const total = wmsData?.data?.total ?? records.length
-  const totalPages = Math.ceil(total / pageSize) || 1
+  const allRecords = wmsData?.data?.records ?? wmsData?.data ?? []
 
   const trackingMap = (trackingData?.data ?? []).reduce((m, tr) => {
     m[tr.outbound_order_no] = tr; return m
@@ -361,12 +370,21 @@ export default function Ordenes() {
 
   const surtidores = surtidoresData?.data ?? []
 
-  const filteredRecords = records.filter(r => {
+  const q = search.trim().toLowerCase()
+  const filteredRecords = allRecords.filter(r => {
     const tracking = trackingMap[r.outboundOrderNo]
     if (filterStatus && (tracking?.status || 'pending_assignment') !== filterStatus) return false
     if (filterSurtidor && tracking?.surtidor_nombre !== filterSurtidor) return false
+    if (q) {
+      const haystack = [r.outboundOrderNo, r.customerCode, r.thirdOrderNo, r.receiverName, r.logisticsChannel].join(' ').toLowerCase()
+      if (!haystack.includes(q)) return false
+    }
     return true
   })
+
+  const total = filteredRecords.length
+  const totalPages = Math.ceil(total / pageSize) || 1
+  const pagedRecords = filteredRecords.slice((page - 1) * pageSize, page * pageSize)
 
   const assignMut = useMutation({
     mutationFn: ({ obc, surtidorId }) => upsertOrderTracking(obc, {
@@ -380,7 +398,7 @@ export default function Ordenes() {
   const loadDetailMut = useMutation({
     mutationFn: (obc) => getOutboundDetail(obc),
     onSuccess: (data, obc) => {
-      const row = records.find(r => r.outboundOrderNo === obc)
+      const row = allRecords.find(r => r.outboundOrderNo === obc)
       setWmsDetailOrder(row ? { ...row, _detail: data?.data } : { outboundOrderNo: obc, _detail: data?.data })
     },
     onError: () => toast.error(t('toast.error')),
@@ -399,9 +417,23 @@ export default function Ordenes() {
     <div className="flex flex-col h-full">
       <Header title={t('surtido.ordenes.title')} subtitle={t('nav.surtido_wms')}
         actions={
-          <button className="btn-ghost text-xs flex items-center gap-1.5" onClick={() => setShowSurtidoresModal(true)}>
-            <Users size={14} /> {t('surtido.ordenes.manage_surtidores')}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="btn-ghost text-xs flex items-center gap-1.5"
+              onClick={handleRefresh}
+              disabled={refreshing}>
+              {refreshing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+              {t('wmshub.config.sheet_refresh')}
+              {sheetTs > 0 && (
+                <span className="text-warm-400 font-normal">
+                  {t('wmshub.config.datos_al')} {new Date(sheetTs).toLocaleTimeString()}
+                </span>
+              )}
+            </button>
+            <button className="btn-ghost text-xs flex items-center gap-1.5" onClick={() => setShowSurtidoresModal(true)}>
+              <Users size={14} /> {t('surtido.ordenes.manage_surtidores')}
+            </button>
+          </div>
         }
       />
 
@@ -432,7 +464,7 @@ export default function Ordenes() {
 
       {/* Table */}
       <div className="flex-1 overflow-y-auto p-4">
-        {filteredRecords.length === 0 ? (
+        {pagedRecords.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400">
             <Package2 size={40} className="opacity-30" />
             <p className="text-sm">{t('common.noData')}</p>
@@ -456,7 +488,7 @@ export default function Ordenes() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
-                  {filteredRecords.map((r, i) => {
+                  {pagedRecords.map((r, i) => {
                     const obc = r.outboundOrderNo
                     const tracking = trackingMap[obc]
                     const status = tracking?.status || 'pending_assignment'

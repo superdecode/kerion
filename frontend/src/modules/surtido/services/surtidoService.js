@@ -1,10 +1,12 @@
 import api from '../../../core/services/api'
+import {
+  getOutboundList as getOutboundListFromSheets,
+  getOutboundDetail as getOutboundDetailFromSheets,
+} from '../../wmshub/services/googleSheetsService'
 
-export const getOutboundList = (params) =>
-  api.get('/upapex/outbound-list', { params }).then(r => r.data)
+export const getOutboundList = () => getOutboundListFromSheets()
 
-export const getOutboundDetail = (orderNo) =>
-  api.get(`/upapex/outbound-detail/${encodeURIComponent(orderNo)}`).then(r => r.data)
+export const getOutboundDetail = (orderNo) => getOutboundDetailFromSheets(orderNo)
 
 export const getScanSessions = (params) =>
   api.get('/upapex/scan-sessions', { params }).then(r => r.data)

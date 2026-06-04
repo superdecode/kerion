@@ -24,7 +24,7 @@ router.get('/config',
     try {
       const result = await req.tQuery(
         `SELECT id, base_url, is_active, last_verified_at, created_at, updated_at,
-                app_key, app_secret_encrypted
+                app_key, app_secret_encrypted, sheet_inventory_url, sheet_outbound_url
          FROM wms_config WHERE tenant_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1`,
         [req.tenantId]
       )
@@ -41,6 +41,8 @@ router.get('/config',
           updated_at: row.updated_at,
           app_key_masked: row.app_key ? `****${row.app_key.slice(-4)}` : null,
           has_secret: !!row.app_secret_encrypted,
+          sheet_inventory_url: row.sheet_inventory_url || null,
+          sheet_outbound_url:  row.sheet_outbound_url  || null,
         },
       })
     } catch (err) {
@@ -91,6 +93,61 @@ router.post('/config',
         ? 'El servidor no tiene configurada la clave de encriptación WMS. Contacta al administrador.'
         : 'Error guardando configuración Upapex'
       res.status(500).json({ success: false, error: userMsg })
+    }
+  }
+)
+
+// PUT /api/upapex/config/sheets — save Google Sheets URLs
+router.put('/config/sheets',
+  authenticateToken, loadFullUser,
+  requirePermission('sistema.wms', 'editar'),
+  async (req, res) => {
+    try {
+      const { sheet_inventory_url, sheet_outbound_url } = req.body
+      const existing = await req.tQuery(
+        'SELECT id FROM wms_config WHERE tenant_id = $1 LIMIT 1',
+        [req.tenantId]
+      )
+      if (existing.rows.length > 0) {
+        await req.tQuery(
+          'UPDATE wms_config SET sheet_inventory_url = $1, sheet_outbound_url = $2, updated_at = now() WHERE tenant_id = $3',
+          [sheet_inventory_url || null, sheet_outbound_url || null, req.tenantId]
+        )
+      } else {
+        await req.tQuery(
+          'INSERT INTO wms_config (tenant_id, sheet_inventory_url, sheet_outbound_url) VALUES ($1, $2, $3)',
+          [req.tenantId, sheet_inventory_url || null, sheet_outbound_url || null]
+        )
+      }
+      res.json({ success: true })
+    } catch (err) {
+      console.error('PUT upapex/config/sheets error:', err.message)
+      res.status(500).json({ success: false, error: 'Error guardando URLs de hojas' })
+    }
+  }
+)
+
+// GET /api/upapex/proxy/sheet?url= — CORS proxy for Google Sheets CSV
+router.get('/proxy/sheet',
+  authenticateToken, loadFullUser,
+  async (req, res) => {
+    try {
+      const { url } = req.query
+      if (!url || !url.startsWith('https://docs.google.com/')) {
+        return res.status(400).json({ success: false, error: 'URL inválida: debe ser una hoja de Google' })
+      }
+      const upstream = await fetch(url, {
+        headers: { Accept: 'text/csv,text/plain' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!upstream.ok) {
+        return res.status(502).json({ success: false, error: `Error al acceder a la hoja: HTTP ${upstream.status}` })
+      }
+      const text = await upstream.text()
+      res.set('Content-Type', 'text/plain; charset=utf-8').send(text)
+    } catch (err) {
+      console.error('GET upapex/proxy/sheet error:', err.message)
+      res.status(502).json({ success: false, error: 'No se pudo obtener la hoja de cálculo' })
     }
   }
 )

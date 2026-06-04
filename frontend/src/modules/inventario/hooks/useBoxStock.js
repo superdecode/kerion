@@ -4,17 +4,13 @@ import { normalizeCodeFast } from '../../_shared/wms/normalizeCode'
 import { useInventarioStore } from '../stores/inventarioStore'
 import { getBoxStock } from '../services/inventarioService'
 
-/**
- * Fetches box-stock and builds the in-memory inventory Map used for scan classification.
- * Stores the map in inventarioStore so Escaneo page can lookup instantly without re-fetching.
- */
-export function useBoxStock(params = {}) {
+export function useBoxStock() {
   const setSnapshot = useInventarioStore(s => s.setInventorySnapshot)
 
   const query = useQuery({
-    queryKey: ['upapex-box-stock', params],
-    queryFn: () => getBoxStock({ pageSize: 100, ...params }),
-    staleTime: 30000,
+    queryKey: ['upapex-box-stock'],
+    queryFn: getBoxStock,
+    staleTime: 5 * 60 * 1000,
   })
 
   useEffect(() => {

@@ -1,17 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   Eye, EyeOff, Plug, RefreshCw, CheckCircle2, XCircle,
   Loader2, Save, Wifi, WifiOff, Key, Clock, Zap,
-  ArrowUpDown, ShieldCheck, ShieldAlert,
+  ArrowUpDown, ShieldCheck, ShieldAlert, Link2,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useWmsHubStore } from '../stores/wmsHubStore'
-import { getConfig, saveConfig, testConnection } from '../services/wmsHubService'
+import { getConfig, saveConfig, testConnection, saveSheetConfig } from '../services/wmsHubService'
+import { testSheetUrl, invalidateUrlCache, getCacheTimestamp } from '../services/googleSheetsService'
 
 export default function Configuracion() {
   const { t } = useI18nStore()
@@ -26,6 +27,12 @@ export default function Configuracion() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [testStart, setTestStart] = useState(null)
 
+  const [sheetInventoryUrl, setSheetInventoryUrl] = useState('')
+  const [sheetOutboundUrl, setSheetOutboundUrl] = useState('')
+  const [sheetTestResults, setSheetTestResults] = useState({})
+  const [invTs, setInvTs] = useState(() => getCacheTimestamp('inventory'))
+  const [outTs, setOutTs] = useState(() => getCacheTimestamp('outbound'))
+
   const { data: configData, isLoading: configLoading } = useQuery({
     queryKey: ['upapex-config'],
     queryFn: getConfig,
@@ -35,6 +42,11 @@ export default function Configuracion() {
   const config = configData?.data
   const isConnected = lastTest?.ok === true
   const canSave = appKey.trim().length > 0 && appSecret.trim().length > 0
+
+  useEffect(() => {
+    if (config?.sheet_inventory_url) setSheetInventoryUrl(config.sheet_inventory_url)
+    if (config?.sheet_outbound_url)  setSheetOutboundUrl(config.sheet_outbound_url)
+  }, [config?.sheet_inventory_url, config?.sheet_outbound_url])
 
   const saveMut = useMutation({
     mutationFn: () => saveConfig({ app_key: appKey, app_secret: appSecret }),
@@ -59,6 +71,34 @@ export default function Configuracion() {
       toast.error(err.response?.data?.error || t('wmshub.config.test_fail'))
     },
   })
+
+  const saveSheetsMut = useMutation({
+    mutationFn: () => saveSheetConfig({
+      sheet_inventory_url: sheetInventoryUrl.trim() || null,
+      sheet_outbound_url:  sheetOutboundUrl.trim()  || null,
+    }),
+    onSuccess: () => {
+      invalidateUrlCache()
+      toast.success(t('wmshub.config.sheet_saved'))
+      qc.invalidateQueries({ queryKey: ['upapex-config'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  async function handleTestSheet(url, type) {
+    setSheetTestResults(prev => ({ ...prev, [type]: { loading: true } }))
+    try {
+      const result = await testSheetUrl(url, type)
+      setSheetTestResults(prev => ({ ...prev, [type]: { ok: true, rowCount: result.rowCount, mappedFields: result.mappedFields } }))
+    } catch (err) {
+      setSheetTestResults(prev => ({ ...prev, [type]: { ok: false, error: err.message } }))
+    }
+  }
+
+  function fmtTs(ts) {
+    if (!ts) return t('wmshub.config.sheet_never')
+    return new Date(ts).toLocaleTimeString()
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -305,6 +345,75 @@ export default function Configuracion() {
                     <div className={`w-2 h-2 rounded-full shrink-0 ${item.value ? 'bg-success-400' : 'bg-warm-300'}`} />
                   </div>
                 ))}
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Google Sheets card */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="card">
+            <div className="px-5 pt-5 pb-4 border-b border-warm-100 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center shrink-0">
+                <Link2 className="w-4 h-4 text-primary-600" />
+              </div>
+              <div>
+                <h2 className="font-bold text-warm-900 text-sm">{t('wmshub.config.sheets_section')}</h2>
+                <p className="text-xs text-warm-400">{t('wmshub.config.sheet_placeholder')}</p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {[
+                { key: 'inventory', label: t('wmshub.config.sheet_inventory_label'), value: sheetInventoryUrl, set: setSheetInventoryUrl, ts: invTs },
+                { key: 'outbound',  label: t('wmshub.config.sheet_outbound_label'),  value: sheetOutboundUrl,  set: setSheetOutboundUrl,  ts: outTs },
+              ].map(({ key, label, value, set, ts }) => {
+                const res = sheetTestResults[key]
+                return (
+                  <div key={key}>
+                    <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">{label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        className="input-field flex-1 text-xs font-mono"
+                        placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+                        value={value}
+                        onChange={e => { set(e.target.value); setSheetTestResults(p => ({ ...p, [key]: null })) }}
+                      />
+                      <button
+                        className="btn-ghost text-xs shrink-0 inline-flex items-center gap-1"
+                        disabled={!value.trim() || res?.loading}
+                        onClick={() => handleTestSheet(value.trim(), key)}>
+                        {res?.loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                        {t('wmshub.config.sheet_test_btn')}
+                      </button>
+                    </div>
+                    {res && !res.loading && (
+                      <p className={`mt-1 text-[11px] flex items-center gap-1 ${res.ok ? 'text-success-600' : 'text-danger-600'}`}>
+                        {res.ok
+                          ? <><CheckCircle2 size={11} /> {t('wmshub.config.sheet_test_ok')} — {res.rowCount} filas, {res.mappedFields?.length} campos</>
+                          : <><XCircle size={11} /> {res.error}</>}
+                      </p>
+                    )}
+                    {ts > 0 && (
+                      <p className="mt-0.5 text-[10px] text-warm-400">
+                        {t('wmshub.config.sheet_last_fetch')}: {fmtTs(ts)}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+
+              <div className="flex justify-end">
+                <button
+                  className="btn-primary inline-flex items-center gap-2"
+                  disabled={saveSheetsMut.isPending}
+                  onClick={() => saveSheetsMut.mutate()}>
+                  {saveSheetsMut.isPending
+                    ? <><Loader2 size={14} className="animate-spin" /> {t('common.saving')}</>
+                    : <><Save size={14} /> {t('common.save')}</>}
+                </button>
               </div>
             </div>
           </motion.div>

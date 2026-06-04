@@ -1,0 +1,210 @@
+/**
+ * ARCHIVED: xlwms OpenAPI Integration
+ * =====================================
+ * Status: Archived — replaced by Google Sheets CSV data source (2026-06-04)
+ *
+ * What was built:
+ *   Full backend integration with the xlwms warehouse management system
+ *   (https://api.xlwms.com/openapi). Implemented request signing (HMAC-SHA256),
+ *   per-tenant credential storage (AES-256-CBC encrypted app_secret), in-flight
+ *   deduplication, retry logic, and in-memory config cache per tenant.
+ *
+ * Endpoints implemented:
+ *   POST /v1/boxStock/page               — paginated box inventory
+ *   POST /v1/integratedInventory/pageOpen — sku-level integrated inventory
+ *   POST /v1/outboundOrder/big/pageList   — outbound order list
+ *   POST /v1/outboundOrder/big/detail     — outbound order detail
+ *
+ * Authentication:
+ *   HMAC-SHA256 authcode. Sort payload keys {appKey, data, reqTime} alphabetically
+ *   (case-insensitive), concatenate VALUES only (no key= prefix), then
+ *   HMAC-SHA256 with appSecret. Verified working: credentials and signing
+ *   confirmed valid by xlwms API (returned code 200 on some endpoints).
+ *
+ * Why replaced:
+ *   The xlwms account used lacked warehouse-level data permissions. The API
+ *   returned code 200 on /boxStock but returned an empty records array because
+ *   the tenant was not assigned any warehouse (whCode). The outbound list
+ *   returned 502 for similar reasons. Re-activating this code would require
+ *   the xlwms account to have whCode-level permissions assigned by the platform
+ *   administrator. The appKey and appSecret themselves are valid.
+ *
+ * To re-activate:
+ *   1. Ensure the xlwms account has warehouse permissions (whCode assigned)
+ *   2. Restore this file to backend/src/modules/upapex/services/upapexApiClient.js
+ *   3. Restore the WMS proxy routes in upapex.routes.js (box-stock, integrated-inventory,
+ *      outbound-list, outbound-detail)
+ *   4. Revert inventarioService.js getBoxStock and surtidoService.js getOutboundList/Detail
+ *      to call the backend proxy routes instead of googleSheetsService
+ */
+
+// ── Dependencies ───────────────────────────────────────────────────────────
+
+// import { createHmac } from 'crypto'
+// import { query } from '../../../config/database.js'
+// import { decrypt } from '../../../shared/services/wmsCredentials.js'
+
+const BASE_URL = 'https://api.xlwms.com/openapi'
+
+// ── Config cache ───────────────────────────────────────────────────────────
+
+const _configCache = new Map()
+const CONFIG_TTL_MS = 2 * 60 * 1000
+const _inFlight = new Map()
+const _fieldLogDone = new Set()
+
+function makeReqTime() {
+  return String(Math.floor(Date.now() / 1000))
+}
+
+/**
+ * HMAC-SHA256 authcode per xlwms docs:
+ * Sort {appKey, data, reqTime} keys alphabetically, concatenate VALUES only
+ * (no key= prefix), then HMAC-SHA256 with appSecret.
+ */
+function buildAuthCode(appKey, appSecret, data, reqTime) {
+  const params = {
+    appKey,
+    data: JSON.stringify(data),
+    reqTime: String(reqTime),
+  }
+  const paramStr = Object.keys(params)
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    .map(k => params[k])
+    .join('')
+  return createHmac('sha256', appSecret).update(paramStr).digest('hex')
+}
+
+async function getConfig(tenantId) {
+  const cached = _configCache.get(tenantId)
+  if (cached && Date.now() - cached.at < CONFIG_TTL_MS) return cached.config
+
+  const res = await query(
+    'SELECT app_key, app_secret_encrypted FROM wms_config WHERE tenant_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1',
+    [tenantId]
+  )
+  const row = res.rows[0] || null
+  const config = row
+    ? {
+        app_key: row.app_key,
+        app_secret: row.app_secret_encrypted ? decrypt(row.app_secret_encrypted) : null,
+      }
+    : null
+  _configCache.set(tenantId, { config, at: Date.now() })
+  return config
+}
+
+export function invalidateConfigCache(tenantId) {
+  if (tenantId) _configCache.delete(tenantId)
+  else _configCache.clear()
+}
+
+async function upapexPost(tenantId, endpoint, data) {
+  const config = await getConfig(tenantId)
+  if (!config) {
+    const err = new Error('Upapex WMS no configurado')
+    err.code = 'UPAPEX_NOT_CONFIGURED'
+    throw err
+  }
+
+  const reqTime = makeReqTime()
+  const body = JSON.stringify({ appKey: config.app_key, reqTime, data })
+
+  let url = `${BASE_URL}${endpoint}`
+  let authcode = null
+  if (config.app_secret) {
+    authcode = buildAuthCode(config.app_key, config.app_secret, data, reqTime)
+    url += `?authcode=${authcode}`
+  }
+
+  console.log(`[xlwms] POST ${endpoint} appKey=****${config.app_key.slice(-4)} reqTime=${reqTime} authcode=${authcode ? authcode.slice(0,8) + '...' : 'NONE'}`)
+
+  let lastErr
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(12000),
+      })
+      if (!res.ok) throw new Error(`WMS HTTP ${res.status}`)
+      const json = await res.json()
+      if (json.code !== 200) {
+        console.error(`[xlwms] FULL_RESPONSE=${JSON.stringify(json)} endpoint=${endpoint}`)
+        const rawMsg = json.msg || json.message || json.errmsg || json.error || ''
+        const msg = rawMsg ? `[${json.code}] ${rawMsg}` : `WMS error code ${json.code}`
+        const err = new Error(msg)
+        err.wmsCode = json.code
+        err.wmsMsg = msg
+        throw err
+      }
+      if (json.data && !_fieldLogDone.has(endpoint)) {
+        _fieldLogDone.add(endpoint)
+        const sample = json.data?.records?.[0] ?? json.data?.[0] ?? json.data
+        console.log(`[xlwms] FIELDS ${endpoint}: ${JSON.stringify(sample)}`)
+      }
+      return json.data
+    } catch (err) {
+      if (err.code === 'UPAPEX_NOT_CONFIGURED' || err.wmsCode) throw err
+      lastErr = err
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 2000))
+    }
+  }
+  throw lastErr
+}
+
+function dedupKey(tenantId, endpoint, data) {
+  return `${tenantId}:${endpoint}:${JSON.stringify(data)}`
+}
+
+async function upapexPostDedup(tenantId, endpoint, data) {
+  const key = dedupKey(tenantId, endpoint, data)
+  const existing = _inFlight.get(key)
+  if (existing) return existing
+
+  const promise = upapexPost(tenantId, endpoint, data).finally(() => {
+    _inFlight.delete(key)
+  })
+  _inFlight.set(key, promise)
+  setTimeout(() => _inFlight.delete(key), 500)
+  return promise
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────
+
+export async function testConnection(tenantId) {
+  return upapexPost(tenantId, '/v1/boxStock/page', { page: 1, pageSize: 1 })
+}
+
+export async function getBoxStock(tenantId, params = {}) {
+  const { page = 1, pageSize = 25, ...rest } = params
+  return upapexPostDedup(tenantId, '/v1/boxStock/page', { page, pageSize, ...rest })
+}
+
+export async function getIntegratedInventory(tenantId, params = {}) {
+  const { page = 1, pageSize = 25, ...rest } = params
+  return upapexPostDedup(tenantId, '/v1/integratedInventory/pageOpen', {
+    page,
+    pageSize,
+    timeType: 'operateTime',
+    ...rest,
+  })
+}
+
+export async function getBigOutboundList(tenantId, params = {}) {
+  const { page = 1, pageSize = 25, ...rest } = params
+  return upapexPostDedup(tenantId, '/v1/outboundOrder/big/pageList', {
+    page,
+    pageSize,
+    timeType: 'orderCreateTime',
+    ...rest,
+  })
+}
+
+export async function getBigOutboundDetail(tenantId, outboundOrderNoList) {
+  const list = Array.isArray(outboundOrderNoList) ? outboundOrderNoList : [outboundOrderNoList]
+  return upapexPost(tenantId, '/v1/outboundOrder/big/detail', { outboundOrderNoList: list })
+}
+
+export { getConfig as _getConfig }

@@ -1,7 +1,7 @@
 import api from '../../../core/services/api'
+import { getInventoryList } from '../../wmshub/services/googleSheetsService'
 
-export const getBoxStock = (params) =>
-  api.get('/upapex/box-stock', { params }).then(r => r.data)
+export const getBoxStock = () => getInventoryList()
 
 export const getIntegratedInventory = (params) =>
   api.get('/upapex/integrated-inventory', { params }).then(r => r.data)
