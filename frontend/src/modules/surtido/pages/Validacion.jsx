@@ -6,6 +6,7 @@ import {
   Search, CheckCircle2, XCircle, AlertCircle, Loader2, Wifi, WifiOff,
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
   ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck,
+  MapPin, XOctagon, Plus,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -17,7 +18,7 @@ import { playSound, initAudio } from '../../_shared/wms/playSound'
 import {
   getOutboundList, getOutboundDetail,
   createScanSession, updateScanSession, addScanEvent, clearSessionEvents,
-  upsertOrderTracking,
+  upsertOrderTracking, getScanSessions,
 } from '../services/surtidoService'
 import { getUbicaciones } from '../../wmshub/services/wmsHubService'
 
@@ -30,7 +31,6 @@ function buildItemMaps(detailData) {
   const productList = detail.productList ?? []
   const packageMap = new Map()
   packageList.forEach(p => {
-    // xlwms primary barcode is customizeCode; fall back to boxType/boxCode
     const codes = [p.customizeCode, p.boxType, p.boxCode].filter(Boolean)
     const expectedQty = p.quantity ?? p.totalPackageQty ?? p.qty ?? 1
     codes.forEach(c => {
@@ -63,7 +63,10 @@ function useSessionTimer(startTime) {
 }
 
 const fmtElapsed = (secs) => {
-  const m = Math.floor(secs / 60); const s = secs % 60
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  const s = secs % 60
+  if (h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
 }
 
@@ -73,20 +76,28 @@ function SearchStep({ onFound }) {
   const toast = useToastStore.getState()
   const [input, setInput] = useState('')
   const [results, setResults] = useState(null)
+  const [loading, setLoading] = useState(false)
   const inputRef = useRef(null)
 
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80) }, [])
 
-  const searchMut = useMutation({
-    mutationFn: (q) => getOutboundList({ page: 1, pageSize: 10, outboundOrderNos: q }),
-    onSuccess: (data) => {
-      const records = data?.data?.records ?? data?.data ?? []
-      if (records.length === 0) { toast.error(t('surtido.escaneo.order_not_found') + ': ' + input); setResults([]); return }
-      if (records.length === 1) { onFound(records[0].outboundOrderNo); return }
-      setResults(records)
-    },
-    onError: () => toast.error(t('toast.error')),
-  })
+  async function doSearch(q) {
+    if (!q.trim()) return
+    setLoading(true)
+    try {
+      const data = await getOutboundList()
+      const all = data?.data?.records ?? data?.data ?? []
+      const norm = q.trim().toLowerCase()
+      const filtered = all.filter(r => (r.outboundOrderNo || '').toLowerCase().includes(norm))
+      if (filtered.length === 0) { toast.error(t('surtido.escaneo.order_not_found') + ': ' + q); setResults([]); return }
+      if (filtered.length === 1) { onFound(filtered[0].outboundOrderNo); return }
+      setResults(filtered)
+    } catch {
+      toast.error(t('toast.error'))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -116,15 +127,15 @@ function SearchStep({ onFound }) {
                 placeholder="OB-XXXXXXXX"
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && input.trim()) searchMut.mutate(input.trim()) }}
+                onKeyDown={e => { if (e.key === 'Enter' && input.trim()) doSearch(input.trim()) }}
               />
             </div>
             <motion.button
               className="btn-primary px-6 py-4 text-base shadow-glow"
-              onClick={() => searchMut.mutate(input.trim())}
-              disabled={!input.trim() || searchMut.isPending}
+              onClick={() => doSearch(input.trim())}
+              disabled={!input.trim() || loading}
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-              {searchMut.isPending ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
             </motion.button>
           </div>
         </motion.div>
@@ -249,10 +260,133 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
           onClick={onStart}
           disabled={isStarting}
           whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}>
-          {isStarting ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
-          {t('surtido.escaneo.start_validation')}
+          {isStarting ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18} />}
+          {t('surtido.validacion.ubicacion_step_title')}
         </motion.button>
       </div>
+    </div>
+  )
+}
+
+/* ─── Location step ───────────────────────────────────────── */
+function LocationStep({ obc, ubicacionesData, onConfirm, onBack, isStarting }) {
+  const { t } = useI18nStore()
+  const toast = useToastStore.getState()
+  const [code, setCode] = useState('')
+  const [showNotFound, setShowNotFound] = useState(false)
+  const [notFoundCode, setNotFoundCode] = useState('')
+  const inputRef = useRef(null)
+
+  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80) }, [])
+
+  const ubicaciones = ubicacionesData?.data ?? []
+
+  function tryConfirm(raw) {
+    const val = raw.trim()
+    if (!val) return
+    if (ubicaciones.length === 0) {
+      onConfirm(null)
+      return
+    }
+    const norm = val.toLowerCase()
+    const found = ubicaciones.find(u =>
+      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
+    )
+    if (found) {
+      onConfirm({ id: found.id, codigo: found.codigo, nombre: found.nombre })
+    } else {
+      setNotFoundCode(val)
+      setShowNotFound(true)
+    }
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="max-w-2xl mx-auto space-y-4">
+        <button className="btn-ghost text-sm inline-flex items-center gap-1.5" onClick={onBack}>
+          <ArrowLeft size={14} /> {t('common.back')}
+        </button>
+
+        <motion.div className="card p-6"
+          initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-2xl bg-accent-100 flex items-center justify-center shrink-0">
+              <MapPin className="w-5 h-5 text-accent-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-warm-900">{t('surtido.validacion.ubicacion_step_title')}</h3>
+              <p className="text-xs text-warm-500">{obc}</p>
+            </div>
+          </div>
+
+          <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">
+            {t('surtido.validacion.ubicacion_scan_label')}
+          </label>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300" />
+              <input
+                ref={inputRef}
+                type="text"
+                className="w-full pl-12 pr-5 py-4 text-base bg-white border-2 border-warm-200 rounded-2xl
+                  focus:border-accent-500 focus:ring-4 focus:ring-accent-100
+                  transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
+                placeholder="UB-XXX"
+                value={code}
+                onChange={e => setCode(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') tryConfirm(e.target.value) }}
+              />
+            </div>
+            <motion.button
+              className="btn-primary px-6 py-4 text-base"
+              onClick={() => tryConfirm(code)}
+              disabled={!code.trim() || isStarting}
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+              {isStarting ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
+            </motion.button>
+          </div>
+
+          {ubicaciones.length > 0 && (
+            <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
+              {ubicaciones.filter(u =>
+                !code.trim() ||
+                (u.codigo || '').toLowerCase().includes(code.toLowerCase()) ||
+                (u.nombre || '').toLowerCase().includes(code.toLowerCase())
+              ).map(u => (
+                <button key={u.id}
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-accent-50 transition-colors text-xs flex items-center gap-2"
+                  onClick={() => onConfirm({ id: u.id, codigo: u.codigo, nombre: u.nombre })}>
+                  <MapPin size={11} className="text-accent-500 shrink-0" />
+                  <span className="font-mono font-semibold text-warm-800">{u.codigo}</span>
+                  <span className="text-warm-500">{u.nombre}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button
+            className="mt-4 text-xs text-warm-400 hover:text-warm-600 transition-colors underline-offset-2 hover:underline"
+            onClick={() => onConfirm(null)}>
+            {t('surtido.validacion.ubicacion_skip')}
+          </button>
+        </motion.div>
+      </div>
+
+      <Modal isOpen={showNotFound} onClose={() => setShowNotFound(false)}
+        title={t('surtido.validacion.ubicacion_not_found_title')} icon={MapPin}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => setShowNotFound(false)}>{t('common.cancel')}</button>
+            <button className="btn-primary" onClick={() => { setShowNotFound(false); onConfirm({ id: null, codigo: notFoundCode, nombre: notFoundCode }) }}>
+              {t('surtido.validacion.ubicacion_create_btn')}
+            </button>
+          </div>
+        }>
+        <p className="text-sm text-warm-600">
+          <strong className="font-mono text-warm-800">{notFoundCode}</strong> — {t('surtido.validacion.ubicacion_not_found_body')}
+        </p>
+      </Modal>
     </div>
   )
 }
@@ -318,6 +452,137 @@ function ItemsTable({ items, itemCounts, t, onManualAdjust }) {
   )
 }
 
+/* ─── Rejected items table ────────────────────────────────── */
+function RejectedTable({ items, t }) {
+  if (items.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-12 text-warm-400 gap-2">
+      <CheckCircle2 size={36} className="opacity-30 text-success-500" />
+      <p className="text-sm text-success-600">{t('surtido.validacion.all_complete')}</p>
+    </div>
+  )
+  return (
+    <div className="card overflow-hidden shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-warm-50/60">
+              <th className="table-header">{t('surtido.validacion.code_header')}</th>
+              <th className="table-header">{t('common.status')}</th>
+              <th className="table-header text-right">Hora</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-warm-50">
+            {items.map((e, i) => (
+              <tr key={i} className="hover:bg-danger-50/20 transition-colors">
+                <td className="table-cell font-mono font-semibold text-danger-800">{e.code}</td>
+                <td className="table-cell">
+                  <span className={`badge ${
+                    e.result === 'duplicate' ? 'bg-warning-100 text-warning-700' : 'bg-danger-100 text-danger-700'
+                  }`}>
+                    {e.result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
+                  </span>
+                </td>
+                <td className="table-cell text-right text-warm-400 tabular-nums">{new Date(e.ts).toLocaleTimeString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Recount modal ───────────────────────────────────────── */
+function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
+  const [recountInput, setRecountInput] = useState('')
+  const [recountItems, setRecountItems] = useState([])
+  const recountRef = useRef(null)
+  const lastKeyRef = useRef(0)
+
+  useEffect(() => {
+    if (isOpen) { setRecountItems([]); setTimeout(() => recountRef.current?.focus(), 80) }
+  }, [isOpen])
+
+  function doRecount(raw) {
+    const norm = normalizeCode(raw.trim())
+    if (!norm) return
+    const alreadyInRecount = recountItems.some(r => r.code === norm && r.status !== 'nuevo')
+    const alreadyInSession = sessionHistory.some(h => h.code === norm && h.result === 'ok')
+    let status
+    if (alreadyInRecount) {
+      status = 'duplicado'
+    } else if (alreadyInSession) {
+      status = 'ya_registrado'
+    } else {
+      status = 'nuevo'
+    }
+    setRecountItems(prev => [{ code: norm, status, ts: Date.now() }, ...prev])
+    recountRef.current.value = ''
+  }
+
+  function handleKeyDown(e) {
+    const now = Date.now()
+    const delta = now - lastKeyRef.current
+    lastKeyRef.current = now
+    if (e.key === 'Enter') {
+      const val = e.target.value.trim()
+      if (!val) return
+      doRecount(val); return
+    }
+    if (delta > SCANNER_THRESHOLD_MS && e.target.value.length > 0) {
+      e.preventDefault()
+      e.target.value = ''
+    }
+  }
+
+  const statusCls = {
+    ya_registrado: 'bg-success-50 text-success-700 border-success-200',
+    duplicado:     'bg-warning-50 text-warning-700 border-warning-200',
+    nuevo:         'bg-primary-50 text-primary-700 border-primary-200',
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={() => { setRecountItems([]); onClose() }}
+      title={t('surtido.escaneo.recount')} icon={RotateCcw}
+      footer={<button className="btn-ghost" onClick={() => { setRecountItems([]); onClose() }}>{t('common.close')}</button>}>
+      <div className="space-y-3">
+        <div className="relative">
+          <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300" />
+          <input
+            ref={recountRef}
+            type="text"
+            className="w-full pl-12 pr-5 py-3.5 text-base bg-white border-2 border-warm-200 rounded-2xl
+              focus:border-primary-500 focus:ring-4 focus:ring-primary-100
+              transition-all outline-none placeholder:text-warm-300 font-mono"
+            placeholder={t('surtido.validacion.scan_placeholder')}
+            onKeyDown={handleKeyDown}
+            autoComplete="off"
+          />
+        </div>
+        <div className="space-y-1.5 max-h-72 overflow-y-auto">
+          {recountItems.length === 0 ? (
+            <p className="text-xs text-warm-400 text-center py-4">{t('surtido.validacion.history_empty')}</p>
+          ) : recountItems.map((item, i) => (
+            <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs ${statusCls[item.status]}`}>
+              <span className="font-mono font-semibold flex-1 truncate">{item.code}</span>
+              <span className="font-semibold shrink-0">
+                {t(`surtido.escaneo.recount_${item.status}`)}
+              </span>
+              {item.status === 'nuevo' && (
+                <button
+                  className="btn-primary text-xs px-2 py-1 rounded-lg inline-flex items-center gap-1 shrink-0"
+                  onClick={() => onAddToSession(item.code)}>
+                  <Plus size={11} /> {t('surtido.escaneo.recount_add_btn')}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════ */
 export default function SurtidoValidacion() {
   const { t } = useI18nStore()
@@ -331,6 +596,7 @@ export default function SurtidoValidacion() {
   const [obc, setObc] = useState(null)
   const [sessionId, setSessionId] = useState(null)
   const [sessionStart, setSessionStart] = useState(null)
+  const [selectedUbicacion, setSelectedUbicacion] = useState(null)
   const [lastScan, setLastScan] = useState(null)
   const [history, setHistory] = useState([])
   const [counts, setCounts] = useState({ ok: 0, rejected: 0 })
@@ -340,13 +606,12 @@ export default function SurtidoValidacion() {
   const [showRecount, setShowRecount] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
   const [showFinalize, setShowFinalize] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [finalNotes, setFinalNotes] = useState('')
-  const [finalUbicacionId, setFinalUbicacionId] = useState(null)
-  const [activeTab, setActiveTab] = useState('cajas')
+  const [activeTab, setActiveTab] = useState('registros')
 
   const sessionElapsed = useSessionTimer(sessionStart)
 
-  // Restore session from storage or pre-fill OBC from URL param
   useEffect(() => {
     const saved = sessionStorage.getItem('kirion_surtido_session')
     if (saved) {
@@ -356,6 +621,7 @@ export default function SurtidoValidacion() {
           setObc(s.obc); setSessionId(s.sessionId); setSessionStart(new Date(s.sessionStart))
           setCounts(s.counts || { ok: 0, rejected: 0 })
           setItemCounts(new Map(s.itemCountsArr || []))
+          setSelectedUbicacion(s.ubicacion || null)
           setStep('session')
           return
         }
@@ -375,6 +641,12 @@ export default function SurtidoValidacion() {
     queryKey: ['upapex-ubicaciones', 'surtido'],
     queryFn: () => getUbicaciones('surtido'),
     staleTime: 120000,
+  })
+  const { data: trackingData } = useQuery({
+    queryKey: ['upapex-order-tracking'],
+    queryFn: () => getScanSessions({ pageSize: 100 }),
+    staleTime: 60000,
+    enabled: step === 'session',
   })
 
   const { packageMap, productMap } = useMemo(() => {
@@ -398,6 +670,11 @@ export default function SurtidoValidacion() {
     return (totalScanned / mins).toFixed(1)
   }, [sessionElapsed, totalScanned])
 
+  const rejectedHistory = useMemo(
+    () => history.filter(e => e.result === 'rejected' || e.result === 'duplicate'),
+    [history]
+  )
+
   useEffect(() => {
     const handler = () => initAudio()
     document.addEventListener('click', handler, { once: true })
@@ -408,7 +685,6 @@ export default function SurtidoValidacion() {
     if (step === 'session') setTimeout(() => scanRef.current?.focus(), 80)
   }, [step])
 
-  // Flush pending sync every 30s
   useEffect(() => {
     const interval = setInterval(async () => {
       if (pendingSync.length === 0 || isSyncing) return
@@ -422,10 +698,10 @@ export default function SurtidoValidacion() {
     return () => clearInterval(interval)
   }, [pendingSync, isSyncing])
 
-  const persistSession = (newObc, newSessionId, newStart) => {
+  const persistSession = (newObc, newSessionId, newStart, ubicacion) => {
     sessionStorage.setItem('kirion_surtido_session', JSON.stringify({
       obc: newObc, sessionId: newSessionId, sessionStart: newStart.toISOString(),
-      counts: { ok: 0, rejected: 0 }, itemCountsArr: [],
+      counts: { ok: 0, rejected: 0 }, itemCountsArr: [], ubicacion: ubicacion || null,
     }))
   }
 
@@ -433,22 +709,24 @@ export default function SurtidoValidacion() {
     sessionStorage.removeItem('kirion_surtido_session')
     setStep('search'); setObc(null); setSessionId(null); setSessionStart(null)
     setLastScan(null); setHistory([]); setCounts({ ok: 0, rejected: 0 })
-    setItemCounts(new Map()); setPendingSync([])
+    setItemCounts(new Map()); setPendingSync([]); setSelectedUbicacion(null)
   }
 
   const createSessionMut = useMutation({
-    mutationFn: () => {
+    mutationFn: (ubicacion) => {
       const packageList = (detailData?.data ?? detailData)?.packageList ?? (detailData?.data ?? detailData)?.details ?? (detailData?.data ?? detailData)?.items ?? []
       return createScanSession({
         outbound_order_no: obc,
         third_order_no: (detailData?.data ?? detailData)?.thirdOrderNo || null,
         total_expected: packageList.reduce((s, p) => s + (p.quantity ?? p.totalPackageQty ?? p.qty ?? 1), 0),
+        ubicacion_id: ubicacion?.id || null,
       })
     },
-    onSuccess: (data) => {
+    onSuccess: (data, ubicacion) => {
       const sid = data.data.id; const now = new Date()
       setSessionId(sid); setSessionStart(now); setStep('session')
-      persistSession(obc, sid, now)
+      setSelectedUbicacion(ubicacion)
+      persistSession(obc, sid, now, ubicacion)
       upsertOrderTracking(obc, { status: 'validating' }).catch(() => {})
     },
     onError: () => toast.error(t('toast.error')),
@@ -459,6 +737,23 @@ export default function SurtidoValidacion() {
     onError: (_, vars) => setPendingSync(p => [...p, { key: vars._dedupeKey, payload: vars }]),
   })
 
+  const cancelMut = useMutation({
+    mutationFn: () => clearSessionEvents(sessionId),
+    onSuccess: () => {
+      toast.success(t('common.cancel') + ' OK')
+      clearSession(); setShowCancelConfirm(false)
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  function handleCancel() {
+    if (counts.ok === 0 && counts.rejected === 0) {
+      clearSession()
+    } else {
+      setShowCancelConfirm(true)
+    }
+  }
+
   const doScan = useCallback((rawCode) => {
     if (!rawCode.trim() || !sessionId) return
     const norm = normalizeCode(rawCode)
@@ -466,7 +761,7 @@ export default function SurtidoValidacion() {
     if (isDup) {
       playSound('warning')
       setLastScan({ code: norm, result: 'duplicate' })
-      setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h].slice(0, 15))
+      setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h])
       toast.warning(t('surtido.validacion.duplicate') + ': ' + norm)
       addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'duplicate', quantity: 1, _dedupeKey: `DUP_${norm}_${Date.now()}` })
       return
@@ -475,7 +770,7 @@ export default function SurtidoValidacion() {
     if (!matched) {
       playSound('error')
       setLastScan({ code: norm, result: 'rejected' })
-      setHistory(h => [{ code: norm, result: 'rejected', ts: Date.now() }, ...h].slice(0, 15))
+      setHistory(h => [{ code: norm, result: 'rejected', ts: Date.now() }, ...h])
       setCounts(c => ({ ...c, rejected: c.rejected + 1 }))
       toast.error(t('surtido.validacion.not_in_bd') + ': ' + norm)
       addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'not_found', quantity: 1, _dedupeKey: `NF_${norm}_${Date.now()}` })
@@ -483,7 +778,7 @@ export default function SurtidoValidacion() {
     }
     playSound('success')
     setLastScan({ code: norm, result: 'ok' })
-    setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 15))
+    setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h])
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
     setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
     const ts = Date.now()
@@ -494,6 +789,23 @@ export default function SurtidoValidacion() {
       scan_result: 'ok', quantity: 1, _dedupeKey: `OK_${norm}_${ts}`,
     })
   }, [sessionId, history, packageMap, productMap, addEventMut, t])
+
+  function addCodeToSession(code) {
+    const norm = normalizeCode(code)
+    const matched = packageMap.get(norm) || productMap.get(norm)
+    playSound('success')
+    setLastScan({ code: norm, result: 'ok' })
+    setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h])
+    setCounts(c => ({ ...c, ok: c.ok + 1 }))
+    if (matched) {
+      setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
+    }
+    if (sessionId) {
+      const ts = Date.now()
+      addEventMut.mutate({ session_id: sessionId, scanned_code: code, normalized_code: norm, scan_result: 'ok', quantity: 1, _dedupeKey: `RC_${norm}_${ts}` })
+    }
+    toast.success(t('surtido.escaneo.recount_add_btn') + ': ' + norm)
+  }
 
   function handleKeyDown(e) {
     const now = Date.now()
@@ -511,33 +823,27 @@ export default function SurtidoValidacion() {
     }
   }
 
-  const recountMut = useMutation({
-    mutationFn: () => clearSessionEvents(sessionId),
-    onSuccess: () => {
-      setHistory([]); setCounts({ ok: 0, rejected: 0 }); setItemCounts(new Map())
-      setLastScan(null); setShowRecount(false)
-      toast.success(t('surtido.escaneo.recount_success'))
-      setTimeout(() => scanRef.current?.focus(), 80)
-    },
-    onError: () => toast.error(t('toast.error')),
-  })
-
   const finalizeMut = useMutation({
     mutationFn: () => {
       const total = allItems.reduce((s, i) => s + (i.expectedQty || 1), 0)
       const status = counts.ok < total ? 'with_discrepancies' : 'complete'
-      return updateScanSession(sessionId, { status, notes: finalNotes, total_scanned: counts.ok, ubicacion_id: finalUbicacionId || null })
+      return updateScanSession(sessionId, { status, notes: finalNotes, total_scanned: counts.ok, ubicacion_id: selectedUbicacion?.id || null })
     },
     onSuccess: () => {
       upsertOrderTracking(obc, { status: 'complete' }).catch(() => {})
       toast.success(t('surtido.escaneo.session_saved'))
       qc.invalidateQueries({ queryKey: ['upapex-scan-sessions'] })
-      clearSession(); setShowFinalize(false); setFinalUbicacionId(null)
+      clearSession(); setShowFinalize(false)
     },
     onError: () => toast.error(t('toast.error')),
   })
 
   const missingItems = allItems.filter(item => (itemCounts.get(item.displayCode) || 0) < (item.expectedQty || 1))
+
+  const sessionList = useMemo(() => {
+    const raw = trackingData?.data?.records ?? trackingData?.data ?? []
+    return raw
+  }, [trackingData])
 
   if (detailLoading && step !== 'search') {
     return (
@@ -548,8 +854,8 @@ export default function SurtidoValidacion() {
     )
   }
 
-  /* ─── SEARCH / PREVIEW STEPS ─────────────────────────── */
-  if (step === 'search' || step === 'preview') {
+  /* ─── SEARCH / PREVIEW / LOCATION STEPS ─────────────────── */
+  if (step === 'search' || step === 'preview' || step === 'location') {
     return (
       <div className="flex flex-col h-full">
         <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} />
@@ -558,7 +864,16 @@ export default function SurtidoValidacion() {
           <PreviewStep
             obc={obc} detailData={detailData}
             onBack={() => { setObc(null); setStep('search') }}
-            onStart={() => createSessionMut.mutate()}
+            onStart={() => setStep('location')}
+            isStarting={false}
+          />
+        )}
+        {step === 'location' && (
+          <LocationStep
+            obc={obc}
+            ubicacionesData={ubicacionesData}
+            onBack={() => setStep('preview')}
+            onConfirm={(ubicacion) => createSessionMut.mutate(ubicacion)}
             isStarting={createSessionMut.isPending}
           />
         )}
@@ -591,6 +906,12 @@ export default function SurtidoValidacion() {
               <span className="hidden sm:inline">{t('surtido.escaneo.missing')}</span>
             </button>
             <button
+              className="px-3 py-2 rounded-xl text-danger-600 bg-danger-50 hover:bg-danger-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
+              onClick={handleCancel}>
+              <XOctagon className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('surtido.escaneo.cancel')}</span>
+            </button>
+            <button
               className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
               onClick={() => setShowFinalize(true)}>
               <Square className="w-4 h-4" /> {t('surtido.escaneo.finalize')}
@@ -612,7 +933,14 @@ export default function SurtidoValidacion() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-warm-800 truncate leading-tight font-mono">{obc}</p>
-                  <p className="text-[10px] text-warm-500 leading-tight">{t('surtido.validacion.in_progress')}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <p className="text-[10px] text-warm-500 leading-tight">{t('surtido.validacion.in_progress')}</p>
+                    {selectedUbicacion && (
+                      <span className="text-[10px] text-accent-600 font-medium flex items-center gap-0.5">
+                        <MapPin size={9} /> {selectedUbicacion.codigo}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-3xl font-black text-warm-800 tracking-tighter leading-none">
@@ -621,7 +949,6 @@ export default function SurtidoValidacion() {
                 </div>
               </div>
 
-              {/* Progress bar */}
               <div className="w-full h-2.5 bg-warm-100 rounded-full overflow-hidden border border-warm-200/50 mb-1">
                 <div className={`h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r ${
                   progress >= 100 ? 'from-success-400 to-success-600' :
@@ -707,17 +1034,20 @@ export default function SurtidoValidacion() {
 
             {/* Tabs */}
             <div className="flex gap-1 border-b border-warm-100">
-              {['cajas', 'productos'].map(tab => (
+              {['registros', 'rechazados'].map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)}
                   className={`pb-2.5 px-4 text-sm font-semibold transition-all border-b-2 ${
                     activeTab === tab ? 'text-primary-700 border-primary-500' : 'text-warm-500 border-transparent hover:text-warm-700'
                   }`}>
                   {t(`surtido.escaneo.tab_${tab}`)}
+                  {tab === 'rechazados' && rejectedHistory.length > 0 && (
+                    <span className="ml-1.5 bg-danger-100 text-danger-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{rejectedHistory.length}</span>
+                  )}
                 </button>
               ))}
             </div>
 
-            {activeTab === 'cajas' && (
+            {activeTab === 'registros' && (
               <ItemsTable items={allItems.filter(i => i.type === 'box')} itemCounts={itemCounts} t={t}
                 onManualAdjust={(code, delta) => {
                   setItemCounts(m => { const next = new Map(m); next.set(code, Math.max(0, (m.get(code) || 0) + delta)); return next })
@@ -725,53 +1055,87 @@ export default function SurtidoValidacion() {
                     addEventMut.mutate({ session_id: sessionId, scanned_code: code, normalized_code: code, scan_result: 'ok', quantity: 1, _dedupeKey: `MAN_${code}_${Date.now()}` })
                 }} />
             )}
-            {activeTab === 'productos' && (
-              <ItemsTable items={allItems.filter(i => i.type === 'sku')} itemCounts={itemCounts} t={t}
-                onManualAdjust={(code, delta) => {
-                  setItemCounts(m => { const next = new Map(m); next.set(code, Math.max(0, (m.get(code) || 0) + delta)); return next })
-                }} />
+            {activeTab === 'rechazados' && (
+              <RejectedTable items={rejectedHistory} t={t} />
             )}
           </div>
         </div>
 
-        {/* Right history panel */}
-        <div className="hidden lg:flex flex-col w-56 shrink-0 border-l border-warm-100 bg-warm-50/60">
+        {/* Right sidebar: orders with progress */}
+        <div className="hidden lg:flex flex-col w-60 shrink-0 border-l border-warm-100 bg-warm-50/60">
           <div className="px-4 py-3 border-b border-warm-100 bg-white">
             <h3 className="text-xs font-bold text-warm-600 uppercase tracking-wide flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5" /> {t('surtido.validacion.history_title')}
+              <Zap className="w-3.5 h-3.5" /> {t('surtido.validacion.sidebar_title')}
             </h3>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {history.length === 0 ? (
-              <p className="text-xs text-warm-400 text-center py-6">{t('surtido.validacion.history_empty')}</p>
-            ) : (
-              history.map((e, i) => (
-                <div key={i} className={`px-2.5 py-2 rounded-xl text-xs flex items-center gap-2 ${
-                  e.result === 'ok'        ? 'bg-success-50 text-success-800' :
-                  e.result === 'duplicate' ? 'bg-warning-50 text-warning-800' :
-                  'bg-danger-50 text-danger-800'
-                }`}>
-                  <span className="font-mono font-semibold truncate flex-1">{e.code}</span>
-                  <span className="opacity-60 shrink-0 tabular-nums">{new Date(e.ts).toLocaleTimeString()}</span>
+            {/* Current order */}
+            {obc && (
+              <div className="px-2.5 py-2 rounded-xl bg-primary-50 border border-primary-200 text-xs">
+                <p className="font-mono font-bold text-primary-700 truncate">{obc}</p>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-primary-600">{totalScanned}/{totalExpected}</span>
+                  {totalExpected > 0 && (
+                    <div className="w-12 h-1.5 bg-primary-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-primary-500 rounded-full" style={{ width: `${progress}%` }} />
+                    </div>
+                  )}
                 </div>
-              ))
+              </div>
+            )}
+            {sessionList.length === 0 ? (
+              <p className="text-xs text-warm-400 text-center py-4">{t('surtido.validacion.history_empty')}</p>
+            ) : (
+              sessionList.filter(s => s.outbound_order_no !== obc).map((s, i) => {
+                const pct = s.total_expected > 0 ? Math.min(100, Math.round((s.total_scanned / s.total_expected) * 100)) : 0
+                const isComplete = s.status === 'complete'
+                return (
+                  <div key={s.id || i} className="px-2.5 py-2 rounded-xl bg-white border border-warm-100 text-xs">
+                    <p className="font-mono font-semibold text-warm-700 truncate">{s.outbound_order_no}</p>
+                    <div className="flex items-center justify-between mt-1">
+                      {isComplete ? (
+                        <span className="text-success-600 font-semibold flex items-center gap-1">
+                          <CheckCircle2 size={10} /> 100%
+                        </span>
+                      ) : (
+                        <span className="text-warm-500">{s.total_scanned ?? 0}/{s.total_expected ?? '?'}</span>
+                      )}
+                      {!isComplete && s.total_expected > 0 && (
+                        <div className="w-10 h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-primary-400 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
         </div>
       </div>
 
       {/* Recount modal */}
-      <Modal isOpen={showRecount} onClose={() => setShowRecount(false)} title={t('surtido.escaneo.recount')} icon={RotateCcw}
+      <RecountModal
+        isOpen={showRecount}
+        onClose={() => setShowRecount(false)}
+        sessionHistory={history}
+        onAddToSession={addCodeToSession}
+        t={t}
+      />
+
+      {/* Cancel confirm modal */}
+      <Modal isOpen={showCancelConfirm} onClose={() => setShowCancelConfirm(false)}
+        title={t('surtido.escaneo.cancel_confirm_title')} icon={XOctagon}
         footer={
           <div className="flex gap-3 justify-end">
-            <button className="btn-ghost" onClick={() => setShowRecount(false)}>{t('common.cancel')}</button>
-            <button className="btn-primary inline-flex items-center gap-2" onClick={() => recountMut.mutate()} disabled={recountMut.isPending}>
-              {recountMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
-              {t('surtido.escaneo.recount')}
+            <button className="btn-ghost" onClick={() => setShowCancelConfirm(false)}>{t('common.cancel')}</button>
+            <button className="btn-danger inline-flex items-center gap-2" onClick={() => cancelMut.mutate()} disabled={cancelMut.isPending}>
+              {cancelMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <XOctagon size={14} />}
+              {t('surtido.escaneo.cancel')}
             </button>
           </div>
         }>
-        <p className="text-sm text-warm-600">{t('surtido.escaneo.recount_confirm')}</p>
+        <p className="text-sm text-warm-600">{t('surtido.escaneo.cancel_confirm_body')}</p>
       </Modal>
 
       {/* Missing items modal */}
@@ -823,29 +1187,26 @@ export default function SurtidoValidacion() {
               <p className="text-2xl font-bold text-warm-700 leading-none">{totalExpected}</p>
               <p className="text-xs text-warm-500 mt-1">{t('surtido.escaneo.expected')}</p>
             </div>
+            {counts.rejected > 0 && (
+              <div className="col-span-2 bg-danger-50 rounded-xl p-3 text-center">
+                <p className="text-xl font-bold text-danger-600 leading-none">{counts.rejected}</p>
+                <p className="text-xs text-danger-600 mt-1">{t('surtido.validacion.rejected_abbr')}</p>
+              </div>
+            )}
           </div>
+          {selectedUbicacion && (
+            <div className="bg-accent-50 rounded-xl px-3 py-2 text-xs flex items-center gap-2">
+              <MapPin size={12} className="text-accent-600 shrink-0" />
+              <span className="font-mono font-semibold text-accent-700">{selectedUbicacion.codigo}</span>
+              <span className="text-accent-600">{selectedUbicacion.nombre}</span>
+            </div>
+          )}
           <textarea
             className="input-field text-sm w-full h-20 resize-none"
             placeholder={t('surtido.escaneo.notes')}
             value={finalNotes}
             onChange={e => setFinalNotes(e.target.value)}
           />
-          {ubicacionesData?.data?.length > 0 && (
-            <div>
-              <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">
-                {t('surtido.validacion.ubicacion_label')}
-              </label>
-              <select
-                className="input-field"
-                value={finalUbicacionId || ''}
-                onChange={e => setFinalUbicacionId(e.target.value || null)}>
-                <option value="">{t('surtido.validacion.ubicacion_placeholder')}</option>
-                {ubicacionesData.data.map(u => (
-                  <option key={u.id} value={u.id}>{u.codigo} — {u.nombre}</option>
-                ))}
-              </select>
-            </div>
-          )}
         </div>
       </Modal>
     </div>

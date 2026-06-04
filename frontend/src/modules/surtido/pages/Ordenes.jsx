@@ -3,8 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, UserCheck, Users, Plus, Trash2, X, ChevronDown, Play, Loader2,
-  Package2, Calendar, Truck, ScanBarcode, Copy, Check, Info, Activity,
-  User, Clock, BarChart3, RefreshCw,
+  Package2, Truck, ScanBarcode, Copy, Check, Info, Activity,
+  User, Clock, BarChart3, RefreshCw, Database, CheckCircle2,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -26,15 +26,6 @@ const STATUS_META = {
   pending_validation: { labelKey: 'surtido.ordenes.status.pending_validation', cls: 'bg-primary-100 text-primary-700' },
   validating:         { labelKey: 'surtido.ordenes.status.validating',         cls: 'bg-success-100 text-success-700' },
   complete:           { labelKey: 'surtido.ordenes.status.complete',           cls: 'bg-success-200 text-success-800' },
-}
-
-const fmtDate = (v) => {
-  if (!v) return '—'
-  const s = String(v)
-  if (s.length <= 10) return s || '—'
-  const date = s.slice(0, 10)
-  const time = s.slice(11, 16)
-  return time ? `${date} ${time}` : date
 }
 
 function SurtidoresModal({ isOpen, onClose }) {
@@ -146,8 +137,7 @@ function WmsDetailModal({ order, onClose }) {
     { label: t('surtido.ordenes.detail.tracking'), value: d?.logisticsTrackNo || order.logisticsTrackNo,    mono: true, span: true },
     { label: t('surtido.ordenes.detail.warehouse'), value: d?.whCode || order.whCode },
     { label: t('surtido.ordenes.receiver'), value: d?.receiverName || order.receiverName },
-    { label: t('surtido.ordenes.fecha_creacion'), value: fmtDate(order.orderCreateTime) },
-    { label: t('surtido.ordenes.fecha_entrega'),  value: fmtDate(d?.expectedTime || order.outboundTime) },
+    { label: t('surtido.ordenes.fecha_entrega'),  value: d?.expectedTime || order.outboundTime ? String(d?.expectedTime || order.outboundTime).slice(0, 10) : null },
   ].filter(i => i.value)
 
   return (
@@ -315,17 +305,46 @@ function CopyableObc({ obc }) {
   )
 }
 
+function StatusChips({ selected, onChange, t }) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <button
+        onClick={() => onChange('')}
+        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
+          !selected
+            ? 'bg-warm-800 text-white border-warm-800'
+            : 'bg-white text-warm-600 border-warm-200 hover:border-warm-300 hover:text-warm-800'
+        }`}>
+        {t('common.all')}
+      </button>
+      {Object.entries(STATUS_META).map(([k, v]) => (
+        <button key={k} onClick={() => onChange(k === selected ? '' : k)}
+          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
+            selected === k
+              ? `${v.cls} border-current`
+              : 'bg-white text-warm-500 border-warm-200 hover:border-warm-300 hover:text-warm-700'
+          }`}>
+          {t(v.labelKey)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Ordenes() {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const navigate = useNavigate()
   const qc = useQueryClient()
 
+  const [tab, setTab] = useState('wms')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterSurtidor, setFilterSurtidor] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [showSurtidoresModal, setShowSurtidoresModal] = useState(false)
   const [assignTarget, setAssignTarget] = useState(null)
   const [wmsDetailOrder, setWmsDetailOrder] = useState(null)
@@ -362,19 +381,33 @@ export default function Ordenes() {
     staleTime: 60000,
   })
 
-  const allRecords = wmsData?.data?.records ?? wmsData?.data ?? []
+  const allWmsRecords = wmsData?.data?.records ?? wmsData?.data ?? []
+  const trackingList  = trackingData?.data ?? []
+  const surtidores    = surtidoresData?.data ?? []
 
-  const trackingMap = (trackingData?.data ?? []).reduce((m, tr) => {
+  const trackingMap = trackingList.reduce((m, tr) => {
     m[tr.outbound_order_no] = tr; return m
   }, {})
 
-  const surtidores = surtidoresData?.data ?? []
+  const wmsMap = allWmsRecords.reduce((m, r) => {
+    m[r.outboundOrderNo] = r; return m
+  }, {})
 
   const q = search.trim().toLowerCase()
-  const filteredRecords = allRecords.filter(r => {
+
+  function matchesDateFilter(dateStr) {
+    if (!dateStr) return true
+    const d = String(dateStr).slice(0, 10)
+    if (dateFrom && d < dateFrom) return false
+    if (dateTo   && d > dateTo)   return false
+    return true
+  }
+
+  const filteredWms = allWmsRecords.filter(r => {
     const tracking = trackingMap[r.outboundOrderNo]
     if (filterStatus && (tracking?.status || 'pending_assignment') !== filterStatus) return false
     if (filterSurtidor && tracking?.surtidor_nombre !== filterSurtidor) return false
+    if (!matchesDateFilter(r.orderCreateTime)) return false
     if (q) {
       const haystack = [r.outboundOrderNo, r.customerCode, r.thirdOrderNo, r.receiverName, r.logisticsChannel].join(' ').toLowerCase()
       if (!haystack.includes(q)) return false
@@ -382,9 +415,22 @@ export default function Ordenes() {
     return true
   })
 
-  const total = filteredRecords.length
-  const totalPages = Math.ceil(total / pageSize) || 1
-  const pagedRecords = filteredRecords.slice((page - 1) * pageSize, page * pageSize)
+  const filteredValidacion = trackingList.filter(tr => {
+    if (filterStatus && tr.status !== filterStatus) return false
+    if (filterSurtidor && tr.surtidor_nombre !== filterSurtidor) return false
+    const wms = wmsMap[tr.outbound_order_no]
+    if (!matchesDateFilter(wms?.orderCreateTime || tr.updated_at)) return false
+    if (q) {
+      const haystack = [tr.outbound_order_no, tr.surtidor_nombre, wms?.customerCode, wms?.thirdOrderNo].filter(Boolean).join(' ').toLowerCase()
+      if (!haystack.includes(q)) return false
+    }
+    return true
+  })
+
+  const activeRecords = tab === 'wms' ? filteredWms : filteredValidacion
+  const total       = activeRecords.length
+  const totalPages  = Math.ceil(total / pageSize) || 1
+  const pagedRecords = activeRecords.slice((page - 1) * pageSize, page * pageSize)
 
   const assignMut = useMutation({
     mutationFn: ({ obc, surtidorId }) => upsertOrderTracking(obc, {
@@ -398,11 +444,22 @@ export default function Ordenes() {
   const loadDetailMut = useMutation({
     mutationFn: (obc) => getOutboundDetail(obc),
     onSuccess: (data, obc) => {
-      const row = allRecords.find(r => r.outboundOrderNo === obc)
+      const row = allWmsRecords.find(r => r.outboundOrderNo === obc)
       setWmsDetailOrder(row ? { ...row, _detail: data?.data } : { outboundOrderNo: obc, _detail: data?.data })
     },
     onError: () => toast.error(t('toast.error')),
   })
+
+  function clearFilters() {
+    setFilterStatus(''); setFilterSurtidor(''); setSearch(''); setDateFrom(''); setDateTo('')
+  }
+
+  const hasFilters = filterStatus || filterSurtidor || search || dateFrom || dateTo
+
+  const tabs = [
+    { key: 'wms',        icon: Database,     label: t('surtido.ordenes.tab_wms') },
+    { key: 'validacion', icon: CheckCircle2, label: t('surtido.ordenes.tab_validacion') },
+  ]
 
   if (wmsLoading) {
     return (
@@ -437,29 +494,55 @@ export default function Ordenes() {
         }
       />
 
-      {/* Filter bar */}
-      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-lg border-b border-warm-100 px-4 py-2.5 flex items-center gap-2 flex-wrap shadow-sm">
-        <div className="relative flex-1 min-w-44 max-w-xs">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400" />
-          <input type="text" className="input-field pl-8 text-sm h-9"
-            placeholder={t('surtido.ordenes.search_placeholder')}
-            value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+      {/* Tab bar */}
+      <div className="sticky top-0 z-[5] bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6">
+        <div className="flex gap-1">
+          {tabs.map(item => (
+            <button key={item.key}
+              onClick={() => { setTab(item.key); setPage(1) }}
+              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all duration-200 ${
+                tab === item.key
+                  ? 'border-primary-600 text-primary-700 bg-primary-50/50'
+                  : 'border-transparent text-warm-500 hover:text-warm-700 hover:bg-warm-50'
+              }`}>
+              <item.icon className="w-4 h-4" />
+              {item.label}
+            </button>
+          ))}
         </div>
-        <select className="input-field text-sm h-9 w-auto" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-          <option value="">{t('surtido.ordenes.status')} — {t('common.all')}</option>
-          {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{t(v.labelKey)}</option>)}
-        </select>
-        {surtidores.length > 0 && (
-          <select className="input-field text-sm h-9 w-auto" value={filterSurtidor} onChange={e => setFilterSurtidor(e.target.value)}>
-            <option value="">{t('surtido.ordenes.surtidor')} — {t('common.all')}</option>
-            {surtidores.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
-          </select>
-        )}
-        {(filterStatus || filterSurtidor || search) && (
-          <button className="btn-ghost text-xs h-9 px-2" onClick={() => { setFilterStatus(''); setFilterSurtidor(''); setSearch('') }}>
-            <X size={13} />
-          </button>
-        )}
+      </div>
+
+      {/* Filter bar */}
+      <div className="bg-white/90 backdrop-blur-lg border-b border-warm-100 px-4 py-2.5 space-y-2 shadow-sm">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-44 max-w-xs">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400" />
+            <input type="text" className="input-field pl-8 text-sm h-9"
+              placeholder={t('surtido.ordenes.search_placeholder')}
+              value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <input type="date" className="input-field text-sm h-9 w-36" value={dateFrom}
+              onChange={e => { setDateFrom(e.target.value); setPage(1) }}
+              title={t('surtido.ordenes.date_from')} />
+            <span className="text-warm-400 text-xs">–</span>
+            <input type="date" className="input-field text-sm h-9 w-36" value={dateTo}
+              onChange={e => { setDateTo(e.target.value); setPage(1) }}
+              title={t('surtido.ordenes.date_to')} />
+          </div>
+          {surtidores.length > 0 && (
+            <select className="input-field text-sm h-9 w-auto" value={filterSurtidor} onChange={e => setFilterSurtidor(e.target.value)}>
+              <option value="">{t('surtido.ordenes.surtidor')} — {t('common.all')}</option>
+              {surtidores.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+            </select>
+          )}
+          {hasFilters && (
+            <button className="btn-ghost text-xs h-9 px-2" onClick={clearFilters}>
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        <StatusChips selected={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(1) }} t={t} />
       </div>
 
       {/* Table */}
@@ -469,130 +552,29 @@ export default function Ordenes() {
             <Package2 size={40} className="opacity-30" />
             <p className="text-sm">{t('common.noData')}</p>
           </div>
+        ) : tab === 'wms' ? (
+          <WmsTable
+            records={pagedRecords} trackingMap={trackingMap}
+            onAssign={r => setAssignTarget(r)}
+            onDetail={obc => loadDetailMut.mutate(obc)}
+            isLoadingDetail={(obc) => loadDetailMut.isPending && loadDetailMut.variables === obc}
+            onProgress={obc => setProgressObc(obc)}
+            onValidate={obc => navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`)}
+            t={t}
+            page={page} totalPages={totalPages} pageSize={pageSize} total={total}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+          />
         ) : (
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-warm-50/60">
-                    <th className="table-header font-semibold">OBC</th>
-                    <th className="table-header hidden md:table-cell font-semibold">{t('surtido.ordenes.fecha_creacion')}</th>
-                    <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.cliente')}</th>
-                    <th className="table-header hidden xl:table-cell font-semibold">{t('surtido.ordenes.receiver')}</th>
-                    <th className="table-header hidden xl:table-cell font-semibold">{t('surtido.ordenes.canal')}</th>
-                    <th className="table-header hidden 2xl:table-cell font-semibold">{t('surtido.ordenes.referencia')}</th>
-                    <th className="table-header text-right font-semibold">{t('surtido.ordenes.cajas')}</th>
-                    <th className="table-header font-semibold">{t('surtido.ordenes.surtidor')}</th>
-                    <th className="table-header font-semibold">{t('surtido.ordenes.status')}</th>
-                    <th className="table-header text-right font-semibold">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-warm-50">
-                  {pagedRecords.map((r, i) => {
-                    const obc = r.outboundOrderNo
-                    const tracking = trackingMap[obc]
-                    const status = tracking?.status || 'pending_assignment'
-                    const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
-                    const noSurtidor = !tracking?.surtidor_nombre
-                    const cliente = r.customerCode || r.customerNo || r.customerName || '—'
-                    const destino = r.receiverName || '—'
-                    const canal = r.logisticsChannel || '—'
-                    const referencia = r.thirdOrderNo || r.referenceNo || '—'
-                    const cajas = r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? '—'
-                    const isLoadingDetail = loadDetailMut.isPending && loadDetailMut.variables === obc
-
-                    return (
-                      <tr key={obc || i}
-                        className={`transition-colors hover:bg-primary-50/20 ${noSurtidor ? 'bg-warning-50/20' : ''}`}>
-
-                        <td className="table-cell"><CopyableObc obc={obc} /></td>
-
-                        <td className="table-cell hidden md:table-cell">
-                          <span className="text-warm-500 text-xs flex items-center gap-1">
-                            <Calendar size={10} className="text-warm-300" />
-                            {fmtDate(r.orderCreateTime)}
-                          </span>
-                        </td>
-
-                        <td className="table-cell hidden lg:table-cell">
-                          <span className="font-mono text-primary-700 text-xs font-semibold">{cliente}</span>
-                        </td>
-
-                        <td className="table-cell hidden xl:table-cell">
-                          <span className="text-warm-600 text-xs flex items-center gap-1">
-                            <Truck size={10} className="text-warm-300" />
-                            <span className="truncate max-w-[100px] block">{destino}</span>
-                          </span>
-                        </td>
-
-                        <td className="table-cell hidden xl:table-cell">
-                          <span className="text-warm-600 text-xs truncate max-w-[120px] block">{canal}</span>
-                        </td>
-
-                        <td className="table-cell hidden 2xl:table-cell">
-                          <span className="font-mono text-xs text-warm-600">{referencia}</span>
-                        </td>
-
-                        <td className="table-cell text-right">
-                          <span className="font-semibold text-warm-700">{cajas}</span>
-                        </td>
-
-                        <td className="table-cell">
-                          <button
-                            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all hover:shadow-sm ${
-                              noSurtidor
-                                ? 'border-warning-300 text-warning-700 bg-warning-50 hover:border-warning-400'
-                                : 'border-warm-200 text-warm-700 hover:border-primary-300 hover:text-primary-700'
-                            }`}
-                            onClick={e => { e.stopPropagation(); setAssignTarget(r) }}>
-                            <UserCheck size={11} />
-                            <span className="max-w-[90px] truncate">
-                              {tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}
-                            </span>
-                            <ChevronDown size={9} />
-                          </button>
-                        </td>
-
-                        <td className="table-cell">
-                          <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
-                        </td>
-
-                        <td className="table-cell text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button title="Ver detalles WMS"
-                              className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
-                              onClick={e => { e.stopPropagation(); loadDetailMut.mutate(obc) }}
-                              disabled={isLoadingDetail}>
-                              {isLoadingDetail ? <Loader2 size={13} className="animate-spin" /> : <Info size={13} />}
-                            </button>
-                            <button title="Ver progreso interno"
-                              className="p-1.5 rounded-lg text-warm-400 hover:text-accent-600 hover:bg-accent-50 border border-transparent hover:border-accent-200 transition-all"
-                              onClick={e => { e.stopPropagation(); setProgressObc(obc) }}>
-                              <Activity size={13} />
-                            </button>
-                            <button title={t('surtido.ordenes.validate_btn')}
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-800 px-2.5 py-1.5 rounded-lg hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
-                              onClick={e => { e.stopPropagation(); navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`) }}>
-                              <Play size={11} /> {t('surtido.ordenes.validate_btn')}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {totalPages > 1 && (
-              <TablePagination
-                page={page} totalPages={totalPages} pageSize={pageSize} totalItems={total}
-                onPageChange={setPage}
-                onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-                itemLabel={t('surtido.ordenes.item_label')}
-              />
-            )}
-          </div>
+          <ValidacionTable
+            records={pagedRecords} wmsMap={wmsMap}
+            onProgress={obc => setProgressObc(obc)}
+            onValidate={obc => navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`)}
+            t={t}
+            page={page} totalPages={totalPages} pageSize={pageSize} total={total}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+          />
         )}
       </div>
 
@@ -614,6 +596,212 @@ export default function Ordenes() {
         tracking={progressObc ? trackingMap[progressObc] : null}
         onClose={() => setProgressObc(null)}
       />
+    </div>
+  )
+}
+
+function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, onProgress, onValidate, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-warm-50/60">
+              <th className="table-header font-semibold">OBC</th>
+              <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.cliente')}</th>
+              <th className="table-header hidden xl:table-cell font-semibold">{t('surtido.ordenes.receiver')}</th>
+              <th className="table-header hidden xl:table-cell font-semibold">{t('surtido.ordenes.canal')}</th>
+              <th className="table-header hidden 2xl:table-cell font-semibold">{t('surtido.ordenes.referencia')}</th>
+              <th className="table-header text-right font-semibold">{t('surtido.ordenes.cajas')}</th>
+              <th className="table-header font-semibold">{t('surtido.ordenes.surtidor')}</th>
+              <th className="table-header font-semibold">{t('surtido.ordenes.status')}</th>
+              <th className="table-header text-right font-semibold">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-warm-50">
+            {records.map((r, i) => {
+              const obc = r.outboundOrderNo
+              const tracking = trackingMap[obc]
+              const status = tracking?.status || 'pending_assignment'
+              const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
+              const noSurtidor = !tracking?.surtidor_nombre
+              const cliente = r.customerCode || r.customerNo || r.customerName || '—'
+              const destino = r.receiverName || '—'
+              const canal = r.logisticsChannel || '—'
+              const referencia = r.thirdOrderNo || r.referenceNo || '—'
+              const cajas = r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? '—'
+              const loadingDetail = isLoadingDetail(obc)
+
+              return (
+                <tr key={obc || i} className={`transition-colors hover:bg-primary-50/20 ${noSurtidor ? 'bg-warning-50/20' : ''}`}>
+
+                  <td className="table-cell"><CopyableObc obc={obc} /></td>
+
+                  <td className="table-cell hidden lg:table-cell">
+                    <span className="font-mono text-primary-700 text-xs font-semibold">{cliente}</span>
+                  </td>
+
+                  <td className="table-cell hidden xl:table-cell">
+                    <span className="text-warm-600 text-xs flex items-center gap-1">
+                      <Truck size={10} className="text-warm-300" />
+                      <span className="truncate max-w-[100px] block">{destino}</span>
+                    </span>
+                  </td>
+
+                  <td className="table-cell hidden xl:table-cell">
+                    <span className="text-warm-600 text-xs truncate max-w-[120px] block">{canal}</span>
+                  </td>
+
+                  <td className="table-cell hidden 2xl:table-cell">
+                    <span className="font-mono text-xs text-warm-600">{referencia}</span>
+                  </td>
+
+                  <td className="table-cell text-right">
+                    <span className="font-semibold text-warm-700">{cajas}</span>
+                  </td>
+
+                  <td className="table-cell">
+                    <button
+                      className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all hover:shadow-sm ${
+                        noSurtidor
+                          ? 'border-warning-300 text-warning-700 bg-warning-50 hover:border-warning-400'
+                          : 'border-warm-200 text-warm-700 hover:border-primary-300 hover:text-primary-700'
+                      }`}
+                      onClick={e => { e.stopPropagation(); onAssign(r) }}>
+                      <UserCheck size={11} />
+                      <span className="max-w-[90px] truncate">
+                        {tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}
+                      </span>
+                      <ChevronDown size={9} />
+                    </button>
+                  </td>
+
+                  <td className="table-cell">
+                    <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
+                  </td>
+
+                  <td className="table-cell text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button title="Ver detalles WMS"
+                        className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+                        onClick={e => { e.stopPropagation(); onDetail(obc) }}
+                        disabled={loadingDetail}>
+                        {loadingDetail ? <Loader2 size={13} className="animate-spin" /> : <Info size={13} />}
+                      </button>
+                      <button title="Ver progreso interno"
+                        className="p-1.5 rounded-lg text-warm-400 hover:text-accent-600 hover:bg-accent-50 border border-transparent hover:border-accent-200 transition-all"
+                        onClick={e => { e.stopPropagation(); onProgress(obc) }}>
+                        <Activity size={13} />
+                      </button>
+                      <button title={t('surtido.ordenes.validate_btn')}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-800 px-2.5 py-1.5 rounded-lg hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+                        onClick={e => { e.stopPropagation(); onValidate(obc) }}>
+                        <Play size={11} /> {t('surtido.ordenes.validate_btn')}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {totalPages > 1 && (
+        <TablePagination
+          page={page} totalPages={totalPages} pageSize={pageSize} totalItems={total}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          itemLabel={t('surtido.ordenes.item_label')}
+        />
+      )}
+    </div>
+  )
+}
+
+function ValidacionTable({ records, wmsMap, onProgress, onValidate, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-warm-50/60">
+              <th className="table-header font-semibold">OBC</th>
+              <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.cliente')}</th>
+              <th className="table-header font-semibold">{t('surtido.ordenes.surtidor')}</th>
+              <th className="table-header text-right font-semibold">{t('surtido.escaneo.scanned')}</th>
+              <th className="table-header font-semibold">{t('surtido.ordenes.status')}</th>
+              <th className="table-header text-right font-semibold">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-warm-50">
+            {records.map((tr, i) => {
+              const obc = tr.outbound_order_no
+              const wms = wmsMap[obc]
+              const status = tr.status || 'pending_assignment'
+              const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
+              const total_expected = wms?.outboundBoxCount ?? wms?.packageCount ?? wms?.totalQty ?? tr.total_expected ?? '?'
+              const scanned = tr.total_scanned ?? 0
+              const pct = total_expected !== '?' && total_expected > 0
+                ? Math.min(100, Math.round((scanned / total_expected) * 100))
+                : null
+
+              return (
+                <tr key={obc || i} className="transition-colors hover:bg-primary-50/20">
+                  <td className="table-cell"><CopyableObc obc={obc} /></td>
+                  <td className="table-cell hidden lg:table-cell">
+                    <span className="font-mono text-primary-700 text-xs font-semibold">
+                      {wms?.customerCode || wms?.customerName || '—'}
+                    </span>
+                  </td>
+                  <td className="table-cell">
+                    <span className="text-warm-700 text-xs flex items-center gap-1">
+                      <User size={10} className="text-warm-300" />
+                      {tr.surtidor_nombre || '—'}
+                    </span>
+                  </td>
+                  <td className="table-cell text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="font-semibold text-warm-700 tabular-nums">{scanned}/{total_expected}</span>
+                      {pct !== null && (
+                        <div className="w-16 h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${pct >= 100 ? 'bg-success-500' : 'bg-primary-400'}`}
+                            style={{ width: `${pct}%` }} />
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="table-cell">
+                    <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
+                  </td>
+                  <td className="table-cell text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button title="Ver progreso interno"
+                        className="p-1.5 rounded-lg text-warm-400 hover:text-accent-600 hover:bg-accent-50 border border-transparent hover:border-accent-200 transition-all"
+                        onClick={e => { e.stopPropagation(); onProgress(obc) }}>
+                        <Activity size={13} />
+                      </button>
+                      <button title={t('surtido.ordenes.validate_btn')}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-800 px-2.5 py-1.5 rounded-lg hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+                        onClick={e => { e.stopPropagation(); onValidate(obc) }}>
+                        <ScanBarcode size={11} /> {t('surtido.ordenes.validate_btn')}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {totalPages > 1 && (
+        <TablePagination
+          page={page} totalPages={totalPages} pageSize={pageSize} totalItems={total}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          itemLabel={t('surtido.ordenes.item_label')}
+        />
+      )}
     </div>
   )
 }
