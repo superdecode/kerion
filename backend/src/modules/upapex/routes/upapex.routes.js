@@ -42,8 +42,8 @@ router.get('/config',
   }
 )
 
-// PUT /api/upapex/config/sheets — save Google Sheets URLs
-router.put('/config/sheets',
+// POST /api/upapex/config/sheets — save Google Sheets URLs
+router.post('/config/sheets',
   authenticateToken, loadFullUser,
   requirePermission('sistema.wms', 'editar'),
   async (req, res) => {
