@@ -5,6 +5,7 @@ import {
   Search, UserCheck, Users, Plus, Trash2, X, ChevronDown, Play, Loader2,
   Package2, Truck, ScanBarcode, Copy, Check, Info, Activity,
   User, Clock, BarChart3, RefreshCw, Database, CheckCircle2,
+  MapPin, Timer, XCircle, AlertCircle,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -15,7 +16,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import {
   getOutboundList, getOutboundDetail,
   getSurtidores, createSurtidor, deleteSurtidor,
-  getOrderTracking, upsertOrderTracking, getScanSessions,
+  getOrderTracking, upsertOrderTracking, getScanSessions, getScanSession,
 } from '../services/surtidoService'
 import { refreshSheet, getCacheTimestamp } from '../../wmshub/services/googleSheetsService'
 
@@ -197,89 +198,248 @@ function WmsDetailModal({ order, onClose }) {
   )
 }
 
-function ProgressModal({ obc, tracking, onClose }) {
+const SESSION_STATUS = {
+  complete:           { cls: 'bg-success-100 text-success-700',  label: 'Completa' },
+  with_discrepancies: { cls: 'bg-warning-100 text-warning-700',  label: 'Con diferencias' },
+  validating:         { cls: 'bg-primary-100 text-primary-700',  label: 'En curso' },
+}
+
+function fmtDt(v) {
+  if (!v) return '—'
+  return String(v).slice(0, 16).replace('T', ' ')
+}
+
+function calcSessionDuration(s) {
+  if (!s?.started_at) return '—'
+  const end = s.completed_at ? new Date(s.completed_at) : new Date()
+  const secs = Math.max(0, Math.floor((end - new Date(s.started_at)) / 1000))
+  const h = Math.floor(secs / 3600); const m = Math.floor((secs % 3600) / 60); const sc = secs % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${sc}s`
+  return `${sc}s`
+}
+
+function OrderDetailModal({ obc, tracking, onClose }) {
   const { t } = useI18nStore()
   const status = tracking?.status || 'pending_assignment'
   const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
 
-  const { data: sessionsData, isLoading } = useQuery({
+  const [selectedSessionId, setSelectedSessionId] = useState(null)
+  const [detailTab, setDetailTab] = useState('registros')
+
+  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
     queryKey: ['upapex-scan-sessions-obc', obc],
     queryFn: () => getScanSessions({ outbound_order_no: obc, pageSize: 50 }),
     enabled: !!obc,
     staleTime: 30000,
+    onSuccess: (data) => {
+      const records = data?.data?.records ?? data?.data ?? []
+      if (records.length > 0 && !selectedSessionId) {
+        setSelectedSessionId(records[0].id)
+      }
+    },
   })
   const sessions = sessionsData?.data?.records ?? sessionsData?.data ?? []
 
+  const activeSession = selectedSessionId
+    ? sessions.find(s => s.id === selectedSessionId) ?? sessions[0]
+    : sessions[0]
+
+  const { data: sessionDetail, isLoading: detailLoading } = useQuery({
+    queryKey: ['upapex-scan-session-detail', activeSession?.id],
+    queryFn: () => getScanSession(activeSession.id),
+    enabled: !!activeSession?.id,
+    staleTime: 30000,
+  })
+
+  const events = sessionDetail?.data?.events ?? []
+  const okEvents  = events.filter(e => e.scan_result === 'ok')
+  const badEvents = events.filter(e => e.scan_result !== 'ok')
+
+  const handleClose = () => { setSelectedSessionId(null); onClose() }
+
   return (
-    <Modal isOpen={!!obc} onClose={onClose} title="Progreso interno" icon={Activity}
-      footer={<button className="btn-ghost" onClick={onClose}><X size={14} /> {t('common.close')}</button>}
-    >
-      <div className="space-y-4 text-xs">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-warm-50 rounded-lg px-3 py-2.5">
-            <p className="text-warm-400 text-[10px] uppercase tracking-wide mb-1">{t('surtido.ordenes.status')}</p>
-            <span className={`badge text-[11px] font-semibold ${meta.cls}`}>{t(meta.labelKey)}</span>
-          </div>
-          <div className="bg-warm-50 rounded-lg px-3 py-2.5">
-            <p className="text-warm-400 text-[10px] uppercase tracking-wide mb-1">{t('surtido.ordenes.surtidor')}</p>
-            <p className="font-semibold text-warm-800 flex items-center gap-1">
-              <User size={11} className="text-warm-400" />
-              {tracking?.surtidor_nombre || '—'}
-            </p>
-          </div>
-          <div className="bg-warm-50 rounded-lg px-3 py-2.5">
-            <p className="text-warm-400 text-[10px] uppercase tracking-wide mb-1">Sesiones</p>
-            <p className="font-bold text-warm-800 text-base">{tracking?.session_count ?? 0}</p>
-          </div>
-          <div className="bg-warm-50 rounded-lg px-3 py-2.5">
-            <p className="text-warm-400 text-[10px] uppercase tracking-wide mb-1">Escaneados</p>
-            <p className="font-bold text-primary-700 text-base">{tracking?.total_scanned ?? 0}</p>
-          </div>
+    <Modal isOpen={!!obc} onClose={handleClose}
+      title={
+        <div className="flex items-center gap-2.5">
+          <span className="font-mono font-bold text-warm-900">{obc}</span>
+          <span className={`badge text-[11px] font-semibold ${meta.cls}`}>{t(meta.labelKey)}</span>
         </div>
-
-        {tracking?.notes && (
-          <div className="bg-warm-50 rounded-lg px-3 py-2.5">
-            <p className="text-warm-400 text-[10px] uppercase tracking-wide mb-1">Notas</p>
-            <p className="text-warm-700">{tracking.notes}</p>
+      }
+      icon={Activity}
+      size="full"
+      footer={<button className="btn-ghost" onClick={handleClose}><X size={14} /> {t('common.close')}</button>}
+    >
+      {sessionsLoading ? (
+        <div className="flex items-center justify-center py-16 gap-2 text-warm-400">
+          <Loader2 size={18} className="animate-spin" /> {t('common.loading')}
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {/* Order summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: t('surtido.ordenes.status'),   value: <span className={`badge text-xs font-semibold ${meta.cls}`}>{t(meta.labelKey)}</span> },
+              { label: t('surtido.ordenes.surtidor'),  value: tracking?.surtidor_nombre || '—' },
+              { label: 'Sesiones',                     value: sessions.length },
+              { label: 'Total escaneados',             value: tracking?.total_scanned ?? okEvents.length },
+            ].map(f => (
+              <div key={f.label} className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
+                <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1">{f.label}</p>
+                <div className="text-sm font-semibold text-warm-700">{f.value}</div>
+              </div>
+            ))}
           </div>
-        )}
 
-        {isLoading ? (
-          <div className="flex items-center justify-center py-6 gap-2 text-warm-400">
-            <Loader2 size={14} className="animate-spin" /> {t('common.loading')}
-          </div>
-        ) : sessions.length > 0 ? (
-          <div>
-            <p className="font-semibold text-warm-500 mb-2 uppercase tracking-wider text-[10px] flex items-center gap-1">
-              <BarChart3 size={10} /> Sesiones de validacion ({sessions.length})
-            </p>
-            <div className="space-y-2">
-              {sessions.map((s, i) => (
-                <div key={s.id || i} className="bg-warm-50 rounded-lg px-3 py-2.5 border border-warm-100">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className={`badge text-[10px] ${
-                      s.status === 'complete' ? 'bg-success-100 text-success-700' :
-                      s.status === 'with_discrepancies' ? 'bg-warning-100 text-warning-700' :
-                      'bg-primary-100 text-primary-700'
-                    }`}>{s.status}</span>
-                    <span className="text-warm-400 text-[10px] flex items-center gap-1">
-                      <Clock size={9} /> {String(s.started_at || '').slice(0, 16).replace('T', ' ')}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-warm-600">
-                    <span>{s.operator_nombre || '—'}</span>
-                    <span className="text-warm-300">|</span>
-                    <span>{s.total_scanned ?? 0} / {s.total_expected ?? '?'} escaneados</span>
-                  </div>
-                </div>
-              ))}
+          {/* Session selector (if multiple) */}
+          {sessions.length > 1 && (
+            <div className="flex gap-1.5 flex-wrap">
+              {sessions.map((s, i) => {
+                const sm = SESSION_STATUS[s.status] ?? { cls: 'bg-warm-100 text-warm-600', label: s.status }
+                return (
+                  <button key={s.id}
+                    onClick={() => { setSelectedSessionId(s.id); setDetailTab('registros') }}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                      (activeSession?.id === s.id)
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white text-warm-600 border-warm-200 hover:border-primary-300 hover:text-primary-700'
+                    }`}>
+                    #{i + 1} · {fmtDt(s.started_at).slice(11, 16)}
+                    <span className={`ml-1.5 badge text-[10px] font-bold ${sm.cls} ${activeSession?.id === s.id ? 'opacity-80' : ''}`}>{sm.label}</span>
+                  </button>
+                )
+              })}
             </div>
-          </div>
-        ) : (
-          <p className="text-center text-warm-400 py-4">{t('common.noData')}</p>
-        )}
-      </div>
+          )}
+
+          {/* Active session detail */}
+          {activeSession && (
+            <>
+              {/* Session info cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'Inicio validación', value: fmtDt(activeSession.started_at),   icon: Clock },
+                  { label: 'Fin validación',    value: fmtDt(activeSession.completed_at) || 'En curso', icon: Clock },
+                  { label: 'Duración',          value: calcSessionDuration(activeSession), icon: Timer },
+                  { label: 'Operador',          value: activeSession.operator_nombre || '—', icon: User },
+                ].map(f => (
+                  <div key={f.label} className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
+                    <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
+                      <f.icon size={9} /> {f.label}
+                    </p>
+                    <p className="text-sm font-semibold text-warm-700 font-mono">{f.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Stats bar */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-xl bg-success-50 border border-success-100 text-center">
+                  <p className="text-2xl font-black text-success-600 leading-none">{activeSession.total_scanned ?? okEvents.length}</p>
+                  <p className="text-[10px] text-success-600 uppercase tracking-wider font-bold mt-1">Validados</p>
+                </div>
+                <div className="p-3 rounded-xl bg-warm-50 border border-warm-100 text-center">
+                  <p className="text-2xl font-black text-warm-700 leading-none">{activeSession.total_expected ?? '?'}</p>
+                  <p className="text-[10px] text-warm-500 uppercase tracking-wider font-bold mt-1">Esperados</p>
+                </div>
+                <div className="p-3 rounded-xl bg-danger-50 border border-danger-100 text-center">
+                  <p className="text-2xl font-black text-danger-600 leading-none">{badEvents.length}</p>
+                  <p className="text-[10px] text-danger-600 uppercase tracking-wider font-bold mt-1">Rechazados</p>
+                </div>
+              </div>
+
+              {activeSession.notes && (
+                <div className="bg-warm-50 rounded-xl px-3 py-2.5 border border-warm-100">
+                  <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">Notas</p>
+                  <p className="text-sm text-warm-700">{activeSession.notes}</p>
+                </div>
+              )}
+
+              {/* Tabs */}
+              <div className="flex gap-1 border-b border-warm-100">
+                <button onClick={() => setDetailTab('registros')}
+                  className={`pb-2.5 px-4 text-sm font-semibold transition-all border-b-2 flex items-center gap-1.5 ${
+                    detailTab === 'registros' ? 'text-primary-700 border-primary-500' : 'text-warm-500 border-transparent hover:text-warm-700'
+                  }`}>
+                  <CheckCircle2 size={13} /> {t('surtido.escaneo.tab_registros')}
+                  <span className="bg-success-100 text-success-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{okEvents.length}</span>
+                </button>
+                <button onClick={() => setDetailTab('rechazados')}
+                  className={`pb-2.5 px-4 text-sm font-semibold transition-all border-b-2 flex items-center gap-1.5 ${
+                    detailTab === 'rechazados' ? 'text-primary-700 border-primary-500' : 'text-warm-500 border-transparent hover:text-warm-700'
+                  }`}>
+                  <XCircle size={13} /> {t('surtido.escaneo.tab_rechazados')}
+                  {badEvents.length > 0 && (
+                    <span className="bg-danger-100 text-danger-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badEvents.length}</span>
+                  )}
+                </button>
+              </div>
+
+              {detailLoading ? (
+                <div className="flex justify-center py-8 text-warm-400 gap-2">
+                  <Loader2 size={16} className="animate-spin" /> {t('common.loading')}
+                </div>
+              ) : detailTab === 'registros' ? (
+                <EventsTable events={okEvents} t={t} />
+              ) : (
+                <EventsTable events={badEvents} t={t} showResult />
+              )}
+            </>
+          )}
+
+          {sessions.length === 0 && (
+            <p className="text-center text-warm-400 py-10 text-sm">{t('common.noData')}</p>
+          )}
+        </div>
+      )}
     </Modal>
+  )
+}
+
+function EventsTable({ events, t, showResult = false }) {
+  if (events.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-10 gap-2 text-warm-400">
+      <CheckCircle2 size={32} className="opacity-30" />
+      <p className="text-sm">{t('common.noData')}</p>
+    </div>
+  )
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto max-h-80">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-warm-50/90 backdrop-blur-sm">
+              <th className="table-header font-semibold">#</th>
+              <th className="table-header font-semibold">{t('surtido.validacion.code_header')}</th>
+              {showResult && <th className="table-header font-semibold">Tipo</th>}
+              <th className="table-header font-semibold text-right">Hora escaneo</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-warm-50">
+            {events.map((e, i) => (
+              <tr key={e.id || i} className={`hover:bg-primary-50/20 transition-colors ${
+                showResult && e.scan_result === 'duplicate' ? 'bg-warning-50/30' : ''
+              }`}>
+                <td className="table-cell text-warm-400 tabular-nums">{i + 1}</td>
+                <td className="table-cell font-mono font-semibold text-warm-800">{e.normalized_code || e.scanned_code}</td>
+                {showResult && (
+                  <td className="table-cell">
+                    <span className={`badge text-[10px] ${
+                      e.scan_result === 'duplicate' ? 'bg-warning-100 text-warning-700' : 'bg-danger-100 text-danger-700'
+                    }`}>
+                      {e.scan_result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
+                    </span>
+                  </td>
+                )}
+                <td className="table-cell text-right text-warm-400 tabular-nums">
+                  {String(e.scanned_at || '').slice(11, 19)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 
@@ -312,8 +472,8 @@ function StatusChips({ selected, onChange, t }) {
         onClick={() => onChange('')}
         className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
           !selected
-            ? 'bg-warm-800 text-white border-warm-800'
-            : 'bg-white text-warm-600 border-warm-200 hover:border-warm-300 hover:text-warm-800'
+            ? 'bg-primary-600 text-white border-primary-600'
+            : 'bg-white text-warm-600 border-warm-200 hover:border-primary-300 hover:text-primary-700'
         }`}>
         {t('common.all')}
       </button>
@@ -321,8 +481,8 @@ function StatusChips({ selected, onChange, t }) {
         <button key={k} onClick={() => onChange(k === selected ? '' : k)}
           className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
             selected === k
-              ? `${v.cls} border-current`
-              : 'bg-white text-warm-500 border-warm-200 hover:border-warm-300 hover:text-warm-700'
+              ? 'bg-primary-600 text-white border-primary-600'
+              : 'bg-white text-warm-500 border-warm-200 hover:border-primary-300 hover:text-primary-700'
           }`}>
           {t(v.labelKey)}
         </button>
@@ -514,6 +674,9 @@ export default function Ordenes() {
 
       {/* Filter bar */}
       <div className="bg-white/90 backdrop-blur-lg border-b border-warm-100 px-4 py-2.5 space-y-2 shadow-sm">
+        {/* Status chips — top row */}
+        <StatusChips selected={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(1) }} t={t} />
+        {/* Search + date + surtidor — second row */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative flex-1 min-w-44 max-w-xs">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400" />
@@ -542,7 +705,6 @@ export default function Ordenes() {
             </button>
           )}
         </div>
-        <StatusChips selected={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(1) }} t={t} />
       </div>
 
       {/* Table */}
@@ -591,7 +753,7 @@ export default function Ordenes() {
 
       <WmsDetailModal order={wmsDetailOrder} onClose={() => setWmsDetailOrder(null)} />
 
-      <ProgressModal
+      <OrderDetailModal
         obc={progressObc}
         tracking={progressObc ? trackingMap[progressObc] : null}
         onClose={() => setProgressObc(null)}

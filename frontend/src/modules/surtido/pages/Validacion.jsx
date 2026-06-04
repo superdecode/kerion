@@ -260,133 +260,10 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
           onClick={onStart}
           disabled={isStarting}
           whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}>
-          {isStarting ? <Loader2 size={18} className="animate-spin" /> : <MapPin size={18} />}
-          {t('surtido.validacion.ubicacion_step_title')}
+          {isStarting ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
+          {t('surtido.escaneo.start_validation')}
         </motion.button>
       </div>
-    </div>
-  )
-}
-
-/* ─── Location step ───────────────────────────────────────── */
-function LocationStep({ obc, ubicacionesData, onConfirm, onBack, isStarting }) {
-  const { t } = useI18nStore()
-  const toast = useToastStore.getState()
-  const [code, setCode] = useState('')
-  const [showNotFound, setShowNotFound] = useState(false)
-  const [notFoundCode, setNotFoundCode] = useState('')
-  const inputRef = useRef(null)
-
-  useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80) }, [])
-
-  const ubicaciones = ubicacionesData?.data ?? []
-
-  function tryConfirm(raw) {
-    const val = raw.trim()
-    if (!val) return
-    if (ubicaciones.length === 0) {
-      onConfirm(null)
-      return
-    }
-    const norm = val.toLowerCase()
-    const found = ubicaciones.find(u =>
-      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
-    )
-    if (found) {
-      onConfirm({ id: found.id, codigo: found.codigo, nombre: found.nombre })
-    } else {
-      setNotFoundCode(val)
-      setShowNotFound(true)
-    }
-  }
-
-  return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-2xl mx-auto space-y-4">
-        <button className="btn-ghost text-sm inline-flex items-center gap-1.5" onClick={onBack}>
-          <ArrowLeft size={14} /> {t('common.back')}
-        </button>
-
-        <motion.div className="card p-6"
-          initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-2xl bg-accent-100 flex items-center justify-center shrink-0">
-              <MapPin className="w-5 h-5 text-accent-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-warm-900">{t('surtido.validacion.ubicacion_step_title')}</h3>
-              <p className="text-xs text-warm-500">{obc}</p>
-            </div>
-          </div>
-
-          <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">
-            {t('surtido.validacion.ubicacion_scan_label')}
-          </label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300" />
-              <input
-                ref={inputRef}
-                type="text"
-                className="w-full pl-12 pr-5 py-4 text-base bg-white border-2 border-warm-200 rounded-2xl
-                  focus:border-accent-500 focus:ring-4 focus:ring-accent-100
-                  transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
-                placeholder="UB-XXX"
-                value={code}
-                onChange={e => setCode(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') tryConfirm(e.target.value) }}
-              />
-            </div>
-            <motion.button
-              className="btn-primary px-6 py-4 text-base"
-              onClick={() => tryConfirm(code)}
-              disabled={!code.trim() || isStarting}
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-              {isStarting ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
-            </motion.button>
-          </div>
-
-          {ubicaciones.length > 0 && (
-            <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
-              {ubicaciones.filter(u =>
-                !code.trim() ||
-                (u.codigo || '').toLowerCase().includes(code.toLowerCase()) ||
-                (u.nombre || '').toLowerCase().includes(code.toLowerCase())
-              ).map(u => (
-                <button key={u.id}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-accent-50 transition-colors text-xs flex items-center gap-2"
-                  onClick={() => onConfirm({ id: u.id, codigo: u.codigo, nombre: u.nombre })}>
-                  <MapPin size={11} className="text-accent-500 shrink-0" />
-                  <span className="font-mono font-semibold text-warm-800">{u.codigo}</span>
-                  <span className="text-warm-500">{u.nombre}</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <button
-            className="mt-4 text-xs text-warm-400 hover:text-warm-600 transition-colors underline-offset-2 hover:underline"
-            onClick={() => onConfirm(null)}>
-            {t('surtido.validacion.ubicacion_skip')}
-          </button>
-        </motion.div>
-      </div>
-
-      <Modal isOpen={showNotFound} onClose={() => setShowNotFound(false)}
-        title={t('surtido.validacion.ubicacion_not_found_title')} icon={MapPin}
-        footer={
-          <div className="flex gap-3 justify-end">
-            <button className="btn-ghost" onClick={() => setShowNotFound(false)}>{t('common.cancel')}</button>
-            <button className="btn-primary" onClick={() => { setShowNotFound(false); onConfirm({ id: null, codigo: notFoundCode, nombre: notFoundCode }) }}>
-              {t('surtido.validacion.ubicacion_create_btn')}
-            </button>
-          </div>
-        }>
-        <p className="text-sm text-warm-600">
-          <strong className="font-mono text-warm-800">{notFoundCode}</strong> — {t('surtido.validacion.ubicacion_not_found_body')}
-        </p>
-      </Modal>
     </div>
   )
 }
@@ -506,7 +383,7 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
   function doRecount(raw) {
     const norm = normalizeCode(raw.trim())
     if (!norm) return
-    const alreadyInRecount = recountItems.some(r => r.code === norm && r.status !== 'nuevo')
+    const alreadyInRecount = recountItems.some(r => r.code === norm)
     const alreadyInSession = sessionHistory.some(h => h.code === norm && h.result === 'ok')
     let status
     if (alreadyInRecount) {
@@ -609,6 +486,11 @@ export default function SurtidoValidacion() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [finalNotes, setFinalNotes] = useState('')
   const [activeTab, setActiveTab] = useState('registros')
+  const [ubicacionConfirmed, setUbicacionConfirmed] = useState(false)
+  const [locationInputValue, setLocationInputValue] = useState('')
+  const [showLocationNotFound, setShowLocationNotFound] = useState(false)
+  const [locationNotFoundCode, setLocationNotFoundCode] = useState('')
+  const locationRef = useRef(null)
 
   const sessionElapsed = useSessionTimer(sessionStart)
 
@@ -622,6 +504,7 @@ export default function SurtidoValidacion() {
           setCounts(s.counts || { ok: 0, rejected: 0 })
           setItemCounts(new Map(s.itemCountsArr || []))
           setSelectedUbicacion(s.ubicacion || null)
+          setUbicacionConfirmed(s.ubicacionConfirmed || !!s.ubicacion)
           setStep('session')
           return
         }
@@ -682,8 +565,13 @@ export default function SurtidoValidacion() {
   }, [])
 
   useEffect(() => {
-    if (step === 'session') setTimeout(() => scanRef.current?.focus(), 80)
-  }, [step])
+    if (step !== 'session') return
+    if (!ubicacionConfirmed) {
+      setTimeout(() => locationRef.current?.focus(), 80)
+    } else {
+      setTimeout(() => scanRef.current?.focus(), 80)
+    }
+  }, [step, ubicacionConfirmed])
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -710,27 +598,67 @@ export default function SurtidoValidacion() {
     setStep('search'); setObc(null); setSessionId(null); setSessionStart(null)
     setLastScan(null); setHistory([]); setCounts({ ok: 0, rejected: 0 })
     setItemCounts(new Map()); setPendingSync([]); setSelectedUbicacion(null)
+    setUbicacionConfirmed(false); setLocationInputValue('')
   }
 
   const createSessionMut = useMutation({
-    mutationFn: (ubicacion) => {
+    mutationFn: () => {
       const packageList = (detailData?.data ?? detailData)?.packageList ?? (detailData?.data ?? detailData)?.details ?? (detailData?.data ?? detailData)?.items ?? []
       return createScanSession({
         outbound_order_no: obc,
         third_order_no: (detailData?.data ?? detailData)?.thirdOrderNo || null,
         total_expected: packageList.reduce((s, p) => s + (p.quantity ?? p.totalPackageQty ?? p.qty ?? 1), 0),
-        ubicacion_id: ubicacion?.id || null,
+        ubicacion_id: null,
       })
     },
-    onSuccess: (data, ubicacion) => {
+    onSuccess: (data) => {
       const sid = data.data.id; const now = new Date()
       setSessionId(sid); setSessionStart(now); setStep('session')
-      setSelectedUbicacion(ubicacion)
-      persistSession(obc, sid, now, ubicacion)
+      setSelectedUbicacion(null); setUbicacionConfirmed(false)
+      persistSession(obc, sid, now, null)
       upsertOrderTracking(obc, { status: 'validating' }).catch(() => {})
     },
     onError: () => toast.error(t('toast.error')),
   })
+
+  const updateUbicacionMut = useMutation({
+    mutationFn: (ubicacion) => updateScanSession(sessionId, { ubicacion_id: ubicacion?.id || null }),
+    onSuccess: (_, ubicacion) => {
+      setSelectedUbicacion(ubicacion)
+      setUbicacionConfirmed(true)
+      setLocationInputValue('')
+      const saved = sessionStorage.getItem('kirion_surtido_session')
+      if (saved) {
+        try {
+          const s = JSON.parse(saved)
+          sessionStorage.setItem('kirion_surtido_session', JSON.stringify({ ...s, ubicacion, ubicacionConfirmed: true }))
+        } catch {}
+      }
+      setTimeout(() => scanRef.current?.focus(), 80)
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  function tryConfirmUbicacion(raw) {
+    const val = raw.trim()
+    if (!val) return
+    const ubicaciones = ubicacionesData?.data ?? []
+    if (ubicaciones.length === 0) {
+      setUbicacionConfirmed(true)
+      setTimeout(() => scanRef.current?.focus(), 80)
+      return
+    }
+    const norm = val.toLowerCase()
+    const found = ubicaciones.find(u =>
+      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
+    )
+    if (found) {
+      updateUbicacionMut.mutate({ id: found.id, codigo: found.codigo, nombre: found.nombre })
+    } else {
+      setLocationNotFoundCode(val)
+      setShowLocationNotFound(true)
+    }
+  }
 
   const addEventMut = useMutation({
     mutationFn: addScanEvent,
@@ -854,8 +782,8 @@ export default function SurtidoValidacion() {
     )
   }
 
-  /* ─── SEARCH / PREVIEW / LOCATION STEPS ─────────────────── */
-  if (step === 'search' || step === 'preview' || step === 'location') {
+  /* ─── SEARCH / PREVIEW STEPS ────────────────────────────── */
+  if (step === 'search' || step === 'preview') {
     return (
       <div className="flex flex-col h-full">
         <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} />
@@ -864,16 +792,7 @@ export default function SurtidoValidacion() {
           <PreviewStep
             obc={obc} detailData={detailData}
             onBack={() => { setObc(null); setStep('search') }}
-            onStart={() => setStep('location')}
-            isStarting={false}
-          />
-        )}
-        {step === 'location' && (
-          <LocationStep
-            obc={obc}
-            ubicacionesData={ubicacionesData}
-            onBack={() => setStep('preview')}
-            onConfirm={(ubicacion) => createSessionMut.mutate(ubicacion)}
+            onStart={() => createSessionMut.mutate()}
             isStarting={createSessionMut.isPending}
           />
         )}
@@ -933,14 +852,7 @@ export default function SurtidoValidacion() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-warm-800 truncate leading-tight font-mono">{obc}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <p className="text-[10px] text-warm-500 leading-tight">{t('surtido.validacion.in_progress')}</p>
-                    {selectedUbicacion && (
-                      <span className="text-[10px] text-accent-600 font-medium flex items-center gap-0.5">
-                        <MapPin size={9} /> {selectedUbicacion.codigo}
-                      </span>
-                    )}
-                  </div>
+                  <p className="text-[10px] text-warm-500 leading-tight mt-0.5">{t('surtido.validacion.in_progress')}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-3xl font-black text-warm-800 tracking-tighter leading-none">
@@ -958,6 +870,15 @@ export default function SurtidoValidacion() {
                   style={{ width: `${progress}%` }} />
               </div>
 
+              {selectedUbicacion && ubicacionConfirmed && (
+                <div className="flex items-center gap-2 px-2.5 py-1.5 mb-2 rounded-xl bg-accent-50 border border-accent-100">
+                  <MapPin size={11} className="text-accent-600 shrink-0" />
+                  <span className="font-mono text-xs font-semibold text-accent-700">{selectedUbicacion.codigo}</span>
+                  {selectedUbicacion.nombre && selectedUbicacion.nombre !== selectedUbicacion.codigo && (
+                    <span className="text-[11px] text-accent-500 truncate">{selectedUbicacion.nombre}</span>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-4 gap-2 pt-2 border-t border-warm-100">
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-success-50">
                   <p className="text-lg font-extrabold text-success-600 leading-none">{counts.ok}</p>
@@ -980,6 +901,67 @@ export default function SurtidoValidacion() {
                 </div>
               </div>
             </div>
+
+            {/* Location scan - shown until confirmed */}
+            {!ubicacionConfirmed && (
+              <motion.div
+                className="card p-4 border-2 border-accent-300 bg-accent-50/40 space-y-3"
+                initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-accent-100 flex items-center justify-center">
+                      <MapPin className="w-3.5 h-3.5 text-accent-600" />
+                    </div>
+                    <span className="text-sm font-bold text-accent-700">{t('surtido.validacion.ubicacion_scan_label')}</span>
+                  </div>
+                  <button
+                    className="text-xs text-warm-400 hover:text-warm-600 transition-colors"
+                    onClick={() => { setUbicacionConfirmed(true); setTimeout(() => scanRef.current?.focus(), 80) }}>
+                    {t('surtido.validacion.ubicacion_skip')}
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-300" />
+                    <input
+                      ref={locationRef}
+                      type="text"
+                      className="w-full pl-10 pr-4 py-3 text-base bg-white border-2 border-accent-200 rounded-2xl
+                        focus:border-accent-500 focus:ring-4 focus:ring-accent-100
+                        transition-all outline-none placeholder:text-warm-300 font-mono"
+                      placeholder="UB-XXX"
+                      value={locationInputValue}
+                      onChange={e => setLocationInputValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') tryConfirmUbicacion(e.target.value) }}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <button
+                    className="btn-primary px-4 py-3 rounded-2xl"
+                    onClick={() => tryConfirmUbicacion(locationInputValue)}
+                    disabled={!locationInputValue.trim() || updateUbicacionMut.isPending}>
+                    {updateUbicacionMut.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  </button>
+                </div>
+                {ubicacionesData?.data?.length > 0 && locationInputValue.trim() && (
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {(ubicacionesData.data).filter(u =>
+                      (u.codigo || '').toLowerCase().includes(locationInputValue.toLowerCase()) ||
+                      (u.nombre || '').toLowerCase().includes(locationInputValue.toLowerCase())
+                    ).slice(0, 6).map(u => (
+                      <button key={u.id}
+                        className="w-full text-left px-3 py-1.5 rounded-xl hover:bg-accent-100 transition-colors text-xs flex items-center gap-2"
+                        onClick={() => updateUbicacionMut.mutate({ id: u.id, codigo: u.codigo, nombre: u.nombre })}>
+                        <MapPin size={10} className="text-accent-500 shrink-0" />
+                        <span className="font-mono font-semibold text-warm-800">{u.codigo}</span>
+                        <span className="text-warm-500">{u.nombre}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
 
             {/* Scan input */}
             <div className="relative">
@@ -1122,6 +1104,25 @@ export default function SurtidoValidacion() {
         onAddToSession={addCodeToSession}
         t={t}
       />
+
+      {/* Location not found modal */}
+      <Modal isOpen={showLocationNotFound} onClose={() => setShowLocationNotFound(false)}
+        title={t('surtido.validacion.ubicacion_not_found_title')} icon={MapPin}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => setShowLocationNotFound(false)}>{t('common.cancel')}</button>
+            <button className="btn-primary" onClick={() => {
+              setShowLocationNotFound(false)
+              updateUbicacionMut.mutate({ id: null, codigo: locationNotFoundCode, nombre: locationNotFoundCode })
+            }}>
+              {t('surtido.validacion.ubicacion_create_btn')}
+            </button>
+          </div>
+        }>
+        <p className="text-sm text-warm-600">
+          <strong className="font-mono text-warm-800">{locationNotFoundCode}</strong> — {t('surtido.validacion.ubicacion_not_found_body')}
+        </p>
+      </Modal>
 
       {/* Cancel confirm modal */}
       <Modal isOpen={showCancelConfirm} onClose={() => setShowCancelConfirm(false)}
