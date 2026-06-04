@@ -119,7 +119,7 @@ export default function Configuracion() {
               </div>
               <div>
                 <h2 className="font-bold text-warm-900 text-sm">{t('wmshub.config.sheets_section')}</h2>
-                <p className="text-xs text-warm-400">{t('wmshub.config.sheet_placeholder')}</p>
+                <p className="text-xs text-warm-400">{t('wmshub.config.sheet_description')}</p>
               </div>
             </div>
 
@@ -136,7 +136,7 @@ export default function Configuracion() {
                       <input
                         type="url"
                         className="input-field flex-1 text-xs font-mono"
-                        placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+                        placeholder={t('wmshub.config.sheet_placeholder')}
                         value={value}
                         onChange={e => { set(e.target.value); setSheetTestResults(p => ({ ...p, [key]: null })) }}
                       />

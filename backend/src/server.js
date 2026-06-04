@@ -638,6 +638,12 @@ async function runMigrations() {
     `ALTER TABLE inv_sessions  ADD COLUMN IF NOT EXISTS ubicacion_id UUID REFERENCES dev_ubicaciones(id)`,
     `ALTER TABLE pick_sessions ADD COLUMN IF NOT EXISTS ubicacion_id UUID REFERENCES dev_ubicaciones(id)`,
 
+    // ── 046: Google Sheets URLs on wms_config ────────────────────────────
+    `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS sheet_inventory_url TEXT`,
+    `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS sheet_outbound_url  TEXT`,
+    `ALTER TABLE wms_config ALTER COLUMN app_key DROP NOT NULL`,
+    `ALTER TABLE wms_config ALTER COLUMN base_url DROP NOT NULL`,
+
     // ── 040: Enable RLS on every public-schema table ──────────────────────
     // Blocks all access through Supabase REST/anon key (deny-by-default: no
     // policies = no access for anon/authenticated roles).
