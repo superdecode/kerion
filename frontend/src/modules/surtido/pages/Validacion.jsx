@@ -6,7 +6,7 @@ import {
   Search, CheckCircle2, XCircle, AlertCircle, Loader2, Wifi, WifiOff,
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
   ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck,
-  MapPin, XOctagon, Plus,
+  MapPin, XOctagon, Plus, Pencil, X, AlertTriangle,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -23,6 +23,11 @@ import {
 import { getUbicaciones } from '../../wmshub/services/wmsHubService'
 
 const SCANNER_THRESHOLD_MS = 500
+const TABS_KEY = 'kirion_surtido_tabs'
+const ACTIVE_TAB_KEY = 'kirion_surtido_active_tab'
+const SESSION_KEY = (tabId) => `kirion_surtido_session_${tabId}`
+
+function genId() { return Math.random().toString(36).slice(2, 9) }
 
 function buildItemMaps(detailData) {
   const detail = detailData?.data ?? detailData
@@ -47,6 +52,17 @@ function buildItemMaps(detailData) {
     if (norm) productMap.set(norm, { ...p, expectedQty, scannedQty: 0, type: 'sku', displayCode: norm })
   })
   return { packageMap, productMap }
+}
+
+function validateOrderBoxData(detailData) {
+  const detail = detailData?.data ?? detailData
+  if (!detail) return { ok: false, reason: 'no_data' }
+  const packageList = detail.packageList ?? detail.details ?? detail.items ?? []
+  if (packageList.length === 0) return { ok: false, reason: 'no_boxes' }
+  const noCode = packageList.filter(p => !p.customizeCode && !p.boxType && !p.boxCode)
+  if (noCode.length === packageList.length) return { ok: false, reason: 'no_codes' }
+  const noQty = packageList.filter(p => !p.quantity && !p.totalPackageQty && !p.qty)
+  return { ok: true, warnings: noQty.length > 0 ? ['missing_qty'] : [], packageList }
 }
 
 function useSessionTimer(startTime) {
@@ -177,11 +193,14 @@ function SearchStep({ onFound }) {
 }
 
 /* ─── Preview step ────────────────────────────────────────── */
-function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
+function PreviewStep({ obc, detailData, isLoadingDetail, onStart, onBack, isStarting }) {
   const { t } = useI18nStore()
   const detail = detailData?.data ?? detailData
   const packageList = detail?.packageList ?? detail?.details ?? detail?.items ?? []
   const productList = detail?.productList ?? []
+
+  const validation = detailData ? validateOrderBoxData(detailData) : null
+  const canStart = !isLoadingDetail && validation?.ok === true
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -213,9 +232,9 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
                 <p className="font-semibold text-warm-800 truncate">{detail.logisticsChannel}</p>
               </div>
             )}
-            <div className="bg-primary-50 rounded-xl px-3 py-2">
-              <p className="text-xs text-primary-600">{t('surtido.validacion.expected_boxes')}</p>
-              <p className="font-bold text-primary-700 text-lg">{packageList.length || detail?.totalQty || '?'}</p>
+            <div className={`rounded-xl px-3 py-2 ${canStart ? 'bg-primary-50' : 'bg-danger-50'}`}>
+              <p className={`text-xs ${canStart ? 'text-primary-600' : 'text-danger-600'}`}>{t('surtido.validacion.expected_boxes')}</p>
+              <p className={`font-bold text-lg ${canStart ? 'text-primary-700' : 'text-danger-700'}`}>{packageList.length || detail?.totalQty || '?'}</p>
             </div>
             {productList.length > 0 && (
               <div className="bg-accent-50 rounded-xl px-3 py-2">
@@ -225,6 +244,29 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
             )}
           </div>
         </div>
+
+        {/* Validation errors — block start */}
+        {!isLoadingDetail && validation && !validation.ok && (
+          <div className="rounded-2xl border-2 border-danger-200 bg-danger-50 p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-danger-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-sm text-danger-700 mb-1">{t('surtido.validacion.box_validation_error')}</p>
+              <p className="text-xs text-danger-600">
+                {validation.reason === 'no_boxes'  && t('surtido.validacion.error_no_boxes')}
+                {validation.reason === 'no_codes'  && t('surtido.validacion.error_no_codes')}
+                {validation.reason === 'no_data'   && t('surtido.validacion.error_no_data')}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Warnings (missing qty) — allow start */}
+        {!isLoadingDetail && validation?.ok && validation.warnings?.length > 0 && (
+          <div className="rounded-2xl border border-warning-200 bg-warning-50 p-3 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-warning-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-warning-700">{t('surtido.validacion.warn_missing_qty')}</p>
+          </div>
+        )}
 
         {packageList.length > 0 && (
           <div className="card overflow-hidden">
@@ -242,13 +284,23 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
-                  {packageList.map((p, i) => (
-                    <tr key={i} className="hover:bg-warm-50 transition-colors">
-                      <td className="table-cell font-mono font-semibold">{p.customizeCode || p.boxType || p.boxCode || '—'}</td>
-                      <td className="table-cell text-warm-500">{p.boxType || '—'}</td>
-                      <td className="table-cell text-right font-semibold">{p.quantity ?? p.totalPackageQty ?? p.qty ?? '?'}</td>
-                    </tr>
-                  ))}
+                  {packageList.map((p, i) => {
+                    const code = p.customizeCode || p.boxType || p.boxCode
+                    const qty = p.quantity ?? p.totalPackageQty ?? p.qty
+                    const missingCode = !code
+                    const missingQty = !qty
+                    return (
+                      <tr key={i} className={`hover:bg-warm-50 transition-colors ${missingCode ? 'bg-danger-50/30' : ''}`}>
+                        <td className="table-cell font-mono font-semibold">
+                          {code || <span className="text-danger-500 italic">sin código</span>}
+                        </td>
+                        <td className="table-cell text-warm-500">{p.boxType || '—'}</td>
+                        <td className="table-cell text-right font-semibold">
+                          {missingQty ? <span className="text-warning-600 italic">—</span> : qty}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -256,10 +308,10 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
         )}
 
         <motion.button
-          className="btn-primary w-full inline-flex items-center justify-center gap-2.5 py-3.5 text-base shadow-glow"
+          className="btn-primary w-full inline-flex items-center justify-center gap-2.5 py-3.5 text-base shadow-glow disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
           onClick={onStart}
-          disabled={isStarting}
-          whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}>
+          disabled={isStarting || !canStart}
+          whileHover={canStart ? { scale: 1.01 } : {}} whileTap={canStart ? { scale: 0.98 } : {}}>
           {isStarting ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
           {t('surtido.escaneo.start_validation')}
         </motion.button>
@@ -417,6 +469,7 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
   return (
     <Modal isOpen={isOpen} onClose={() => { setRecountItems([]); onClose() }}
       title={t('surtido.escaneo.recount')} icon={RotateCcw}
+      size="lg"
       footer={<button className="btn-ghost" onClick={() => { setRecountItems([]); onClose() }}>{t('common.close')}</button>}>
       <div className="space-y-3">
         <div className="relative">
@@ -432,7 +485,7 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
             autoComplete="off"
           />
         </div>
-        <div className="space-y-1.5 max-h-72 overflow-y-auto">
+        <div className="space-y-1.5 max-h-96 overflow-y-auto">
           {recountItems.length === 0 ? (
             <p className="text-xs text-warm-400 text-center py-4">{t('surtido.validacion.history_empty')}</p>
           ) : recountItems.map((item, i) => (
@@ -457,13 +510,13 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
 }
 
 /* ═══════════════════════════════════════════════════════════ */
-export default function SurtidoValidacion() {
+/* ─── TabSession ─────────────────────────────────────────── */
+function TabSession({ tabId, isActive, initialObc, onUpdateTab }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const scanRef = useRef(null)
   const lastKeyTimeRef = useRef(0)
-  const [searchParams] = useSearchParams()
 
   const [step, setStep] = useState('search')
   const [obc, setObc] = useState(null)
@@ -486,12 +539,14 @@ export default function SurtidoValidacion() {
   const [locationInputValue, setLocationInputValue] = useState('')
   const [showLocationNotFound, setShowLocationNotFound] = useState(false)
   const [locationNotFoundCode, setLocationNotFoundCode] = useState('')
+  const [locationFlash, setLocationFlash] = useState(false)
   const locationRef = useRef(null)
 
   const sessionElapsed = useSessionTimer(sessionStart)
+  const storageKey = SESSION_KEY(tabId)
 
   useEffect(() => {
-    const saved = sessionStorage.getItem('kirion_surtido_session')
+    const saved = sessionStorage.getItem(storageKey)
     if (saved) {
       try {
         const s = JSON.parse(saved)
@@ -502,12 +557,12 @@ export default function SurtidoValidacion() {
           setSelectedUbicacion(s.ubicacion || null)
           setUbicacionConfirmed(s.ubicacionConfirmed || !!s.ubicacion)
           setStep('session')
+          onUpdateTab({ obc: s.obc, step: 'session' })
           return
         }
       } catch {}
     }
-    const obcParam = searchParams.get('obc')
-    if (obcParam) { setObc(obcParam); setStep('preview') }
+    if (initialObc) { setObc(initialObc); setStep('preview'); onUpdateTab({ obc: initialObc, step: 'preview' }) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: detailData, isLoading: detailLoading } = useQuery({
@@ -561,13 +616,13 @@ export default function SurtidoValidacion() {
   }, [])
 
   useEffect(() => {
-    if (step !== 'session') return
+    if (step !== 'session' || !isActive) return
     if (!ubicacionConfirmed) {
       setTimeout(() => locationRef.current?.focus(), 80)
     } else {
       setTimeout(() => scanRef.current?.focus(), 80)
     }
-  }, [step, ubicacionConfirmed])
+  }, [step, ubicacionConfirmed, isActive])
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -583,18 +638,19 @@ export default function SurtidoValidacion() {
   }, [pendingSync, isSyncing])
 
   const persistSession = (newObc, newSessionId, newStart, ubicacion) => {
-    sessionStorage.setItem('kirion_surtido_session', JSON.stringify({
+    sessionStorage.setItem(storageKey, JSON.stringify({
       obc: newObc, sessionId: newSessionId, sessionStart: newStart.toISOString(),
       counts: { ok: 0, rejected: 0 }, itemCountsArr: [], ubicacion: ubicacion || null,
     }))
   }
 
   const clearSession = () => {
-    sessionStorage.removeItem('kirion_surtido_session')
+    sessionStorage.removeItem(storageKey)
     setStep('search'); setObc(null); setSessionId(null); setSessionStart(null)
     setLastScan(null); setHistory([]); setCounts({ ok: 0, rejected: 0 })
     setItemCounts(new Map()); setPendingSync([]); setSelectedUbicacion(null)
     setUbicacionConfirmed(false); setLocationInputValue('')
+    onUpdateTab({ obc: null, step: 'search' })
   }
 
   const createSessionMut = useMutation({
@@ -613,6 +669,7 @@ export default function SurtidoValidacion() {
       setSelectedUbicacion(null); setUbicacionConfirmed(false)
       persistSession(obc, sid, now, null)
       upsertOrderTracking(obc, { status: 'validating' }).catch(() => {})
+      onUpdateTab({ obc, step: 'session' })
     },
     onError: () => toast.error(t('toast.error')),
   })
@@ -623,11 +680,13 @@ export default function SurtidoValidacion() {
       setSelectedUbicacion(ubicacion)
       setUbicacionConfirmed(true)
       setLocationInputValue('')
-      const saved = sessionStorage.getItem('kirion_surtido_session')
+      setLocationFlash(true)
+      setTimeout(() => setLocationFlash(false), 1200)
+      const saved = sessionStorage.getItem(storageKey)
       if (saved) {
         try {
           const s = JSON.parse(saved)
-          sessionStorage.setItem('kirion_surtido_session', JSON.stringify({ ...s, ubicacion, ubicacionConfirmed: true }))
+          sessionStorage.setItem(storageKey, JSON.stringify({ ...s, ubicacion, ubicacionConfirmed: true }))
         } catch {}
       }
       setTimeout(() => scanRef.current?.focus(), 80)
@@ -749,12 +808,12 @@ export default function SurtidoValidacion() {
 
   const finalizeMut = useMutation({
     mutationFn: () => {
-      const total = allItems.reduce((s, i) => s + (i.expectedQty || 1), 0)
-      const status = counts.ok < total ? 'with_discrepancies' : 'complete'
-      return updateScanSession(sessionId, { status, notes: finalNotes, total_scanned: counts.ok, ubicacion_id: selectedUbicacion?.id || null })
+      const sessionStatus = counts.ok < totalExpected ? 'with_discrepancies' : 'complete'
+      return updateScanSession(sessionId, { status: sessionStatus, notes: finalNotes, total_scanned: counts.ok, ubicacion_id: selectedUbicacion?.id || null })
     },
     onSuccess: () => {
-      upsertOrderTracking(obc, { status: 'complete' }).catch(() => {})
+      const orderStatus = totalExpected > 0 && counts.ok >= totalExpected ? 'complete' : 'partial'
+      upsertOrderTracking(obc, { status: orderStatus }).catch(() => {})
       toast.success(t('surtido.escaneo.session_saved'))
       qc.invalidateQueries({ queryKey: ['upapex-scan-sessions'] })
       clearSession(); setShowFinalize(false)
@@ -770,74 +829,64 @@ export default function SurtidoValidacion() {
   }, [trackingData])
 
   if (detailLoading && step !== 'search') {
-    return (
-      <div className="flex flex-col h-full">
-        <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} />
-        <LoadingSpinner text={t('common.loading')} />
-      </div>
-    )
+    return <div className="flex-1 flex items-center justify-center"><LoadingSpinner text={t('common.loading')} /></div>
   }
 
   /* ─── SEARCH / PREVIEW STEPS ────────────────────────────── */
-  if (step === 'search' || step === 'preview') {
+  if (step === 'search') {
+    return <SearchStep onFound={foundObc => { setObc(foundObc); setStep('preview'); onUpdateTab({ obc: foundObc, step: 'preview' }) }} />
+  }
+
+  if (step === 'preview') {
     return (
-      <div className="flex flex-col h-full">
-        <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} />
-        {step === 'search' && <SearchStep onFound={foundObc => { setObc(foundObc); setStep('preview') }} />}
-        {step === 'preview' && (
-          <PreviewStep
-            obc={obc} detailData={detailData}
-            onBack={() => { setObc(null); setStep('search') }}
-            onStart={() => createSessionMut.mutate()}
-            isStarting={createSessionMut.isPending}
-          />
-        )}
-      </div>
+      <PreviewStep
+        obc={obc} detailData={detailData} isLoadingDetail={detailLoading}
+        onBack={() => { setObc(null); setStep('search'); onUpdateTab({ obc: null, step: 'search' }) }}
+        onStart={() => createSessionMut.mutate()}
+        isStarting={createSessionMut.isPending}
+      />
     )
   }
 
   /* ─── ACTIVE SESSION ─────────────────────────────────── */
   return (
-    <div className="flex flex-col h-full">
-      <Header title={t('surtido.validacion.title')} subtitle={`${t('nav.surtido_wms')} · ${obc || ''}`}
-        actions={
-          <div className="flex items-center gap-1.5">
-            {pendingSync.length > 0 && (
-              <span className="px-3 py-2 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
-                {isSyncing ? <Loader2 size={13} className="animate-spin" /> : <WifiOff size={13} />}
-                {pendingSync.length}
-              </span>
-            )}
-            <button
-              className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-              onClick={() => setShowRecount(true)} title={t('surtido.escaneo.recount')}>
-              <RotateCcw className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('surtido.escaneo.recount')}</span>
-            </button>
-            <button
-              className="px-3 py-2 rounded-xl text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-              onClick={() => setShowMissing(true)}>
-              <List className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('surtido.escaneo.missing')}</span>
-            </button>
-            <button
-              className="px-3 py-2 rounded-xl text-danger-600 bg-danger-50 hover:bg-danger-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-              onClick={handleCancel}>
-              <XOctagon className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('surtido.escaneo.cancel')}</span>
-            </button>
-            <button
-              className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
-              onClick={() => setShowFinalize(true)}>
-              <Square className="w-4 h-4" /> {t('surtido.escaneo.finalize')}
-            </button>
+    <div className="flex-1 flex overflow-hidden">
+      {/* Main area */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Session action bar */}
+        <div className="sticky top-0 z-[4] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-4 py-2 flex items-center gap-1.5">
+          <div className="flex-1 flex items-center gap-2 min-w-0">
+            <span className="font-mono font-bold text-warm-800 text-sm truncate">{obc}</span>
+            <span className="text-warm-400 text-xs font-mono tabular-nums">{fmtElapsed(sessionElapsed)}</span>
           </div>
-        }
-      />
+          {pendingSync.length > 0 && (
+            <span className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
+              {isSyncing ? <Loader2 size={12} className="animate-spin" /> : <WifiOff size={12} />}
+              {pendingSync.length}
+            </span>
+          )}
+          <button className="px-3 py-1.5 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+            onClick={() => setShowRecount(true)}>
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t('surtido.escaneo.recount')}</span>
+          </button>
+          <button className="px-3 py-1.5 rounded-xl text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+            onClick={() => setShowMissing(true)}>
+            <List className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t('surtido.escaneo.missing')}</span>
+          </button>
+          <button className="px-3 py-1.5 rounded-xl text-danger-600 bg-danger-50 hover:bg-danger-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+            onClick={handleCancel}>
+            <XOctagon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t('surtido.escaneo.cancel')}</span>
+          </button>
+          <button className="btn-danger inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
+            onClick={() => setShowFinalize(true)}>
+            <Square className="w-3.5 h-3.5" /> {t('surtido.escaneo.finalize')}
+          </button>
+        </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Main area */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="p-6">
           <div className="max-w-3xl mx-auto space-y-4">
 
             {/* Session info card */}
@@ -866,15 +915,31 @@ export default function SurtidoValidacion() {
                   style={{ width: `${progress}%` }} />
               </div>
 
+              {/* Location separator — shown when confirmed */}
               {selectedUbicacion && ubicacionConfirmed && (
-                <div className="flex items-center gap-2 px-2.5 py-1.5 mb-2 rounded-xl bg-accent-50 border border-accent-100">
-                  <MapPin size={11} className="text-accent-600 shrink-0" />
-                  <span className="font-mono text-xs font-semibold text-accent-700">{selectedUbicacion.codigo}</span>
+                <motion.div
+                  className={`flex items-center gap-2 px-2.5 py-1.5 mb-2 rounded-xl border transition-colors duration-700 ${
+                    locationFlash ? 'bg-success-100 border-success-300' : 'bg-accent-50 border-accent-100'
+                  }`}
+                  initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}>
+                  <MapPin size={11} className={`shrink-0 ${locationFlash ? 'text-success-600' : 'text-accent-600'}`} />
+                  <span className={`font-mono text-xs font-semibold ${locationFlash ? 'text-success-700' : 'text-accent-700'}`}>{selectedUbicacion.codigo}</span>
                   {selectedUbicacion.nombre && selectedUbicacion.nombre !== selectedUbicacion.codigo && (
-                    <span className="text-[11px] text-accent-500 truncate">{selectedUbicacion.nombre}</span>
+                    <span className={`text-[11px] truncate ${locationFlash ? 'text-success-500' : 'text-accent-500'}`}>{selectedUbicacion.nombre}</span>
                   )}
-                </div>
+                  <button
+                    className="ml-auto p-1 rounded-lg hover:bg-accent-200 text-accent-400 hover:text-accent-700 transition-colors"
+                    title={t('surtido.validacion.ubicacion_edit')}
+                    onClick={() => {
+                      setUbicacionConfirmed(false)
+                      setLocationInputValue(selectedUbicacion?.codigo || '')
+                      setTimeout(() => locationRef.current?.focus(), 80)
+                    }}>
+                    <Pencil size={10} />
+                  </button>
+                </motion.div>
               )}
+
               <div className="grid grid-cols-4 gap-2 pt-2 border-t border-warm-100">
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-success-50">
                   <p className="text-lg font-extrabold text-success-600 leading-none">{counts.ok}</p>
@@ -898,7 +963,7 @@ export default function SurtidoValidacion() {
               </div>
             </div>
 
-            {/* Location scan - shown until confirmed */}
+            {/* Location scan card — shown until confirmed */}
             {!ubicacionConfirmed && (
               <motion.div
                 className="card p-4 border-2 border-accent-300 bg-accent-50/40 space-y-3"
@@ -1038,63 +1103,62 @@ export default function SurtidoValidacion() {
             )}
           </div>
         </div>
+      </div>
 
-        {/* Right sidebar: orders with progress */}
-        <div className="hidden lg:flex w-80 border-l border-warm-100 bg-white flex-col shrink-0">
-          <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50">
-            <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5 text-primary-500" /> {t('surtido.validacion.sidebar_title')}
-            </h3>
-          </div>
-          <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2">
-            {/* Current order */}
-            {obc && (
-              <div className="p-3 rounded-xl border border-primary-200 bg-primary-50/50 shadow-sm">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs font-bold text-warm-700 font-mono truncate mr-2">{obc}</span>
-                  <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">ACTIVA</span>
-                </div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] text-warm-500 font-medium">{totalScanned}/{totalExpected} cajas</span>
-                  <span className="text-[10px] font-bold text-primary-600">{progress}%</span>
-                </div>
-                <div className="w-full h-1.5 bg-primary-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-primary-400 to-accent-500 rounded-full transition-all duration-500"
-                    style={{ width: `${progress}%` }} />
-                </div>
+      {/* Right sidebar: orders with progress */}
+      <div className="hidden lg:flex w-80 border-l border-warm-100 bg-white flex-col shrink-0">
+        <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50">
+          <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
+            <Zap className="w-3.5 h-3.5 text-primary-500" /> {t('surtido.validacion.sidebar_title')}
+          </h3>
+        </div>
+        <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2">
+          {obc && (
+            <div className="p-3 rounded-xl border border-primary-200 bg-primary-50/50 shadow-sm">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-warm-700 font-mono truncate mr-2">{obc}</span>
+                <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">ACTIVA</span>
               </div>
-            )}
-            {sessionList.length === 0 ? (
-              <div className="py-8 text-center text-xs text-warm-400">{t('surtido.validacion.history_empty')}</div>
-            ) : (
-              sessionList.filter(s => s.outbound_order_no !== obc).map((s, i) => {
-                const pct = s.total_expected > 0 ? Math.min(100, Math.round(((s.total_scanned ?? 0) / s.total_expected) * 100)) : 0
-                const isComplete = s.status === 'complete'
-                return (
-                  <div key={s.id || i} className="p-3 rounded-xl border border-warm-100 hover:border-warm-200 hover:bg-warm-50 transition-all">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-bold text-warm-700 font-mono truncate mr-2">{s.outbound_order_no}</span>
-                      <span className={`badge text-[9px] ${isComplete ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-600'}`}>
-                        {isComplete ? '100%' : `${pct}%`}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[10px] text-warm-400 font-medium">{s.total_scanned ?? 0}/{s.total_expected ?? '?'} cajas</span>
-                      {isComplete && (
-                        <span className="text-[10px] text-success-600 flex items-center gap-1">
-                          <CheckCircle2 size={9} /> Completa
-                        </span>
-                      )}
-                    </div>
-                    <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${isComplete ? 'bg-success-400' : 'bg-primary-400'}`}
-                        style={{ width: `${pct}%` }} />
-                    </div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] text-warm-500 font-medium">{totalScanned}/{totalExpected} cajas</span>
+                <span className="text-[10px] font-bold text-primary-600">{progress}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-primary-100 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-primary-400 to-accent-500 rounded-full transition-all duration-500"
+                  style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+          )}
+          {sessionList.length === 0 ? (
+            <div className="py-8 text-center text-xs text-warm-400">{t('surtido.validacion.history_empty')}</div>
+          ) : (
+            sessionList.filter(s => s.outbound_order_no !== obc).map((s, i) => {
+              const pct = s.total_expected > 0 ? Math.min(100, Math.round(((s.total_scanned ?? 0) / s.total_expected) * 100)) : 0
+              const isComplete = s.status === 'complete'
+              return (
+                <div key={s.id || i} className="p-3 rounded-xl border border-warm-100 hover:border-warm-200 hover:bg-warm-50 transition-all">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-bold text-warm-700 font-mono truncate mr-2">{s.outbound_order_no}</span>
+                    <span className={`badge text-[9px] ${isComplete ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-600'}`}>
+                      {isComplete ? '100%' : `${pct}%`}
+                    </span>
                   </div>
-                )
-              })
-            )}
-          </div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] text-warm-400 font-medium">{s.total_scanned ?? 0}/{s.total_expected ?? '?'} cajas</span>
+                    {isComplete && (
+                      <span className="text-[10px] text-success-600 flex items-center gap-1">
+                        <CheckCircle2 size={9} /> Completa
+                      </span>
+                    )}
+                  </div>
+                  <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${isComplete ? 'bg-success-400' : 'bg-primary-400'}`}
+                      style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )
+            })
+          )}
         </div>
       </div>
 
@@ -1143,8 +1207,9 @@ export default function SurtidoValidacion() {
 
       {/* Missing items modal */}
       <Modal isOpen={showMissing} onClose={() => setShowMissing(false)} title={t('surtido.escaneo.missing_title')} icon={List}
+        size="lg"
         footer={<button className="btn-ghost" onClick={() => setShowMissing(false)}>{t('common.close')}</button>}>
-        <div className="space-y-1.5 max-h-80 overflow-y-auto">
+        <div className="space-y-1.5 max-h-96 overflow-y-auto">
           {missingItems.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-6">
               <CheckCircle2 size={28} className="text-success-500" />
@@ -1212,6 +1277,138 @@ export default function SurtidoValidacion() {
           />
         </div>
       </Modal>
+    </div>
+  )
+}
+
+/* ─── Tab bar ─────────────────────────────────────────────── */
+function TabBar({ tabs, activeTabId, onSelect, onAdd, onClose }) {
+  return (
+    <div className="flex items-center border-b border-warm-100 bg-white/60 backdrop-blur-2xl px-2 overflow-x-auto shrink-0">
+      {tabs.map(tab => (
+        <button key={tab.id}
+          onClick={() => onSelect(tab.id)}
+          className={`group flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all whitespace-nowrap shrink-0 ${
+            tab.id === activeTabId
+              ? 'border-primary-500 text-primary-700 bg-primary-50/40'
+              : 'border-transparent text-warm-500 hover:text-warm-700 hover:bg-warm-50'
+          }`}>
+          <ScanBarcode size={12} className={tab.id === activeTabId ? 'text-primary-500' : 'text-warm-400'} />
+          <span className="max-w-[120px] truncate">{tab.label}</span>
+          {tabs.length > 1 && (
+            <span
+              role="button"
+              tabIndex={-1}
+              onClick={e => { e.stopPropagation(); onClose(tab.id) }}
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-warm-200 text-warm-400 hover:text-warm-700 transition-all ml-0.5">
+              <X size={10} />
+            </span>
+          )}
+        </button>
+      ))}
+      <button
+        onClick={onAdd}
+        className="flex items-center justify-center w-8 h-8 mx-1 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 transition-colors shrink-0"
+        title="Nueva sesión">
+        <Plus size={14} />
+      </button>
+    </div>
+  )
+}
+
+/* ─── Main export ─────────────────────────────────────────── */
+export default function SurtidoValidacion() {
+  const { t } = useI18nStore()
+  const [searchParams] = useSearchParams()
+
+  const [tabs, setTabs] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(TABS_KEY) || 'null')
+      if (Array.isArray(saved) && saved.length > 0) return saved
+    } catch {}
+    return [{ id: genId(), label: t('surtido.validacion.new_tab') }]
+  })
+  const [activeTabId, setActiveTabId] = useState(() => {
+    try {
+      const saved = localStorage.getItem(ACTIVE_TAB_KEY)
+      if (saved) return saved
+    } catch {}
+    return tabs[0]?.id
+  })
+
+  const obcParam = searchParams.get('obc')
+  const [initialObcConsumed, setInitialObcConsumed] = useState(false)
+
+  useEffect(() => {
+    if (!obcParam || initialObcConsumed) return
+    setInitialObcConsumed(true)
+    const activeTab = tabs.find(t => t.id === activeTabId)
+    if (activeTab?.label === t('surtido.validacion.new_tab') || !activeTab?.label) {
+      setTabs(prev => prev.map(tab => tab.id === activeTabId ? { ...tab, label: obcParam } : tab))
+    }
+  }, [obcParam]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    try { localStorage.setItem(TABS_KEY, JSON.stringify(tabs)) } catch {}
+  }, [tabs])
+
+  useEffect(() => {
+    try { localStorage.setItem(ACTIVE_TAB_KEY, activeTabId) } catch {}
+  }, [activeTabId])
+
+  function addTab() {
+    const newId = genId()
+    const newTab = { id: newId, label: t('surtido.validacion.new_tab') }
+    setTabs(prev => [...prev, newTab])
+    setActiveTabId(newId)
+  }
+
+  function closeTab(tabId) {
+    setTabs(prev => {
+      const next = prev.filter(t => t.id !== tabId)
+      if (next.length === 0) {
+        const fresh = { id: genId(), label: t('surtido.validacion.new_tab') }
+        setActiveTabId(fresh.id)
+        return [fresh]
+      }
+      if (tabId === activeTabId) {
+        setActiveTabId(next[next.length - 1].id)
+      }
+      return next
+    })
+    try { sessionStorage.removeItem(SESSION_KEY(tabId)) } catch {}
+  }
+
+  function handleUpdateTab(tabId, { obc, step }) {
+    setTabs(prev => prev.map(tab => {
+      if (tab.id !== tabId) return tab
+      const label = obc || t('surtido.validacion.new_tab')
+      return { ...tab, label }
+    }))
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} />
+      <TabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onSelect={setActiveTabId}
+        onAdd={addTab}
+        onClose={closeTab}
+      />
+      <div className="flex-1 flex overflow-hidden relative">
+        {tabs.map(tab => (
+          <div key={tab.id} className={`absolute inset-0 flex ${tab.id === activeTabId ? '' : 'hidden'}`}>
+            <TabSession
+              tabId={tab.id}
+              isActive={tab.id === activeTabId}
+              initialObc={tab.id === activeTabId && !initialObcConsumed ? obcParam : null}
+              onUpdateTab={(data) => handleUpdateTab(tab.id, data)}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
