@@ -129,7 +129,8 @@ async function upapexPostDedup(tenantId, endpoint, data) {
 // ── Public API functions ───────────────────────────────────────────────────
 
 export async function testConnection(tenantId) {
-  return upapexPost(tenantId, '/v1/integratedInventory/pageOpen', { page: 1, pageSize: 1 })
+  // Use boxStock since integratedInventory requires extra permissions
+  return upapexPost(tenantId, '/v1/boxStock/page', { page: 1, pageSize: 1 })
 }
 
 export async function getBoxStock(tenantId, params = {}) {
