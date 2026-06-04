@@ -230,16 +230,11 @@ router.get('/outbound-list',
         page: parseInt(page) || 1,
         pageSize: Math.min(parseInt(pageSize) || 25, 100),
       }
-      // xlwms expects outboundOrderNos as an array
       if (outboundOrderNos) {
         params.outboundOrderNos = String(outboundOrderNos).split(',').map(s => s.trim()).filter(Boolean)
       }
-      // xlwms requires a time range when using timeType; default to last 90 days
-      const now = new Date()
-      const pad = n => String(n).padStart(2, '0')
-      const fmtDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-      params.startTime = startTime || fmtDate(new Date(now - 90 * 24 * 60 * 60 * 1000))
-      params.endTime   = endTime   || fmtDate(now)
+      if (startTime) params.startTime = startTime
+      if (endTime) params.endTime = endTime
 
       const data = await getBigOutboundList(req.tenantId, params)
       res.json({ success: true, data })

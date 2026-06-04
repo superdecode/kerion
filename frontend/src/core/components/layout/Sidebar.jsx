@@ -16,10 +16,8 @@ import {
   PackagePlus,
   PackageMinus,
   Package,
-  ListChecks,
   BadgeCheck,
   Wifi,
-  ClipboardList,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
@@ -51,14 +49,14 @@ const getNavItems = (t) => [
     label: t('nav.inventario'),
     items: [
       { path: '/inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode,   permission: 'inventario.escaneo' },
-      { path: '/inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: ClipboardList, permission: 'inventario.registros' },
+      { path: '/inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: Package,       permission: 'inventario.registros' },
     ],
   },
   {
     id: 'surtido',
     label: t('nav.surtido'),
     items: [
-      { path: '/surtido',            tourId: 'nav-sur-ordenes',   label: t('nav.sur.ordenes'),      icon: ListChecks,  permission: 'surtido.ordenes' },
+      { path: '/surtido',            tourId: 'nav-sur-ordenes',   label: t('nav.sur.ordenes'),      icon: FileText,    permission: 'surtido.ordenes' },
       { path: '/surtido/validacion',  tourId: 'nav-sur-validacion', label: t('nav.sur.validacion'),   icon: BadgeCheck,  permission: 'surtido.validacion' },
       { path: '/surtido/registros',  tourId: 'nav-sur-registros', label: t('nav.sur.registros'),    icon: History,     permission: 'surtido.registros' },
     ],
