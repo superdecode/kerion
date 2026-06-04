@@ -91,8 +91,9 @@ async function upapexPost(tenantId, endpoint, data) {
       if (!res.ok) throw new Error(`WMS HTTP ${res.status}`)
       const json = await res.json()
       if (json.code !== 200) {
-        const msg = json.msg ? `[${json.code}] ${json.msg}` : `WMS error code ${json.code}`
-        console.error(`[xlwms] ERROR code=${json.code} msg="${json.msg}" endpoint=${endpoint}`)
+        console.error(`[xlwms] FULL_RESPONSE=${JSON.stringify(json)} endpoint=${endpoint}`)
+        const rawMsg = json.msg || json.message || json.errmsg || json.error || ''
+        const msg = rawMsg ? `[${json.code}] ${rawMsg}` : `WMS error code ${json.code}`
         const err = new Error(msg)
         err.wmsCode = json.code
         err.wmsMsg = msg
