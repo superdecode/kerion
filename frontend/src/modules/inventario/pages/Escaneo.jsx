@@ -21,9 +21,9 @@ import { saveInventorySession } from '../services/inventarioService'
 import { getConfig, getUbicaciones } from '../../wmshub/services/wmsHubService'
 
 const STATUS_META = {
-  ok:      { label: 'Disponible', bg: 'bg-success-100 text-success-700',  icon: CheckCircle2, border: 'border-l-success-400', dot: 'bg-success-400', flash: 'bg-success-50/80 border-success-200' },
-  blocked: { label: 'Bloqueado',  bg: 'bg-warning-100 text-warning-700',  icon: AlertTriangle, border: 'border-l-warning-400', dot: 'bg-warning-400', flash: 'bg-warning-50/80 border-warning-200' },
-  nowms:   { label: 'Sin WMS',    bg: 'bg-danger-100 text-danger-700',    icon: Ban, border: 'border-l-danger-400', dot: 'bg-danger-400', flash: 'bg-danger-50/80 border-danger-200' },
+  ok:      { labelKey: 'inventario.escaneo.group_disponible', bg: 'bg-success-100 text-success-700',  icon: CheckCircle2, border: 'border-l-success-400', dot: 'bg-success-400', flash: 'bg-success-50/80 border-success-200' },
+  blocked: { labelKey: 'inventario.escaneo.group_bloqueado',  bg: 'bg-warning-100 text-warning-700',  icon: AlertTriangle, border: 'border-l-warning-400', dot: 'bg-warning-400', flash: 'bg-warning-50/80 border-warning-200' },
+  nowms:   { labelKey: 'inventario.escaneo.group_nowms',      bg: 'bg-danger-100 text-danger-700',    icon: Ban, border: 'border-l-danger-400', dot: 'bg-danger-400', flash: 'bg-danger-50/80 border-danger-200' },
 }
 
 const GROUPS = ['ok', 'blocked', 'nowms']
@@ -48,13 +48,14 @@ const fmtElapsed = (secs) => {
 
 /* ─── Modals ─────────────────────────────────────────────── */
 
-function SessionTypeModal({ isOpen, onStart }) {
+function SessionTypeModal({ isOpen, onStart, onClose }) {
   const { t } = useI18nStore()
   const [selected, setSelected] = useState('unificado')
   return (
-    <Modal isOpen={isOpen} onClose={() => {}} title={t('inventario.escaneo.session_type_title')} icon={Package}
+    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.session_type_title')} icon={Package}
       footer={
-        <div className="flex justify-end">
+        <div className="flex gap-3 justify-end">
+          <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn-primary inline-flex items-center gap-2" onClick={() => onStart(selected)}>
             <ScanBarcode size={14} /> {t('inventario.escaneo.start_session')}
           </button>
@@ -110,7 +111,7 @@ function MoveItemModal({ isOpen, onClose, onMove }) {
           return (
             <button key={g} onClick={() => onMove(g)}
               className={`w-full flex items-center gap-2 px-4 py-2.5 rounded-xl border ${meta.bg} border-current/20 hover:opacity-80 text-sm font-medium`}>
-              <meta.icon size={14} /> {meta.label}
+              <meta.icon size={14} /> {t(meta.labelKey)}
             </button>
           )
         })}
@@ -155,13 +156,13 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
             return (
               <div key={g} className={`rounded-xl p-3 text-center ${meta.bg}`}>
                 <p className="text-2xl font-bold leading-none">{counts[g] || 0}</p>
-                <p className="text-xs mt-1">{meta.label}</p>
+                <p className="text-xs mt-1">{t(meta.labelKey)}</p>
               </div>
             )
           })}
         </div>
         <div className="bg-primary-50 rounded-xl px-4 py-2 flex justify-between items-center">
-          <span className="text-warm-700">Total</span>
+          <span className="text-warm-700">{t('inventario.escaneo.total')}</span>
           <span className="font-bold text-primary-700 text-lg">{tab.items.length}</span>
         </div>
         {ubicaciones && ubicaciones.length > 0 && (
@@ -230,7 +231,7 @@ function UnificadoPanel({ items, onRemove, onMove }) {
                   </td>
                   <td className="table-cell">
                     <span className={`badge ${meta.bg} inline-flex items-center gap-1`}>
-                      <StatusIcon size={10} /> {meta.label}
+                      <StatusIcon size={10} /> {t(meta.labelKey)}
                     </span>
                   </td>
                   <td className="table-cell hidden md:table-cell text-warm-500 text-xs">{item.sku}</td>
@@ -274,7 +275,7 @@ function ClasificacionPanel({ items, onRemove, onMove }) {
           <div key={g} className={`card overflow-hidden border-t-4 ${meta.border.replace('border-l-', 'border-t-')}`}>
             <div className={`flex items-center gap-2 px-4 py-2.5 ${meta.bg} border-b border-current/10`}>
               <meta.icon size={14} />
-              <span className="font-semibold text-sm">{meta.label}</span>
+              <span className="font-semibold text-sm">{t(meta.labelKey)}</span>
               <span className="ml-auto font-bold text-lg">{groupItems.length}</span>
             </div>
             <div className="max-h-64 overflow-y-auto divide-y divide-warm-50">
@@ -453,7 +454,7 @@ export default function Escaneo() {
   if (tabs.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.escaneo.title')} subtitle="Inventario" />
+        <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')} />
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-2xl mx-auto">
             <motion.div className="text-center mb-8"
@@ -512,7 +513,7 @@ export default function Escaneo() {
             </motion.div>
           </div>
         </div>
-        <SessionTypeModal isOpen={showTypeModal} onStart={handleStartSession} />
+        <SessionTypeModal isOpen={showTypeModal} onStart={handleStartSession} onClose={() => setShowTypeModal(false)} />
       </div>
     )
   }
@@ -520,7 +521,7 @@ export default function Escaneo() {
   /* ─── ACTIVE TABS VIEW ────────────────────────────────── */
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.escaneo.title')} subtitle="Inventario"
+      <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')}
         actions={
           <div className="flex items-center gap-1.5">
             {pendingCount > 0 && (
@@ -703,7 +704,7 @@ export default function Escaneo() {
                     lastScan.status === 'blocked'  ? 'text-warning-600' :
                     'text-danger-600'
                   }`}>
-                    {STATUS_META[lastScan.status]?.label ?? 'Sin WMS'}
+                    {t(STATUS_META[lastScan.status]?.labelKey ?? 'inventario.escaneo.group_nowms')}
                   </span>
                 </motion.div>
               )}
@@ -728,7 +729,7 @@ export default function Escaneo() {
       )}
 
       {/* Modals */}
-      <SessionTypeModal isOpen={showTypeModal} onStart={handleStartSession} />
+      <SessionTypeModal isOpen={showTypeModal} onStart={handleStartSession} onClose={() => setShowTypeModal(false)} />
       <SessionSummaryModal isOpen={showSummaryModal} tab={activeTab}
         onSave={() => saveSessionMut.mutate()}
         onContinue={() => setShowSummaryModal(false)}

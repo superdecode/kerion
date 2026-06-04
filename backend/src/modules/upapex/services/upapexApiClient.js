@@ -12,25 +12,35 @@ const CONFIG_TTL_MS = 2 * 60 * 1000
 const _inFlight = new Map()
 
 function makeReqTime() {
-  const d = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`
+  // xlwms requires UNIX timestamp in seconds (10-digit)
+  return String(Math.floor(Date.now() / 1000))
+}
+
+// Sort all object keys alphabetically (case-insensitive), recursively
+function sortObjectKeys(obj) {
+  if (typeof obj !== 'object' || obj === null) return obj
+  if (Array.isArray(obj)) return obj.map(sortObjectKeys)
+  return Object.keys(obj)
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    .reduce((acc, k) => { acc[k] = sortObjectKeys(obj[k]); return acc }, {})
 }
 
 /**
  * HMAC-SHA256 authcode per xlwms docs:
- * Sort keys of {appKey, data, reqTime} alphabetically (case-insensitive),
- * concatenate as "key=value" pairs, then HMAC-SHA256 with appSecret.
+ * 1. Sort data fields alphabetically (case-insensitive)
+ * 2. Sort {appKey, data, reqTime} keys alphabetically
+ * 3. Concatenate VALUES only (no key= prefix), then HMAC-SHA256 with appSecret
  */
 function buildAuthCode(appKey, appSecret, data, reqTime) {
+  const sortedData = sortObjectKeys(data)
   const params = {
     appKey,
-    data: JSON.stringify(data),
+    data: JSON.stringify(sortedData),
     reqTime: String(reqTime),
   }
   const paramStr = Object.keys(params)
     .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-    .map(k => `${k}=${params[k]}`)
+    .map(k => params[k])
     .join('')
   return createHmac('sha256', appSecret).update(paramStr).digest('hex')
 }

@@ -87,7 +87,10 @@ router.post('/config',
       res.json({ success: true })
     } catch (err) {
       console.error('POST upapex/config error:', err.message)
-      res.status(500).json({ success: false, error: 'Error guardando configuración Upapex' })
+      const userMsg = err.message.includes('WMS_ENCRYPTION_KEY')
+        ? 'El servidor no tiene configurada la clave de encriptación WMS. Contacta al administrador.'
+        : 'Error guardando configuración Upapex'
+      res.status(500).json({ success: false, error: userMsg })
     }
   }
 )

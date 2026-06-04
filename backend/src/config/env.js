@@ -36,6 +36,8 @@ const env = {
   TURNSTILE_SECRET: process.env.TURNSTILE_SECRET || '',
   // Cron security
   CRON_SECRET: process.env.CRON_SECRET || '',
+  // WMS credentials encryption key (AES-256-CBC)
+  WMS_ENCRYPTION_KEY: process.env.WMS_ENCRYPTION_KEY || '',
 }
 
 if (env.NODE_ENV === 'production') {
@@ -44,6 +46,7 @@ if (env.NODE_ENV === 'production') {
     'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD',
     'RESEND_API_KEY', 'SUPER_ADMIN_EMAIL', 'LEGACY_TENANT_ID',
     'TENANT_BASE_DOMAIN', 'CRON_SECRET', 'TURNSTILE_SECRET',
+    'WMS_ENCRYPTION_KEY',
   ]
   const missing = required.filter(k => !process.env[k])
   if (missing.length > 0) {
