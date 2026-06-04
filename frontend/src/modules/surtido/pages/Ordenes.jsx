@@ -161,9 +161,9 @@ function DetailPanel({ order, tracking, onClose }) {
         {/* Key info grid */}
         <div className="grid grid-cols-2 gap-2">
           {[
-            { label: t('surtido.ordenes.detail.warehouse'), value: detail?.warehouseCode },
-            { label: t('surtido.ordenes.detail.channel'), value: detail?.logisticsChannelCode || detail?.logisticsChannel },
-            { label: t('surtido.ordenes.detail.tracking'), value: detail?.trackingNumber || detail?.thirdWaybillCode, mono: true },
+            { label: t('surtido.ordenes.detail.warehouse'), value: detail?.whCode },
+            { label: t('surtido.ordenes.detail.channel'), value: detail?.logisticsChannel },
+            { label: t('surtido.ordenes.detail.tracking'), value: detail?.logisticsTrackNo, mono: true },
             { label: t('surtido.ordenes.surtidor'), value: tracking?.surtidor_nombre },
           ].filter(i => i.value).map((item, i) => (
             <div key={i} className="bg-warm-50 rounded-lg px-2.5 py-2">
@@ -181,9 +181,11 @@ function DetailPanel({ order, tracking, onClose }) {
             <div className="space-y-1.5">
               {packageList.map((p, i) => (
                 <div key={i} className="bg-warm-50 rounded-lg px-3 py-2 border border-warm-100">
-                  <p className="font-mono font-semibold text-warm-800">{p.boxType || p.boxCode || '—'}</p>
-                  {p.customizeCode && <p className="text-warm-400 text-[10px]">Ref: {p.customizeCode}</p>}
-                  <p className="text-warm-500 text-[10px]">Cant: {p.totalPackageQty ?? p.qty ?? '?'}</p>
+                  <p className="font-mono font-semibold text-warm-800">{p.customizeCode || '—'}</p>
+                  {p.boxSkuQueryVOList?.length > 0 && (
+                    <p className="text-warm-400 text-[10px]">{p.boxSkuQueryVOList.map(s => s.sku).join(', ')}</p>
+                  )}
+                  <p className="text-warm-500 text-[10px]">Cant: {p.quantity ?? '?'}</p>
                 </div>
               ))}
             </div>
@@ -200,7 +202,7 @@ function DetailPanel({ order, tracking, onClose }) {
                 <div key={i} className="bg-warm-50 rounded-lg px-3 py-2 border border-warm-100">
                   <p className="font-mono font-semibold text-warm-800">{p.sku || '—'}</p>
                   {p.productName && <p className="text-warm-500 text-[10px] truncate">{p.productName}</p>}
-                  <p className="text-warm-500 text-[10px]">Cant: {p.qty ?? p.totalProductQty ?? '?'}</p>
+                  <p className="text-warm-500 text-[10px]">Cant: {p.quantity ?? '?'}</p>
                 </div>
               ))}
             </div>
@@ -383,21 +385,21 @@ export default function Ordenes() {
                           <td className="table-cell hidden md:table-cell">
                             <span className="text-warm-500 text-xs flex items-center gap-1">
                               <Calendar size={10} className="text-warm-300" />
-                              {fmtDate(r.createTime)}
+                              {fmtDate(r.orderCreateTime)}
                             </span>
                           </td>
 
                           <td className="table-cell hidden lg:table-cell">
                             <span className="text-warm-600 text-xs flex items-center gap-1">
                               <Truck size={10} className="text-warm-300" />
-                              {fmtDate(r.expectedArrivalDate || r.expectedFinishDate || r.planArrivalDate)}
+                              {fmtDate(r.outboundTime)}
                             </span>
                           </td>
 
                           <td className="table-cell hidden lg:table-cell">
                             <span className="text-warm-600 text-xs flex items-center gap-1">
                               <MapPin size={10} className="text-warm-300" />
-                              {r.warehouseCode || r.logisticsChannelCode || '—'}
+                              {r.whCode || r.logisticsChannel || '—'}
                             </span>
                           </td>
 

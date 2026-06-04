@@ -22,8 +22,11 @@ export function useBoxStock(params = {}) {
     const list = query.data.data?.records ?? query.data.data ?? []
     const map = new Map()
     for (const item of list) {
-      const code = normalizeCodeFast(item.boxCode || item.sku || '')
-      if (code) map.set(code, item)
+      const code = normalizeCodeFast(item.customizeBarcode || '')
+      if (!code) continue
+      const isAvailable = (item.availableAmount ?? 0) > 0
+      const isBlocked = (item.lockAmount ?? 0) > 0 && !isAvailable
+      map.set(code, { ...item, isAvailable, isBlocked })
     }
     setSnapshot(map)
   }, [query.data, setSnapshot])
