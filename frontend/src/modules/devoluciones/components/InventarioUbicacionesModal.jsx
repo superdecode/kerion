@@ -4,13 +4,15 @@ import { LayoutGrid, Upload, Trash2, Search, X, Plus, AlertTriangle, Check } fro
 import Modal from '../../../core/components/common/Modal'
 import { createUbicacion, deleteUbicacion, updateUbicacion, importUbicaciones } from '../services/devolucionesService'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 function Toggle({ checked, onChange }) {
+  const { t } = useI18nStore()
   return (
     <button
       type="button"
       onClick={onChange}
-      title={checked ? 'Desactivar ubicación' : 'Activar ubicación'}
+      title={checked ? t('dev.inv_ubicaciones.toggle.desact') : t('dev.inv_ubicaciones.toggle.activar')}
       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
         checked ? 'bg-primary-500' : 'bg-warm-200'
       }`}
@@ -33,6 +35,7 @@ export default function InventarioUbicacionesModal({
   selectActionLabel = 'Seleccionar',
 }) {
   const toast = useToastStore()
+  const { t } = useI18nStore()
   const [codigo, setCodigo] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -55,10 +58,10 @@ export default function InventarioUbicacionesModal({
       await createUbicacion({ codigo: codigo.trim(), nombre: codigo.trim() })
       setCodigo('')
       setShowForm(false)
-      toast.success('Ubicación creada')
+      toast.success(t('dev.inv_ubicaciones.toast.creada'))
       onSaved?.()
     } catch (e) {
-      toast.error(e.response?.data?.error || 'Error al crear ubicación')
+      toast.error(e.response?.data?.error || t('dev.inv_ubicaciones.toast.err_crear'))
     } finally {
       setSaving(false)
     }
@@ -74,7 +77,7 @@ export default function InventarioUbicacionesModal({
       })
       onSaved?.()
     } catch {
-      toast.error('Error al actualizar')
+      toast.error(t('dev.inv_ubicaciones.toast.err_upd'))
     }
   }
 
@@ -83,11 +86,11 @@ export default function InventarioUbicacionesModal({
     setDeletingId(deleteRow.id)
     try {
       await deleteUbicacion(deleteRow.id)
-      toast.success('Ubicación eliminada')
+      toast.success(t('dev.inv_ubicaciones.toast.eliminada'))
       onSaved?.()
       setDeleteRow(null)
     } catch (e) {
-      toast.error(e.response?.data?.error || 'No se puede eliminar: puede tener registros asociados')
+      toast.error(e.response?.data?.error || t('dev.inv_ubicaciones.toast.err_del'))
     } finally {
       setDeletingId(null)
     }
@@ -115,7 +118,7 @@ export default function InventarioUbicacionesModal({
   const canSelect = typeof onSelect === 'function'
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Ubicaciones" icon={LayoutGrid} size="lg-wide">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('dev.inv_ubicaciones.title')} icon={LayoutGrid} size="lg-wide">
       <div className="space-y-4">
 
         {/* Buscador + botón nueva */}
@@ -126,7 +129,7 @@ export default function InventarioUbicacionesModal({
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar por código o nombre..."
+              placeholder={t('dev.inv_ubicaciones.search')}
               className="text-xs outline-none bg-transparent text-warm-700 flex-1"
             />
             {search && (
@@ -136,9 +139,9 @@ export default function InventarioUbicacionesModal({
             )}
           </div>
           <div className="text-xs text-warm-500 shrink-0">
-            <span className="font-semibold text-warm-700">{totalActivas}</span> activas
+            <span className="font-semibold text-warm-700">{totalActivas}</span> {t('dev.inv_ubicaciones.activas')}
             <span className="text-warm-300 mx-1">·</span>
-            <span className="font-semibold text-warm-700">{ubicaciones.length}</span> totales
+            <span className="font-semibold text-warm-700">{ubicaciones.length}</span> {t('dev.inv_ubicaciones.totales')}
           </div>
           {allowManagement && (
             <div className="flex items-center gap-1.5 shrink-0">
@@ -149,7 +152,7 @@ export default function InventarioUbicacionesModal({
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-warm-200 bg-white text-warm-600 hover:bg-warm-100 cursor-pointer transition-all"
               >
-                <Upload className="w-3.5 h-3.5" /> Importar
+                <Upload className="w-3.5 h-3.5" /> {t('dev.inv_ubicaciones.importar')}
               </button>
               <button
                 onClick={() => setShowForm(v => !v)}
@@ -160,7 +163,7 @@ export default function InventarioUbicacionesModal({
                 }`}
               >
                 {showForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                {showForm ? 'Cerrar' : 'Nueva'}
+                {showForm ? t('dev.inv_ubicaciones.cerrar') : t('dev.inv_ubicaciones.nueva')}
               </button>
             </div>
           )}
@@ -180,11 +183,11 @@ export default function InventarioUbicacionesModal({
               <div className="bg-warm-50/60 rounded-2xl border border-warm-100 p-4">
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
-                    <label className="block text-[11px] text-warm-500 mb-1 font-medium">Código de ubicación *</label>
+                    <label className="block text-[11px] text-warm-500 mb-1 font-medium">{t('dev.inv_ubicaciones.codigo_label')}</label>
                     <input
                       value={codigo}
                       onChange={e => setCodigo(e.target.value)}
-                      placeholder="ej. U-01, BODEGA-A, RACK-1"
+                      placeholder={t('dev.inv_ubicaciones.codigo_ph')}
                       className={inputCls}
                       onKeyDown={e => e.key === 'Enter' && handleSave()}
                       autoFocus
@@ -197,11 +200,11 @@ export default function InventarioUbicacionesModal({
                       className="btn-primary inline-flex items-center gap-1.5 disabled:opacity-50"
                     >
                       <Plus className="w-4 h-4" />
-                      {saving ? 'Guardando...' : 'Agregar'}
+                      {saving ? t('dev.inv_ubicaciones.guardar_btn') : t('dev.inv_ubicaciones.agregar_btn')}
                     </button>
                   </div>
                 </div>
-                <p className="text-[10px] text-warm-400 mt-1.5">Completa el código y presiona Agregar. Para cargas masivas usa el botón Importar.</p>
+                <p className="text-[10px] text-warm-400 mt-1.5">{t('dev.inv_ubicaciones.nota_masiva')}</p>
               </div>
             </motion.div>
           )}
@@ -212,18 +215,18 @@ export default function InventarioUbicacionesModal({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wider text-warm-500 border-b border-warm-100 bg-warm-50/50">
-                <th className="px-4 py-2.5">Código</th>
-                <th className="px-4 py-2.5">Nombre</th>
-                <th className="px-4 py-2.5 text-right">Pcs en stock</th>
-                <th className="px-4 py-2.5 text-center">{allowManagement ? 'Activa' : 'Estado'}</th>
-                <th className="px-4 py-2.5 text-right">Acciones</th>
+                <th className="px-4 py-2.5">{t('dev.inv_ubicaciones.col.codigo')}</th>
+                <th className="px-4 py-2.5">{t('dev.inv_ubicaciones.col.nombre')}</th>
+                <th className="px-4 py-2.5 text-right">{t('dev.inv_ubicaciones.col.pcs')}</th>
+                <th className="px-4 py-2.5 text-center">{allowManagement ? t('dev.inv_ubicaciones.col.activa') : t('dev.inv_ubicaciones.col.estado')}</th>
+                <th className="px-4 py-2.5 text-right">{t('dev.inv_ubicaciones.col.acciones')}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-warm-400 text-sm">
-                    {search ? 'Sin resultados para esa búsqueda' : 'Sin ubicaciones registradas'}
+                    {search ? t('dev.inv_ubicaciones.sin_resultados') : t('dev.inv_ubicaciones.sin_datos')}
                   </td>
                 </tr>
               ) : filtered.map(row => {
@@ -246,7 +249,7 @@ export default function InventarioUbicacionesModal({
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                           isActive ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-500'
                         }`}>
-                          {isActive ? 'Activa' : 'Inactiva'}
+                          {isActive ? t('dev.inv_ubicaciones.estado.activa') : t('dev.inv_ubicaciones.estado.inactiva')}
                         </span>
                       )}
                     </td>
@@ -272,10 +275,10 @@ export default function InventarioUbicacionesModal({
                         {allowManagement && (
                           <button
                             onClick={() => stock > 0
-                              ? toast.error('Tiene inventario activo. Desactívala primero.')
+                              ? toast.error(t('dev.inv_ubicaciones.has_stock'))
                               : setDeleteRow(row)
                             }
-                            title={stock > 0 ? 'No eliminable: tiene stock' : 'Eliminar ubicación'}
+                            title={stock > 0 ? t('dev.inv_ubicaciones.title.no_del') : t('dev.inv_ubicaciones.title.del')}
                             className={`p-1.5 rounded-lg transition-colors ${
                               stock > 0
                                 ? 'text-warm-200 cursor-not-allowed'
@@ -307,7 +310,7 @@ export default function InventarioUbicacionesModal({
               <div className="flex items-center gap-2.5 min-w-0">
                 <AlertTriangle className="w-4 h-4 text-danger-500 shrink-0" />
                 <p className="text-sm text-danger-700">
-                  ¿Eliminar <span className="font-semibold font-mono">{deleteRow.codigo}</span>? Esta acción no se puede deshacer.
+                  {t('dev.inv_ubicaciones.del.body')} <span className="font-semibold font-mono">{deleteRow.codigo}</span>? {t('dev.inv_ubicaciones.del.warning')}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -315,14 +318,14 @@ export default function InventarioUbicacionesModal({
                   onClick={() => setDeleteRow(null)}
                   className="px-3 py-1.5 rounded-lg border border-warm-200 text-xs font-semibold text-warm-600 hover:bg-warm-100 transition-colors"
                 >
-                  Cancelar
+                  {t('dev.inv_ubicaciones.del.cancelar')}
                 </button>
                 <button
                   onClick={handleDelete}
                   disabled={!!deletingId}
                   className="px-3 py-1.5 rounded-lg bg-danger-600 text-white text-xs font-semibold hover:bg-danger-700 disabled:opacity-60 transition-colors"
                 >
-                  {deletingId ? '...' : 'Eliminar'}
+                  {deletingId ? t('dev.inv_ubicaciones.del.ing') : t('dev.inv_ubicaciones.del.confirmar')}
                 </button>
               </div>
             </motion.div>

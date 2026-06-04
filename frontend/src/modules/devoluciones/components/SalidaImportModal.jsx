@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import Modal from '../../../core/components/common/Modal'
 import { previewImportarSalida } from '../services/devolucionesService'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 function normalizeKey(k) {
   return String(k).toLowerCase().trim().replace(/[^a-z0-9]/g, '')
@@ -37,6 +38,7 @@ function parseExcelRows(file) {
 
 export default function SalidaImportModal({ isOpen, onClose, onImport }) {
   const toast = useToastStore()
+  const { t } = useI18nStore()
   const fileRef = useRef(null)
   const [loading, setLoading] = useState(false)
   const [encontrados, setEncontrados] = useState([])
@@ -59,7 +61,7 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
     try {
       const rows = await parseExcelRows(file)
       if (rows.length === 0) {
-        toast.error('El archivo no contiene filas válidas (columnas: sku, cantidad)')
+        toast.error(t('dev.salida_import.err.vacio'))
         return
       }
       const res = await previewImportarSalida(rows)
@@ -70,7 +72,7 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
       setChecked(enc.map((_, i) => i))
       setStep('review')
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error al procesar archivo')
+      toast.error(err.response?.data?.error || t('dev.salida_import.err.procesar'))
     } finally {
       setLoading(false)
       e.target.value = ''
@@ -83,7 +85,7 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
 
   const handleConfirm = () => {
     const selected = encontrados.filter((_, i) => checked.includes(i))
-    if (!selected.length) { toast.error('Selecciona al menos una línea'); return }
+    if (!selected.length) { toast.error(t('dev.salida_import.err.sin_validas')); return }
     onImport(selected)
     reset()
   }
@@ -92,20 +94,20 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
     <Modal
       isOpen={isOpen}
       onClose={() => { onClose(); reset() }}
-      title="Importar desde Excel"
+      title={t('dev.salida_import.title')}
       icon={FileSpreadsheet}
       size="xl"
       footer={
         step === 'review' ? (
           <>
-            <button onClick={reset} className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">Subir otro</button>
-            <button onClick={() => { onClose(); reset() }} className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">Cancelar</button>
+            <button onClick={reset} className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">{t('dev.salida_import.subir_otro')}</button>
+            <button onClick={() => { onClose(); reset() }} className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">{t('dev.salida_import.cancelar')}</button>
             <button
               onClick={handleConfirm}
               disabled={checked.length === 0}
               className="px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold disabled:opacity-50"
             >
-              Agregar {checked.length} líneas
+              {t('dev.salida_import.agregar')} {checked.length}
             </button>
           </>
         ) : null
@@ -114,20 +116,20 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
       {step === 'upload' && (
         <div className="py-6 text-center space-y-4">
           <div className="text-sm text-warm-600">
-            El archivo Excel debe tener columnas: <span className="font-mono bg-warm-100 px-1.5 py-0.5 rounded text-xs">sku</span> y <span className="font-mono bg-warm-100 px-1.5 py-0.5 rounded text-xs">cantidad</span>.
+            {t('dev.salida_import.upload.desc')} <span className="font-mono bg-warm-100 px-1.5 py-0.5 rounded text-xs">sku</span> y <span className="font-mono bg-warm-100 px-1.5 py-0.5 rounded text-xs">cantidad</span>.
             <br />
-            <span className="text-warm-400 text-xs mt-1 block">Si el SKU no se encuentra, se buscará por número de guía (embalaje1).</span>
+            <span className="text-warm-400 text-xs mt-1 block">{t('dev.salida_import.upload.guia')}</span>
           </div>
           <motion.label
             whileHover={{ scale: 1.01 }}
             className="flex flex-col items-center justify-center gap-3 w-full h-36 border-2 border-dashed border-warm-300 rounded-2xl cursor-pointer hover:border-primary-400 hover:bg-primary-50/30 transition-all"
           >
             {loading ? (
-              <div className="text-sm text-warm-500">Procesando...</div>
+              <div className="text-sm text-warm-500">{t('dev.salida_import.procesando')}</div>
             ) : (
               <>
                 <Upload className="w-8 h-8 text-warm-300" />
-                <div className="text-sm text-warm-500">Haz clic o arrastra tu archivo .xlsx aquí</div>
+                <div className="text-sm text-warm-500">{t('dev.salida_import.upload.click')}</div>
               </>
             )}
             <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile} disabled={loading} />
@@ -141,10 +143,10 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <CheckCircle className="w-4 h-4 text-success-600" />
-                <span className="text-sm font-semibold text-success-700">{encontrados.length} coincidencias encontradas</span>
+                <span className="text-sm font-semibold text-success-700">{encontrados.length} {t('dev.salida_import.encontrados')}</span>
                 {encontrados.some(r => r.match_type === 'guia') && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-100 text-accent-700 text-[10px] font-semibold">
-                    <Tag className="w-3 h-3" /> incluye coincidencias por guía
+                    <Tag className="w-3 h-3" /> {t('dev.salida_import.guia_match')}
                   </span>
                 )}
               </div>
@@ -153,11 +155,11 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
                   <thead>
                     <tr className="text-left text-[10px] uppercase text-warm-400 border-b border-warm-100 bg-warm-50">
                       <th className="px-3 py-2 w-8" />
-                      <th className="px-3 py-2">SKU</th>
-                      <th className="px-3 py-2">Código</th>
-                      <th className="px-3 py-2">Coincidencia</th>
-                      <th className="px-3 py-2 text-right">Disp.</th>
-                      <th className="px-3 py-2 text-right">Solicitada</th>
+                      <th className="px-3 py-2">{t('dev.salida_import.col.sku')}</th>
+                      <th className="px-3 py-2">{t('dev.salida_import.col.codigo')}</th>
+                      <th className="px-3 py-2">{t('dev.salida_import.col.coincidencia')}</th>
+                      <th className="px-3 py-2 text-right">{t('dev.salida_import.col.disp')}</th>
+                      <th className="px-3 py-2 text-right">{t('dev.salida_import.col.solicitada')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -179,7 +181,7 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
                                 <Tag className="w-2.5 h-2.5" /> Guía: {row.guia_buscada}
                               </span>
                             ) : (
-                              <span className="text-[10px] text-warm-400">SKU directo</span>
+                              <span className="text-[10px] text-warm-400">{t('dev.salida_import.sku_directo')}</span>
                             )}
                           </td>
                           <td className={`px-3 py-2 text-right font-medium ${insuficiente ? 'text-warning-600' : 'text-success-700'}`}>
@@ -199,15 +201,15 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <XCircle className="w-4 h-4 text-danger-500" />
-                <span className="text-sm font-semibold text-danger-700">{noEncontrados.length} sin coincidencia</span>
+                <span className="text-sm font-semibold text-danger-700">{noEncontrados.length} {t('dev.salida_import.no_encontrados')}</span>
               </div>
               <div className="border border-warm-100 rounded-xl overflow-hidden max-h-40 overflow-y-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-[10px] uppercase text-warm-400 border-b border-warm-100 bg-warm-50">
-                      <th className="px-3 py-2">SKU / Guía</th>
-                      <th className="px-3 py-2 text-right">Cantidad</th>
-                      <th className="px-3 py-2">Motivo</th>
+                      <th className="px-3 py-2">{t('dev.salida_import.col.sku_guia')}</th>
+                      <th className="px-3 py-2 text-right">{t('dev.salida_import.col.cantidad')}</th>
+                      <th className="px-3 py-2">{t('dev.salida_import.col.motivo')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -227,7 +229,7 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
           {encontrados.length === 0 && (
             <div className="flex items-center gap-2 text-sm text-warning-700 bg-warning-50 rounded-xl p-3">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              No se encontró ningún SKU ni guía en inventario disponible.
+              {t('dev.salida_import.sin_nada')}
             </div>
           )}
         </div>

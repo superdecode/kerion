@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-  Search, ChevronLeft, ChevronRight, UserCheck,
+  Search, UserCheck,
   Users, Plus, Trash2, X, ChevronDown, Play, Loader2,
-  Package2, MapPin, Calendar, Truck, ScanBarcode,
+  FileText, MapPin, Calendar, Truck, ScanBarcode, Package2,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -29,8 +29,12 @@ const STATUS_META = {
 
 const fmtDate = (v) => {
   if (!v) return '—'
-  const s = String(v).slice(0, 10)
-  return s || '—'
+  const s = String(v)
+  if (s.length <= 10) return s || '—'
+  // ISO datetime: show date + time (HH:MM)
+  const date = s.slice(0, 10)
+  const time = s.slice(11, 16)
+  return time ? `${date} ${time}` : date
 }
 
 function SurtidoresModal({ isOpen, onClose }) {
@@ -145,8 +149,21 @@ function DetailPanel({ order, tracking, onClose }) {
   const packageList = detail?.packageList ?? detail?.details ?? detail?.items ?? []
   const productList = detail?.productList ?? []
 
+  const infoFields = [
+    { label: t('surtido.ordenes.detail.order_no'),     value: order.outboundOrderNo, mono: true, span: true },
+    { label: t('surtido.ordenes.detail.warehouse'),    value: detail?.whCode || order.whCode },
+    { label: t('surtido.ordenes.detail.channel'),      value: detail?.logisticsChannel || order.logisticsChannel },
+    { label: t('surtido.ordenes.detail.tracking'),     value: detail?.logisticsTrackNo, mono: true },
+    { label: t('surtido.ordenes.surtidor'),            value: tracking?.surtidor_nombre },
+    { label: t('surtido.ordenes.status'),              value: tracking?.status ? t(`surtido.ordenes.status.${tracking.status}`) : null },
+    { label: t('surtido.ordenes.detail.create_time'),  value: fmtDate(order.orderCreateTime) },
+    { label: t('surtido.ordenes.detail.outbound_time'),value: fmtDate(order.outboundTime) },
+    { label: t('surtido.ordenes.detail.total_qty'),    value: order.totalQty != null ? String(order.totalQty) : null },
+    { label: t('surtido.ordenes.detail.box_count'),    value: packageList.length > 0 ? String(packageList.length) : null },
+  ].filter(i => i.value)
+
   return (
-    <div className="w-80 shrink-0 border-l border-warm-200 bg-white overflow-y-auto flex flex-col shadow-xl">
+    <div className="w-96 shrink-0 border-l border-warm-200 bg-white overflow-y-auto flex flex-col shadow-xl">
       <div className="bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-3 flex items-center justify-between">
         <div>
           <p className="text-[10px] font-semibold text-primary-200 uppercase tracking-wider">{t('surtido.ordenes.detail_panel')}</p>
@@ -158,17 +175,12 @@ function DetailPanel({ order, tracking, onClose }) {
       </div>
 
       <div className="p-4 space-y-4 text-xs">
-        {/* Key info grid */}
+        {/* Info grid */}
         <div className="grid grid-cols-2 gap-2">
-          {[
-            { label: t('surtido.ordenes.detail.warehouse'), value: detail?.whCode },
-            { label: t('surtido.ordenes.detail.channel'), value: detail?.logisticsChannel },
-            { label: t('surtido.ordenes.detail.tracking'), value: detail?.logisticsTrackNo, mono: true },
-            { label: t('surtido.ordenes.surtidor'), value: tracking?.surtidor_nombre },
-          ].filter(i => i.value).map((item, i) => (
-            <div key={i} className="bg-warm-50 rounded-lg px-2.5 py-2">
+          {infoFields.map((item, i) => (
+            <div key={i} className={`bg-warm-50 rounded-lg px-2.5 py-2 ${item.span ? 'col-span-2' : ''}`}>
               <p className="text-warm-400 text-[10px] uppercase tracking-wide">{item.label}</p>
-              <p className={`font-semibold text-warm-800 truncate ${item.mono ? 'font-mono' : ''}`}>{item.value}</p>
+              <p className={`font-semibold text-warm-800 truncate ${item.mono ? 'font-mono text-[11px]' : ''}`}>{item.value}</p>
             </div>
           ))}
         </div>
@@ -178,14 +190,19 @@ function DetailPanel({ order, tracking, onClose }) {
             <p className="font-semibold text-warm-500 mb-2 uppercase tracking-wider text-[10px] flex items-center gap-1">
               <Package2 size={10} /> {t('surtido.escaneo.tab_cajas')} ({packageList.length})
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 max-h-56 overflow-y-auto">
               {packageList.map((p, i) => (
                 <div key={i} className="bg-warm-50 rounded-lg px-3 py-2 border border-warm-100">
-                  <p className="font-mono font-semibold text-warm-800">{p.customizeCode || '—'}</p>
+                  <p className="font-mono font-semibold text-warm-800 text-[11px]">{p.customizeCode || p.customizeBarcode || '—'}</p>
                   {p.boxSkuQueryVOList?.length > 0 && (
-                    <p className="text-warm-400 text-[10px]">{p.boxSkuQueryVOList.map(s => s.sku).join(', ')}</p>
+                    <p className="text-warm-400 text-[10px] mt-0.5 truncate">
+                      {p.boxSkuQueryVOList.map(s => s.sku).join(', ')}
+                    </p>
                   )}
-                  <p className="text-warm-500 text-[10px]">Cant: {p.quantity ?? '?'}</p>
+                  <div className="flex items-center justify-between mt-0.5">
+                    {p.boxType && <span className="text-warm-400 text-[10px]">{p.boxType}</span>}
+                    <span className="text-warm-600 text-[10px] font-medium">{t('surtido.ordenes.detail.qty')} {p.quantity ?? '?'}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -197,16 +214,23 @@ function DetailPanel({ order, tracking, onClose }) {
             <p className="font-semibold text-warm-500 mb-2 uppercase tracking-wider text-[10px] flex items-center gap-1">
               <ScanBarcode size={10} /> {t('surtido.escaneo.tab_productos')} ({productList.length})
             </p>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {productList.map((p, i) => (
                 <div key={i} className="bg-warm-50 rounded-lg px-3 py-2 border border-warm-100">
-                  <p className="font-mono font-semibold text-warm-800">{p.sku || '—'}</p>
-                  {p.productName && <p className="text-warm-500 text-[10px] truncate">{p.productName}</p>}
-                  <p className="text-warm-500 text-[10px]">Cant: {p.quantity ?? '?'}</p>
+                  <p className="font-mono font-semibold text-warm-800 text-[11px]">{p.sku || '—'}</p>
+                  {p.productName && <p className="text-warm-500 text-[10px] truncate mt-0.5">{p.productName}</p>}
+                  <span className="text-warm-600 text-[10px] font-medium">{t('surtido.ordenes.detail.qty')} {p.quantity ?? '?'}</span>
                 </div>
               ))}
             </div>
           </div>
+        )}
+
+        {packageList.length === 0 && productList.length === 0 && detail === undefined && (
+          <div className="py-4 text-center text-warm-400">{t('common.loading')}</div>
+        )}
+        {packageList.length === 0 && productList.length === 0 && detail !== undefined && (
+          <div className="py-4 text-center text-warm-400">{t('common.noData')}</div>
         )}
       </div>
     </div>
@@ -346,7 +370,7 @@ export default function Ordenes() {
         <div className="flex-1 overflow-y-auto p-4">
           {filteredRecords.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400">
-              <Package2 size={40} className="opacity-30" />
+              <FileText size={40} className="opacity-30" />
               <p className="text-sm">{t('common.noData')}</p>
             </div>
           ) : (

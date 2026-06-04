@@ -230,9 +230,16 @@ router.get('/outbound-list',
         page: parseInt(page) || 1,
         pageSize: Math.min(parseInt(pageSize) || 25, 100),
       }
-      if (outboundOrderNos) params.outboundOrderNos = outboundOrderNos
-      if (startTime) params.startTime = startTime
-      if (endTime) params.endTime = endTime
+      // xlwms expects outboundOrderNos as an array
+      if (outboundOrderNos) {
+        params.outboundOrderNos = String(outboundOrderNos).split(',').map(s => s.trim()).filter(Boolean)
+      }
+      // xlwms requires a time range when using timeType; default to last 90 days
+      const now = new Date()
+      const pad = n => String(n).padStart(2, '0')
+      const fmtDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+      params.startTime = startTime || fmtDate(new Date(now - 90 * 24 * 60 * 60 * 1000))
+      params.endTime   = endTime   || fmtDate(now)
 
       const data = await getBigOutboundList(req.tenantId, params)
       res.json({ success: true, data })
@@ -293,7 +300,7 @@ router.get('/scan-sessions',
   requirePermission('surtido.registros', 'ver'),
   async (req, res) => {
     try {
-      const { page = 1, pageSize = 20, status, operator_id, fecha_inicio, fecha_fin } = req.query
+      const { page = 1, pageSize = 20, status, operator_id, fecha_inicio, fecha_fin, outbound_order_no } = req.query
       const limit = Math.min(parseInt(pageSize) || 20, 100)
       const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit
 
@@ -305,6 +312,7 @@ router.get('/scan-sessions',
       if (operator_id) { conditions.push(`s.operator_id = $${p++}`); params.push(parseInt(operator_id)) }
       if (fecha_inicio) { conditions.push(`s.started_at >= $${p++}`); params.push(fecha_inicio) }
       if (fecha_fin) { conditions.push(`s.started_at <= $${p++}`); params.push(fecha_fin) }
+      if (outbound_order_no) { conditions.push(`s.outbound_order_no = $${p++}`); params.push(outbound_order_no) }
 
       const where = conditions.join(' AND ')
       const [sessionsRes, countRes] = await Promise.all([
@@ -488,13 +496,22 @@ router.post('/inventory-session',
       }, { total: 0, ok: 0, blocked: 0, nowms: 0 })
 
       const sessionRes = await req.tQuery(
-        `INSERT INTO inv_sessions
-           (tenant_id, operator_id, scan_type, status, completed_at, notes, ubicacion_id,
-            total_scans, total_ok, total_blocked, total_nowms)
-         VALUES ($1, $2, $3, 'saved', now(), $4, $5, $6, $7, $8, $9)
-         RETURNING *`,
-        [req.tenantId, req.user.id, scan_type, notes || null, ubicacion_id || null,
-         totals.total, totals.ok, totals.blocked, totals.nowms]
+        ubicacion_id
+          ? `INSERT INTO inv_sessions
+               (tenant_id, operator_id, scan_type, status, completed_at, notes, ubicacion_id,
+                total_scans, total_ok, total_blocked, total_nowms)
+             VALUES ($1, $2, $3, 'saved', now(), $4, $5, $6, $7, $8, $9)
+             RETURNING *`
+          : `INSERT INTO inv_sessions
+               (tenant_id, operator_id, scan_type, status, completed_at, notes,
+                total_scans, total_ok, total_blocked, total_nowms)
+             VALUES ($1, $2, $3, 'saved', now(), $4, $5, $6, $7, $8)
+             RETURNING *`,
+        ubicacion_id
+          ? [req.tenantId, req.user.id, scan_type, notes || null, ubicacion_id,
+             totals.total, totals.ok, totals.blocked, totals.nowms]
+          : [req.tenantId, req.user.id, scan_type, notes || null,
+             totals.total, totals.ok, totals.blocked, totals.nowms]
       )
       const session = sessionRes.rows[0]
 

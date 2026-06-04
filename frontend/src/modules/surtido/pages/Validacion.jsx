@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -29,8 +30,9 @@ function buildItemMaps(detailData) {
   const productList = detail.productList ?? []
   const packageMap = new Map()
   packageList.forEach(p => {
-    const codes = [p.boxType, p.customizeCode, p.boxCode].filter(Boolean)
-    const expectedQty = p.totalPackageQty ?? p.qty ?? 1
+    // xlwms primary barcode is customizeCode; fall back to boxType/boxCode
+    const codes = [p.customizeCode, p.boxType, p.boxCode].filter(Boolean)
+    const expectedQty = p.quantity ?? p.totalPackageQty ?? p.qty ?? 1
     codes.forEach(c => {
       const norm = normalizeCode(c)
       if (norm) packageMap.set(norm, { ...p, expectedQty, scannedQty: 0, type: 'box', displayCode: norm })
@@ -41,7 +43,7 @@ function buildItemMaps(detailData) {
   const productMap = new Map()
   productList.forEach(p => {
     const norm = normalizeCode(p.sku || '')
-    const expectedQty = p.qty ?? p.totalProductQty ?? 1
+    const expectedQty = p.quantity ?? p.qty ?? p.totalProductQty ?? 1
     if (norm) productMap.set(norm, { ...p, expectedQty, scannedQty: 0, type: 'sku', displayCode: norm })
   })
   return { packageMap, productMap }
@@ -188,16 +190,16 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm pt-2 border-t border-warm-100">
-            {detail?.warehouseCode && (
+            {detail?.whCode && (
               <div className="bg-warm-50 rounded-xl px-3 py-2">
                 <p className="text-xs text-warm-500">{t('surtido.validacion.warehouse')}</p>
-                <p className="font-semibold text-warm-800 truncate">{detail.warehouseCode}</p>
+                <p className="font-semibold text-warm-800 truncate">{detail.whCode}</p>
               </div>
             )}
-            {(detail?.logisticsChannelCode || detail?.logisticsChannel) && (
+            {detail?.logisticsChannel && (
               <div className="bg-warm-50 rounded-xl px-3 py-2">
                 <p className="text-xs text-warm-500">{t('surtido.validacion.channel')}</p>
-                <p className="font-semibold text-warm-800 truncate">{detail.logisticsChannelCode || detail.logisticsChannel}</p>
+                <p className="font-semibold text-warm-800 truncate">{detail.logisticsChannel}</p>
               </div>
             )}
             <div className="bg-primary-50 rounded-xl px-3 py-2">
@@ -231,9 +233,9 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
                 <tbody className="divide-y divide-warm-50">
                   {packageList.map((p, i) => (
                     <tr key={i} className="hover:bg-warm-50 transition-colors">
-                      <td className="table-cell font-mono font-semibold">{p.boxType || p.boxCode || '—'}</td>
-                      <td className="table-cell text-warm-500">{p.customizeCode || '—'}</td>
-                      <td className="table-cell text-right font-semibold">{p.totalPackageQty ?? p.qty ?? '?'}</td>
+                      <td className="table-cell font-mono font-semibold">{p.customizeCode || p.boxType || p.boxCode || '—'}</td>
+                      <td className="table-cell text-warm-500">{p.boxType || '—'}</td>
+                      <td className="table-cell text-right font-semibold">{p.quantity ?? p.totalPackageQty ?? p.qty ?? '?'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -323,6 +325,7 @@ export default function SurtidoValidacion() {
   const qc = useQueryClient()
   const scanRef = useRef(null)
   const lastKeyTimeRef = useRef(0)
+  const [searchParams] = useSearchParams()
 
   const [step, setStep] = useState('search')
   const [obc, setObc] = useState(null)
@@ -343,7 +346,7 @@ export default function SurtidoValidacion() {
 
   const sessionElapsed = useSessionTimer(sessionStart)
 
-  // Restore session from storage
+  // Restore session from storage or pre-fill OBC from URL param
   useEffect(() => {
     const saved = sessionStorage.getItem('kirion_surtido_session')
     if (saved) {
@@ -354,10 +357,13 @@ export default function SurtidoValidacion() {
           setCounts(s.counts || { ok: 0, rejected: 0 })
           setItemCounts(new Map(s.itemCountsArr || []))
           setStep('session')
+          return
         }
       } catch {}
     }
-  }, [])
+    const obcParam = searchParams.get('obc')
+    if (obcParam) { setObc(obcParam); setStep('preview') }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: detailData, isLoading: detailLoading } = useQuery({
     queryKey: ['upapex-outbound-detail', obc],
@@ -436,7 +442,7 @@ export default function SurtidoValidacion() {
       return createScanSession({
         outbound_order_no: obc,
         third_order_no: (detailData?.data ?? detailData)?.thirdOrderNo || null,
-        total_expected: packageList.reduce((s, p) => s + (p.totalPackageQty ?? p.qty ?? 1), 0),
+        total_expected: packageList.reduce((s, p) => s + (p.quantity ?? p.totalPackageQty ?? p.qty ?? 1), 0),
       })
     },
     onSuccess: (data) => {

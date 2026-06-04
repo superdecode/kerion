@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { PackageCheck, Search, X, ChevronsUpDown, ChevronUp, ChevronDown, CheckCheck, Printer, AlertTriangle } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import { fmtDate } from '../../../core/utils/dateFormat'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 function Toggle({ checked, onChange }) {
   return (
@@ -38,6 +39,7 @@ function SortTh({ label, field, currentField, dir, onSort, className = '' }) {
 }
 
 export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salida = null, onConfirm, saving = false }) {
+  const { t } = useI18nStore()
   const [local, setLocal] = useState([])
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState(null)
@@ -170,7 +172,7 @@ export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salid
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Confirmar surtido"
+      title={t('dev.surtido_confirm.title')}
       icon={PackageCheck}
       size="xl"
       footer={
@@ -178,23 +180,23 @@ export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salid
           <div className="flex items-center gap-2 mr-auto">
             <span className="text-xs text-warm-500">
               <span className={`font-bold ${surtidoCount === 0 ? 'text-warm-400' : 'text-success-700'}`}>{surtidoCount}</span>
-              <span className="text-warm-400"> / {local.length} líneas surtidas</span>
+              <span className="text-warm-400"> / {local.length} {t('dev.surtido_confirm.lineas_surtidas')}</span>
             </span>
             <button
               onClick={handlePrint}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100 transition-colors"
             >
-              <Printer className="w-3.5 h-3.5" /> Imprimir
+              <Printer className="w-3.5 h-3.5" /> {t('dev.surtido_confirm.imprimir')}
             </button>
           </div>
-          <button onClick={onClose} className="btn-ghost inline-flex min-w-24 items-center justify-center">Cancelar</button>
+          <button onClick={onClose} className="btn-ghost inline-flex min-w-24 items-center justify-center">{t('dev.surtido_confirm.cancelar')}</button>
           <button
             onClick={handleConfirm}
             disabled={saving || surtidoCount === 0}
             className="btn-primary disabled:opacity-60 inline-flex min-w-36 items-center justify-center gap-2"
           >
             <PackageCheck className="w-4 h-4" />
-            {saving ? 'Completando...' : 'Completar orden'}
+            {saving ? t('dev.surtido_confirm.completando') : t('dev.surtido_confirm.completar')}
           </button>
         </>
       }
@@ -204,22 +206,22 @@ export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salid
         {/* Summary + irreversibility warning */}
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="rounded-xl border border-warm-100 bg-warm-50 px-3 py-2">
-            <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wide">Líneas</p>
+            <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wide">{t('dev.surtido_confirm.lineas')}</p>
             <p className="text-lg font-black text-warm-800">{local.length}</p>
           </div>
           <div className="rounded-xl border border-primary-100 bg-primary-50 px-3 py-2">
-            <p className="text-[10px] font-bold text-primary-400 uppercase tracking-wide">Piezas solicitadas</p>
+            <p className="text-[10px] font-bold text-primary-400 uppercase tracking-wide">{t('dev.surtido_confirm.piezas_sol')}</p>
             <p className="text-lg font-black text-primary-700">{local.reduce((a, r) => a + Number(r.cantidad_solicitada), 0)}</p>
           </div>
           <div className="rounded-xl border border-success-100 bg-success-50 px-3 py-2">
-            <p className="text-[10px] font-bold text-success-500 uppercase tracking-wide">Líneas surtidas</p>
+            <p className="text-[10px] font-bold text-success-500 uppercase tracking-wide">{t('dev.surtido_confirm.lineas_surt')}</p>
             <p className="text-lg font-black text-success-700">{surtidoCount}</p>
           </div>
         </div>
 
         <div className="flex items-start gap-2 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2.5 text-xs text-warning-700">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-px text-warning-500" />
-          <span><span className="font-bold">Acción irreversible.</span> Al confirmar el surtido se descontará el inventario y la orden quedará cerrada. No podrás modificarla después.</span>
+          <span><span className="font-bold">{t('dev.surtido_confirm.irrev')}</span> {t('dev.surtido_confirm.warning')}</span>
         </div>
 
         {/* Toolbar */}
@@ -230,7 +232,7 @@ export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salid
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar SKU, código, ubicación..."
+              placeholder={t('dev.surtido_confirm.search')}
               className="text-xs outline-none bg-transparent text-warm-700 flex-1"
             />
             {search && (
@@ -244,13 +246,13 @@ export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salid
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100 transition-colors shrink-0"
           >
             <CheckCheck className="w-3.5 h-3.5" />
-            {allSurtido ? 'Desmarcar todo' : 'Marcar todo'}
+            {allSurtido ? t('dev.surtido_confirm.desmarcar_todo') : t('dev.surtido_confirm.marcar_todo')}
           </button>
         </div>
 
         {/* Legend */}
         <p className="text-[11px] text-warm-400">
-          Registra las cantidades reales y marca cada línea como surtida para confirmar.
+          {t('dev.surtido_confirm.leyenda')}
         </p>
 
         {/* Table */}
@@ -259,18 +261,18 @@ export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salid
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-warm-50/95 backdrop-blur-sm border-b border-warm-100">
                 <tr>
-                  <SortTh label="SKU" field="sku" currentField={sortField} dir={sortDir} onSort={handleSort} className="pl-4" />
-                  <SortTh label="Código" field="codigo_trazabilidad" currentField={sortField} dir={sortDir} onSort={handleSort} />
-                  <SortTh label="Ubicación" field="ubicacion_nombre" currentField={sortField} dir={sortDir} onSort={handleSort} />
-                  <SortTh label="Solicitada" field="cantidad_solicitada" currentField={sortField} dir={sortDir} onSort={handleSort} className="text-right" />
-                  <th className="py-2 pr-3 text-right text-xs uppercase tracking-wide text-warm-500">Real</th>
-                  <th className="py-2 pr-4 text-center text-xs uppercase tracking-wide text-warm-500">Surtido</th>
+                  <SortTh label={t('dev.surtido_confirm.col.sku')} field="sku" currentField={sortField} dir={sortDir} onSort={handleSort} className="pl-4" />
+                  <SortTh label={t('dev.surtido_confirm.col.codigo')} field="codigo_trazabilidad" currentField={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortTh label={t('dev.surtido_confirm.col.ubicacion')} field="ubicacion_nombre" currentField={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortTh label={t('dev.surtido_confirm.col.solicitada')} field="cantidad_solicitada" currentField={sortField} dir={sortDir} onSort={handleSort} className="text-right" />
+                  <th className="py-2 pr-3 text-right text-xs uppercase tracking-wide text-warm-500">{t('dev.surtido_confirm.col.real')}</th>
+                  <th className="py-2 pr-4 text-center text-xs uppercase tracking-wide text-warm-500">{t('dev.surtido_confirm.col.surtido')}</th>
                 </tr>
               </thead>
               <tbody>
                 {display.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-sm text-warm-400">Sin resultados</td>
+                    <td colSpan={6} className="py-10 text-center text-sm text-warm-400">{t('dev.surtido_confirm.sin_resultados')}</td>
                   </tr>
                 ) : display.map((row) => {
                   const overStock = !row.surtido && Number(row.cantidad_surtida) > (row.cantidad_disponible ?? Infinity)
@@ -296,7 +298,7 @@ export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salid
                             overStock ? 'border-danger-400 bg-danger-50 text-danger-700' : 'border-warm-200 bg-white'
                           } disabled:bg-success-50 disabled:border-success-200 disabled:text-success-700`}
                         />
-                        {overStock && <div className="text-[10px] text-danger-500 mt-0.5 text-right">Excede stock</div>}
+                        {overStock && <div className="text-[10px] text-danger-500 mt-0.5 text-right">{t('dev.surtido_confirm.excede_stock')}</div>}
                       </td>
                       <td className="py-2.5 pr-4 text-center">
                         <Toggle

@@ -383,7 +383,7 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter ${
                               row._isUpdate ? 'bg-accent-100 text-accent-700' : 'bg-primary-100 text-primary-700'
                             }`}>
-                              {row._isUpdate ? 'Actualizar' : 'Crear'}
+                              {row._isUpdate ? t('dev.importar_ub.accion.actualizar') : t('dev.importar_ub.accion.crear')}
                             </span>
                           )}
                         </td>
@@ -414,9 +414,9 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
               <div className="flex items-start gap-3 p-4 bg-warning-50 border border-warning-100 rounded-2xl shadow-sm">
                 <AlertCircle className="w-5 h-5 text-warning-500 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-bold text-warning-800">Hay filas con errores</p>
+                  <p className="text-sm font-bold text-warning-800">{t('dev.importar_ub.hay_errores')}</p>
                   <p className="text-xs text-warning-700 mt-0.5 opacity-90">
-                    Se detectaron {stats.errors} registros inválidos que no serán importados. Puedes eliminarlos de la lista o corregir el archivo y volver a subirlo.
+                    {stats.errors} {t('dev.importar_ub.errores_desc')}
                   </p>
                 </div>
               </div>
@@ -436,21 +436,19 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
               <Check className="w-10 h-10 text-success-600" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-2xl font-black text-warm-800 tracking-tight">¡Importación Exitosa!</h3>
-              <p className="text-sm text-warm-500 max-w-sm mx-auto">
-                Las ubicaciones han sido procesadas correctamente y ya están disponibles en el sistema.
-              </p>
+              <h3 className="text-2xl font-black text-warm-800 tracking-tight">{t('dev.importar_ub.success.title')}</h3>
+              <p className="text-sm text-warm-500 max-w-sm mx-auto">{t('dev.importar_ub.success.body')}</p>
             </div>
             
             {importResult && (
               <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
                 <div className="bg-success-50/50 border border-success-100 rounded-2xl p-4">
                   <p className="text-2xl font-black text-success-700 leading-none">{importResult.resumen?.procesados ?? 0}</p>
-                  <p className="text-[10px] font-bold text-success-600 uppercase tracking-widest mt-1.5">Procesados</p>
+                  <p className="text-[10px] font-bold text-success-600 uppercase tracking-widest mt-1.5">{t('dev.importar_ub.procesados')}</p>
                 </div>
                 <div className="bg-primary-50/50 border border-primary-100 rounded-2xl p-4">
                   <p className="text-2xl font-black text-primary-700 leading-none">{(importResult.resumen?.creados ?? 0) + (importResult.resumen?.actualizados ?? 0)}</p>
-                  <p className="text-[10px] font-bold text-primary-600 uppercase tracking-widest mt-1.5">Guardados</p>
+                  <p className="text-[10px] font-bold text-primary-600 uppercase tracking-widest mt-1.5">{t('dev.importar_ub.guardados')}</p>
                 </div>
               </div>
             )}

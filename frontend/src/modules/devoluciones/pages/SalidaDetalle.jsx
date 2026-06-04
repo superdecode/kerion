@@ -14,6 +14,7 @@ import SalidaImportModal from '../components/SalidaImportModal'
 import SurtidoConfirmModal from '../components/SurtidoConfirmModal'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import {
   getSalida, updateSalida, completarSalida, cancelarSalida, deleteSalida,
   downloadSalidaExcel, listInventario,
@@ -27,11 +28,6 @@ const ESTADO_COLORS = {
   completado: 'bg-success-100 text-success-700',
   cancelado:  'bg-danger-100 text-danger-600',
 }
-const ESTADO_LABELS = {
-  borrador: 'Borrador', pendiente: 'Pendiente', en_proceso: 'En proceso',
-  completado: 'Completado', cancelado: 'Cancelado',
-}
-
 // Columns that participate in grouping key (identifying fields)
 const PRINT_EXTRA_COLS = [
   { id: 'descripcion', label: 'Descripción',       field: 'descripcion',          isKey: true },
@@ -182,6 +178,7 @@ export default function SalidaDetalle() {
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
   const toast = useToastStore()
+  const { t } = useI18nStore()
 
   const [showImport, setShowImport] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
@@ -247,7 +244,7 @@ export default function SalidaDetalle() {
   const updateMutation = useMutation({
     mutationFn: (payload) => updateSalida(id, payload),
     onSuccess: refresh,
-    onError: () => toast.error('Error al actualizar salida'),
+    onError: () => toast.error(t('dev.salida_detalle.toast.err_update')),
   })
 
   const saveRef = () => {
@@ -271,10 +268,10 @@ export default function SalidaDetalle() {
     onSuccess: () => {
       refresh()
       qc.invalidateQueries({ queryKey: ['dev-inventario'] })
-      toast.success('Salida completada')
+      toast.success(t('dev.salida_detalle.toast.completada'))
       setShowConfirm(false)
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al completar'),
+    onError: (e) => toast.error(e.response?.data?.error || t('dev.salida_detalle.toast.err_completar')),
   })
 
   const cancelMutation = useMutation({
@@ -283,19 +280,19 @@ export default function SalidaDetalle() {
       qc.invalidateQueries({ queryKey: ['dev-salidas'] })
       refresh()
       setShowCancelModal(false)
-      toast.success('Cancelado')
+      toast.success(t('dev.salida_detalle.toast.cancelado'))
     },
-    onError: () => toast.error('Error al cancelar'),
+    onError: () => toast.error(t('dev.salida_detalle.toast.err_cancelar')),
   })
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteSalida(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dev-salidas'] })
-      toast.success('Cerrado')
+      toast.success(t('dev.salida_detalle.toast.cerrado'))
       navigate('/devoluciones/salidas')
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al cerrar'),
+    onError: (e) => toast.error(e.response?.data?.error || t('dev.salida_detalle.toast.err_cerrar')),
   })
 
   const exportExcel = async () => {
@@ -304,7 +301,7 @@ export default function SalidaDetalle() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = `${salida.codigo}.xlsx`; a.click()
       URL.revokeObjectURL(url)
-    } catch { toast.error('Error al exportar') }
+    } catch { toast.error(t('dev.salida_detalle.toast.err_exportar')) }
   }
 
   const handleInvSearch = (val) => {
@@ -327,7 +324,7 @@ export default function SalidaDetalle() {
       { inventario_id: selectedInv.id, cantidad_solicitada: Number(qty) || 1 },
     ]
     updateMutation.mutate({ items: nextItems }, {
-      onSuccess: () => toast.success('Línea agregada'),
+      onSuccess: () => toast.success(t('dev.salida_detalle.toast.linea_add')),
     })
     setSelectedInv(null); setInvSearch(''); setInvQ(''); setQty(1)
   }
@@ -337,7 +334,7 @@ export default function SalidaDetalle() {
       .filter(it => it.id !== lineId)
       .map(it => ({ inventario_id: it.inventario_id, cantidad_solicitada: it.cantidad_solicitada }))
     updateMutation.mutate({ items: nextItems }, {
-      onSuccess: () => { toast.success('Línea eliminada'); setDeletingLineId(null) },
+      onSuccess: () => { toast.success(t('dev.salida_detalle.toast.linea_del')); setDeletingLineId(null) },
     })
   }
 
@@ -349,7 +346,7 @@ export default function SalidaDetalle() {
         : { inventario_id: it.inventario_id, cantidad_solicitada: it.cantidad_solicitada }
     )
     updateMutation.mutate({ items: nextItems }, {
-      onSuccess: () => { toast.success('Cantidad actualizada'); setEditingLine(null) },
+      onSuccess: () => { toast.success(t('dev.salida_detalle.toast.cant_upd')); setEditingLine(null) },
     })
   }
 
@@ -359,7 +356,7 @@ export default function SalidaDetalle() {
       ...encontrados.map(r => ({ inventario_id: r.inventario_id, cantidad_solicitada: r.cantidad_solicitada })),
     ]
     updateMutation.mutate({ items: nextItems }, {
-      onSuccess: () => { setShowImport(false); toast.success('Líneas importadas') },
+      onSuccess: () => { setShowImport(false); toast.success(t('dev.salida_detalle.toast.importadas')) },
     })
   }
 
@@ -483,8 +480,8 @@ export default function SalidaDetalle() {
     setPrintExtraCols(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id])
   }
 
-  if (salidaQuery.isLoading) return <div className="p-8 text-sm text-warm-400">Cargando...</div>
-  if (!salida) return <div className="p-8 text-sm text-warm-400">Orden no encontrada</div>
+  if (salidaQuery.isLoading) return <div className="p-8 text-sm text-warm-400">{t('dev.salida_detalle.loading')}</div>
+  if (!salida) return <div className="p-8 text-sm text-warm-400">{t('dev.salida_detalle.not_found')}</div>
 
   const hasExtraCols = isCompleted
 
@@ -499,7 +496,7 @@ export default function SalidaDetalle() {
             <div className="flex items-center gap-2">
               <span className="font-mono text-base font-bold text-warm-800">{salida.codigo}</span>
               <span className={`badge text-xs ${ESTADO_COLORS[salida.estado]}`}>
-                {ESTADO_LABELS[salida.estado]}
+                {t('dev.estado.' + salida.estado)}
               </span>
             </div>
           </div>
@@ -509,7 +506,7 @@ export default function SalidaDetalle() {
             {isCompleted && (
               <button onClick={exportExcel}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border bg-success-50 text-success-700 border-success-200 hover:bg-success-100 transition-colors">
-                <Download className="w-3.5 h-3.5" /> Exportar Excel
+                <Download className="w-3.5 h-3.5" /> {t('dev.salida_detalle.export_excel')}
               </button>
             )}
             {isPrintable && items.length > 0 && (
@@ -517,13 +514,13 @@ export default function SalidaDetalle() {
                 onClick={() => setShowPrintConfig(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors"
               >
-                <Printer className="w-3.5 h-3.5" /> Hoja de surtido
+                <Printer className="w-3.5 h-3.5" /> {t('dev.salida_detalle.hoja_surtido')}
               </button>
             )}
             {isEditable && canCreate && (
               <button onClick={() => setShowImport(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors">
-                Importar Excel
+                {t('dev.salida_detalle.importar_excel')}
               </button>
             )}
             {isEditable && canEdit && (
@@ -533,12 +530,12 @@ export default function SalidaDetalle() {
                   estado: salida.estado,
                   referencia: refValue.trim() || null,
                   items: items.map(it => ({ inventario_id: it.inventario_id, cantidad_solicitada: it.cantidad_solicitada })),
-                }, { onSuccess: () => toast.success('Guardado') })}
+                }, { onSuccess: () => toast.success(t('dev.salida_detalle.toast.guardado')) })}
                 disabled={updateMutation.isPending}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 disabled:opacity-50 transition-colors"
               >
                 <Save className="w-3.5 h-3.5" />
-                {updateMutation.isPending ? 'Guardando...' : 'Guardar'}
+                {updateMutation.isPending ? t('dev.salida_detalle.guardando') : t('dev.salida_detalle.guardar')}
               </button>
             )}
             {isEditable && canEdit && items.length > 0 && (
@@ -547,7 +544,7 @@ export default function SalidaDetalle() {
                 onClick={() => setShowConfirm(true)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-success-600 text-white text-sm font-semibold shadow-sm hover:shadow-glow-success hover:-translate-y-[1px] transition-all duration-200 active:scale-[0.97]"
               >
-                <PackageCheck className="w-4 h-4" /> Confirmar surtido
+                <PackageCheck className="w-4 h-4" /> {t('dev.salida_detalle.confirmar_surtido')}
               </motion.button>
             )}
             {canCancelRecord && (
@@ -557,7 +554,7 @@ export default function SalidaDetalle() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-warning-200 text-warning-700 text-sm hover:bg-warning-50 disabled:opacity-60"
               >
                 <X className="w-4 h-4" />
-                {cancelMutation.isPending ? 'Cancelando...' : 'Cancelar'}
+                {cancelMutation.isPending ? t('dev.salida_detalle.cancelando') : t('dev.salida_detalle.cancelar')}
               </button>
             )}
             {canDeleteRecord && (
@@ -567,7 +564,7 @@ export default function SalidaDetalle() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-danger-200 text-danger-600 text-sm hover:bg-danger-50 disabled:opacity-60"
               >
                 <Trash2 className="w-4 h-4" />
-                {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar'}
+                {deleteMutation.isPending ? t('dev.salida_detalle.eliminando') : t('dev.salida_detalle.eliminar')}
               </button>
             )}
           </div>
@@ -576,15 +573,15 @@ export default function SalidaDetalle() {
 
       {/* Summary cards */}
       <div className="shrink-0 px-5 py-3 border-b border-warm-100 grid grid-cols-4 gap-3">
-        <SummaryCard icon={User}         label="Responsable"       value={salida.responsable_nombre || 'Sin asignar'} color="warm" />
-        <SummaryCard icon={CalendarDays} label="Fecha de creación" value={fmtDate(salida.created_at)} color="warm" />
-        <SummaryCard icon={Hash}         label="Líneas"             value={items.length} color="primary" />
-        <SummaryCard icon={Layers}       label="Piezas solicitadas" value={totalPiezas} color="primary" />
+        <SummaryCard icon={User}         label={t('dev.salida_detalle.card.responsable')} value={salida.responsable_nombre || t('dev.salida_detalle.sin_asignar')} color="warm" />
+        <SummaryCard icon={CalendarDays} label={t('dev.salida_detalle.card.fecha')}        value={fmtDate(salida.created_at)} color="warm" />
+        <SummaryCard icon={Hash}         label={t('dev.salida_detalle.card.lineas')}       value={items.length} color="primary" />
+        <SummaryCard icon={Layers}       label={t('dev.salida_detalle.card.piezas')}       value={totalPiezas} color="primary" />
       </div>
 
       {/* Referencia / notas bar */}
       <div className="shrink-0 px-5 py-2 border-b border-warm-100 flex items-center gap-3">
-        <span className="text-[11px] font-semibold text-warm-400 uppercase tracking-wider shrink-0">Ref. externa</span>
+        <span className="text-[11px] font-semibold text-warm-400 uppercase tracking-wider shrink-0">{t('dev.salida_detalle.ref_externa')}</span>
         {isEditable && canEdit ? (
           <div className="flex items-center gap-2 flex-1">
             <input
@@ -592,7 +589,7 @@ export default function SalidaDetalle() {
               value={refValue}
               onChange={e => setRefValue(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && saveRef()}
-              placeholder="Nro. orden cliente / referencia de otro sistema..."
+              placeholder={t('dev.salida_detalle.ref_placeholder')}
               className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-warm-200 bg-warm-50 focus:outline-none focus:ring-2 focus:ring-primary-200"
             />
             {refValue !== (salida.referencia || '') && (
@@ -601,7 +598,7 @@ export default function SalidaDetalle() {
                 disabled={updateMutation.isPending}
                 className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60"
               >
-                Guardar
+                {t('dev.salida_detalle.guardar')}
               </button>
             )}
           </div>
@@ -614,7 +611,7 @@ export default function SalidaDetalle() {
 
         <div className="px-5 py-2 border-b border-warm-100 flex items-center justify-between gap-3">
           <span className="text-xs font-semibold text-warm-500 uppercase tracking-wide shrink-0">
-            Líneas ({items.length})
+            {t('dev.salida_detalle.lineas_label')} ({items.length})
           </span>
           <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-2.5 py-1.5 max-w-xs w-full">
             <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
@@ -622,7 +619,7 @@ export default function SalidaDetalle() {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar código, SKU, ubicación..."
+              placeholder={t('dev.salida_detalle.search')}
               className="text-xs outline-none bg-transparent text-warm-700 flex-1"
             />
             {search && (
@@ -639,12 +636,12 @@ export default function SalidaDetalle() {
             {items.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-warm-300">
                 <ArrowRightFromLine className="w-10 h-10 mb-3" />
-                <p className="text-sm">Sin líneas — agrega items del inventario abajo</p>
+                <p className="text-sm">{t('dev.salida_detalle.sin_lineas')}</p>
               </div>
             ) : displayItems.length === 0 && search ? (
               <div className="flex flex-col items-center py-10 text-warm-300">
                 <Search className="w-8 h-8 mb-2" />
-                <p className="text-sm">Sin resultados para "{search}"</p>
+                <p className="text-sm">{t('dev.salida_detalle.sin_resultados')} "{search}"</p>
               </div>
             ) : (
               <>
@@ -652,15 +649,15 @@ export default function SalidaDetalle() {
                   <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-wide text-warm-500 border-b border-warm-100 bg-warm-50/80">
-                      <th className="table-header w-10">#</th>
-                      <SortHeader label="Código" field="codigo_trazabilidad" currentField={sortField} dir={sortDir} onSort={handleSort} />
-                      <SortHeader label="SKU" field="sku" currentField={sortField} dir={sortDir} onSort={handleSort} />
-                      <th className="table-header">Descripción</th>
-                      <SortHeader label="Ubicación" field="ubicacion_nombre" currentField={sortField} dir={sortDir} onSort={handleSort} />
-                      <SortHeader label="Solicitada" field="cantidad_solicitada" currentField={sortField} dir={sortDir} onSort={handleSort} className="text-right" />
-                      {hasExtraCols && <th className="table-header text-right">Surtida</th>}
-                      {hasExtraCols && <th className="table-header">Surtido</th>}
-                      {isEditable && (canEdit || canDelete) && <th className="table-header text-right w-20">Acciones</th>}
+                      <th className="table-header w-10">{t('dev.salida_detalle.col.num')}</th>
+                      <SortHeader label={t('dev.salida_detalle.col.codigo')} field="codigo_trazabilidad" currentField={sortField} dir={sortDir} onSort={handleSort} />
+                      <SortHeader label={t('dev.salida_detalle.col.sku')} field="sku" currentField={sortField} dir={sortDir} onSort={handleSort} />
+                      <th className="table-header">{t('dev.salida_detalle.col.descripcion')}</th>
+                      <SortHeader label={t('dev.salida_detalle.col.ubicacion')} field="ubicacion_nombre" currentField={sortField} dir={sortDir} onSort={handleSort} />
+                      <SortHeader label={t('dev.salida_detalle.col.solicitada')} field="cantidad_solicitada" currentField={sortField} dir={sortDir} onSort={handleSort} className="text-right" />
+                      {hasExtraCols && <th className="table-header text-right">{t('dev.salida_detalle.col.surtida')}</th>}
+                      {hasExtraCols && <th className="table-header">{t('dev.salida_detalle.col.surtido')}</th>}
+                      {isEditable && (canEdit || canDelete) && <th className="table-header text-right w-20">{t('dev.salida_detalle.col.acciones')}</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -682,7 +679,7 @@ export default function SalidaDetalle() {
                         {hasExtraCols && (
                           <td className="table-cell">
                             <span className={`badge text-[10px] ${row.surtido ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-600'}`}>
-                              {row.surtido ? 'Surtido' : 'No surtido'}
+                              {row.surtido ? t('dev.salida_detalle.surtido_si') : t('dev.salida_detalle.surtido_no')}
                             </span>
                           </td>
                         )}
@@ -718,7 +715,7 @@ export default function SalidaDetalle() {
                   totalItems={displayItems.length}
                   onPageChange={setPage}
                   onPageSizeChange={setPageSize}
-                  itemLabel="líneas"
+                  itemLabel={t('dev.salida_detalle.lineas_label').toLowerCase()}
                 />
               </>
             )}
@@ -727,17 +724,17 @@ export default function SalidaDetalle() {
             {isEditable && canCreate && (
               <div className="border-t-2 border-dashed border-primary-200/70 bg-gradient-to-br from-primary-50/40 via-white to-accent-50/20 px-5 py-4">
                 <div className="text-[11px] font-bold text-primary-500 uppercase tracking-wider mb-3">
-                  + Agregar línea
+                  {t('dev.salida_detalle.agregar_linea')}
                 </div>
                 <div className="flex items-end gap-3 flex-wrap">
                   <div className="relative flex-1 min-w-[240px]">
-                    <label className="block text-[11px] text-warm-500 mb-1">Buscar en inventario</label>
+                    <label className="block text-[11px] text-warm-500 mb-1">{t('dev.salida_detalle.buscar_inv')}</label>
                     <div className="flex items-center gap-1.5 bg-white border border-warm-200 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-primary-200">
                       <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
                       <input
                         value={invSearch}
                         onChange={e => handleInvSearch(e.target.value)}
-                        placeholder="SKU, código, embalaje..."
+                        placeholder={t('dev.salida_detalle.inv_search_ph')}
                         className="text-sm outline-none bg-transparent text-warm-700 flex-1"
                       />
                       {invSearch && (
@@ -767,7 +764,7 @@ export default function SalidaDetalle() {
                                   </div>
                                 </div>
                                 <div className="text-right shrink-0">
-                                  <div className="text-xs font-bold text-success-700">{inv.cantidad_disponible} disp.</div>
+                                  <div className="text-xs font-bold text-success-700">{inv.cantidad_disponible} {t('dev.salida_detalle.disp')}</div>
                                   {inv.ubicacion_nombre && <div className="text-[10px] text-warm-400 mt-0.5">{inv.ubicacion_nombre}</div>}
                                 </div>
                               </div>
@@ -787,13 +784,13 @@ export default function SalidaDetalle() {
                       <div className="text-warm-500 mt-0.5">{selectedInv.descripcion}</div>
                       <div className="flex gap-3 mt-0.5">
                         <span className="font-mono text-warm-400">{selectedInv.embalaje1 || selectedInv.codigo_trazabilidad || '—'}</span>
-                        <span className="font-bold text-success-700">{selectedInv.cantidad_disponible} disp.</span>
+                        <span className="font-bold text-success-700">{selectedInv.cantidad_disponible} {t('dev.salida_detalle.disp')}</span>
                       </div>
                     </motion.div>
                   )}
 
                   <div className="w-28 shrink-0">
-                    <label className="block text-[11px] text-warm-500 mb-1">Cantidad</label>
+                    <label className="block text-[11px] text-warm-500 mb-1">{t('dev.salida_detalle.cantidad')}</label>
                     <input
                       type="number" min="1"
                       value={qty}
@@ -811,7 +808,7 @@ export default function SalidaDetalle() {
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold disabled:opacity-50 shrink-0"
                   >
                     <Plus className="w-4 h-4" />
-                    {updateMutation.isPending ? 'Agregando...' : 'Agregar'}
+                    {updateMutation.isPending ? t('dev.salida_detalle.agregando') : t('dev.salida_detalle.agregar')}
                   </motion.button>
                 </div>
               </div>
@@ -824,28 +821,28 @@ export default function SalidaDetalle() {
       <Modal
         isOpen={showPrintConfig}
         onClose={() => setShowPrintConfig(false)}
-        title="Hoja de surtido"
+        title={t('dev.salida_detalle.hoja_surtido')}
         icon={Printer}
         size="sm"
         footer={
           <>
             <button onClick={() => setShowPrintConfig(false)}
               className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600 hover:bg-warm-50">
-              Cancelar
+              {t('dev.salida_detalle.print.cancelar')}
             </button>
             <button
               onClick={executePrint}
               disabled={items.length === 0}
               className="px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-1.5"
             >
-              <Printer className="w-3.5 h-3.5" /> Imprimir
+              <Printer className="w-3.5 h-3.5" /> {t('dev.salida_detalle.print.imprimir')}
             </button>
           </>
         }
       >
         <div className="space-y-3">
           <div className="p-3 rounded-xl bg-warm-50 border border-warm-100">
-            <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wide mb-2">Columnas base (siempre)</p>
+            <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wide mb-2">{t('dev.salida_detalle.print.base_cols')}</p>
             <div className="flex gap-3 text-xs text-warm-600 font-medium">
               <span className="inline-flex items-center gap-1"><Check className="w-3 h-3 text-success-500" /> SKU</span>
               <span className="inline-flex items-center gap-1"><Check className="w-3 h-3 text-success-500" /> Ubicación</span>
@@ -853,7 +850,7 @@ export default function SalidaDetalle() {
             </div>
           </div>
           <div>
-            <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wide mb-2">Columnas adicionales</p>
+            <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wide mb-2">{t('dev.salida_detalle.print.extra_cols')}</p>
             <div className="grid grid-cols-2 gap-1.5">
               {PRINT_EXTRA_COLS
                 .filter(c => c.id !== 'cant_sur' || isCompleted)
@@ -874,8 +871,8 @@ export default function SalidaDetalle() {
             </div>
           </div>
           <div className="p-2.5 rounded-lg bg-primary-50 border border-primary-100 text-xs text-primary-700">
-            <span className="font-semibold">{groupedPrintItems.length}</span> filas · <span className="font-semibold">{printTotalPiezas}</span> piezas
-            {isCompleted && <span> · <span className="font-semibold">{printTotalSurtidas}</span> surtidas</span>}
+            <span className="font-semibold">{groupedPrintItems.length}</span> {t('dev.salida_detalle.print.filas')} · <span className="font-semibold">{printTotalPiezas}</span> {t('dev.salida_detalle.print.piezas')}
+            {isCompleted && <span> · <span className="font-semibold">{printTotalSurtidas}</span> {t('dev.salida_detalle.print.surtidas')}</span>}
           </div>
         </div>
       </Modal>
@@ -884,19 +881,19 @@ export default function SalidaDetalle() {
       <Modal
         isOpen={!!editingLine}
         onClose={() => setEditingLine(null)}
-        title="Editar cantidad"
+        title={t('dev.salida_detalle.edit_qty.title')}
         icon={Pencil}
         size="sm"
         footer={
           <>
             <button onClick={() => setEditingLine(null)}
-              className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">Cancelar</button>
+              className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">{t('dev.salida_detalle.edit_qty.cancelar')}</button>
             <button
               onClick={saveLine}
               disabled={updateMutation.isPending}
               className="px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold disabled:opacity-60"
             >
-              {updateMutation.isPending ? 'Guardando...' : 'Guardar'}
+              {updateMutation.isPending ? t('dev.salida_detalle.edit_qty.guardando') : t('dev.salida_detalle.edit_qty.guardar')}
             </button>
           </>
         }
@@ -908,7 +905,7 @@ export default function SalidaDetalle() {
               {editingLine.descripcion && <span className="text-warm-400 ml-1.5">— {editingLine.descripcion}</span>}
             </div>
             <div>
-              <label className="block text-xs font-medium text-warm-500 mb-1.5">Cantidad solicitada</label>
+              <label className="block text-xs font-medium text-warm-500 mb-1.5">{t('dev.salida_detalle.edit_qty.label')}</label>
               <input
                 type="number" min="1"
                 value={editQty}
@@ -926,49 +923,49 @@ export default function SalidaDetalle() {
       <Modal
         isOpen={!!deletingLineId}
         onClose={() => setDeletingLineId(null)}
-        title="Eliminar línea"
+        title={t('dev.salida_detalle.del_linea.title')}
         icon={AlertTriangle}
         size="sm"
         footer={
           <>
             <button onClick={() => setDeletingLineId(null)}
-              className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">Cancelar</button>
+              className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">{t('dev.salida_detalle.del_linea.cancel')}</button>
             <button
               onClick={() => removeLine(deletingLineId)}
               disabled={updateMutation.isPending}
               className="px-4 py-2 rounded-xl bg-danger-600 text-white text-sm font-semibold disabled:opacity-60">
-              {updateMutation.isPending ? '...' : 'Eliminar'}
+              {updateMutation.isPending ? '...' : t('dev.salida_detalle.del_linea.confirm')}
             </button>
           </>
         }
       >
-        <p className="text-sm text-warm-700">¿Eliminar esta línea de la orden?</p>
+        <p className="text-sm text-warm-700">{t('dev.salida_detalle.del_linea.body')}</p>
       </Modal>
 
       {/* Cancel modal */}
       <Modal
         isOpen={showCancelModal}
         onClose={() => setShowCancelModal(false)}
-        title="Cancelar orden de salida"
+        title={t('dev.salida_detalle.cancel.title')}
         icon={X}
         size="sm"
         footer={
           <>
             <button onClick={() => setShowCancelModal(false)}
               className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600 hover:bg-warm-50">
-              No cancelar
+              {t('dev.salida_detalle.cancel.no')}
             </button>
             <button
               onClick={() => cancelMutation.mutate()}
               disabled={cancelMutation.isPending}
               className="px-4 py-2 rounded-xl bg-warning-600 text-white text-sm font-semibold disabled:opacity-60">
-              {cancelMutation.isPending ? 'Cancelando...' : 'Sí, cancelar'}
+              {cancelMutation.isPending ? t('dev.salida_detalle.cancel.ing') : t('dev.salida_detalle.cancel.yes')}
             </button>
           </>
         }
       >
         <p className="text-sm text-warm-600">
-          ¿Cancelar esta orden de salida? Tiene {items.length} líneas con {totalPiezas} piezas solicitadas. La orden quedará marcada como cancelada.
+          {t('dev.salida_detalle.cancel.body')} {items.length} {t('dev.salida_detalle.cancel.lineas')} {totalPiezas} {t('dev.salida_detalle.cancel.piezas')}
         </p>
       </Modal>
 

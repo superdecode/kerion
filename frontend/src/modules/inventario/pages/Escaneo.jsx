@@ -6,6 +6,7 @@ import {
   Plus, X, Package, CheckCircle2, AlertTriangle, Ban,
   Loader2, Wifi, WifiOff, Trash2, ArrowRight, MoveRight,
   Square, AlertCircle, ScanBarcode, Clock, Timer,
+  RefreshCw, PanelRightClose, PanelRightOpen, Search,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -116,6 +117,26 @@ function MoveItemModal({ isOpen, onClose, onMove }) {
           )
         })}
       </div>
+    </Modal>
+  )
+}
+
+function CloseTabModal({ isOpen, count, onConfirm, onClose }) {
+  const { t } = useI18nStore()
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.close_tab_title')} icon={AlertTriangle}
+      footer={
+        <div className="flex gap-3 justify-end">
+          <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="btn-danger inline-flex items-center gap-2" onClick={onConfirm}>
+            <Trash2 size={14} /> {t('inventario.escaneo.close_tab_confirm')}
+          </button>
+        </div>
+      }
+    >
+      <p className="text-sm text-warm-700">
+        {t('inventario.escaneo.close_tab_body').replace('{{count}}', count)}
+      </p>
     </Modal>
   )
 }
@@ -310,6 +331,72 @@ function ClasificacionPanel({ items, onRemove, onMove }) {
   )
 }
 
+/* ─── Right side panel ────────────────────────────────────── */
+
+function SidePanel({ items }) {
+  const { t } = useI18nStore()
+  const [search, setSearch] = useState('')
+
+  const filtered = search.trim()
+    ? items.filter(item => item.code.toLowerCase().includes(search.toLowerCase()) || (item.code2 || '').toLowerCase().includes(search.toLowerCase()))
+    : items
+
+  const counts = items.reduce((a, i) => { a[i.status] = (a[i.status] || 0) + 1; return a }, {})
+
+  return (
+    <div className="hidden lg:flex w-72 border-l border-warm-100 bg-white flex-col shrink-0">
+      <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50">
+        <h4 className="text-xs font-bold text-warm-700 mb-2 uppercase tracking-wider">{t('inventario.escaneo.panel_title')}</h4>
+        <div className="flex gap-2 mb-2.5">
+          {GROUPS.map(g => {
+            const meta = STATUS_META[g]
+            return (
+              <div key={g} className={`flex-1 rounded-lg px-2 py-1.5 text-center ${meta.bg}`}>
+                <p className="text-base font-bold leading-none">{counts[g] || 0}</p>
+                <p className="text-[9px] mt-0.5 font-semibold uppercase">{t(meta.labelKey).slice(0, 4)}</p>
+              </div>
+            )
+          })}
+        </div>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-warm-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={t('inventario.escaneo.panel_search')}
+            className="w-full pl-7 pr-2 py-1.5 text-xs rounded-lg border border-warm-200 outline-none focus:border-primary-400 bg-white"
+          />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {filtered.length === 0 ? (
+          <div className="py-8 text-center text-xs text-warm-400">{t('inventario.escaneo.panel_empty')}</div>
+        ) : (
+          [...filtered].reverse().map((item, i) => {
+            const meta = STATUS_META[item.status] ?? STATUS_META.nowms
+            return (
+              <div key={i} className={`px-3 py-2 rounded-xl border ${meta.flash || 'bg-warm-50 border-warm-100'} transition-all`}>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-mono text-[11px] font-semibold text-warm-800 truncate">{item.code}</span>
+                  <span className={`badge text-[9px] shrink-0 ${meta.bg}`}>{t(meta.labelKey)}</span>
+                </div>
+                {item.code2 && (
+                  <p className="font-mono text-[10px] text-warm-400 truncate mt-0.5">
+                    {item.wasSwapped && <span className="text-accent-500 mr-1">SWAP</span>}{item.code2}
+                  </p>
+                )}
+                {item.sku && item.sku !== '-' && (
+                  <p className="text-[10px] text-warm-500 truncate">{item.sku}</p>
+                )}
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════ */
 export default function Escaneo() {
   const { t } = useI18nStore()
@@ -326,7 +413,7 @@ export default function Escaneo() {
     getSummary, inventorySnapshot,
   } = useInventarioStore()
 
-  useBoxStock()
+  const boxStockQuery = useBoxStock()
   const { isPending: isSyncing, pendingCount } = useAutoSync()
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? null
@@ -337,9 +424,11 @@ export default function Escaneo() {
   const [showSummaryModal, setShowSummaryModal] = useState(false)
   const [duplicatePending, setDuplicatePending] = useState(null)
   const [moveTarget, setMoveTarget] = useState(null)
-  const [lastScan, setLastScan] = useState(null) // { status: 'ok'|'blocked'|'nowms'|'duplicate', code }
+  const [lastScan, setLastScan] = useState(null)
   const [wmsConfigured, setWmsConfigured] = useState(true)
   const [ubicacionId, setUbicacionId] = useState(null)
+  const [showPanel, setShowPanel] = useState(false)
+  const [closeTabPending, setCloseTabPending] = useState(null) // { tabId, count }
 
   const { data: configData } = useQuery({
     queryKey: ['upapex-config'], queryFn: getConfig, staleTime: 60000,
@@ -397,10 +486,28 @@ export default function Escaneo() {
 
   function handleCloseTab(tabId) {
     const tab = tabs.find(t => t.id === tabId)
-    if (tab?.items.length > 0) {
-      if (!window.confirm(t('inventario.escaneo.cancel_confirm'))) return
+    if (!tab) return
+    if (tab.items.length === 0) {
+      closeTab(tabId)
+    } else {
+      setCloseTabPending({ tabId, count: tab.items.length })
     }
-    closeTab(tabId)
+  }
+
+  function handleCancelSession() {
+    if (!activeTab) return
+    if (activeTab.items.length === 0) {
+      closeTab(activeTabId)
+    } else {
+      setCloseTabPending({ tabId: activeTabId, count: activeTab.items.length })
+    }
+  }
+
+  function confirmCloseTab() {
+    if (closeTabPending) {
+      closeTab(closeTabPending.tabId)
+      setCloseTabPending(null)
+    }
   }
 
   const doAddItem = useCallback((newItem) => {
@@ -530,6 +637,37 @@ export default function Escaneo() {
                 {pendingCount}
               </span>
             )}
+            {/* Sync button */}
+            <button
+              onClick={() => boxStockQuery.refetch()}
+              disabled={boxStockQuery.isFetching}
+              className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-2 text-sm font-semibold disabled:opacity-50"
+              title={t('inventario.escaneo.sync_btn')}
+            >
+              <RefreshCw size={14} className={boxStockQuery.isFetching ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">{t('inventario.escaneo.sync_btn')}</span>
+            </button>
+            {/* Panel toggle */}
+            <button
+              onClick={() => setShowPanel(v => !v)}
+              className={`px-3 py-2 rounded-xl transition-all hidden lg:inline-flex items-center gap-2 text-sm font-semibold ${
+                showPanel ? 'text-primary-600 bg-primary-50' : 'text-warm-500 bg-warm-100 hover:bg-warm-200'
+              }`}
+            >
+              {showPanel ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+              <span>{t('inventario.escaneo.panel_btn')}</span>
+            </button>
+            {/* Cancel session */}
+            {activeTab && (
+              <button
+                onClick={handleCancelSession}
+                className="px-3 py-2 rounded-xl text-warning-600 bg-warning-50 hover:bg-warning-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
+              >
+                <Ban size={14} />
+                <span className="hidden sm:inline">{t('inventario.escaneo.cancel_session')}</span>
+              </button>
+            )}
+            {/* Finalizar session */}
             {activeTab && (
               <button
                 className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
@@ -581,150 +719,157 @@ export default function Escaneo() {
         )}
       </div>
 
-      {/* Active tab content */}
+      {/* Active tab content + optional side panel */}
       {activeTab && (
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-3xl mx-auto space-y-4">
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="max-w-5xl mx-auto space-y-4">
 
-            {/* Session info card */}
-            <div className="card p-3 shadow-sm overflow-hidden">
-              <div className="flex items-center gap-3 mb-2">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                  activeTab.scanType === 'clasificacion' ? 'bg-accent-50' : 'bg-primary-50'
-                }`}>
-                  <Package className={`w-4 h-4 ${activeTab.scanType === 'clasificacion' ? 'text-accent-600' : 'text-primary-600'}`} />
+              {/* Session info card */}
+              <div className="card p-3 shadow-sm overflow-hidden">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    activeTab.scanType === 'clasificacion' ? 'bg-accent-50' : 'bg-primary-50'
+                  }`}>
+                    <Package className={`w-4 h-4 ${activeTab.scanType === 'clasificacion' ? 'text-accent-600' : 'text-primary-600'}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-warm-800 truncate leading-tight">{activeTab.name}</p>
+                    <p className="text-[10px] text-warm-500 leading-tight">
+                      {activeTab.scanType === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado')}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-3xl font-black text-warm-800 tracking-tighter leading-none">
+                      {activeTab.items.length}
+                      <span className="text-xs font-medium text-warm-400 ml-1">{t('inventario.escaneo.scans_label')}</span>
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-warm-800 truncate leading-tight">{activeTab.name}</p>
-                  <p className="text-[10px] text-warm-500 leading-tight">
-                    {activeTab.scanType === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado')}
-                  </p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-3xl font-black text-warm-800 tracking-tighter leading-none">
-                    {activeTab.items.length}
-                    <span className="text-xs font-medium text-warm-400 ml-1">{t('inventario.escaneo.scans_label')}</span>
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-4 gap-2 pt-2 border-t border-warm-100">
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-success-50">
-                  <p className="text-lg font-extrabold text-success-600 leading-none">{summary.ok}</p>
-                  <p className="text-[9px] text-success-600 uppercase tracking-wider font-bold leading-tight">{t('inventario.escaneo.ok_abbr')}</p>
-                </div>
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-warning-50">
-                  <p className="text-lg font-extrabold text-warning-600 leading-none">{summary.blocked}</p>
-                  <p className="text-[9px] text-warning-600 uppercase tracking-wider font-bold leading-tight">{t('inventario.escaneo.blocked_abbr')}</p>
-                </div>
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-danger-50">
-                  <p className="text-lg font-extrabold text-danger-600 leading-none">{summary.nowms}</p>
-                  <p className="text-[9px] text-danger-600 uppercase tracking-wider font-bold leading-tight">{t('inventario.escaneo.nowms_abbr')}</p>
-                </div>
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/60">
-                  <Timer className="w-3.5 h-3.5 text-warm-400 shrink-0" />
-                  <div>
-                    <p className="text-sm font-bold text-warm-700 font-mono leading-none">{fmtElapsed(sessionElapsed)}</p>
-                    <p className="text-[8px] text-warm-400 uppercase tracking-wider font-bold">{t('inventario.escaneo.time_label')}</p>
+                <div className="grid grid-cols-4 gap-2 pt-2 border-t border-warm-100">
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-success-50">
+                    <p className="text-lg font-extrabold text-success-600 leading-none">{summary.ok}</p>
+                    <p className="text-[9px] text-success-600 uppercase tracking-wider font-bold leading-tight">{t('inventario.escaneo.ok_abbr')}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-warning-50">
+                    <p className="text-lg font-extrabold text-warning-600 leading-none">{summary.blocked}</p>
+                    <p className="text-[9px] text-warning-600 uppercase tracking-wider font-bold leading-tight">{t('inventario.escaneo.blocked_abbr')}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-danger-50">
+                    <p className="text-lg font-extrabold text-danger-600 leading-none">{summary.nowms}</p>
+                    <p className="text-[9px] text-danger-600 uppercase tracking-wider font-bold leading-tight">{t('inventario.escaneo.nowms_abbr')}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/60">
+                    <Timer className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-warm-700 font-mono leading-none">{fmtElapsed(sessionElapsed)}</p>
+                      <p className="text-[8px] text-warm-400 uppercase tracking-wider font-bold">{t('inventario.escaneo.time_label')}</p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Scan input */}
-            <div>
-              {!pendingCode1 ? (
-                <div className="relative">
-                  <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
-                  <input
-                    ref={scanRef}
-                    type="text"
-                    className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warm-200 rounded-2xl
-                      focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
-                      transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
-                    placeholder={t('inventario.escaneo.scan_placeholder')}
-                    onKeyDown={e => { if (e.key === 'Enter') { processScan(e.target.value.trim()); e.target.value = '' } }}
-                    autoComplete="off"
-                  />
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="p-3 rounded-xl bg-warning-50 border border-warning-200 flex items-center gap-2 text-sm text-warning-700">
-                    <AlertCircle size={14} className="shrink-0" />
-                    <span className="font-medium flex-1 truncate">
-                      {t('inventario.escaneo.code2_waiting')}: <code className="font-mono">{pendingCode1.code}</code>
-                    </span>
-                    <button className="shrink-0 p-1 hover:bg-warning-200 rounded-lg transition-colors"
-                      onClick={() => { clearPendingCode1(); scanRef.current?.focus() }}>
-                      <X size={14} />
-                    </button>
-                  </div>
+              {/* Scan input */}
+              <div>
+                {!pendingCode1 ? (
                   <div className="relative">
-                    <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warning-400" />
+                    <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
                     <input
-                      ref={code2Ref}
+                      ref={scanRef}
                       type="text"
-                      className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warning-300 rounded-2xl
-                        focus:border-warning-500 focus:ring-4 focus:ring-warning-100
+                      className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warm-200 rounded-2xl
+                        focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
                         transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
-                      placeholder={t('inventario.escaneo.code2_placeholder')}
-                      onKeyDown={e => { if (e.key === 'Enter') { processCode2(e.target.value.trim()); e.target.value = '' } }}
+                      placeholder={t('inventario.escaneo.scan_placeholder')}
+                      onKeyDown={e => { if (e.key === 'Enter') { processScan(e.target.value.trim()); e.target.value = '' } }}
                       autoComplete="off"
                     />
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="p-3 rounded-xl bg-warning-50 border border-warning-200 flex items-center gap-2 text-sm text-warning-700">
+                      <AlertCircle size={14} className="shrink-0" />
+                      <span className="font-medium flex-1 truncate">
+                        {t('inventario.escaneo.code2_waiting')}: <code className="font-mono">{pendingCode1.code}</code>
+                      </span>
+                      <button className="shrink-0 p-1 hover:bg-warning-200 rounded-lg transition-colors"
+                        onClick={() => { clearPendingCode1(); scanRef.current?.focus() }}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warning-400" />
+                      <input
+                        ref={code2Ref}
+                        type="text"
+                        className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warning-300 rounded-2xl
+                          focus:border-warning-500 focus:ring-4 focus:ring-warning-100
+                          transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
+                        placeholder={t('inventario.escaneo.code2_placeholder')}
+                        onKeyDown={e => { if (e.key === 'Enter') { processCode2(e.target.value.trim()); e.target.value = '' } }}
+                        autoComplete="off"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Last scan feedback */}
+              <AnimatePresence mode="wait">
+                {lastScan && (
+                  <motion.div
+                    key={lastScan.code + lastScan.status}
+                    initial={{ opacity: 0, y: -10, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                    className={`p-4 rounded-2xl flex items-center gap-3 border ${
+                      lastScan.status === 'ok'        ? 'bg-success-50/80 border-success-200' :
+                      lastScan.status === 'blocked'   ? 'bg-warning-50/80 border-warning-200' :
+                      lastScan.status === 'duplicate' ? 'bg-warning-50/80 border-warning-200' :
+                      'bg-danger-50/80 border-danger-200'
+                    }`}>
+                    {lastScan.status === 'ok'       ? <CheckCircle2 className="w-5 h-5 text-success-500 shrink-0" /> :
+                     lastScan.status === 'blocked'  ? <AlertTriangle className="w-5 h-5 text-warning-500 shrink-0" /> :
+                     lastScan.status === 'duplicate'? <AlertCircle className="w-5 h-5 text-warning-500 shrink-0" /> :
+                     <Ban className="w-5 h-5 text-danger-500 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium opacity-70">{t('inventario.escaneo.last_scan')}</p>
+                      <p className="font-mono font-bold text-warm-800 truncate">{lastScan.code}</p>
+                    </div>
+                    <span className={`text-sm font-semibold shrink-0 ${
+                      lastScan.status === 'ok'       ? 'text-success-600' :
+                      lastScan.status === 'duplicate'? 'text-warning-600' :
+                      lastScan.status === 'blocked'  ? 'text-warning-600' :
+                      'text-danger-600'
+                    }`}>
+                      {t(STATUS_META[lastScan.status]?.labelKey ?? 'inventario.escaneo.group_nowms')}
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Items panel */}
+              {activeTab.scanType === 'clasificacion' ? (
+                <ClasificacionPanel
+                  items={activeTab.items}
+                  onRemove={idx => removeItem(activeTabId, idx)}
+                  onMove={idx => setMoveTarget(idx)}
+                />
+              ) : (
+                <UnificadoPanel
+                  items={activeTab.items}
+                  onRemove={idx => removeItem(activeTabId, idx)}
+                  onMove={idx => setMoveTarget(idx)}
+                />
               )}
             </div>
-
-            {/* Last scan feedback */}
-            <AnimatePresence mode="wait">
-              {lastScan && (
-                <motion.div
-                  key={lastScan.code + lastScan.status}
-                  initial={{ opacity: 0, y: -10, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                  className={`p-4 rounded-2xl flex items-center gap-3 border ${
-                    lastScan.status === 'ok'        ? 'bg-success-50/80 border-success-200' :
-                    lastScan.status === 'blocked'   ? 'bg-warning-50/80 border-warning-200' :
-                    lastScan.status === 'duplicate' ? 'bg-warning-50/80 border-warning-200' :
-                    'bg-danger-50/80 border-danger-200'
-                  }`}>
-                  {lastScan.status === 'ok'       ? <CheckCircle2 className="w-5 h-5 text-success-500 shrink-0" /> :
-                   lastScan.status === 'blocked'  ? <AlertTriangle className="w-5 h-5 text-warning-500 shrink-0" /> :
-                   lastScan.status === 'duplicate'? <AlertCircle className="w-5 h-5 text-warning-500 shrink-0" /> :
-                   <Ban className="w-5 h-5 text-danger-500 shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium opacity-70">{t('inventario.escaneo.last_scan')}</p>
-                    <p className="font-mono font-bold text-warm-800 truncate">{lastScan.code}</p>
-                  </div>
-                  <span className={`text-sm font-semibold shrink-0 ${
-                    lastScan.status === 'ok'       ? 'text-success-600' :
-                    lastScan.status === 'duplicate'? 'text-warning-600' :
-                    lastScan.status === 'blocked'  ? 'text-warning-600' :
-                    'text-danger-600'
-                  }`}>
-                    {t(STATUS_META[lastScan.status]?.labelKey ?? 'inventario.escaneo.group_nowms')}
-                  </span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Items panel */}
-            {activeTab.scanType === 'clasificacion' ? (
-              <ClasificacionPanel
-                items={activeTab.items}
-                onRemove={idx => removeItem(activeTabId, idx)}
-                onMove={idx => setMoveTarget(idx)}
-              />
-            ) : (
-              <UnificadoPanel
-                items={activeTab.items}
-                onRemove={idx => removeItem(activeTabId, idx)}
-                onMove={idx => setMoveTarget(idx)}
-              />
-            )}
           </div>
+
+          {/* Right side panel */}
+          {showPanel && (
+            <SidePanel items={activeTab.items} />
+          )}
         </div>
       )}
 
@@ -752,6 +897,12 @@ export default function Escaneo() {
           if (moveTarget !== null && activeTabId) moveItemGroup(activeTabId, moveTarget, newGroup)
           setMoveTarget(null)
         }} />
+      <CloseTabModal
+        isOpen={!!closeTabPending}
+        count={closeTabPending?.count ?? 0}
+        onConfirm={confirmCloseTab}
+        onClose={() => setCloseTabPending(null)}
+      />
     </div>
   )
 }
