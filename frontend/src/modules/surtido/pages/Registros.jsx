@@ -2,15 +2,15 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   X, CheckCircle2, XCircle, AlertTriangle, Copy, Check,
-  Clock, ScanBarcode, Package2, Activity, MapPin, User, Timer,
-  Loader2, AlertCircle,
+  Clock, ScanBarcode, Package2, Activity, User, Timer,
+  Loader2, AlertCircle, Eye, Truck, Calendar,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { getScanSessions, getScanSession } from '../services/surtidoService'
+import { getScanSessions, getScanSession, getOutboundList } from '../services/surtidoService'
 
 const STATUS_META = {
   open:               { labelKey: 'surtido.registros.status.open',               cls: 'bg-warning-100 text-warning-700' },
@@ -60,7 +60,7 @@ function ObcHeader({ obc, status, t }) {
   )
 }
 
-function ScanTable({ events, showResult = false, t }) {
+function ScanTable({ events, showType = false, t }) {
   if (events.length === 0) return (
     <div className="flex flex-col items-center justify-center py-10 gap-2 text-warm-400">
       <CheckCircle2 size={32} className="opacity-30" />
@@ -74,7 +74,7 @@ function ScanTable({ events, showResult = false, t }) {
           <tr>
             <th className="text-left px-3 py-2.5 font-bold text-warm-500">#</th>
             <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('surtido.validacion.code_header')}</th>
-            {showResult && <th className="text-left px-3 py-2.5 font-bold text-warm-500">Tipo</th>}
+            {showType && <th className="text-left px-3 py-2.5 font-bold text-warm-500">Tipo</th>}
             <th className="text-right px-3 py-2.5 font-bold text-warm-500">Hora</th>
           </tr>
         </thead>
@@ -85,9 +85,9 @@ function ScanTable({ events, showResult = false, t }) {
             }`}>
               <td className="px-3 py-2 text-warm-400 tabular-nums font-bold">{i + 1}</td>
               <td className="px-3 py-2 font-mono font-semibold text-warm-700">
-                {e.normalized_code || e.scanned_code || e.code}
+                {e.normalized_code || e.scanned_code}
               </td>
-              {showResult && (
+              {showType && (
                 <td className="px-3 py-2">
                   <span className={`badge text-[10px] ${
                     e.scan_result === 'duplicate' ? 'bg-warning-100 text-warning-700' : 'bg-danger-100 text-danger-700'
@@ -119,16 +119,32 @@ function DetailModal({ sessionId, isOpen, onClose }) {
     onSuccess: () => setDetailTab('validados'),
   })
 
-  const session = data?.data ?? {}
-  const events = session.events ?? []
+  // Correct data shape: { session: {...}, events: [...] }
+  const session = data?.data?.session ?? {}
+  const events  = data?.data?.events  ?? []
+
+  // WMS data for destino + fecha entrega (uses cached list)
+  const { data: wmsData } = useQuery({
+    queryKey: ['upapex-outbound'],
+    queryFn: getOutboundList,
+    staleTime: 5 * 60 * 1000,
+    enabled: isOpen && !!session.outbound_order_no,
+  })
+  const wmsOrder = (wmsData?.data?.records ?? wmsData?.data ?? [])
+    .find(r => r.outboundOrderNo === session.outbound_order_no)
 
   const validados  = events.filter(e => e.scan_result === 'ok')
-  const rechazados = events.filter(e => e.scan_result === 'not_found')
-  const duplicados = events.filter(e => e.scan_result === 'duplicate')
+  // rechazados = everything that is not ok (not_found + duplicate)
+  const rechazados = events.filter(e => e.scan_result !== 'ok')
 
   const totalExpected = session.total_expected ?? 0
   const totalScanned  = session.total_scanned ?? validados.length
   const progress      = totalExpected > 0 ? Math.min(100, Math.round((totalScanned / totalExpected) * 100)) : 0
+
+  const destino      = wmsOrder?.receiverName || wmsOrder?.consignee || '—'
+  const fechaEntrega = wmsOrder?.expectedTime || wmsOrder?.outboundTime
+    ? String(wmsOrder?.expectedTime || wmsOrder?.outboundTime).slice(0, 10)
+    : '—'
 
   const handleClose = () => { setDetailTab('validados'); onClose() }
 
@@ -136,9 +152,10 @@ function DetailModal({ sessionId, isOpen, onClose }) {
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={isLoading ? <span className="text-warm-400 text-sm">{t('common.loading')}</span> : (
-        <ObcHeader obc={session.outbound_order_no} status={session.status} t={t} />
-      )}
+      title={isLoading
+        ? <span className="text-warm-400 text-sm">{t('common.loading')}</span>
+        : <ObcHeader obc={session.outbound_order_no} status={session.status} t={t} />
+      }
       icon={Activity}
       size="full"
       footer={<button className="btn-ghost" onClick={handleClose}><X size={14} /> {t('common.close')}</button>}
@@ -150,54 +167,70 @@ function DetailModal({ sessionId, isOpen, onClose }) {
       ) : (
         <div className="space-y-5">
 
-          {/* Info grid — row 1 */}
+          {/* Info grid — row 1: Estado, Validador, Duración, Validados */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: t('surtido.registros.operator'), value: session.operator_nombre || '—', icon: User },
-              { label: t('surtido.registros.duration'),  value: durationLabel(session.started_at, session.ended_at ?? session.completed_at), icon: Timer },
-              { label: t('surtido.registros.detail.start'), value: fmtDt(session.started_at), icon: Clock },
-              { label: 'Fin',                              value: fmtDt(session.ended_at ?? session.completed_at) || 'En curso', icon: Clock },
-            ].map(f => (
-              <div key={f.label} className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
-                <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
-                  <f.icon size={9} /> {f.label}
-                </p>
-                <p className="text-sm font-semibold text-warm-700 font-mono">{f.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Info grid — row 2 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: t('surtido.registros.expected'),  value: totalExpected },
-              { label: t('surtido.registros.validated'), value: totalScanned },
-              { label: t('surtido.registros.rejected'),  value: rechazados.length },
-              { label: t('surtido.escaneo.match_duplicate'), value: duplicados.length },
-            ].map(f => (
-              <div key={f.label} className="p-3 rounded-xl bg-warm-50 border border-warm-100/60 text-center">
-                <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1">{f.label}</p>
-                <p className="text-2xl font-black text-warm-700 leading-none">{f.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Progress bar */}
-          {totalExpected > 0 && (
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
-              <div className="flex justify-between items-center mb-2">
-                <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold">Progreso</p>
-                <span className={`text-sm font-black ${progress >= 100 ? 'text-success-600' : 'text-primary-600'}`}>{progress}%</span>
-              </div>
-              <div className="w-full h-2.5 bg-warm-100 rounded-full overflow-hidden border border-warm-200/50">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${
-                    progress >= 100 ? 'from-success-400 to-success-600' : 'from-primary-400 to-accent-500'
-                  }`}
-                  style={{ width: `${progress}%` }} />
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1">{t('surtido.registros.status')}</p>
+              <div className="mt-0.5">
+                <span className={`badge text-xs font-semibold ${(STATUS_META[session.status] ?? STATUS_META.open).cls}`}>
+                  {t((STATUS_META[session.status] ?? STATUS_META.open).labelKey)}
+                </span>
               </div>
             </div>
-          )}
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
+                <User size={9} /> {t('surtido.registros.operator')}
+              </p>
+              <p className="text-sm font-semibold text-warm-700 truncate">{session.operator_nombre || '—'}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
+                <Timer size={9} /> {t('surtido.registros.duration')}
+              </p>
+              <p className="text-sm font-semibold text-warm-700 font-mono">
+                {durationLabel(session.started_at, session.ended_at ?? session.completed_at)}
+              </p>
+            </div>
+            {/* Single quantity card: validated / total — % */}
+            <div className={`p-3 rounded-xl border ${progress >= 100 ? 'bg-success-50 border-success-200' : 'bg-primary-50 border-primary-100'}`}>
+              <p className={`text-[10px] uppercase tracking-wider font-bold mb-1 ${progress >= 100 ? 'text-success-500' : 'text-primary-500'}`}>
+                {t('surtido.registros.validated')}
+              </p>
+              <div className="flex items-baseline gap-1.5">
+                <span className={`text-xl font-black leading-none ${progress >= 100 ? 'text-success-600' : 'text-primary-600'}`}>{totalScanned}</span>
+                <span className={`text-xs font-semibold ${progress >= 100 ? 'text-success-400' : 'text-primary-400'}`}>/ {totalExpected}</span>
+                <span className={`ml-auto text-sm font-black ${progress >= 100 ? 'text-success-600' : 'text-primary-600'}`}>{progress}%</span>
+              </div>
+              {totalExpected > 0 && (
+                <div className="w-full h-1.5 bg-white/60 rounded-full overflow-hidden mt-2">
+                  <div className={`h-full rounded-full transition-all ${progress >= 100 ? 'bg-success-500' : 'bg-primary-500'}`}
+                    style={{ width: `${progress}%` }} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Info grid — row 2: Inicio, Destino, Fecha entrega */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
+                <Clock size={9} /> {t('surtido.registros.detail.start')}
+              </p>
+              <p className="text-sm font-semibold text-warm-700 font-mono">{fmtDt(session.started_at)}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
+                <Truck size={9} /> Destino
+              </p>
+              <p className="text-sm font-semibold text-warm-700 truncate">{destino}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/60">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1">
+                <Calendar size={9} /> Fecha entrega
+              </p>
+              <p className="text-sm font-semibold text-warm-700 font-mono">{fechaEntrega}</p>
+            </div>
+          </div>
 
           {/* Notes */}
           {session.notes && (
@@ -212,12 +245,12 @@ function DetailModal({ sessionId, isOpen, onClose }) {
             <div className="bg-danger-50 border border-danger-200 rounded-xl p-3 flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
               <p className="text-xs font-semibold text-danger-700">
-                {rechazados.length} {rechazados.length === 1 ? 'caja rechazada' : 'cajas rechazadas'} — no coinciden con los datos del pedido
+                {rechazados.length} {rechazados.length === 1 ? 'caja no validada' : 'cajas no validadas'} (rechazadas o duplicadas)
               </p>
             </div>
           )}
 
-          {/* Tabs */}
+          {/* Tabs — sticky */}
           <div className="sticky top-0 z-10 bg-white -mx-1 px-1 flex gap-1 border-b border-warm-100">
             <button onClick={() => setDetailTab('validados')}
               className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
@@ -235,21 +268,11 @@ function DetailModal({ sessionId, isOpen, onClose }) {
                 <span className="bg-danger-100 text-danger-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{rechazados.length}</span>
               )}
             </button>
-            <button onClick={() => setDetailTab('duplicados')}
-              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
-                detailTab === 'duplicados' ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
-              }`}>
-              <Copy size={12} /> Duplicados
-              {duplicados.length > 0 && (
-                <span className="bg-warning-100 text-warning-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{duplicados.length}</span>
-              )}
-            </button>
           </div>
 
           {/* Tab content */}
           {detailTab === 'validados'  && <ScanTable events={validados}  t={t} />}
-          {detailTab === 'rechazados' && <ScanTable events={rechazados} t={t} showResult />}
-          {detailTab === 'duplicados' && <ScanTable events={duplicados} t={t} showResult />}
+          {detailTab === 'rechazados' && <ScanTable events={rechazados} t={t} showType />}
 
         </div>
       )}
@@ -330,6 +353,7 @@ export default function SurtidoRegistros() {
                     <th className="table-header text-right font-semibold">{t('surtido.registros.validated')}</th>
                     <th className="table-header text-right hidden md:table-cell font-semibold">{t('surtido.registros.rejected')}</th>
                     <th className="table-header font-semibold">{t('surtido.registros.status')}</th>
+                    <th className="table-header text-right font-semibold">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
@@ -379,6 +403,14 @@ export default function SurtidoRegistros() {
                         </td>
                         <td className="table-cell">
                           <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
+                        </td>
+                        <td className="table-cell text-right">
+                          <button
+                            className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+                            onClick={e => { e.stopPropagation(); setDetailId(r.id) }}
+                            title={t('common.show')}>
+                            <Eye size={13} />
+                          </button>
                         </td>
                       </tr>
                     )
