@@ -16,26 +16,16 @@ function makeReqTime() {
   return String(Math.floor(Date.now() / 1000))
 }
 
-// Sort all object keys alphabetically (case-insensitive), recursively
-function sortObjectKeys(obj) {
-  if (typeof obj !== 'object' || obj === null) return obj
-  if (Array.isArray(obj)) return obj.map(sortObjectKeys)
-  return Object.keys(obj)
-    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-    .reduce((acc, k) => { acc[k] = sortObjectKeys(obj[k]); return acc }, {})
-}
-
 /**
  * HMAC-SHA256 authcode per xlwms docs:
- * 1. Sort data fields alphabetically (case-insensitive)
- * 2. Sort {appKey, data, reqTime} keys alphabetically
- * 3. Concatenate VALUES only (no key= prefix), then HMAC-SHA256 with appSecret
+ * Sort {appKey, data, reqTime} keys alphabetically, concatenate VALUES only
+ * (no key= prefix), then HMAC-SHA256 with appSecret.
+ * Data fields are NOT sorted — passed as-is (matches what the body sends).
  */
 function buildAuthCode(appKey, appSecret, data, reqTime) {
-  const sortedData = sortObjectKeys(data)
   const params = {
     appKey,
-    data: JSON.stringify(sortedData),
+    data: JSON.stringify(data),
     reqTime: String(reqTime),
   }
   const paramStr = Object.keys(params)
@@ -98,9 +88,11 @@ async function upapexPost(tenantId, endpoint, data) {
       if (!res.ok) throw new Error(`WMS HTTP ${res.status}`)
       const json = await res.json()
       if (json.code !== 200) {
-        const err = new Error(json.msg || `WMS error code ${json.code}`)
+        const msg = json.msg ? `[${json.code}] ${json.msg}` : `WMS error code ${json.code}`
+        console.error(`xlwms error: code=${json.code} msg=${json.msg} endpoint=${endpoint}`)
+        const err = new Error(msg)
         err.wmsCode = json.code
-        err.wmsMsg = json.msg
+        err.wmsMsg = msg
         throw err
       }
       return json.data
