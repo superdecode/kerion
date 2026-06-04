@@ -11,6 +11,9 @@ const CONFIG_TTL_MS = 2 * 60 * 1000
 // In-flight request deduplication (500ms window)
 const _inFlight = new Map()
 
+// Track which endpoints we've already logged fields for
+const _fieldLogDone = new Set()
+
 function makeReqTime() {
   // xlwms requires UNIX timestamp in seconds (10-digit)
   return String(Math.floor(Date.now() / 1000))
@@ -98,6 +101,12 @@ async function upapexPost(tenantId, endpoint, data) {
         err.wmsCode = json.code
         err.wmsMsg = msg
         throw err
+      }
+      // Log first record of first successful response to inspect field names
+      if (json.data && !_fieldLogDone.has(endpoint)) {
+        _fieldLogDone.add(endpoint)
+        const sample = json.data?.records?.[0] ?? json.data?.[0] ?? json.data
+        console.log(`[xlwms] FIELDS ${endpoint}: ${JSON.stringify(sample)}`)
       }
       return json.data
     } catch (err) {
