@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -6,7 +6,7 @@ import {
   Search, UserCheck, Users, Plus, Trash2, X, ChevronDown, Play, Loader2,
   Package2, Truck, ScanBarcode, Copy, Check, Info, Activity,
   User, Clock, BarChart3, RefreshCw, Database, CheckCircle2,
-  MapPin, Timer, XCircle, AlertCircle,
+  MapPin, Timer, XCircle, AlertCircle, Pencil,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -620,6 +620,15 @@ export default function Ordenes() {
     onError: () => toast.error(t('toast.error')),
   })
 
+  const statusMut = useMutation({
+    mutationFn: ({ obcs, status }) => Promise.all(obcs.map(obc => upsertOrderTracking(obc, { status }))),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['upapex-order-tracking'] })
+      if (vars.obcs.length > 1) toast.success(`${vars.obcs.length} ${t('surtido.ordenes.item_label')} actualizadas`)
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
   const loadDetailMut = useMutation({
     mutationFn: (obc) => getOutboundDetail(obc),
     onSuccess: (data, obc) => {
@@ -752,6 +761,7 @@ export default function Ordenes() {
             records={pagedRecords} wmsMap={wmsMap}
             onProgress={obc => setProgressObc(obc)}
             onValidate={obc => navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`)}
+            onStatusChange={(obcs, status) => statusMut.mutate({ obcs, status })}
             t={t}
             page={page} totalPages={totalPages} pageSize={pageSize} total={total}
             onPageChange={setPage}
@@ -904,15 +914,67 @@ function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, o
   )
 }
 
-function ValidacionTable({ records, wmsMap, onProgress, onValidate, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+function ValidacionTable({ records, wmsMap, onProgress, onValidate, onStatusChange, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+  const [selected, setSelected] = useState(new Set())
+  const [editStatusObc, setEditStatusObc] = useState(null)
+
+  useEffect(() => { setSelected(new Set()) }, [page])
+
+  const allChecked = records.length > 0 && records.every(r => selected.has(r.outbound_order_no))
+  const someChecked = selected.size > 0
+
+  const toggleAll = () => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (allChecked) records.forEach(r => next.delete(r.outbound_order_no))
+      else records.forEach(r => next.add(r.outbound_order_no))
+      return next
+    })
+  }
+
+  const toggleRow = (obc) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(obc)) next.delete(obc); else next.add(obc)
+      return next
+    })
+  }
+
   return (
     <motion.div className="card overflow-hidden"
       initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
+
+      {someChecked && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100">
+          <span className="text-xs text-primary-700 font-semibold tabular-nums">
+            {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
+          </span>
+          <button
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+            onClick={() => { onStatusChange([...selected], 'sorting'); setSelected(new Set()) }}>
+            <ScanBarcode size={12} /> Marcar Surtido
+          </button>
+          <button
+            className="inline-flex items-center gap-1 text-xs text-warm-500 hover:text-warm-700 transition-colors"
+            onClick={() => setSelected(new Set())}>
+            <X size={12} /> Limpiar
+          </button>
+        </div>
+      )}
+
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-warm-50 border-b border-warm-100">
+              <th className="table-header w-8">
+                <input type="checkbox"
+                  checked={allChecked}
+                  ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
+                  onChange={toggleAll}
+                  className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                  onClick={e => e.stopPropagation()} />
+              </th>
               <th className="table-header font-semibold">OBC</th>
               <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.cliente')}</th>
               <th className="table-header font-semibold">{t('surtido.ordenes.surtidor')}</th>
@@ -932,11 +994,22 @@ function ValidacionTable({ records, wmsMap, onProgress, onValidate, t, page, tot
               const pct = total_expected !== '?' && total_expected > 0
                 ? Math.min(100, Math.round((scanned / total_expected) * 100))
                 : null
+              const isChecked = selected.has(obc)
+              const isEditingStatus = editStatusObc === obc
 
               return (
                 <tr key={obc || i}
                   onClick={() => onProgress(obc)}
-                  className="transition-colors cursor-pointer hover:bg-primary-50/30">
+                  className={`transition-colors cursor-pointer hover:bg-primary-50/30 ${isChecked ? 'bg-primary-50/20' : ''}`}>
+
+                  <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
+                    <input type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleRow(obc)}
+                      className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                      onClick={e => e.stopPropagation()} />
+                  </td>
+
                   <td className="table-cell"><CopyableObc obc={obc} /></td>
                   <td className="table-cell hidden lg:table-cell">
                     <span className="font-mono text-primary-700 text-xs font-semibold">
@@ -961,8 +1034,29 @@ function ValidacionTable({ records, wmsMap, onProgress, onValidate, t, page, tot
                       )}
                     </div>
                   </td>
-                  <td className="table-cell">
-                    <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
+                  <td className="table-cell" onClick={e => e.stopPropagation()}>
+                    {isEditingStatus ? (
+                      <select
+                        autoFocus
+                        defaultValue={status}
+                        onChange={e => { onStatusChange([obc], e.target.value); setEditStatusObc(null) }}
+                        onBlur={() => setEditStatusObc(null)}
+                        className="text-xs rounded-lg border border-primary-300 outline-none focus:border-primary-500 px-1.5 py-1 text-warm-700 bg-white">
+                        {STATUS_FILTER_KEYS.map(k => (
+                          <option key={k} value={k}>{t(STATUS_META[k].labelKey)}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="flex items-center gap-1.5 group/statusEdit">
+                        <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
+                        <button
+                          title="Editar estado"
+                          onClick={e => { e.stopPropagation(); setEditStatusObc(obc) }}
+                          className="opacity-0 group-hover/statusEdit:opacity-100 p-0.5 rounded text-warm-300 hover:text-warm-600 transition-all">
+                          <Pencil size={10} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                   <td className="table-cell text-right">
                     <div className="flex items-center justify-end gap-1">
