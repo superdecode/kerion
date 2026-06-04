@@ -200,20 +200,20 @@ export default function Folios() {
     try {
       const wb = XLSX.utils.book_new()
       const wsData = [
-        ['Folio', detailFolio.folio_numero],
-        ['Empresa', detailFolio.empresa_nombre],
-        ['Estado', detailFolio.estado],
-        ['Creado por', detailFolio.creado_por_nombre || ''],
-        ['Fecha creación', fmtDateTime(detailFolio.created_at)],
-        ['Total tarimas', detailFolio.total_tarimas],
-        ['Total guías', detailFolio.total_guias],
+        [t('fep.excel.folio'), detailFolio.folio_numero],
+        [t('fep.excel.empresa'), detailFolio.empresa_nombre],
+        [t('fep.excel.estado'), detailFolio.estado],
+        [t('fep.excel.creadoPor'), detailFolio.creado_por_nombre || ''],
+        [t('fep.excel.fechaCreacion'), fmtDateTime(detailFolio.created_at)],
+        [t('fep.excel.totalTarimas'), detailFolio.total_tarimas],
+        [t('fep.excel.totalGuias'), detailFolio.total_guias],
         [],
-        ['#', 'Código Guía', 'Tarima', 'Canal', 'Posición', 'Hora Escaneo'],
+        [t('fep.excel.numCol'), t('fep.excel.codigoGuia'), t('fep.excel.tarima'), t('fep.excel.canal'), t('fep.excel.posicion'), t('fep.excel.horaEscaneo')],
         ...detailGuias.map((g, i) => [i + 1, g.codigo_guia, g.tarima_codigo, g.canal_nombre, g.posicion, g.timestamp_escaneo ? fmtDateTime(g.timestamp_escaneo) : '']),
       ]
       const ws = XLSX.utils.aoa_to_sheet(wsData)
       ws['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 22 }]
-      XLSX.utils.book_append_sheet(wb, ws, 'Folio')
+      XLSX.utils.book_append_sheet(wb, ws, t('fep.excel.sheetName'))
       XLSX.writeFile(wb, `${detailFolio.folio_numero}_${getToday()}.xlsx`)
     } catch { toast.error(t('fep.excelError')) }
   }
@@ -281,7 +281,7 @@ export default function Folios() {
       qc.invalidateQueries({ queryKey: ['fep-folios'] })
       qc.invalidateQueries({ queryKey: ['fep-stats'] })
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error cancelando folio')
+      toast.error(err.response?.data?.error || t('fep.cancelError'))
     } finally {
       setCancelTarget(null); setCancelMotivo('')
     }
@@ -295,7 +295,7 @@ export default function Folios() {
       qc.invalidateQueries({ queryKey: ['fep-folios'] })
       qc.invalidateQueries({ queryKey: ['fep-stats'] })
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error eliminando folio')
+      toast.error(err.response?.data?.error || t('fep.deleteError'))
     } finally {
       setDeleteTarget(null)
     }
@@ -337,7 +337,7 @@ export default function Folios() {
       qc.invalidateQueries({ queryKey: ['fep-folios'] })
       qc.invalidateQueries({ queryKey: ['fep-stats'] })
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Error creando folio')
+      toast.error(err.response?.data?.error || t('fep.createError'))
     } finally {
       setSubmitting(false)
     }

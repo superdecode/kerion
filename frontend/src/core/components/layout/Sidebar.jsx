@@ -133,7 +133,7 @@ export default function Sidebar() {
       <button
         onClick={() => setCollapsed(v => !v)}
         className="absolute -right-3.5 top-[4.5rem] z-20 w-7 h-7 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-colors shadow-md"
-        title={collapsed ? 'Expandir' : 'Colapsar'}
+        title={collapsed ? t('nav.expand') : t('nav.collapse')}
       >
         {collapsed
           ? <ChevronRight className="w-3.5 h-3.5 text-blue-600" />

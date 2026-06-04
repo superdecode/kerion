@@ -88,7 +88,7 @@ export default function Configuracion() {
                 <div>
                   <p className="font-bold text-base leading-tight">
                     {config && isConnected ? t('wms.statusConfigured') :
-                     config               ? 'WMS configurado' :
+                     config               ? t('wms.statusConfigured') :
                      t('wms.statusNotConfigured')}
                   </p>
                   {config && (

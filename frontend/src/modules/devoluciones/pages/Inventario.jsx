@@ -11,6 +11,7 @@ import Header from '../../../core/components/layout/Header'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import AjusteModal from '../components/AjusteModal'
 import InventarioUbicacionesModal from '../components/InventarioUbicacionesModal'
 import ImportarInventarioModal from '../components/ImportarInventarioModal'
@@ -64,6 +65,7 @@ const getMovimientoReferenciaHref = (row) => {
 function UbicacionFilter({ ubicaciones, value, onChange }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
+  const { t } = useI18nStore()
 
   const selected = useMemo(
     () => ubicaciones.find(u => String(u.id) === String(value)),
@@ -103,7 +105,7 @@ function UbicacionFilter({ ubicaciones, value, onChange }) {
           onChange={e => { setQ(e.target.value); onChange(''); setOpen(true) }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Filtrar por ubicación..."
+          placeholder={t('dev.inventario.filter_ubicacion')}
           className="text-xs outline-none bg-transparent text-warm-700 flex-1 min-w-0 w-32"
         />
         {(value || q) && (
@@ -138,6 +140,7 @@ export default function Inventario() {
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
   const toast = useToastStore()
+  const { t } = useI18nStore()
 
   const [tab, setTab] = useState('actual')
   const [qInput, setQInput] = useState('')
@@ -200,12 +203,12 @@ export default function Inventario() {
         toast.warning?.(`Resultado parcial: ${result.summary?.creados || 0} creados, ${result.summary?.actualizados || 0} actualizados, ${result.summary?.fallidos || 0} fallidos`)
         return
       }
-      toast.success('Ajuste registrado')
+      toast.success(t('dev.ajuste.toast.ok'))
       setShowAjuste(false)
     },
     onError: (e) => {
       console.error('Error guardando ajuste:', e.response?.data || e)
-      toast.error(e.response?.data?.error || 'Error al guardar ajuste')
+      toast.error(e.response?.data?.error || t('dev.ajuste.toast.err'))
     },
   })
 
@@ -313,7 +316,7 @@ export default function Inventario() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Inventario de devoluciones" subtitle="Stock activo e historial de movimientos" />
+      <Header title={t('dev.inventario.title')} subtitle={t('dev.inventario.subtitle')} />
 
       <div className="flex-1 overflow-y-auto">
 
@@ -322,22 +325,22 @@ export default function Inventario() {
 
           {/* Tab row */}
           <div className="flex gap-0 border-b border-warm-100 px-5">
-            {TABS.map(t => (
+            {TABS.map(tabItem => (
               <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
+                key={tabItem.id}
+                onClick={() => setTab(tabItem.id)}
                 className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all border-b-2 -mb-px ${
-                  tab === t.id
+                  tab === tabItem.id
                     ? 'border-primary-500 text-primary-700'
                     : 'border-transparent text-warm-400 hover:text-warm-600'
                 }`}
               >
-                <t.icon className="w-3.5 h-3.5" />
-                {t.label}
+                <tabItem.icon className="w-3.5 h-3.5" />
+                {t(`dev.inventario.tab.${tabItem.id}`)}
                 <span className={`min-w-[18px] h-[18px] rounded-full text-[10px] font-bold flex items-center justify-center px-1 ${
-                  tab === t.id ? 'bg-primary-100 text-primary-700' : 'bg-warm-100 text-warm-500'
+                  tab === tabItem.id ? 'bg-primary-100 text-primary-700' : 'bg-warm-100 text-warm-500'
                 }`}>
-                  {tabCounts[t.id] ?? 0}
+                  {tabCounts[tabItem.id] ?? 0}
                 </span>
               </button>
             ))}
@@ -356,7 +359,7 @@ export default function Inventario() {
                       type="text"
                       value={qInput}
                       onChange={e => handleQChange(e.target.value)}
-                      placeholder="Buscar SKU, código, descripción..."
+                      placeholder={t('dev.inventario.search_sku')}
                       className="text-xs outline-none bg-transparent text-warm-700 flex-1"
                     />
                     {qInput && (
@@ -403,7 +406,7 @@ export default function Inventario() {
                     <input
                       type="text" value={historialQ}
                       onChange={e => setHistorialQ(e.target.value)}
-                      placeholder="Código, SKU, ubicación..."
+                      placeholder={t('dev.inventario.filter_ubicacion')}
                       className="text-xs outline-none bg-transparent text-warm-700 flex-1"
                     />
                     {historialQ && (
@@ -421,7 +424,7 @@ export default function Inventario() {
                       } ${tiposHistorial.length ? 'ring-1 ring-primary-400' : ''}`}
                     >
                       <Filter className="w-3.5 h-3.5" />
-                      Tipo
+                      {t('dev.inventario.tipo')}
                       {tiposHistorial.length > 0 && (
                         <span className="w-4 h-4 rounded-full bg-primary-500 text-white text-[9px] flex items-center justify-center font-bold">
                           {tiposHistorial.length}
@@ -431,7 +434,7 @@ export default function Inventario() {
                     </button>
                     {tiposHistorial.length > 0 && (
                       <button onClick={() => setTiposHistorial([])} className="inline-flex items-center gap-1 text-xs text-primary-600 font-semibold">
-                        <X className="w-3 h-3" /> Limpiar
+                        <X className="w-3 h-3" /> {t('dev.inventario.clear')}
                       </button>
                     )}
                   </div>
@@ -445,7 +448,7 @@ export default function Inventario() {
                   title="Exportar CSV"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors"
                 >
-                  <Download className="w-3.5 h-3.5" /> Exportar
+                  <Download className="w-3.5 h-3.5" /> {t('dev.inventario.exportar')}
                 </button>
 
                 {tab === 'actual' && canCreate && (
@@ -453,7 +456,7 @@ export default function Inventario() {
                     onClick={() => setShowImport(true)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors"
                   >
-                    <Upload className="w-3.5 h-3.5" /> Importar
+                    <Upload className="w-3.5 h-3.5" /> {t('dev.inventario.importar')}
                   </button>
                 )}
 
@@ -462,7 +465,7 @@ export default function Inventario() {
                     onClick={() => setShowUbicaciones(true)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors"
                   >
-                    <LayoutGrid className="w-3.5 h-3.5" /> Ubicaciones
+                    <LayoutGrid className="w-3.5 h-3.5" /> {t('dev.inventario.ubicaciones')}
                   </button>
                 )}
                 {canCreate && (
@@ -470,7 +473,7 @@ export default function Inventario() {
                     onClick={() => { setAjusteFeedback(null); setAjusteTipo('movimiento'); setShowAjuste(true) }}
                     className="btn-ghost inline-flex items-center gap-1.5 border border-violet-400 text-violet-600 hover:bg-violet-50 hover:border-violet-500"
                   >
-                    <ArrowLeftRight className="w-4 h-4" /> Mover
+                    <ArrowLeftRight className="w-4 h-4" /> {t('dev.inventario.mover')}
                   </button>
                 )}
                 {canCreate && (
@@ -478,7 +481,7 @@ export default function Inventario() {
                     onClick={() => { setAjusteFeedback(null); setAjusteTipo('ajuste'); setShowAjuste(true) }}
                     className="btn-primary inline-flex items-center gap-1.5"
                   >
-                    <ClipboardList className="w-4 h-4" /> Inventario físico
+                    <ClipboardList className="w-4 h-4" /> {t('dev.inventario.inv_fisico')}
                   </button>
                 )}
               </div>
@@ -493,7 +496,7 @@ export default function Inventario() {
                   transition={{ duration: 0.15 }}
                 >
                   <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                    {TIPO_OPTS.map(({ value, label }) => (
+                    {TIPO_OPTS.map(({ value }) => (
                       <button
                         key={value}
                         onClick={() => setTiposHistorial(prev =>
@@ -505,7 +508,7 @@ export default function Inventario() {
                             : 'bg-warm-50 border-warm-200 text-warm-600 hover:bg-warm-100'
                         }`}
                       >
-                        {label}
+                        {t(`dev.inventario.tipo.${value}`)}
                       </button>
                     ))}
                   </div>
@@ -527,16 +530,16 @@ export default function Inventario() {
             {/* Tab: Stock activo */}
             {tab === 'actual' && (
               inventarioQuery.isLoading ? (
-                <div className="py-14 text-center text-sm text-warm-400">Cargando inventario...</div>
+                <div className="py-14 text-center text-sm text-warm-400">{t('dev.inventario.loading_inv')}</div>
               ) : inventarioFiltrado.length === 0 ? (
                 <div className="flex flex-col items-center py-16 gap-3 text-warm-300">
                   <Boxes className="w-10 h-10" />
                   <p className="text-sm">
-                    {ubicacionFilterId ? 'Sin inventario en esta ubicación' : 'Sin inventario disponible'}
+                    {ubicacionFilterId ? t('dev.inventario.sin_inv_ub') : t('dev.inventario.sin_inv')}
                   </p>
                   {ubicacionFilterId && (
                     <button onClick={() => setUbicacionFilterId('')} className="text-xs text-primary-600 font-semibold hover:text-primary-700">
-                      Quitar filtro de ubicación
+                      {t('dev.inventario.quitar_filtro')}
                     </button>
                   )}
                 </div>
@@ -546,28 +549,28 @@ export default function Inventario() {
                     <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-warm-50 border-b border-warm-100">
-                        <th className="table-header">Código</th>
-                        <th className="table-header">SKU</th>
-                        <th className="table-header">Descripción</th>
-                        <th className="table-header">Embalaje</th>
-                        <th className="table-header">Ubicación</th>
+                        <th className="table-header">{t('dev.inventario.col.codigo')}</th>
+                        <th className="table-header">{t('dev.inventario.col.sku')}</th>
+                        <th className="table-header">{t('dev.inventario.col.descripcion')}</th>
+                        <th className="table-header">{t('dev.inventario.col.embalaje')}</th>
+                        <th className="table-header">{t('dev.inventario.col.ubicacion')}</th>
                         {OPTIONAL_COLS.filter(c => visibleCols.includes(c.id)).map(c => (
-                          <th key={c.id} className="table-header">{c.label}</th>
+                          <th key={c.id} className="table-header">{t(`dev.inventario.col_opt.${c.id}`)}</th>
                         ))}
                         <th className="table-header text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <span>Disponible</span>
+                            <span>{t('dev.inventario.col.disponible')}</span>
                             <div className="relative" ref={colConfigRef}>
                               <button
                                 onClick={() => setShowColConfig(v => !v)}
-                                title="Configurar columnas"
+                                title={t('dev.inventario.col_config')}
                                 className={`p-1 rounded-md transition-colors ${showColConfig ? 'bg-primary-100 text-primary-600' : 'text-warm-400 hover:text-warm-600 hover:bg-warm-100'}`}
                               >
                                 <Settings2 className="w-3.5 h-3.5" />
                               </button>
                               {showColConfig && (
                                 <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-xl border border-warm-200 shadow-xl p-2 w-44">
-                                  <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wide px-1 mb-1.5">Columnas opcionales</p>
+                                  <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wide px-1 mb-1.5">{t('dev.inventario.cols_opcionales')}</p>
                                   {OPTIONAL_COLS.map(c => (
                                     <button
                                       key={c.id}
@@ -581,7 +584,7 @@ export default function Inventario() {
                                       }`}>
                                         {visibleCols.includes(c.id) && <Check className="w-2.5 h-2.5 text-white" />}
                                       </span>
-                                      <span className="text-xs text-warm-700">{c.label}</span>
+                                      <span className="text-xs text-warm-700">{t(`dev.inventario.col_opt.${c.id}`)}</span>
                                     </button>
                                   ))}
                                 </div>
@@ -642,7 +645,7 @@ export default function Inventario() {
                     totalItems={inventarioFiltrado.length}
                     onPageChange={setStockPage}
                     onPageSizeChange={setStockPageSize}
-                    itemLabel="líneas"
+                    itemLabel={t('dev.inventario.stock.itemLabel')}
                   />
                 </>
               )
@@ -651,26 +654,26 @@ export default function Inventario() {
             {/* Tab: Historial */}
             {tab === 'historial' && (
               historialQuery.isLoading ? (
-                <div className="py-14 text-center text-sm text-warm-400">Cargando historial...</div>
+                <div className="py-14 text-center text-sm text-warm-400">{t('dev.inventario.loading_hist')}</div>
               ) : movimientos.length === 0 ? (
-                <div className="py-14 text-center text-sm text-warm-400">Sin movimientos registrados</div>
+                <div className="py-14 text-center text-sm text-warm-400">{t('dev.inventario.sin_movimientos')}</div>
               ) : (
                 <>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-warm-50 border-b border-warm-100">
-                        <th className="table-header">Fecha</th>
-                        <th className="table-header">Tipo</th>
-                        <th className="table-header">Referencia</th>
-                        <th className="table-header">Código</th>
-                        <th className="table-header">SKU</th>
-                        <th className="table-header text-right w-[68px] whitespace-nowrap px-2">Anterior</th>
-                        <th className="table-header text-right w-[68px] whitespace-nowrap px-2">Nueva</th>
-                        <th className="table-header text-right w-[76px] whitespace-nowrap px-2">Cambio</th>
-                        <th className="table-header">Ubicación</th>
-                        <th className="table-header">Observación</th>
-                        <th className="table-header">Usuario</th>
+                        <th className="table-header">{t('dev.inventario.hist.fecha')}</th>
+                        <th className="table-header">{t('dev.inventario.hist.tipo')}</th>
+                        <th className="table-header">{t('dev.inventario.hist.referencia')}</th>
+                        <th className="table-header">{t('dev.inventario.hist.codigo')}</th>
+                        <th className="table-header">{t('dev.inventario.hist.sku')}</th>
+                        <th className="table-header text-right w-[68px] whitespace-nowrap px-2">{t('dev.inventario.hist.anterior')}</th>
+                        <th className="table-header text-right w-[68px] whitespace-nowrap px-2">{t('dev.inventario.hist.nueva')}</th>
+                        <th className="table-header text-right w-[76px] whitespace-nowrap px-2">{t('dev.inventario.hist.cambio')}</th>
+                        <th className="table-header">{t('dev.inventario.hist.ubicacion')}</th>
+                        <th className="table-header">{t('dev.inventario.hist.observacion')}</th>
+                        <th className="table-header">{t('dev.inventario.hist.usuario')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warm-50">
@@ -687,7 +690,9 @@ export default function Inventario() {
                             <td className="table-cell text-xs text-warm-500">{fmtDateTime(row.created_at)}</td>
                             <td className="table-cell">
                               <span className={`badge text-[10px] ${TIPO_COLORS[row.tipo] || 'bg-warm-100 text-warm-600'}`}>
-                                {getMovimientoTipoLabel(row)}
+                                {row?.referencia_tipo === 'importacion'
+                                  ? t('dev.inventario.tipo.importacion')
+                                  : t(`dev.inventario.tipo.${row?.tipo}`) || row?.tipo || '—'}
                               </span>
                             </td>
                             <td className="table-cell text-xs">
@@ -748,7 +753,7 @@ export default function Inventario() {
                     totalItems={movimientos.length}
                     onPageChange={setHistorialPage}
                     onPageSizeChange={setHistorialPageSize}
-                    itemLabel="movimientos"
+                    itemLabel={t('dev.inventario.hist.itemLabel')}
                   />
                 </>
               )

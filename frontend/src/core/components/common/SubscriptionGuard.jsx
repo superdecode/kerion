@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, Clock, X, RefreshCw, CheckCircle2, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import { useI18nStore } from '../../stores/i18nStore'
 
 const BANNER_DISMISS_KEY = 'sb_banner_dismiss'
 const RENEWAL_TODAY_KEY = 'sb_renewal_sent'
@@ -79,6 +80,7 @@ function getSubscriptionState(user) {
 }
 
 function RenewalModal({ user, state, onClose, onSent }) {
+  const { t } = useI18nStore()
   const previousRequest = getRenewalSentToday()
   const [form, setForm] = useState({
     contact_name: user?.nombre_completo || '',
@@ -121,7 +123,7 @@ function RenewalModal({ user, state, onClose, onSent }) {
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
         <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md shadow-2xl">
           <div className="flex items-center justify-between p-5 border-b border-gray-800">
-            <h2 className="text-white font-bold text-base">Solicitud ya enviada hoy</h2>
+            <h2 className="text-white font-bold text-base">{t('sub.requestSentToday')}</h2>
             <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
               <X className="w-5 h-5" />
             </button>
@@ -129,26 +131,26 @@ function RenewalModal({ user, state, onClose, onSent }) {
           <div className="p-6 space-y-4">
             <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
               <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-              <p className="text-emerald-300 text-sm font-medium">Ya enviaste una solicitud hoy. Solo se permite una por dia.</p>
+              <p className="text-emerald-300 text-sm font-medium">{t('sub.requestSent')}. {t('sub.oncePerDay')}</p>
             </div>
             <div className="bg-gray-800/60 rounded-xl p-4 space-y-2">
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Solicitud enviada</p>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">{t('sub.requestSentLabel')}</p>
               <div className="flex justify-between">
-                <span className="text-gray-400 text-sm">Contacto</span>
+                <span className="text-gray-400 text-sm">{t('sub.contactLabel')}</span>
                 <span className="text-white text-sm font-semibold">{previousRequest.contact_name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400 text-sm">Email</span>
+                <span className="text-gray-400 text-sm">{t('sub.emailLabel')}</span>
                 <span className="text-white text-sm">{previousRequest.contact_email}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-400 text-sm">Hora de envio</span>
+                <span className="text-gray-400 text-sm">{t('sub.sentAtLabel')}</span>
                 <span className="text-white text-sm">{previousRequest.sent_at}</span>
               </div>
             </div>
-            <p className="text-gray-500 text-xs text-center">Nuestro equipo te contactara en menos de 24 horas.</p>
+            <p className="text-gray-500 text-xs text-center">{t('sub.teamContact24')}</p>
             <button onClick={onClose} className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-xl transition-colors">
-              Entendido
+              {t('sub.understood')}
             </button>
           </div>
         </div>
@@ -160,7 +162,7 @@ function RenewalModal({ user, state, onClose, onSent }) {
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-gray-800">
-          <h2 className="text-white font-bold text-base">Solicitar renovacion</h2>
+          <h2 className="text-white font-bold text-base">{t('sub.renewTitle')}</h2>
           {!sent && (
             <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
               <X className="w-5 h-5" />
@@ -173,43 +175,43 @@ function RenewalModal({ user, state, onClose, onSent }) {
             <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-7 h-7 text-emerald-400" />
             </div>
-            <h3 className="text-white font-bold text-lg mb-2">Solicitud enviada</h3>
-            <p className="text-gray-400 text-sm mb-6">Nuestro equipo te contactara en menos de 24 horas para procesar la renovacion.</p>
+            <h3 className="text-white font-bold text-lg mb-2">{t('sub.requestSent')}</h3>
+            <p className="text-gray-400 text-sm mb-6">{t('sub.teamContact24')}</p>
             <button onClick={onClose} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-xl transition-colors">
-              Cerrar
+              {t('sub.close')}
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
-            <p className="text-gray-400 text-sm">Completa tus datos y nuestro equipo se comunicara contigo para gestionar la renovacion.</p>
+            <p className="text-gray-400 text-sm">{t('sub.renewDesc')}</p>
             <div>
-              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Nombre de contacto</label>
+              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">{t('sub.contactName')}</label>
               <input
                 required
                 value={form.contact_name}
                 onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))}
-                placeholder="Tu nombre"
+                placeholder={t('sub.contactName')}
                 className={inputCls}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Email de contacto</label>
+              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">{t('sub.contactEmail')}</label>
               <input
                 required
                 type="email"
                 value={form.contact_email}
                 onChange={e => setForm(f => ({ ...f, contact_email: e.target.value }))}
-                placeholder="tu@empresa.com"
+                placeholder="you@company.com"
                 className={inputCls}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Mensaje (opcional)</label>
+              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">{t('sub.messageLabel')}</label>
               <textarea
                 value={form.message}
                 onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
                 rows={3}
-                placeholder="Consultas adicionales sobre planes, facturacion..."
+                placeholder={t('sub.messagePlaceholder')}
                 className={`${inputCls} resize-none`}
               />
             </div>
@@ -219,7 +221,7 @@ function RenewalModal({ user, state, onClose, onSent }) {
               className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
             >
               {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-              {loading ? 'Enviando...' : 'Enviar solicitud de renovacion'}
+              {loading ? t('sub.sendingLabel') : t('sub.sendRenewal')}
             </button>
           </form>
         )}
@@ -229,10 +231,11 @@ function RenewalModal({ user, state, onClose, onSent }) {
 }
 
 function BlockedPage({ user, state, onRenew }) {
+  const { t } = useI18nStore()
   const reasons = {
-    expired: 'Tu suscripcion ha vencido.',
-    trial_expired: 'Tu periodo de prueba ha terminado.',
-    suspended: 'Tu cuenta ha sido suspendida.',
+    expired: t('sub.expired'),
+    trial_expired: t('sub.trialExpired'),
+    suspended: t('sub.suspended'),
   }
   const isRenewable = state.reason !== 'suspended'
 
@@ -243,8 +246,8 @@ function BlockedPage({ user, state, onRenew }) {
         <div className="w-20 h-20 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto mb-6">
           <AlertTriangle className="w-10 h-10 text-red-400" />
         </div>
-        <h1 className="text-2xl font-black text-white mb-3">Acceso suspendido</h1>
-        <p className="text-gray-400 text-base mb-2">{reasons[state.reason] || 'Tu acceso al sistema esta suspendido.'}</p>
+        <h1 className="text-2xl font-black text-white mb-3">{t('sub.accessSuspended')}</h1>
+        <p className="text-gray-400 text-base mb-2">{reasons[state.reason] || t('sub.accessSuspended2')}</p>
         {user?.tenant_name && (
           <p className="text-gray-600 text-sm mb-8">{user.tenant_name}</p>
         )}
@@ -254,12 +257,12 @@ function BlockedPage({ user, state, onRenew }) {
               onClick={onRenew}
               className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all hover:shadow-lg hover:shadow-blue-600/25 text-base"
             >
-              Renovar suscripcion
+              {t('sub.renew')}
             </button>
-            <p className="text-gray-600 text-xs">o contacta a <a href="mailto:contacto@kirion.app" className="text-blue-400 hover:text-blue-300">contacto@kirion.app</a></p>
+            <p className="text-gray-600 text-xs">{t('sub.contactSupport')} <a href="mailto:contacto@kirion.app" className="text-blue-400 hover:text-blue-300">contacto@kirion.app</a></p>
           </div>
         ) : (
-          <p className="text-gray-500 text-sm">Contacta a <a href="mailto:contacto@kirion.app" className="text-blue-400">contacto@kirion.app</a> para resolver tu situacion.</p>
+          <p className="text-gray-500 text-sm">{t('sub.contactSupport')} <a href="mailto:contacto@kirion.app" className="text-blue-400">contacto@kirion.app</a> {t('sub.resolveIssue')}</p>
         )}
       </div>
     </div>
@@ -267,6 +270,7 @@ function BlockedPage({ user, state, onRenew }) {
 }
 
 function CountdownBanner({ state, onRenew, onDismiss }) {
+  const { t } = useI18nStore()
   const isUrgent = state.days <= 7
   const isTrial = state.mode === 'trial'
 
@@ -282,11 +286,11 @@ function CountdownBanner({ state, onRenew, onDismiss }) {
         <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${colors.icon} ${isUrgent ? 'animate-pulse' : ''}`} />
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`text-sm font-medium ${colors.text}`}>
-            {isTrial ? 'Trial' : 'Suscripcion'}: vence en
+            {isTrial ? t('sub.trialLabel') : t('sub.subscriptionLabel')}{t('sub.expiresIn')}
           </span>
           <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-sm font-black border ${colors.badge}`}>
             <Clock className="w-3 h-3" />
-            {state.days === 1 ? '1 dia' : `${state.days} dias`}
+            {state.days === 1 ? `1 ${t('sub.day')}` : `${state.days} ${t('sub.days')}`}
           </span>
           <span className={`text-xs ${colors.text} opacity-70`}>
             ({new Date(state.expiresAt).toLocaleDateString('es-MX', { month: 'short', day: 'numeric', year: 'numeric' })})
@@ -298,7 +302,7 @@ function CountdownBanner({ state, onRenew, onDismiss }) {
           onClick={onRenew}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg transition-colors"
         >
-          Renovar
+          {t('sub.renewBtn')}
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
         <button onClick={onDismiss} className="text-gray-600 hover:text-gray-400 transition-colors p-1" title="Ocultar por 24 horas">

@@ -32,7 +32,7 @@ export default function SurtidoHistorial() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('surtido.historial.title')} subtitle="Surtido WMS" />
+        <Header title={t('surtido.historial.title')} subtitle={t('nav.surtido_wms')} />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -40,7 +40,7 @@ export default function SurtidoHistorial() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('surtido.historial.title')} subtitle="Surtido WMS" />
+      <Header title={t('surtido.historial.title')} subtitle={t('nav.surtido_wms')} />
 
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-warm-100 px-4 py-3">
         <div className="relative max-w-sm">
@@ -87,7 +87,7 @@ export default function SurtidoHistorial() {
                           s.status === 'with_discrepancies' ? 'bg-danger-100 text-danger-700' :
                           'bg-warm-100 text-warm-600'
                         }`}>
-                          {s.status}
+                          {t(`surtido.registros.status.${s.status}`) || s.status}
                         </span>
                       </td>
                       <td className="table-cell text-right font-semibold">{s.total_scanned ?? 0}</td>
@@ -107,7 +107,7 @@ export default function SurtidoHistorial() {
               totalItems={total}
               onPageChange={setPage}
               onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-              itemLabel="sesiones"
+              itemLabel={t('surtido.historial.sessions')}
             />
           )}
         </div>

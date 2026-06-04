@@ -8,6 +8,7 @@ import Modal from '../../../core/components/common/Modal'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { importarInventario } from '../services/devolucionesService'
 import * as XLSX from 'xlsx'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 const TIPO_AJUSTE_OPTS = [
   { value: 'set', label: 'Fijar exacto' },
@@ -143,6 +144,7 @@ const FILTER_TABS = [
 ]
 
 export default function ImportarInventarioModal({ isOpen, onClose, inventario = [], ubicaciones = [], onImported }) {
+  const { t } = useI18nStore()
   const toast = useToastStore()
   const fileRef = useRef(null)
   const [step, setStep] = useState('config')
@@ -184,19 +186,19 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
     setLoading(true)
     try {
       const rawRows = await parseExcelFile(file)
-      if (!rawRows.length) { toast.error('El archivo está vacío'); return }
+      if (!rawRows.length) { toast.error(t('dev.importar_inv.err.vacio')); return }
       const processed = rawRows
         .map((r, i) => normalizeRow(r, i))
         .filter(r => r.sku || String(r.cantidad).trim() !== '')
         .map(r => validateRow(r, inventario, tipoImport, ubicaciones))
-      if (!processed.length) { toast.error('No se encontraron filas con datos'); return }
+      if (!processed.length) { toast.error(t('dev.importar_inv.err.sin_datos')); return }
       setRows(processed)
       setFilterMode('all')
       setImportResult(null)
       setStep('review')
     } catch (err) {
       console.error('Error leyendo archivo de inventario:', err)
-      toast.error('Error al leer el archivo. Verifica que sea .xlsx o .xls')
+      toast.error(t('dev.importar_inv.err.leer'))
     } finally {
       setLoading(false)
       e.target.value = ''
@@ -238,7 +240,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
 
   const handleImport = async () => {
     const validRows = rows.filter(r => r._valid)
-    if (!validRows.length) { toast.error('No hay filas válidas para importar'); return }
+    if (!validRows.length) { toast.error(t('dev.importar_inv.err.sin_validas')); return }
     setImporting(true)
     try {
       const result = await importarInventario({
@@ -264,7 +266,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
         setRows(prev => applyServerErrors(prev, result.errors || []))
         setFilterMode('errors')
         setStep('review')
-        toast.warning?.(`Importación parcial: ${result.summary?.creados || 0} creados, ${result.summary?.actualizados || 0} actualizados, ${result.summary?.fallidos || 0} fallidos`)
+        toast.warning?.(`${result.summary?.creados || 0} ${t('dev.importar_inv.creados')}, ${result.summary?.actualizados || 0} ${t('dev.importar_inv.actualizados')}, ${result.summary?.fallidos || 0} ${t('dev.importar_inv.fallidos')}`)
         return
       }
       setStep('success')
@@ -277,7 +279,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
         setFilterMode('errors')
         setStep('review')
       }
-      toast.error(serverData?.error || 'Error al importar')
+      toast.error(serverData?.error || t('dev.importar_inv.err.importar'))
     } finally {
       setImporting(false)
     }
@@ -291,17 +293,17 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
       return (
         <div className="flex items-center justify-between w-full">
           <span className="text-xs text-warm-500">
-            {stats.valid} de {stats.total} fila{stats.total !== 1 ? 's' : ''} válida{stats.valid !== 1 ? 's' : ''}
+            {stats.valid} / {stats.total} {t('dev.importar_inv.filas_validas')}
           </span>
           <div className="flex items-center gap-2">
-            <button onClick={reset} className="btn-ghost">Volver</button>
+            <button onClick={reset} className="btn-ghost">{t('dev.importar_inv.volver')}</button>
             <button
               onClick={handleImport}
               disabled={importing || stats.valid === 0}
               className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
             >
               <Upload className="w-4 h-4" />
-              {importing ? 'Importando...' : `Importar ${stats.valid} fila${stats.valid !== 1 ? 's' : ''}`}
+              {importing ? t('dev.importar_inv.importando') : `${t('dev.importar_inv.importar_btn')} ${stats.valid}`}
             </button>
           </div>
         </div>
@@ -309,7 +311,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
     }
     if (step === 'success') {
       return (
-        <button onClick={() => { onClose(); reset() }} className="btn-primary">Cerrar</button>
+        <button onClick={() => { onClose(); reset() }} className="btn-primary">{t('dev.importar_inv.cerrar')}</button>
       )
     }
     return null
@@ -320,9 +322,9 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
       isOpen={isOpen}
       onClose={() => { if (!importing) { onClose(); reset() } }}
       title={
-        step === 'success' ? 'Importación completada' :
-        step === 'review' ? 'Análisis y validación' :
-        'Importar inventario'
+        step === 'success' ? t('dev.importar_inv.title.success') :
+        step === 'review' ? t('dev.importar_inv.title.review') :
+        t('dev.importar_inv.title')
       }
       icon={FileSpreadsheet}
       size="xl"
@@ -342,7 +344,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
           >
             {/* Tipo de importación */}
             <div>
-              <label className={labelCls}>Tipo de importación</label>
+              <label className={labelCls}>{t('dev.importar_inv.tipo_label')}</label>
               <div className="grid grid-cols-1 gap-2">
                 {IMPORT_TYPES.map(opt => (
                   <label
@@ -362,8 +364,8 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                       className="mt-0.5 accent-primary-500"
                     />
                     <div>
-                      <p className={`text-sm font-semibold ${tipoImport === opt.value ? 'text-primary-700' : 'text-warm-700'}`}>{opt.label}</p>
-                      <p className="text-xs text-warm-500 mt-0.5">{opt.desc}</p>
+                      <p className={`text-sm font-semibold ${tipoImport === opt.value ? 'text-primary-700' : 'text-warm-700'}`}>{t(`dev.importar_inv.tipo.${opt.value}`)}</p>
+                      <p className="text-xs text-warm-500 mt-0.5">{t(`dev.importar_inv.tipo.${opt.value}_desc`)}</p>
                     </div>
                   </label>
                 ))}
@@ -372,25 +374,25 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
 
             {/* Descripción */}
             <div>
-              <label className={labelCls}>Descripción / motivo (opcional)</label>
+              <label className={labelCls}>{t('dev.importar_inv.desc_label')}</label>
               <input
                 value={descripcion}
                 onChange={e => setDescripcion(e.target.value)}
                 className={inputCls}
-                placeholder="Ej. Inventario físico mayo 2026"
+                placeholder={t('dev.importar_inv.desc_ph')}
               />
             </div>
 
             {/* Upload area */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className={labelCls}>Archivo Excel (.xlsx / .xls)</label>
+                <label className={labelCls}>{t('dev.importar_inv.archivo_label')}</label>
                 <button
                   type="button"
                   onClick={downloadTemplate}
                   className="inline-flex items-center gap-1 text-xs text-primary-600 font-semibold hover:text-primary-700"
                 >
-                  <Download className="w-3.5 h-3.5" /> Descargar plantilla
+                  <Download className="w-3.5 h-3.5" /> {t('dev.importar_inv.descargar_plantilla')}
                 </button>
               </div>
               <motion.label
@@ -402,14 +404,14 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                 {loading ? (
                   <div className="flex flex-col items-center gap-2">
                     <div className="w-6 h-6 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-warm-500">Procesando archivo...</p>
+                    <p className="text-sm text-warm-500">{t('dev.importar_inv.procesando')}</p>
                   </div>
                 ) : (
                   <>
                     <Upload className="w-9 h-9 text-warm-300" />
                     <div className="text-center">
-                      <p className="text-sm font-medium text-warm-600">Haz clic o arrastra tu archivo aquí</p>
-                      <p className="text-xs text-warm-400 mt-0.5">Columnas requeridas: <span className="font-mono bg-warm-100 px-1 rounded">sku</span>, <span className="font-mono bg-warm-100 px-1 rounded">cantidad</span></p>
+                      <p className="text-sm font-medium text-warm-600">{t('dev.importar_inv.drop_title')}</p>
+                      <p className="text-xs text-warm-400 mt-0.5">{t('dev.importar_inv.drop_req')} <span className="font-mono bg-warm-100 px-1 rounded">sku</span>, <span className="font-mono bg-warm-100 px-1 rounded">cantidad</span></p>
                     </div>
                   </>
                 )}
@@ -422,9 +424,6 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                   disabled={loading}
                 />
               </motion.label>
-              <p className="text-[11px] text-warm-400 mt-1.5">
-                Columnas opcionales: <span className="font-mono">tipo_ajuste</span>, <span className="font-mono">descripcion</span>, <span className="font-mono">ubicacion</span>, <span className="font-mono">guia1</span>, <span className="font-mono">guia2</span>, <span className="font-mono">multicaja</span>, <span className="font-mono">observacion</span>
-              </p>
             </div>
           </motion.div>
         )}
@@ -442,35 +441,35 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
             {/* Stats summary */}
             <div className="grid grid-cols-4 gap-2">
               {[
-                { label: 'Total filas', value: stats.total, color: 'bg-warm-50 text-warm-700 border-warm-200' },
-                { label: 'Válidas', value: stats.valid, color: 'bg-success-50 text-success-700 border-success-200' },
-                { label: 'Con errores', value: stats.errors, color: stats.errors > 0 ? 'bg-danger-50 text-danger-700 border-danger-200' : 'bg-warm-50 text-warm-400 border-warm-100' },
-                { label: tipoImport === 'importacion' ? 'SKUs nuevos' : 'Existentes', value: tipoImport === 'importacion' ? stats.nuevos : stats.existentes, color: 'bg-accent-50 text-accent-700 border-accent-200' },
+                { labelKey: 'dev.importar_inv.stat.total', value: stats.total, color: 'bg-warm-50 text-warm-700 border-warm-200' },
+                { labelKey: 'dev.importar_inv.stat.validas', value: stats.valid, color: 'bg-success-50 text-success-700 border-success-200' },
+                { labelKey: 'dev.importar_inv.stat.errores', value: stats.errors, color: stats.errors > 0 ? 'bg-danger-50 text-danger-700 border-danger-200' : 'bg-warm-50 text-warm-400 border-warm-100' },
+                { labelKey: tipoImport === 'importacion' ? 'dev.importar_inv.stat.nuevos' : 'dev.importar_inv.stat.existentes', value: tipoImport === 'importacion' ? stats.nuevos : stats.existentes, color: 'bg-accent-50 text-accent-700 border-accent-200' },
               ].map(s => (
-                <div key={s.label} className={`rounded-xl border p-3 text-center ${s.color}`}>
+                <div key={s.labelKey} className={`rounded-xl border p-3 text-center ${s.color}`}>
                   <p className="text-xl font-bold">{s.value}</p>
-                  <p className="text-[10px] font-medium mt-0.5">{s.label}</p>
+                  <p className="text-[10px] font-medium mt-0.5">{t(s.labelKey)}</p>
                 </div>
               ))}
             </div>
 
             {/* Filter tabs */}
             <div className="flex items-center gap-1 border-b border-warm-100">
-              {FILTER_TABS.map(t => (
+              {FILTER_TABS.map(tab => (
                 <button
-                  key={t.id}
-                  onClick={() => setFilterMode(t.id)}
+                  key={tab.id}
+                  onClick={() => setFilterMode(tab.id)}
                   className={`px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
-                    filterMode === t.id
+                    filterMode === tab.id
                       ? 'border-primary-500 text-primary-700'
                       : 'border-transparent text-warm-400 hover:text-warm-600'
                   }`}
                 >
-                  {t.label}
-                  {t.id === 'errors' && stats.errors > 0 && (
+                  {t(`dev.importar_inv.tab.${tab.id}`)}
+                  {tab.id === 'errors' && stats.errors > 0 && (
                     <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-danger-100 text-danger-600 text-[10px] font-bold">{stats.errors}</span>
                   )}
-                  {t.id === 'valid' && (
+                  {tab.id === 'valid' && (
                     <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-success-100 text-success-600 text-[10px] font-bold">{stats.valid}</span>
                   )}
                 </button>
@@ -479,7 +478,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
 
             {/* Table */}
             {filteredRows.length === 0 ? (
-              <div className="py-10 text-center text-sm text-warm-400">Sin filas en esta categoría</div>
+              <div className="py-10 text-center text-sm text-warm-400">{t('dev.importar_inv.sin_filas')}</div>
             ) : (
               <div className="border border-warm-100 rounded-xl overflow-hidden">
                 <div className="overflow-y-auto max-h-[360px]">
@@ -487,13 +486,13 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-warm-50 border-b border-warm-100 text-warm-500 text-left text-[10px] uppercase">
                         <th className="px-3 py-2.5 w-7" />
-                        <th className="px-3 py-2.5 w-12">Fila</th>
-                        <th className="px-3 py-2.5">SKU</th>
-                        <th className="px-3 py-2.5 w-24">Cantidad</th>
-                        <th className="px-3 py-2.5 w-32">Operación</th>
-                        <th className="px-3 py-2.5 w-20 text-right">Stock actual</th>
-                        <th className="px-3 py-2.5 w-20 text-right">Resultado</th>
-                        <th className="px-3 py-2.5">Descripción</th>
+                        <th className="px-3 py-2.5 w-12">{t('dev.importar_inv.col.fila')}</th>
+                        <th className="px-3 py-2.5">{t('dev.importar_inv.col.sku')}</th>
+                        <th className="px-3 py-2.5 w-24">{t('dev.importar_inv.col.cantidad')}</th>
+                        <th className="px-3 py-2.5 w-32">{t('dev.importar_inv.col.operacion')}</th>
+                        <th className="px-3 py-2.5 w-20 text-right">{t('dev.importar_inv.col.stock_actual')}</th>
+                        <th className="px-3 py-2.5 w-20 text-right">{t('dev.importar_inv.col.resultado')}</th>
+                        <th className="px-3 py-2.5">{t('dev.importar_inv.col.descripcion')}</th>
                         <th className="px-3 py-2.5 w-8" />
                       </tr>
                     </thead>
@@ -529,7 +528,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                             <td className="px-3 py-2.5">
                               <span className="font-semibold text-warm-800">{row.sku || '—'}</span>
                               {row._isNew && row._valid && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-accent-100 text-accent-700 text-[9px] font-bold uppercase tracking-wide">Nuevo</span>
+                                <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-accent-100 text-accent-700 text-[9px] font-bold uppercase tracking-wide">{t('dev.importar_inv.badge.nuevo')}</span>
                               )}
                             </td>
 
@@ -547,7 +546,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                                   className="w-full px-2 py-1 rounded-lg border border-warm-200 text-[11px] bg-white focus:outline-none focus:ring-1 focus:ring-primary-200"
                                 >
                                   {TIPO_AJUSTE_OPTS.map(o => (
-                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                    <option key={o.value} value={o.value}>{t(`dev.importar_inv.op.${o.value}`)}</option>
                                   ))}
                                 </select>
                               ) : (
@@ -617,7 +616,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
             {stats.errors > 0 && (
               <div className="flex items-center gap-2 text-xs text-warning-700 bg-warning-50 border border-warning-200 rounded-xl px-3 py-2">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                {stats.errors} fila{stats.errors !== 1 ? 's' : ''} con error{stats.errors !== 1 ? 'es' : ''} serán omitida{stats.errors !== 1 ? 's' : ''} al importar. Puedes eliminarlas o corregir el archivo.
+                {stats.errors} {t('dev.importar_inv.errores_aviso')}
               </div>
             )}
 
@@ -625,15 +624,15 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
               <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-xl border border-success-200 bg-success-50 px-3 py-2 text-center">
                   <p className="text-lg font-bold text-success-700">{importResult.summary.creados || 0}</p>
-                  <p className="text-[10px] text-success-700">Creados</p>
+                  <p className="text-[10px] text-success-700">{t('dev.importar_inv.creados')}</p>
                 </div>
                 <div className="rounded-xl border border-primary-200 bg-primary-50 px-3 py-2 text-center">
                   <p className="text-lg font-bold text-primary-700">{importResult.summary.actualizados || 0}</p>
-                  <p className="text-[10px] text-primary-700">Actualizados</p>
+                  <p className="text-[10px] text-primary-700">{t('dev.importar_inv.actualizados')}</p>
                 </div>
                 <div className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-center">
                   <p className="text-lg font-bold text-danger-700">{importResult.summary.fallidos || 0}</p>
-                  <p className="text-[10px] text-danger-700">Fallidos</p>
+                  <p className="text-[10px] text-danger-700">{t('dev.importar_inv.fallidos')}</p>
                 </div>
               </div>
             )}
@@ -653,22 +652,22 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
               <CheckCircle className="w-9 h-9 text-success-500" />
             </div>
             <div>
-              <p className="text-xl font-bold text-warm-800">Importación exitosa</p>
-              <p className="text-sm text-warm-500 mt-1">El inventario ha sido actualizado correctamente.</p>
+              <p className="text-xl font-bold text-warm-800">{t('dev.importar_inv.success.title')}</p>
+              <p className="text-sm text-warm-500 mt-1">{t('dev.importar_inv.success.body')}</p>
             </div>
             {importResult && (
               <div className="flex items-center gap-6 bg-warm-50 rounded-2xl px-8 py-4 border border-warm-100">
                 <div className="text-center">
                   <p className="text-2xl font-bold text-success-700">{importResult.summary?.creados ?? 0}</p>
-                  <p className="text-xs text-warm-500 mt-0.5">Creados</p>
+                  <p className="text-xs text-warm-500 mt-0.5">{t('dev.importar_inv.creados')}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-bold text-primary-700">{importResult.summary?.actualizados ?? 0}</p>
-                  <p className="text-xs text-warm-500 mt-0.5">Actualizados</p>
+                  <p className="text-xs text-warm-500 mt-0.5">{t('dev.importar_inv.actualizados')}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-2xl font-bold text-danger-600">{importResult.summary?.fallidos ?? 0}</p>
-                  <p className="text-xs text-warm-500 mt-0.5">Fallidos</p>
+                  <p className="text-xs text-warm-500 mt-0.5">{t('dev.importar_inv.fallidos')}</p>
                 </div>
               </div>
             )}

@@ -75,7 +75,7 @@ export default function InventarioDashboard() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.dashboard.title')} subtitle="Inventario" />
+        <Header title={t('inventario.dashboard.title')} subtitle={t('nav.inventario')} />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -83,16 +83,16 @@ export default function InventarioDashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.dashboard.title')} subtitle="Inventario" />
+      <Header title={t('inventario.dashboard.title')} subtitle={t('nav.inventario')} />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <KPICard icon={Package} label={t('inventario.dashboard.total_scanned')} value={kpis.totalItems} gradient="from-primary-500 to-primary-700" iconBg="bg-white/20" index={0} />
           <KPICard icon={Layers} label={t('inventario.dashboard.open_tabs')} value={tabs.length} gradient="from-accent-400 to-accent-600" iconBg="bg-white/20" index={1} />
-          <KPICard icon={CheckCircle2} label="OK" value={localSummary.ok} gradient="from-success-500 to-success-700" iconBg="bg-white/20" index={2} />
+          <KPICard icon={CheckCircle2} label={t('inventario.dashboard.ok')} value={localSummary.ok} gradient="from-success-500 to-success-700" iconBg="bg-white/20" index={2} />
           <KPICard icon={AlertTriangle} label={t('inventario.dashboard.blocked')} value={localSummary.blocked} gradient="from-warning-400 to-warning-600" iconBg="bg-white/20" index={3} />
-          <KPICard icon={Ban} label="No WMS" value={localSummary.nowms} gradient="from-danger-400 to-danger-600" iconBg="bg-white/20" index={4} />
+          <KPICard icon={Ban} label={t('inventario.dashboard.nowms')} value={localSummary.nowms} gradient="from-danger-400 to-danger-600" iconBg="bg-white/20" index={4} />
         </div>
 
         {/* Chart */}
@@ -147,7 +147,7 @@ export default function InventarioDashboard() {
                       <td className="table-cell font-mono text-xs">{s.outbound_order_no || '—'}</td>
                       <td className="table-cell">
                         <span className={`badge ${s.status === 'open' ? 'bg-warning-100 text-warning-700' : 'bg-success-100 text-success-700'}`}>
-                          {s.status}
+                          {t(`inventario.historial.status.${s.status}`) || s.status}
                         </span>
                       </td>
                       <td className="table-cell text-right font-semibold">{s.total_scanned}</td>

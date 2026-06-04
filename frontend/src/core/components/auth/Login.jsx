@@ -93,7 +93,7 @@ export default function Login() {
             </AnimatePresence>
 
             <div>
-              <label className="block text-sm font-semibold text-warm-700 mb-1.5">Usuario</label>
+              <label className="block text-sm font-semibold text-warm-700 mb-1.5">{t('auth.usernameLabel')}</label>
               <input
                 type="email"
                 value={email}
@@ -106,7 +106,7 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-warm-700 mb-1.5">Contraseña</label>
+              <label className="block text-sm font-semibold text-warm-700 mb-1.5">{t('auth.passwordLabel')}</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}

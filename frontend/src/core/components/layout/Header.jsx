@@ -65,9 +65,9 @@ export default function Header({ title, subtitle, actions, showSearch = false })
 
   const handleChangePassword = async () => {
     const { current, nuevo, confirmar } = changePassData
-    if (!current || !nuevo || !confirmar) { setChangePassError('Todos los campos son requeridos'); return }
-    if (nuevo.length < 6) { setChangePassError('La nueva contraseña debe tener al menos 6 caracteres'); return }
-    if (nuevo !== confirmar) { setChangePassError('Las contraseñas no coinciden'); return }
+    if (!current || !nuevo || !confirmar) { setChangePassError(t('auth.allFieldsRequired')); return }
+    if (nuevo.length < 6) { setChangePassError(t('auth.passwordTooShort')); return }
+    if (nuevo !== confirmar) { setChangePassError(t('auth.passwordsNoMatch')); return }
     setChangePassLoading(true)
     setChangePassError('')
     try {
@@ -75,7 +75,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
       setChangePassSuccess(true)
       setTimeout(() => { setChangePassOpen(false); resetChangePass() }, 1500)
     } catch (err) {
-      setChangePassError(err.response?.data?.error || 'Error al cambiar contraseña')
+      setChangePassError(err.response?.data?.error || t('auth.changePasswordError'))
     } finally {
       setChangePassLoading(false)
     }
@@ -195,7 +195,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
                              hover:bg-warm-50 hover:text-warm-800 transition-all"
                 >
                   <Globe className="w-4 h-4" />
-                  <span className="flex-1 text-left">{locale === 'es' ? 'Idioma: Español' : '语言：中文'}</span>
+                  <span className="flex-1 text-left">{t('auth.languageLabel')}{locale === 'es' ? t('auth.languageEs') : t('auth.languageZh')}</span>
                   <span className="text-[10px] text-warm-400 font-medium">{locale === 'es' ? 'ES' : 'ZH'}</span>
                 </button>
               </div>
@@ -238,7 +238,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
               ) : (
                 <Key className="w-4 h-4" />
               )}
-              {changePassSuccess ? '¡Contraseña actualizada!' : t('auth.changePassword')}
+              {changePassSuccess ? t('auth.passwordUpdated') : t('auth.changePassword')}
             </button>
           </div>
         }
@@ -246,7 +246,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
         <div className="space-y-4">
           {changePassSuccess && (
             <div className="bg-success-50 border border-success-200 text-success-700 text-sm px-4 py-3 rounded-xl font-medium">
-              ✓ Contraseña actualizada correctamente
+              ✓ {t('auth.passwordUpdatedMsg')}
             </div>
           )}
           {changePassError && (
@@ -255,7 +255,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
             </div>
           )}
           <div>
-            <label className="block text-xs font-semibold text-warm-600 mb-1.5">Contraseña actual</label>
+            <label className="block text-xs font-semibold text-warm-600 mb-1.5">{t('auth.currentPassword')}</label>
             <input
               type="password"
               value={changePassData.current}
@@ -266,18 +266,18 @@ export default function Header({ title, subtitle, actions, showSearch = false })
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-warm-600 mb-1.5">Nueva contraseña</label>
+            <label className="block text-xs font-semibold text-warm-600 mb-1.5">{t('auth.newPassword2')}</label>
             <input
               type="password"
               value={changePassData.nuevo}
               onChange={e => setChangePassData(p => ({ ...p, nuevo: e.target.value }))}
               className="w-full px-3 py-2.5 rounded-xl border border-warm-200 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-              placeholder="Mínimo 6 caracteres"
+              placeholder={t('auth.minChars')}
               autoComplete="new-password"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-warm-600 mb-1.5">Confirmar nueva contraseña</label>
+            <label className="block text-xs font-semibold text-warm-600 mb-1.5">{t('auth.confirmNewPassword')}</label>
             <input
               type="password"
               value={changePassData.confirmar}
@@ -333,7 +333,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
                 <Globe className="w-3.5 h-3.5" />
                 <span className="text-[10px] uppercase tracking-wider font-bold">{t('profile.language')}</span>
               </div>
-              <p className="text-sm font-semibold text-warm-700">{locale === 'es' ? 'Español' : '中文'}</p>
+              <p className="text-sm font-semibold text-warm-700">{locale === 'es' ? t('auth.languageEs') : t('auth.languageZh')}</p>
             </div>
             <div className="p-3 rounded-xl bg-warm-50 col-span-2">
               <div className="flex items-center gap-2 text-warm-400 mb-1.5">

@@ -22,10 +22,10 @@ const ESTADO_COLORS = {
   COMPLETADO: 'bg-primary-100 text-primary-700',
 }
 
-const TABS = [
-  { id: 'guias', label: 'Guías', icon: FileText },
-  { id: 'tarimas', label: 'Tarimas', icon: Package },
-  { id: 'historial', label: 'Historial', icon: Clock },
+const getTabConfig = (t) => [
+  { id: 'guias', labelKey: 'fep.detail.guias', icon: FileText },
+  { id: 'tarimas', labelKey: 'fep.detail.tarimas', icon: Package },
+  { id: 'historial', labelKey: 'fep.detail.historial', icon: Clock },
 ]
 
 const GUIAS_PER_PAGE = 25
@@ -83,7 +83,7 @@ export default function FolioDetalle() {
         }, 5000)
       }
     } catch {
-      toast.error('Error generando PDF')
+      toast.error(t('fep.printError'))
     } finally {
       setDownloadingPdf(false)
     }
@@ -101,16 +101,16 @@ export default function FolioDetalle() {
     try {
       const wb = XLSX.utils.book_new()
       const wsData = [
-        ['Folio', folio.folio_numero],
-        ['Empresa', folio.empresa_nombre],
-        ['Estado', folio.estado],
-        ['Creado por', folio.creado_por_nombre || ''],
-        ['Fecha creación', fmtDateTime(folio.created_at)],
-        ['Total tarimas', folio.total_tarimas],
-        ['Total guías', folio.total_guias],
-        ...(folio.motivo_cancelacion ? [['Motivo cancelación', folio.motivo_cancelacion]] : []),
+        [t('fep.excel.folio'), folio.folio_numero],
+        [t('fep.excel.empresa'), folio.empresa_nombre],
+        [t('fep.excel.estado'), folio.estado],
+        [t('fep.excel.creadoPor'), folio.creado_por_nombre || ''],
+        [t('fep.excel.fechaCreacion'), fmtDateTime(folio.created_at)],
+        [t('fep.excel.totalTarimas'), folio.total_tarimas],
+        [t('fep.excel.totalGuias'), folio.total_guias],
+        ...(folio.motivo_cancelacion ? [[t('fep.cancelReason'), folio.motivo_cancelacion]] : []),
         [],
-        ['#', 'Código Guía', 'Tarima', 'Canal', 'Posición', 'Hora Escaneo', 'Peso (kg)'],
+        [t('fep.excel.numCol'), t('fep.excel.codigoGuia'), t('fep.excel.tarima'), t('fep.excel.canal'), t('fep.excel.posicion'), t('fep.excel.horaEscaneo'), t('fep.detail.weightKg')],
         ...guias.map((g, i) => [
           i + 1,
           g.codigo_guia,
@@ -123,19 +123,19 @@ export default function FolioDetalle() {
       ]
       const ws = XLSX.utils.aoa_to_sheet(wsData)
       ws['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 22 }, { wch: 10 }]
-      XLSX.utils.book_append_sheet(wb, ws, 'Folio')
+      XLSX.utils.book_append_sheet(wb, ws, t('fep.excel.sheetName'))
       XLSX.writeFile(wb, `${folio.folio_numero}_${getToday()}.xlsx`)
     } catch {
-      toast.error('Error exportando Excel')
+      toast.error(t('fep.excelError'))
     }
   }
 
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title="Detalle de Folio" />
+        <Header title={t('fep.detail.record')} />
         <div className="flex-1 flex items-center justify-center">
-          <LoadingSpinner text="Cargando folio..." />
+          <LoadingSpinner text={t('fep.detail.loading')} />
         </div>
       </div>
     )
@@ -144,7 +144,7 @@ export default function FolioDetalle() {
   if (!folio) {
     return (
       <div className="flex flex-col h-full">
-        <Header title="Detalle de Folio" />
+        <Header title={t('fep.detail.record')} />
         <div className="flex-1 flex items-center justify-center flex-col gap-3 text-warm-400">
           <FileText className="w-10 h-10 opacity-40" />
           <p className="text-sm">Folio no encontrado</p>
@@ -239,7 +239,7 @@ export default function FolioDetalle() {
           {/* Tabs */}
           <div className="card overflow-hidden">
             <div className="flex border-b border-warm-100">
-              {TABS.map(tab => (
+              {getTabConfig(t).map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
@@ -250,7 +250,7 @@ export default function FolioDetalle() {
                   }`}
                 >
                   <tab.icon className="w-4 h-4" />
-                  {tab.label}
+                  {t(tab.labelKey)}
                   {tab.id === 'guias' && (
                     <span className="ml-1 badge bg-warm-100 text-warm-500 text-[10px]">{guias.length}</span>
                   )}

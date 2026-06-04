@@ -4,8 +4,10 @@ import { CloudOff, RefreshCw, Upload, AlertCircle, PlugZap } from 'lucide-react'
 import { useOfflineStore } from '../../stores/offlineStore'
 import { useToastStore } from '../../stores/toastStore'
 import { syncOfflineQueue } from '../../services/offlineSync'
+import { useI18nStore } from '../../stores/i18nStore'
 
 export default function ConnectionBanner() {
+  const { t } = useI18nStore()
   const status = useOfflineStore((s) => s.status)
   const queueLen = useOfflineStore((s) => s.queue.length)
   const syncing = useOfflineStore((s) => s.syncing)
@@ -14,12 +16,12 @@ export default function ConnectionBanner() {
   const handleSync = useCallback(async () => {
     const result = await syncOfflineQueue()
     if (result.synced > 0) {
-      useToastStore.getState().success(`${result.synced} escaneo(s) sincronizado(s)`)
+      useToastStore.getState().success(`${result.synced} ${t('inventario.escaneo.scans_label')}`)
     }
     if (result.failed > 0) {
-      useToastStore.getState().error(`${result.failed} escaneo(s) fallaron al sincronizar`)
+      useToastStore.getState().error(`${result.failed} ${t('inventario.escaneo.scans_label')} - ${t('toast.error')}`)
     }
-  }, [])
+  }, [t])
 
   // Auto-sync only when connectivity is restored, not on every queue/syncing state change.
   // Reading the store imperatively here avoids re-triggering on each dequeue during an
@@ -55,17 +57,17 @@ export default function ConnectionBanner() {
               {status === 'offline' ? (
                 <>
                   <CloudOff className="w-4 h-4 animate-pulse" />
-                  <span>Sin conexion — los escaneos se guardan localmente</span>
+                  <span>{t('connection.offline')}</span>
                 </>
               ) : syncError ? (
                 <>
                   <AlertCircle className="w-4 h-4" />
-                  <span>Error al sincronizar: {syncError}</span>
+                  <span>{t('connection.syncError')}{syncError}</span>
                 </>
               ) : (
                 <>
                   <PlugZap className="w-4 h-4" />
-                  <span>Conexion restaurada</span>
+                  <span>{t('connection.restored')}</span>
                 </>
               )}
             </div>
@@ -75,7 +77,7 @@ export default function ConnectionBanner() {
                 <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
                   status === 'offline' ? 'bg-white/20' : 'bg-white/30'
                 }`}>
-                  {queueLen} pendiente{queueLen !== 1 ? 's' : ''}
+                  {queueLen} {t('connection.pending')}
                 </span>
               )}
               {status === 'online' && queueLen > 0 && !syncing && (
@@ -83,13 +85,13 @@ export default function ConnectionBanner() {
                   onClick={handleSync}
                   className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-xs font-bold"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" /> Sincronizar
+                  <RefreshCw className="w-3.5 h-3.5" /> {t('connection.sync')}
                 </button>
               )}
               {syncing && (
                 <div className="flex items-center gap-1.5 text-xs">
                   <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Sincronizando...
+                  {t('connection.syncing')}
                 </div>
               )}
             </div>

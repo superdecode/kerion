@@ -6,6 +6,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import Modal from '../../../core/components/common/Modal'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import { importUbicaciones } from '../services/devolucionesService'
 import * as XLSX from 'xlsx'
 
@@ -77,14 +78,9 @@ function downloadTemplate() {
   XLSX.writeFile(wb, 'plantilla_importacion_ubicaciones.xlsx')
 }
 
-const FILTER_TABS = [
-  { id: 'all', label: 'Todos' },
-  { id: 'errors', label: 'Errores' },
-  { id: 'valid', label: 'Válidos' },
-]
-
 export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbicaciones = [], onImported }) {
   const toast = useToastStore()
+  const { t } = useI18nStore()
   const fileRef = useRef(null)
   const [step, setStep] = useState('upload')
   const [loading, setLoading] = useState(false)
@@ -92,6 +88,12 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
   const [rows, setRows] = useState([])
   const [filterMode, setFilterMode] = useState('all')
   const [importResult, setImportResult] = useState(null)
+
+  const filterTabs = useMemo(() => [
+    { id: 'all', label: t('dev.importar_ub.tab.all') },
+    { id: 'errors', label: t('dev.importar_ub.tab.errors') },
+    { id: 'valid', label: t('dev.importar_ub.tab.valid') },
+  ], [t])
 
   const reset = () => {
     setStep('upload')
@@ -106,17 +108,17 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
     setLoading(true)
     try {
       const rawRows = await parseExcelFile(file)
-      if (!rawRows.length) { toast.error('El archivo está vacío'); return }
+      if (!rawRows.length) { toast.error(t('dev.importar_ub.err.vacio')); return }
       const processed = rawRows
         .map((r, i) => normalizeRow(r, i))
         .filter(r => r.codigo || r.nombre)
         .map(r => validateRow(r, existingUbicaciones))
-      if (!processed.length) { toast.error('No se encontraron filas con datos'); return }
+      if (!processed.length) { toast.error(t('dev.importar_ub.err.sin_datos')); return }
       setRows(processed)
       setFilterMode('all')
       setStep('review')
     } catch {
-      toast.error('Error al leer el archivo. Verifica que sea .xlsx o .xls')
+      toast.error(t('dev.importar_ub.err.leer'))
     } finally {
       setLoading(false)
       e.target.value = ''
@@ -149,7 +151,7 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
 
   const handleImport = async () => {
     const validRows = rows.filter(r => r._valid)
-    if (!validRows.length) { toast.error('No hay filas válidas para importar'); return }
+    if (!validRows.length) { toast.error(t('dev.importar_ub.err.sin_validas')); return }
     setImporting(true)
     try {
       const res = await importUbicaciones({
@@ -164,7 +166,7 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
       setImportResult(data)
       
       if (data.resumen?.errores > 0 && data.resumen?.procesados === 0) {
-        toast.error('No se pudo importar ninguna ubicación. Revisa los detalles.')
+        toast.error(t('dev.importar_ub.err.ninguna'))
         setStep('review')
         setFilterMode('errors')
       } else {
@@ -173,8 +175,8 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
       }
     } catch (err) {
       console.error('Import error:', err)
-      const msg = err.response?.data?.error || err.response?.data || err.message || 'Error al importar'
-      toast.error(typeof msg === 'string' ? msg.slice(0, 100) : 'Error interno al importar')
+      const msg = err.response?.data?.error || err.response?.data || err.message || t('dev.importar_ub.err.general')
+      toast.error(typeof msg === 'string' ? msg.slice(0, 100) : t('dev.importar_ub.err.general'))
     } finally {
       setImporting(false)
     }
@@ -187,17 +189,17 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
       return (
         <div className="flex items-center justify-between w-full">
           <span className="text-xs text-warm-500">
-            {stats.valid} de {stats.total} fila{stats.total !== 1 ? 's' : ''} válida{stats.valid !== 1 ? 's' : ''}
+            {stats.valid} / {stats.total} {t('dev.importar_ub.filas_validas')}
           </span>
           <div className="flex items-center gap-2">
-            <button onClick={reset} className="btn-ghost text-xs">Atrás</button>
+            <button onClick={reset} className="btn-ghost text-xs">{t('dev.importar_ub.atras')}</button>
             <button
               onClick={handleImport}
               disabled={importing || stats.valid === 0}
               className="btn-primary inline-flex items-center gap-2 text-xs"
             >
               <Upload className="w-3.5 h-3.5" />
-              {importing ? 'Importando...' : `Importar ${stats.valid} ubicaciones`}
+              {importing ? t('dev.importar_ub.importando') : `${t('dev.importar_ub.importar_btn')} ${stats.valid} ${t('dev.importar_ub.ubicaciones')}`}
             </button>
           </div>
         </div>
@@ -205,7 +207,7 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
     }
     if (step === 'success') {
       return (
-        <button onClick={() => { onClose(); reset() }} className="btn-primary">Entendido</button>
+        <button onClick={() => { onClose(); reset() }} className="btn-primary">{t('dev.importar_ub.entendido')}</button>
       )
     }
     return null
@@ -216,9 +218,9 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
       isOpen={isOpen}
       onClose={() => { if (!importing) { onClose(); reset() } }}
       title={
-        step === 'success' ? 'Carga completada' :
-        step === 'review' ? 'Revisión de ubicaciones' :
-        'Importar ubicaciones'
+        step === 'success' ? t('dev.importar_ub.title.success') :
+        step === 'review' ? t('dev.importar_ub.title.review') :
+        t('dev.importar_ub.title')
       }
       icon={LayoutGrid}
       size="lg"
@@ -239,21 +241,19 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
               <div className="w-14 h-14 rounded-2xl bg-primary-50 flex items-center justify-center mx-auto mb-4">
                 <FileSpreadsheet className="w-7 h-7 text-primary-500" />
               </div>
-              <h3 className="text-lg font-bold text-warm-800">Carga masiva de ubicaciones</h3>
-              <p className="text-sm text-warm-500">
-                Sube un archivo Excel para crear nuevas ubicaciones o actualizar las existentes de forma masiva.
-              </p>
+              <h3 className="text-lg font-bold text-warm-800">{t('dev.importar_ub.heading')}</h3>
+              <p className="text-sm text-warm-500">{t('dev.importar_ub.desc')}</p>
             </div>
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <label className={labelCls}>Archivo Excel (.xlsx / .xls)</label>
+                <label className={labelCls}>{t('dev.importar_ub.archivo_label')}</label>
                 <button
                   type="button"
                   onClick={downloadTemplate}
                   className="inline-flex items-center gap-1.5 text-xs text-primary-600 font-bold hover:text-primary-700 transition-colors"
                 >
-                  <Download className="w-3.5 h-3.5" /> Descargar plantilla
+                  <Download className="w-3.5 h-3.5" /> {t('dev.importar_ub.descargar_plantilla')}
                 </button>
               </div>
 
@@ -267,7 +267,7 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
                 {loading ? (
                   <div className="flex flex-col items-center gap-3">
                     <div className="w-8 h-8 border-3 border-primary-500 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm font-medium text-warm-600">Analizando archivo...</p>
+                    <p className="text-sm font-medium text-warm-600">{t('dev.importar_ub.analizando')}</p>
                   </div>
                 ) : (
                   <>
@@ -275,8 +275,8 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
                       <Upload className="w-6 h-6 text-warm-400 group-hover:text-primary-600" />
                     </div>
                     <div className="text-center">
-                      <p className="text-sm font-bold text-warm-700">Selecciona o arrastra el archivo</p>
-                      <p className="text-xs text-warm-400 mt-1">Formatos compatibles: .xlsx, .xls</p>
+                      <p className="text-sm font-bold text-warm-700">{t('dev.importar_ub.drop_title')}</p>
+                      <p className="text-xs text-warm-400 mt-1">{t('dev.importar_ub.drop_compat')}</p>
                     </div>
                   </>
                 )}
@@ -291,15 +291,15 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
               </motion.label>
               
               <div className="bg-warm-50 rounded-2xl p-4 border border-warm-100">
-                <p className="text-[11px] font-bold text-warm-400 uppercase tracking-widest mb-2">Columnas del archivo</p>
+                <p className="text-[11px] font-bold text-warm-400 uppercase tracking-widest mb-2">{t('dev.importar_ub.cols.title')}</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-bold text-warm-700">codigo</span>
-                    <span className="text-[10px] text-warm-500">Requerido. Máx 50 car.</span>
+                    <span className="text-xs font-bold text-warm-700">{t('dev.importar_ub.cols.codigo')}</span>
+                    <span className="text-[10px] text-warm-500">{t('dev.importar_ub.cols.codigo_desc')}</span>
                   </div>
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-bold text-warm-700">nombre</span>
-                    <span className="text-[10px] text-warm-500">Opcional. Máx 200 car.</span>
+                    <span className="text-xs font-bold text-warm-700">{t('dev.importar_ub.cols.nombre')}</span>
+                    <span className="text-[10px] text-warm-500">{t('dev.importar_ub.cols.nombre_desc')}</span>
                   </div>
                 </div>
               </div>
@@ -318,10 +318,10 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
           >
             <div className="grid grid-cols-4 gap-3">
               {[
-                { label: 'Total filas', value: stats.total, color: 'bg-warm-50 text-warm-700 border-warm-200' },
-                { label: 'Válidas', value: stats.valid, color: 'bg-success-50 text-success-700 border-success-200' },
-                { label: 'Nuevas', value: stats.nuevos, color: 'bg-primary-50 text-primary-700 border-primary-200' },
-                { label: 'Existentes', value: stats.actualizaciones, color: 'bg-accent-50 text-accent-700 border-accent-200' },
+                { label: t('dev.importar_ub.stat.total'), value: stats.total, color: 'bg-warm-50 text-warm-700 border-warm-200' },
+                { label: t('dev.importar_ub.stat.validas'), value: stats.valid, color: 'bg-success-50 text-success-700 border-success-200' },
+                { label: t('dev.importar_ub.stat.nuevas'), value: stats.nuevos, color: 'bg-primary-50 text-primary-700 border-primary-200' },
+                { label: t('dev.importar_ub.stat.existentes'), value: stats.actualizaciones, color: 'bg-accent-50 text-accent-700 border-accent-200' },
               ].map(s => (
                 <div key={s.label} className={`rounded-2xl border p-3.5 text-center ${s.color} shadow-sm`}>
                   <p className="text-2xl font-bold leading-none">{s.value}</p>
@@ -331,18 +331,18 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
             </div>
 
             <div className="flex items-center gap-1 border-b border-warm-100">
-              {FILTER_TABS.map(t => (
+              {filterTabs.map(tab => (
                 <button
-                  key={t.id}
-                  onClick={() => setFilterMode(t.id)}
+                  key={tab.id}
+                  onClick={() => setFilterMode(tab.id)}
                   className={`px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition-all ${
-                    filterMode === t.id
+                    filterMode === tab.id
                       ? 'border-primary-500 text-primary-700'
                       : 'border-transparent text-warm-400 hover:text-warm-600'
                   }`}
                 >
-                  {t.label}
-                  {t.id === 'errors' && stats.errors > 0 && (
+                  {tab.label}
+                  {tab.id === 'errors' && stats.errors > 0 && (
                     <span className="ml-2 px-1.5 py-0.5 rounded-full bg-danger-100 text-danger-600 text-[10px] font-black">{stats.errors}</span>
                   )}
                 </button>
@@ -355,10 +355,10 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
                   <thead className="sticky top-0 z-10">
                     <tr className="bg-warm-50 border-b border-warm-100 text-warm-500 text-left text-[10px] uppercase font-black tracking-widest">
                       <th className="px-4 py-3 w-10" />
-                      <th className="px-4 py-3">Código</th>
-                      <th className="px-4 py-3">Nombre</th>
-                      <th className="px-4 py-3">Acción</th>
-                      <th className="px-4 py-3">Validación</th>
+                      <th className="px-4 py-3">{t('dev.importar_ub.col.codigo')}</th>
+                      <th className="px-4 py-3">{t('dev.importar_ub.col.nombre')}</th>
+                      <th className="px-4 py-3">{t('dev.importar_ub.col.accion')}</th>
+                      <th className="px-4 py-3">{t('dev.importar_ub.col.validacion')}</th>
                       <th className="px-4 py-3 w-10 text-right" />
                     </tr>
                   </thead>

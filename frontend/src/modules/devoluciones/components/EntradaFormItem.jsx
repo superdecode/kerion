@@ -3,6 +3,7 @@ import { Plus, Trash2, AlertCircle, X, Image, LayoutGrid } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { skuAutocomplete } from '../services/devolucionesService'
 import Modal from '../../../core/components/common/Modal'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 const emptySku = { sku: '', sku2: '', descripcion: '', cantidad: 1, peso: '', largo: '', ancho: '', alto: '' }
 
@@ -23,6 +24,7 @@ function Toggle({ checked, onChange }) {
 }
 
 function LocationCombo({ value, onChange, ubicaciones, error }) {
+  const { t } = useI18nStore()
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -53,7 +55,7 @@ function LocationCombo({ value, onChange, ubicaciones, error }) {
         value={open ? q : display}
         onChange={e => { setQ(e.target.value); setOpen(true) }}
         onFocus={() => { setQ(''); setOpen(true) }}
-        placeholder="Buscar ubicación..."
+        placeholder={t('dev.entrada_form.buscar_ubicacion')}
         className={`w-full px-3 py-2 rounded-xl border text-sm focus:outline-none focus:ring-2 bg-warm-50 ${
           error ? 'border-danger-300 focus:ring-danger-200' : 'border-warm-200 focus:ring-primary-200'
         }`}
@@ -108,6 +110,7 @@ export default function EntradaFormItem({
   canManageUbicaciones = false,
   selectedUbicacionEvent = null,
 }) {
+  const { t } = useI18nStore()
   const MAX_FOTO_SIZE_BYTES = 2 * 1024 * 1024
   const emb1Ref = useRef(null)
   const [suggestions, setSuggestions] = useState([])
@@ -246,14 +249,14 @@ export default function EntradaFormItem({
 
   const validate = () => {
     const e = {}
-    if (!form.embalaje1.trim()) e.embalaje1 = 'Obligatorio'
-    if (!form.skus[0]?.sku?.trim()) e.sku0 = 'SKU obligatorio'
-    if (!form.ubicacion_id) e.ubicacion_id = 'Obligatoria'
+    if (!form.embalaje1.trim()) e.embalaje1 = t('dev.entrada_form.obligatorio')
+    if (!form.skus[0]?.sku?.trim()) e.sku0 = t('dev.entrada_form.sku_col') + ' ' + t('dev.entrada_form.obligatorio').toLowerCase()
+    if (!form.ubicacion_id) e.ubicacion_id = t('dev.entrada_form.obligatorio')
     const first = form.skus[0] || {}
-    if (!first.peso) e.peso0 = 'Obligatorio'
-    if (!first.largo) e.largo0 = 'Obligatorio'
-    if (!first.ancho) e.ancho0 = 'Obligatorio'
-    if (!first.alto) e.alto0 = 'Obligatorio'
+    if (!first.peso) e.peso0 = t('dev.entrada_form.obligatorio')
+    if (!first.largo) e.largo0 = t('dev.entrada_form.obligatorio')
+    if (!first.ancho) e.ancho0 = t('dev.entrada_form.obligatorio')
+    if (!first.alto) e.alto0 = t('dev.entrada_form.obligatorio')
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -316,39 +319,39 @@ export default function EntradaFormItem({
 
         {/* Block 1: Datos generales — Embalajes + Ubicación */}
         <div className="bg-warm-50/70 border border-warm-100 rounded-xl p-3 space-y-2">
-          <p className="text-[10px] font-semibold text-warm-400 uppercase tracking-wider">Datos de embalaje</p>
+          <p className="text-[10px] font-semibold text-warm-400 uppercase tracking-wider">{t('dev.entrada_form.embalaje_section')}</p>
           <div className="grid grid-cols-[1fr,1fr,1.3fr] gap-2">
             <div>
               <label className={`${labelCls} ${errors.embalaje1 ? 'text-danger-500' : ''}`}>
-                Cód. Embalaje 1 / Guía <span className="text-danger-400">*</span>
+                {t('dev.entrada_form.embalaje1')} <span className="text-danger-400">*</span>
               </label>
               <input
                 ref={emb1Ref}
                 value={form.embalaje1}
                 onChange={e => setForm(p => ({ ...p, embalaje1: e.target.value }))}
                 className={errors.embalaje1 ? inputErrCls : inputCls}
-                placeholder="Guía / código de embalaje"
+                placeholder={t('dev.entrada_form.embalaje1_ph')}
               />
               {errors.embalaje1 && (
                 <p className={errMsgCls}><AlertCircle className="w-3 h-3" /> {errors.embalaje1}</p>
               )}
             </div>
             <div>
-              <label className={labelCls}>Cód. Embalaje 2</label>
+              <label className={labelCls}>{t('dev.entrada_form.embalaje2')}</label>
               <input
                 value={form.embalaje2}
                 onChange={e => setForm(p => ({ ...p, embalaje2: e.target.value }))}
                 className={inputCls}
-                placeholder="Opcional"
+                placeholder={t('dev.entrada_form.embalaje2_ph')}
               />
             </div>
             <div>
               <div className={`${labelCls} flex items-center justify-between ${errors.ubicacion_id ? 'text-danger-500' : ''}`}>
-                <span>Ubicación <span className="text-danger-400">*</span></span>
+                <span>{t('dev.entrada_form.ubicacion')} <span className="text-danger-400">*</span></span>
                 {onOpenUbicaciones && (
                   <button type="button" onClick={onOpenUbicaciones}
                     className="text-[10px] text-primary-500 hover:text-primary-700 hover:underline font-medium normal-case tracking-normal">
-                    {canManageUbicaciones ? 'Ubicaciones' : 'Seleccionar'}
+                    {canManageUbicaciones ? t('dev.entrada_form.ubicar_btn') : t('dev.entrada_form.ubicar_sel')}
                   </button>
                 )}
               </div>
@@ -374,17 +377,17 @@ export default function EntradaFormItem({
 
         {/* Block 2: Datos de producto — cada SKU con sus propias medidas */}
         <div className="bg-white border border-warm-100 rounded-xl p-3 space-y-2">
-          <p className="text-[10px] font-semibold text-warm-400 uppercase tracking-wider">Datos de producto</p>
+          <p className="text-[10px] font-semibold text-warm-400 uppercase tracking-wider">{t('dev.entrada_form.producto_section')}</p>
 
           {/* Column headers — only shown once */}
           <div className="grid grid-cols-[1fr,1.2fr,84px,64px,64px,64px,88px,32px] gap-2 px-0.5">
-            <span className={`${labelCls} ${errors.sku0 ? 'text-danger-500' : ''}`}>SKU <span className="text-danger-400">*</span></span>
-            <span className={labelCls}>Descripción</span>
-            <span className={`${labelCls} ${errors.peso0 ? 'text-danger-500' : ''}`}>Peso kg <span className="text-danger-400">*</span></span>
-            <span className={`${labelCls} ${errors.largo0 ? 'text-danger-500' : ''}`}>Largo <span className="text-danger-400">*</span></span>
-            <span className={`${labelCls} ${errors.ancho0 ? 'text-danger-500' : ''}`}>Ancho <span className="text-danger-400">*</span></span>
-            <span className={`${labelCls} ${errors.alto0 ? 'text-danger-500' : ''}`}>Alto <span className="text-danger-400">*</span></span>
-            <span className={`${labelCls} ml-3 rounded-lg bg-primary-50/70 px-2.5 py-1 text-primary-600`}>Cant.</span>
+            <span className={`${labelCls} ${errors.sku0 ? 'text-danger-500' : ''}`}>{t('dev.entrada_form.sku_col')} <span className="text-danger-400">*</span></span>
+            <span className={labelCls}>{t('dev.entrada_form.desc_col')}</span>
+            <span className={`${labelCls} ${errors.peso0 ? 'text-danger-500' : ''}`}>{t('dev.entrada_form.peso_col')} <span className="text-danger-400">*</span></span>
+            <span className={`${labelCls} ${errors.largo0 ? 'text-danger-500' : ''}`}>{t('dev.entrada_form.largo_col')} <span className="text-danger-400">*</span></span>
+            <span className={`${labelCls} ${errors.ancho0 ? 'text-danger-500' : ''}`}>{t('dev.entrada_form.ancho_col')} <span className="text-danger-400">*</span></span>
+            <span className={`${labelCls} ${errors.alto0 ? 'text-danger-500' : ''}`}>{t('dev.entrada_form.alto_col')} <span className="text-danger-400">*</span></span>
+            <span className={`${labelCls} ml-3 rounded-lg bg-primary-50/70 px-2.5 py-1 text-primary-600`}>{t('dev.entrada_form.cant_col')}</span>
             <span />
           </div>
 
@@ -399,7 +402,7 @@ export default function EntradaFormItem({
                       value={row.sku}
                       onChange={e => updateSku(index, 'sku', e.target.value)}
                       className={`${errors.sku0 && index === 0 ? inputErrCls : inputCls} ${duplicateSku && index === 0 ? '!border-warning-400 !bg-warning-50/40' : ''}`}
-                      placeholder="SKU"
+                      placeholder={t('dev.entrada_form.sku_ph')}
                       autoComplete="off"
                       onKeyDown={e => {
                         if (index === activeSuggRow && suggestions.length > 0) {
@@ -424,7 +427,7 @@ export default function EntradaFormItem({
                               {item.descripcion && <span className="text-warm-400 ml-2">· {item.descripcion}</span>}
                               {(item.peso || item.largo || item.ancho || item.alto) && (
                                 <span className="block mt-0.5 text-[10px] text-warm-400">
-                                  {item.peso ? `${item.peso} kg` : 'Sin peso'}
+                                  {item.peso ? `${item.peso} kg` : t('dev.entrada_form.sin_peso')}
                                   {(item.largo || item.ancho || item.alto) ? ` · ${item.largo || '—'}×${item.ancho || '—'}×${item.alto || '—'} cm` : ''}
                                 </span>
                               )}
@@ -440,7 +443,7 @@ export default function EntradaFormItem({
                     value={row.descripcion}
                     onChange={e => updateSku(index, 'descripcion', e.target.value)}
                     className={inputCls}
-                    placeholder="Descripción"
+                    placeholder={t('dev.entrada_form.desc_ph')}
                   />
 
                   {/* Peso */}
@@ -450,7 +453,7 @@ export default function EntradaFormItem({
                     onChange={e => updateSku(index, 'peso', e.target.value)}
                     onFocus={e => e.target.select()}
                     className={errors.peso0 && index === 0 ? inputErrCls : inputCls}
-                    placeholder="kg"
+                    placeholder={t('dev.entrada_form.peso_ph')}
                   />
 
                   {/* Largo */}
@@ -460,7 +463,7 @@ export default function EntradaFormItem({
                     onChange={e => updateSku(index, 'largo', e.target.value)}
                     onFocus={e => e.target.select()}
                     className={errors.largo0 && index === 0 ? inputErrCls : inputCls}
-                    placeholder="cm"
+                    placeholder={t('dev.entrada_form.largo_ph')}
                   />
 
                   {/* Ancho */}
@@ -470,7 +473,7 @@ export default function EntradaFormItem({
                     onChange={e => updateSku(index, 'ancho', e.target.value)}
                     onFocus={e => e.target.select()}
                     className={errors.ancho0 && index === 0 ? inputErrCls : inputCls}
-                    placeholder="cm"
+                    placeholder={t('dev.entrada_form.ancho_ph')}
                   />
 
                   {/* Alto */}
@@ -480,7 +483,7 @@ export default function EntradaFormItem({
                     onChange={e => updateSku(index, 'alto', e.target.value)}
                     onFocus={e => e.target.select()}
                     className={errors.alto0 && index === 0 ? inputErrCls : inputCls}
-                    placeholder="cm"
+                    placeholder={t('dev.entrada_form.alto_ph')}
                   />
 
                   {/* Cantidad */}
@@ -509,7 +512,7 @@ export default function EntradaFormItem({
                   <div className="flex gap-2 mt-1 flex-wrap">
                     {errors.sku0 && <p className={errMsgCls}><AlertCircle className="w-3 h-3" /> {errors.sku0}</p>}
                     {(errors.largo0 || errors.ancho0 || errors.alto0 || errors.peso0) && (
-                      <p className={errMsgCls}><AlertCircle className="w-3 h-3" /> Medidas y peso son obligatorios</p>
+                      <p className={errMsgCls}><AlertCircle className="w-3 h-3" /> {t('dev.entrada_form.medidas_obligatorio')}</p>
                     )}
                   </div>
                 )}
@@ -519,12 +522,12 @@ export default function EntradaFormItem({
 
           {/* Observaciones */}
           <div className="pt-1">
-            <label className={labelCls}>{form.es_danado ? 'Descripción del daño' : 'Observaciones'}</label>
+            <label className={labelCls}>{form.es_danado ? t('dev.entrada_form.dano_label') : t('dev.entrada_form.obs_label')}</label>
             <input
               value={form.notas}
               onChange={e => setForm(p => ({ ...p, notas: e.target.value }))}
               className={inputCls}
-              placeholder={form.es_danado ? 'Describir el daño...' : 'Notas opcionales'}
+              placeholder={form.es_danado ? t('dev.entrada_form.dano_ph') : t('dev.entrada_form.obs_ph')}
             />
           </div>
 
@@ -537,7 +540,7 @@ export default function EntradaFormItem({
               >
                 <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-warning-50 border border-warning-200 text-xs text-warning-700">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  Este SKU ya existe en la sesión actual.
+                  {t('dev.entrada_form.sku_duplicado')}
                 </div>
               </motion.div>
             )}
@@ -547,17 +550,17 @@ export default function EntradaFormItem({
           <div className="flex items-center gap-4 py-1">
             <div className="flex items-center gap-2">
               <Toggle checked={form.multicaja} onChange={v => setForm(p => ({ ...p, multicaja: v }))} />
-              <span className="text-xs text-warm-600">Multicaja</span>
+              <span className="text-xs text-warm-600">{t('dev.entrada_form.multicaja')}</span>
             </div>
             {form.multicaja && (
               <button type="button" onClick={addSku}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-warm-200 text-xs text-warm-700 hover:bg-warm-50">
-                <Plus className="w-3.5 h-3.5" /> Agregar SKU
+                <Plus className="w-3.5 h-3.5" /> {t('dev.entrada_form.agregar_sku')}
               </button>
             )}
             <div className="flex items-center gap-2 ml-4">
               <Toggle checked={form.es_danado} onChange={v => setForm(p => ({ ...p, es_danado: v }))} />
-              <span className="text-xs text-warm-600">Dañado / vacío</span>
+              <span className="text-xs text-warm-600">{t('dev.entrada_form.danado')}</span>
             </div>
           </div>
         </div>
@@ -573,7 +576,7 @@ export default function EntradaFormItem({
                 <Image className="w-4 h-4 text-warning-500 shrink-0" />
                 <div className="flex-1">
                   <label className="block text-[11px] font-medium text-warning-700 mb-1">
-                    Evidencia fotográfica <span className="font-normal text-warning-500">(opcional)</span>
+                    {t('dev.entrada_form.evidencia')} <span className="font-normal text-warning-500">({t('dev.entrada_form.evidencia_opt')})</span>
                   </label>
                   <input
                     type="file"
@@ -581,7 +584,7 @@ export default function EntradaFormItem({
                     onChange={e => {
                       const file = e.target.files?.[0] || null
                       if (file && file.size > MAX_FOTO_SIZE_BYTES) {
-                        setErrors(prev => ({ ...prev, foto: 'El archivo supera 2 MB' }))
+                        setErrors(prev => ({ ...prev, foto: t('dev.entrada_form.evidencia_err') }))
                         setFotoFile(null)
                         e.target.value = ''
                         return
@@ -608,12 +611,12 @@ export default function EntradaFormItem({
         <Modal
           isOpen={!!pendingUbicacion}
           onClose={() => setPendingUbicacion(null)}
-          title="Ubicación con material existente"
+          title={t('dev.entrada_form.ubicacion_con_mat')}
           icon={LayoutGrid}
           size="sm"
           footer={
             <>
-              <button onClick={() => setPendingUbicacion(null)} className="btn-ghost">Cambiar ubicación</button>
+              <button onClick={() => setPendingUbicacion(null)} className="btn-ghost">{t('dev.entrada_form.ubicacion_cambiar')}</button>
               <button
                 onClick={() => {
                   setForm(p => ({ ...p, ubicacion_id: String(pendingUbicacion.id) }))
@@ -621,7 +624,7 @@ export default function EntradaFormItem({
                 }}
                 className="btn-primary"
               >
-                Sí, agregar aquí
+                {t('dev.entrada_form.ubicacion_agregar')}
               </button>
             </>
           }
@@ -631,9 +634,8 @@ export default function EntradaFormItem({
               <div className="flex items-start gap-2 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2.5">
                 <AlertCircle className="w-4 h-4 text-warning-500 shrink-0 mt-px" />
                 <span>
-                  La ubicación <span className="font-bold">{pendingUbicacion.codigo}</span> — {pendingUbicacion.nombre} ya tiene{' '}
-                  <span className="font-bold text-warning-700">{pendingUbicacion.pcs_stock} pieza{pendingUbicacion.pcs_stock !== 1 ? 's' : ''}</span> de otro material.
-                  ¿Deseas agregar de todas formas?
+                  <span className="font-bold">{pendingUbicacion.codigo}</span> — {pendingUbicacion.nombre} {t('dev.entrada_form.ubicacion_ya')}{' '}
+                  <span className="font-bold text-warning-700">{pendingUbicacion.pcs_stock}</span> {t('dev.entrada_form.ubicacion_pieza')}
                 </span>
               </div>
             </div>
@@ -645,7 +647,7 @@ export default function EntradaFormItem({
           {onCancel && (
             <button type="button" onClick={onCancel}
               className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600 hover:bg-warm-50">
-              Cancelar
+              {t('dev.entrada_form.cancelar')}
             </button>
           )}
           {onSaveDraft && (
@@ -656,7 +658,7 @@ export default function EntradaFormItem({
               disabled={saving}
               className="px-4 py-2 rounded-xl bg-warm-100 text-warm-700 text-sm font-medium hover:bg-warm-200 disabled:opacity-60 transition-colors"
             >
-              {saving ? 'Guardando...' : 'Guardar Borrador'}
+              {saving ? t('dev.entrada_form.guardando') : t('dev.entrada_form.guardar_borrador')}
             </motion.button>
           )}
           <button
@@ -664,7 +666,7 @@ export default function EntradaFormItem({
             disabled={saving}
             className="px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold disabled:opacity-60"
           >
-            {saving ? 'Guardando...' : '+ Agregar'}
+            {saving ? t('dev.entrada_form.guardando') : t('dev.entrada_form.agregar')}
           </button>
         </div>
       </div>

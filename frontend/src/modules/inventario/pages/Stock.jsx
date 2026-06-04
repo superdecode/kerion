@@ -24,7 +24,7 @@ export default function Stock() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.stock.title')} subtitle="Inventario" />
+      <Header title={t('inventario.stock.title')} subtitle={t('nav.inventario')} />
 
       {/* Filter bar */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-warm-100 px-4 py-3">

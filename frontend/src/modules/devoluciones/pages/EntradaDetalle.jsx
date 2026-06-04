@@ -13,6 +13,7 @@ import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import EntradaFormItem from '../components/EntradaFormItem'
 import InventarioUbicacionesModal from '../components/InventarioUbicacionesModal'
 import {
@@ -86,6 +87,7 @@ export default function EntradaDetalle() {
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
   const toast = useToastStore()
+  const { t } = useI18nStore()
 
   const [copied, setCopied] = useState(null)
   const [editingItem, setEditingItem] = useState(null)
@@ -139,7 +141,7 @@ export default function EntradaDetalle() {
         const found = items.find((item) => item.id === parsed.editingItemId)
         if (found) setEditingItem(found)
       }
-      toast.success('Se restauró el progreso pendiente')
+      toast.success(t('dev.entrada_detalle.toast.restaurado'))
     } catch {
       sessionStorage.removeItem(formDraftStorageKey)
     }
@@ -156,19 +158,19 @@ export default function EntradaDetalle() {
   const addItemMutation = useMutation({
     mutationFn: (payload) => createEntradaItem(id, payload),
     onSuccess: () => refresh(),
-    onError: () => toast.error('Error al guardar item'),
+    onError: () => toast.error(t('dev.entrada_detalle.toast.err_guardar')),
   })
 
   const editItemMutation = useMutation({
     mutationFn: ({ itemId, payload }) => updateEntradaItem(id, itemId, payload),
     onSuccess: () => { refresh(); setEditingItem(null) },
-    onError: () => toast.error('Error al actualizar item'),
+    onError: () => toast.error(t('dev.entrada_detalle.toast.err_actualizar')),
   })
 
   const deleteItemMutation = useMutation({
     mutationFn: (itemId) => deleteEntradaItem(id, itemId),
     onSuccess: () => { refresh(); setDeletingItemId(null) },
-    onError: () => toast.error('Error al eliminar item'),
+    onError: () => toast.error(t('dev.entrada_detalle.toast.err_eliminar')),
   })
 
   const confirmMutation = useMutation({
@@ -177,9 +179,9 @@ export default function EntradaDetalle() {
       qc.invalidateQueries({ queryKey: ['dev-entradas'] })
       refresh()
       setShowConfirmModal(false)
-      toast.success('Entrada confirmada — items en inventario')
+      toast.success(t('dev.entrada_detalle.toast.confirmada'))
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al confirmar'),
+    onError: (e) => toast.error(e.response?.data?.error || t('dev.entrada_detalle.toast.err_confirmar')),
   })
 
   const cancelMutation = useMutation({
@@ -188,19 +190,19 @@ export default function EntradaDetalle() {
       qc.invalidateQueries({ queryKey: ['dev-entradas'] })
       refresh()
       setShowCancelModal(false)
-      toast.success('Cancelado')
+      toast.success(t('dev.entrada_detalle.toast.cancelado'))
     },
-    onError: () => toast.error('Error al cancelar'),
+    onError: () => toast.error(t('dev.entrada_detalle.toast.err_cancelar')),
   })
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteEntrada(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['dev-entradas'] })
-      toast.success('Cerrado')
+      toast.success(t('dev.entrada_detalle.toast.cerrado'))
       navigate('/devoluciones/entradas')
     },
-    onError: (e) => toast.error(e.response?.data?.error || 'Error al cerrar'),
+    onError: (e) => toast.error(e.response?.data?.error || t('dev.entrada_detalle.toast.err_cerrar')),
   })
 
   const copy = (text) => {
@@ -216,7 +218,7 @@ export default function EntradaDetalle() {
       const a = document.createElement('a')
       a.href = url; a.download = `${sesion.codigo}.xlsx`; a.click()
       URL.revokeObjectURL(url)
-    } catch { toast.error('Error al exportar') }
+    } catch { toast.error(t('dev.entrada_detalle.toast.err_exportar')) }
   }
 
   const fileToBase64 = (file) => new Promise((resolve, reject) => {
@@ -248,12 +250,12 @@ export default function EntradaDetalle() {
           try {
             await uploadEvidenceForItem(createdItemId, evidencia)
           } catch (e) {
-            toast.error(e.response?.data?.error || 'El registro se guardó, pero la evidencia no se pudo subir')
+            toast.error(e.response?.data?.error || t('dev.entrada_detalle.toast.err_evidencia'))
           }
         }
         sessionStorage.removeItem(formDraftStorageKey)
         setRestoredDraft(null)
-        toast.success('Registro guardado')
+        toast.success(t('dev.entrada_detalle.toast.guardado'))
         onDone?.()
         refresh()
       },
@@ -338,8 +340,8 @@ export default function EntradaDetalle() {
     setPage(1)
   }, [search, filterAdjunto, sortField, sortDir, pageSize])
 
-  if (isLoading) return <div className="p-8 text-sm text-warm-400">Cargando...</div>
-  if (!sesion) return <div className="p-8 text-sm text-warm-400">Entrada no encontrada</div>
+  if (isLoading) return <div className="p-8 text-sm text-warm-400">{t('dev.entrada_detalle.loading')}</div>
+  if (!sesion) return <div className="p-8 text-sm text-warm-400">{t('dev.entrada_detalle.not_found')}</div>
 
   const colSpan = isEditable && (canEdit || canDelete) ? 10 : 9
 
@@ -358,7 +360,7 @@ export default function EntradaDetalle() {
                 {copied === sesion.codigo ? <Check className="w-3.5 h-3.5 text-success-500" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
               <span className={`badge text-xs ml-1 ${ESTADO_COLORS[sesion.estado]}`}>
-                {ESTADO_LABELS[sesion.estado]}
+                {t(`dev.estado.${sesion.estado}`)}
               </span>
             </div>
           </div>
@@ -368,7 +370,7 @@ export default function EntradaDetalle() {
             {sesion.estado === 'confirmado' && (
               <button onClick={exportExcel}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors">
-                <Download className="w-3.5 h-3.5" /> Exportar Excel
+                <Download className="w-3.5 h-3.5" /> {t('dev.entrada_detalle.export_excel')}
               </button>
             )}
             {isEditable && canEdit && items.length > 0 && (
@@ -377,7 +379,7 @@ export default function EntradaDetalle() {
                 onClick={() => setShowConfirmModal(true)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-success-600 text-white text-sm font-semibold shadow-sm hover:shadow-glow-success hover:-translate-y-[1px] transition-all duration-200 active:scale-[0.97]"
               >
-                <PackageCheck className="w-4 h-4" /> Confirmar sesión
+                <PackageCheck className="w-4 h-4" /> {t('dev.entrada_detalle.confirmar_sesion')}
               </motion.button>
             )}
             {isEditable && canEdit && (
@@ -386,7 +388,7 @@ export default function EntradaDetalle() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 text-sm font-medium hover:bg-primary-100 transition-colors"
               >
                 <Save className="w-4 h-4" />
-                Guardar
+                {t('dev.entrada_detalle.guardar')}
               </button>
             )}
             {canCancelRecord && (
@@ -396,7 +398,7 @@ export default function EntradaDetalle() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-warning-200 text-warning-700 text-sm hover:bg-warning-50 disabled:opacity-60"
               >
                 <X className="w-4 h-4" />
-                {cancelMutation.isPending ? 'Cancelando...' : 'Cancelar'}
+                {cancelMutation.isPending ? t('dev.entrada_detalle.cancelando') : t('dev.entrada_detalle.cancelar')}
               </button>
             )}
             {canDeleteRecord && (
@@ -406,7 +408,7 @@ export default function EntradaDetalle() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-danger-200 text-danger-600 text-sm hover:bg-danger-50 disabled:opacity-60"
               >
                 <Trash2 className="w-4 h-4" />
-                {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar'}
+                {deleteMutation.isPending ? t('dev.entrada_detalle.eliminando') : t('dev.entrada_detalle.eliminar')}
               </button>
             )}
           </div>
@@ -415,10 +417,10 @@ export default function EntradaDetalle() {
 
       {/* Summary cards */}
       <div className="shrink-0 px-5 py-3 border-b border-warm-100 grid grid-cols-4 gap-3">
-        <SummaryCard icon={User}         label="Responsable"    value={sesion.responsable_nombre || 'Sin asignar'} color="warm" />
-        <SummaryCard icon={CalendarDays} label="Fecha creación" value={fmtDate(sesion.created_at)} color="warm" />
-        <SummaryCard icon={Hash}         label="Registros"      value={items.length} sub="guías" color="primary" />
-        <SummaryCard icon={Layers}       label="Piezas totales" value={totalPiezas} color="primary" />
+        <SummaryCard icon={User}         label={t('dev.entrada_detalle.card.responsable')}    value={sesion.responsable_nombre || t('dev.entrada_detalle.sin_asignar')} color="warm" />
+        <SummaryCard icon={CalendarDays} label={t('dev.entrada_detalle.card.fecha')} value={fmtDate(sesion.created_at)} color="warm" />
+        <SummaryCard icon={Hash}         label={t('dev.entrada_detalle.card.registros')}      value={items.length} sub={t('dev.entrada_detalle.card.guias')} color="primary" />
+        <SummaryCard icon={Layers}       label={t('dev.entrada_detalle.card.piezas')} value={totalPiezas} color="primary" />
       </div>
 
       {/* Scrollable main */}
@@ -427,14 +429,14 @@ export default function EntradaDetalle() {
         {sesion.estado === 'confirmado' && (
           <div className="px-5 py-2.5 bg-success-50 border-b border-success-100 flex items-center gap-2 text-xs text-success-700">
             <PackageCheck className="w-4 h-4" />
-            Sesión confirmada — {items.length} items en inventario activo
+            {t('dev.entrada_detalle.sesion_confirmada')} — {items.length} {t('dev.entrada_detalle.items_inventario')}
           </div>
         )}
 
         {/* Sub-header: count + search */}
         <div className="px-5 py-2 border-b border-warm-100 flex items-center justify-between gap-3">
           <span className="text-xs font-semibold text-warm-500 uppercase tracking-wide shrink-0">
-            Items ({items.length})
+            {t('dev.entrada_detalle.items_label')} ({items.length})
           </span>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-2.5 py-1.5 max-w-xs w-full">
@@ -443,7 +445,7 @@ export default function EntradaDetalle() {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar código, SKU, ubicación..."
+                placeholder={t('dev.entrada_detalle.search')}
                 className="text-xs outline-none bg-transparent text-warm-700 flex-1"
               />
               {search && (
@@ -454,12 +456,12 @@ export default function EntradaDetalle() {
             </div>
             <button
               onClick={() => setFilterAdjunto(v => v === true ? null : true)}
-              title="Con evidencia fotográfica"
+              title={t('dev.entrada_detalle.adjunto')}
               className={`px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-colors ${
                 filterAdjunto === true ? 'bg-warning-100 border-warning-300 text-warning-700' : 'bg-warm-50 border-warm-200 text-warm-500 hover:bg-warm-100'
               }`}
             >
-              Adjunto
+              {t('dev.entrada_detalle.adjunto')}
             </button>
           </div>
         </div>
@@ -472,12 +474,12 @@ export default function EntradaDetalle() {
             {items.length === 0 && !isEditable ? (
               <div className="flex flex-col items-center justify-center py-16 text-warm-300">
                 <Boxes className="w-10 h-10 mb-3" />
-                <p className="text-sm">Sin items registrados</p>
+                <p className="text-sm">{t('dev.entrada_detalle.sin_items')}</p>
               </div>
             ) : displayItems.length === 0 && search ? (
               <div className="flex flex-col items-center justify-center py-10 text-warm-300">
                 <Search className="w-8 h-8 mb-2" />
-                <p className="text-sm">Sin resultados para "{search}"</p>
+                <p className="text-sm">{t('dev.entrada_detalle.sin_resultados')} "{search}"</p>
               </div>
             ) : items.length > 0 && (
               <>
@@ -485,17 +487,17 @@ export default function EntradaDetalle() {
                   <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-wide text-warm-500 border-b border-warm-100 bg-warm-50/80">
-                      <th className="table-header w-10">#</th>
-                      <SortHeader label="Código" field="codigo_trazabilidad" currentField={sortField} dir={sortDir} onSort={handleSort} />
-                      <SortHeader label="Embalaje 1" field="embalaje1" currentField={sortField} dir={sortDir} onSort={handleSort} />
-                      <th className="table-header">SKU(s)</th>
-                      <SortHeader label="Cant." field="piezas" currentField={sortField} dir={sortDir} onSort={handleSort} className="text-center" />
-                      <th className="table-header">Peso</th>
-                      <th className="table-header">Dimensiones</th>
-                      <SortHeader label="Ubicación" field="ubicacion_nombre" currentField={sortField} dir={sortDir} onSort={handleSort} />
-                      <th className="table-header">Tipo</th>
-                      <th className="table-header text-center w-16">Adjunto</th>
-                      {isEditable && (canEdit || canDelete) && <th className="table-header text-right w-20">Acciones</th>}
+                      <th className="table-header w-10">{t('dev.entrada_detalle.col.num')}</th>
+                      <SortHeader label={t('dev.entrada_detalle.col.codigo')} field="codigo_trazabilidad" currentField={sortField} dir={sortDir} onSort={handleSort} />
+                      <SortHeader label={t('dev.entrada_detalle.col.embalaje1')} field="embalaje1" currentField={sortField} dir={sortDir} onSort={handleSort} />
+                      <th className="table-header">{t('dev.entrada_detalle.col.skus')}</th>
+                      <SortHeader label={t('dev.entrada_detalle.col.cant')} field="piezas" currentField={sortField} dir={sortDir} onSort={handleSort} className="text-center" />
+                      <th className="table-header">{t('dev.entrada_detalle.col.peso')}</th>
+                      <th className="table-header">{t('dev.entrada_detalle.col.dim')}</th>
+                      <SortHeader label={t('dev.entrada_detalle.col.ubicacion')} field="ubicacion_nombre" currentField={sortField} dir={sortDir} onSort={handleSort} />
+                      <th className="table-header">{t('dev.entrada_detalle.col.tipo')}</th>
+                      <th className="table-header text-center w-16">{t('dev.entrada_detalle.col.adjunto')}</th>
+                      {isEditable && (canEdit || canDelete) && <th className="table-header text-right w-20">{t('dev.entrada_detalle.col.acciones')}</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -593,8 +595,8 @@ export default function EntradaDetalle() {
                           </td>
                           <td className="table-cell">
                             <div className="flex gap-1 flex-wrap">
-                              {item.multicaja && <span className="badge text-[10px] bg-accent-100 text-accent-700">Multicaja</span>}
-                              {item.es_danado && <span className="badge text-[10px] bg-danger-100 text-danger-600">Dañado</span>}
+                              {item.multicaja && <span className="badge text-[10px] bg-accent-100 text-accent-700">{t('dev.entrada_detalle.badge.multicaja')}</span>}
+                              {item.es_danado && <span className="badge text-[10px] bg-danger-100 text-danger-600">{t('dev.entrada_detalle.badge.danado')}</span>}
                               {item.codigo_multicaja && (
                                 <span className="badge text-[10px] bg-warm-100 text-warm-600 font-mono">{item.codigo_multicaja}</span>
                               )}
@@ -672,10 +674,10 @@ export default function EntradaDetalle() {
                                 {item.notas
                                   ? (
                                     <div className="text-xs text-warm-600">
-                                      <span className="text-warm-400 font-medium">Notas:</span> {item.notas}
+                                      <span className="text-warm-400 font-medium">{t('dev.entrada_detalle.notas_label')}</span> {item.notas}
                                     </div>
                                   )
-                                  : <div className="text-xs text-warm-300">Sin detalle adicional</div>}
+                                  : <div className="text-xs text-warm-300">{t('dev.entrada_detalle.sin_detalle')}</div>}
                               </td>
                             </motion.tr>
                           )}
@@ -692,7 +694,7 @@ export default function EntradaDetalle() {
                   totalItems={displayItems.length}
                   onPageChange={setPage}
                   onPageSizeChange={setPageSize}
-                  itemLabel="registros"
+                  itemLabel={t('dev.entrada_detalle.registros_label')}
                 />
               </>
             )}
@@ -701,11 +703,11 @@ export default function EntradaDetalle() {
             {isEditable && (
               <div className="border-t-2 border-dashed border-primary-200/70 bg-gradient-to-br from-primary-50/40 via-white to-accent-50/20 p-5">
                 <div className="text-[11px] font-bold text-primary-500 uppercase tracking-wider mb-4 flex items-center justify-between">
-                  <span>{editingItem ? `Editando: ${editingItem.codigo_trazabilidad}` : 'Nuevo registro'}</span>
+                  <span>{editingItem ? `${t('dev.entrada_detalle.editando')} ${editingItem.codigo_trazabilidad}` : t('dev.entrada_detalle.nuevo_registro')}</span>
                   {editingItem && (
                     <button onClick={() => setEditingItem(null)}
                       className="text-xs text-warm-400 hover:text-warm-600 normal-case tracking-normal font-medium">
-                      Cancelar edición
+                      {t('dev.entrada_detalle.cancelar_edicion')}
                     </button>
                   )}
                 </div>
@@ -729,7 +731,7 @@ export default function EntradaDetalle() {
                             try {
                               await uploadEvidenceForItem(updatedItemId, evidencia)
                             } catch (e) {
-                              toast.error(e.response?.data?.error || 'El registro se guardó, pero la evidencia no se pudo subir')
+                              toast.error(e.response?.data?.error || t('dev.entrada_detalle.toast.err_evidencia'))
                             }
                           }
                           sessionStorage.removeItem(formDraftStorageKey)
@@ -745,7 +747,7 @@ export default function EntradaDetalle() {
                             try {
                               await uploadEvidenceForItem(createdItemId, evidencia)
                             } catch (e) {
-                              toast.error(e.response?.data?.error || 'El registro se guardó, pero la evidencia no se pudo subir')
+                              toast.error(e.response?.data?.error || t('dev.entrada_detalle.toast.err_evidencia'))
                             }
                           }
                           sessionStorage.removeItem(formDraftStorageKey)
@@ -766,7 +768,7 @@ export default function EntradaDetalle() {
                             try {
                               await uploadEvidenceForItem(updatedItemId, evidencia)
                             } catch (e) {
-                              toast.error(e.response?.data?.error || 'El borrador se guardó, pero la evidencia no se pudo subir')
+                              toast.error(e.response?.data?.error || t('dev.entrada_detalle.toast.err_evidencia'))
                             }
                           }
                           sessionStorage.removeItem(formDraftStorageKey)
@@ -784,12 +786,12 @@ export default function EntradaDetalle() {
                           try {
                             await uploadEvidenceForItem(createdItemId, evidencia)
                           } catch (e) {
-                            toast.error(e.response?.data?.error || 'El borrador se guardó, pero la evidencia no se pudo subir')
+                            toast.error(e.response?.data?.error || t('dev.entrada_detalle.toast.err_evidencia'))
                           }
                         }
                         sessionStorage.removeItem(formDraftStorageKey)
                         setRestoredDraft(null)
-                        toast.success('Borrador guardado')
+                        toast.success(t('dev.entrada_detalle.toast.borrador'))
                         refresh()
                         setEditingItem(null)
                       },
@@ -808,14 +810,14 @@ export default function EntradaDetalle() {
       <Modal
         isOpen={showConfirmModal}
         onClose={() => setShowConfirmModal(false)}
-        title="Confirmar sesión de entrada"
+        title={t('dev.entrada_detalle.confirm.title')}
         icon={PackageCheck}
         size="sm"
         footer={
           <>
             <button onClick={() => setShowConfirmModal(false)}
               className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600 hover:bg-warm-50">
-              Continuar registrando
+              {t('dev.entrada_detalle.confirm.continuar')}
             </button>
             <motion.button
               whileTap={{ scale: 0.97 }}
@@ -823,7 +825,7 @@ export default function EntradaDetalle() {
               disabled={confirmMutation.isPending}
               className="px-4 py-2 rounded-xl bg-success-600 text-white text-sm font-semibold disabled:opacity-60"
             >
-              {confirmMutation.isPending ? 'Confirmando...' : 'Confirmar definitivamente'}
+              {confirmMutation.isPending ? t('dev.entrada_detalle.confirm.ing') : t('dev.entrada_detalle.confirm.confirmar')}
             </motion.button>
           </>
         }
@@ -832,12 +834,12 @@ export default function EntradaDetalle() {
           <div className="flex items-center gap-3 p-3 rounded-xl bg-success-50 border border-success-100">
             <PackageCheck className="w-8 h-8 text-success-600 shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-success-800">{items.length} items · {totalPiezas} piezas</p>
-              <p className="text-xs text-success-700 mt-0.5">pasarán al inventario activo</p>
+              <p className="text-sm font-semibold text-success-800">{items.length} {t('dev.entrada_detalle.confirm.items')} {totalPiezas}</p>
+              <p className="text-xs text-success-700 mt-0.5">{t('dev.entrada_detalle.confirm.pasar')}</p>
             </div>
           </div>
           <p className="text-sm text-warm-600">
-            Una vez confirmada, la sesión queda cerrada y los items aparecen en el stock disponible. Esta acción no se puede deshacer.
+            {t('dev.entrada_detalle.confirm.warning')}
           </p>
         </div>
       </Modal>
@@ -845,7 +847,7 @@ export default function EntradaDetalle() {
       <Modal
         isOpen={showSaveProgressModal}
         onClose={() => setShowSaveProgressModal(false)}
-        title="Guardar progreso"
+        title={t('dev.entrada_detalle.save_progress.title')}
         icon={Save}
         size="sm"
         footer={
@@ -854,7 +856,7 @@ export default function EntradaDetalle() {
               onClick={() => setShowSaveProgressModal(false)}
               className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600 hover:bg-warm-50"
             >
-              Seguir editando
+              {t('dev.entrada_detalle.save_progress.seguir')}
             </button>
             <button
               onClick={() => {
@@ -868,12 +870,12 @@ export default function EntradaDetalle() {
                 }
                 setShowSaveProgressModal(false)
                 setEditingItem(null)
-                toast.success('Progreso guardado en borrador')
+                toast.success(t('dev.entrada_detalle.toast.progreso'))
                 navigate('/devoluciones/entradas')
               }}
               className="px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold"
             >
-              Guardar y cerrar
+              {t('dev.entrada_detalle.save_progress.guardar')}
             </button>
           </>
         }
@@ -882,12 +884,12 @@ export default function EntradaDetalle() {
           <div className="flex items-center gap-3 p-3 rounded-xl bg-primary-50 border border-primary-100">
             <Save className="w-8 h-8 text-primary-600 shrink-0" />
             <div>
-              <p className="text-sm font-semibold text-primary-800">{items.length} registros guardados</p>
-              <p className="text-xs text-primary-700 mt-0.5">la sesión quedará disponible para continuar después</p>
+              <p className="text-sm font-semibold text-primary-800">{items.length} {t('dev.entrada_detalle.save_progress.records')}</p>
+              <p className="text-xs text-primary-700 mt-0.5">{t('dev.entrada_detalle.save_progress.sesion')}</p>
             </div>
           </div>
           <p className="text-sm text-warm-600">
-            Se conservará el progreso actual de la sesión en estado borrador o en proceso, y podrás retomarla más tarde desde el listado de entradas.
+            {t('dev.entrada_detalle.save_progress.body')}
           </p>
         </div>
       </Modal>
@@ -896,34 +898,34 @@ export default function EntradaDetalle() {
       <Modal
         isOpen={showCancelModal}
         onClose={() => setShowCancelModal(false)}
-        title="Cancelar sesión"
+        title={t('dev.entrada_detalle.cancel.title')}
         icon={X}
         size="sm"
         footer={
           <>
             <button onClick={() => setShowCancelModal(false)}
               className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600 hover:bg-warm-50">
-              No cancelar
+              {t('dev.entrada_detalle.cancel.no')}
             </button>
             <button
               onClick={() => cancelMutation.mutate()}
               disabled={cancelMutation.isPending}
               className="px-4 py-2 rounded-xl bg-warning-600 text-white text-sm font-semibold disabled:opacity-60"
             >
-              {cancelMutation.isPending ? 'Cancelando...' : 'Sí, cancelar'}
+              {cancelMutation.isPending ? t('dev.entrada_detalle.cancel.ing') : t('dev.entrada_detalle.cancel.yes')}
             </button>
           </>
         }
       >
         <p className="text-sm text-warm-600">
-          ¿Cancelar esta sesión de entrada? Los {items.length} items registrados no pasarán al inventario. La sesión quedará marcada como cancelada.
+          {t('dev.entrada_detalle.cancel.body')}
         </p>
       </Modal>
 
       <Modal
         isOpen={!!previewFoto}
         onClose={() => setPreviewFoto(null)}
-        title={`Adjuntos ${previewFoto?.itemCodigo ? `· ${previewFoto.itemCodigo}` : ''}`}
+        title={`${t('dev.entrada_detalle.adjuntos.title')} ${previewFoto?.itemCodigo ? `· ${previewFoto.itemCodigo}` : ''}`}
         icon={ImageIcon}
         size="xl"
       >
@@ -975,24 +977,24 @@ export default function EntradaDetalle() {
       <Modal
         isOpen={!!deletingItemId}
         onClose={() => setDeletingItemId(null)}
-        title="Eliminar item"
+        title={t('dev.entrada_detalle.delete_item.title')}
         icon={AlertTriangle}
         size="sm"
         footer={
           <>
             <button onClick={() => setDeletingItemId(null)}
-              className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">Cancelar</button>
+              className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">{t('dev.entrada_detalle.delete_item.cancel')}</button>
             <button
               onClick={() => deleteItemMutation.mutate(deletingItemId)}
               disabled={deleteItemMutation.isPending}
               className="px-4 py-2 rounded-xl bg-danger-600 text-white text-sm font-semibold disabled:opacity-60"
             >
-              {deleteItemMutation.isPending ? 'Eliminando...' : 'Eliminar'}
+              {deleteItemMutation.isPending ? t('dev.entrada_detalle.delete_item.ing') : t('dev.entrada_detalle.delete_item.confirm')}
             </button>
           </>
         }
       >
-        <p className="text-sm text-warm-700">¿Eliminar este item? La acción no se puede deshacer.</p>
+        <p className="text-sm text-warm-700">{t('dev.entrada_detalle.delete_item.body')}</p>
       </Modal>
 
       {/* Manage ubicaciones modal */}
@@ -1004,7 +1006,7 @@ export default function EntradaDetalle() {
         onSelect={(ubicacion) => {
           setSelectedUbicacionEvent({ ubicacion, nonce: Date.now() })
         }}
-        selectActionLabel={editingItem ? 'Usar' : 'Seleccionar'}
+        selectActionLabel={editingItem ? t('dev.entrada_detalle.usar') : t('dev.entrada_detalle.seleccionar')}
         onSaved={() => {
           qc.invalidateQueries({ queryKey: ['dev-ubicaciones'] })
         }}

@@ -32,7 +32,7 @@ export default function InventarioHistorial() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.historial.title')} subtitle="Inventario" />
+        <Header title={t('inventario.historial.title')} subtitle={t('nav.inventario')} />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -40,7 +40,7 @@ export default function InventarioHistorial() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.historial.title')} subtitle="Inventario" />
+      <Header title={t('inventario.historial.title')} subtitle={t('nav.inventario')} />
 
       {/* Filter bar */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-warm-100 px-4 py-3">
@@ -87,7 +87,7 @@ export default function InventarioHistorial() {
                           s.status === 'complete' ? 'bg-success-100 text-success-700' :
                           'bg-warm-100 text-warm-600'
                         }`}>
-                          {s.status}
+                          {t(`inventario.historial.status.${s.status}`) || s.status}
                         </span>
                       </td>
                       <td className="table-cell text-right font-semibold">{s.total_scanned ?? 0}</td>
@@ -107,7 +107,7 @@ export default function InventarioHistorial() {
               totalItems={total}
               onPageChange={setPage}
               onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-              itemLabel="registros"
+              itemLabel={t('inventario.historial.title').toLowerCase()}
             />
           )}
         </div>

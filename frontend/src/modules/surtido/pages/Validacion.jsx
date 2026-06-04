@@ -143,7 +143,7 @@ function SearchStep({ onFound }) {
                   </div>
                   <div className="flex-1 text-left min-w-0">
                     <p className="font-mono font-semibold text-sm text-warm-800">{r.outboundOrderNo}</p>
-                    <p className="text-[11px] text-warm-400">{r.totalQty ?? '?'} unidades · {(r.createTime || '').slice(0, 10)}</p>
+                    <p className="text-[11px] text-warm-400">{r.totalQty ?? '?'} {t('surtido.validacion.units')} · {(r.createTime || '').slice(0, 10)}</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-warm-400 shrink-0" />
                 </button>
@@ -183,30 +183,30 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
               <Package className="w-5 h-5 text-primary-600" />
             </div>
             <div>
-              <p className="text-xs text-warm-500 uppercase tracking-wide">Orden de salida</p>
+              <p className="text-xs text-warm-500 uppercase tracking-wide">{t('surtido.validacion.order_label')}</p>
               <p className="font-mono font-bold text-warm-900 text-lg">{obc}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm pt-2 border-t border-warm-100">
             {detail?.warehouseCode && (
               <div className="bg-warm-50 rounded-xl px-3 py-2">
-                <p className="text-xs text-warm-500">Almacén</p>
+                <p className="text-xs text-warm-500">{t('surtido.validacion.warehouse')}</p>
                 <p className="font-semibold text-warm-800 truncate">{detail.warehouseCode}</p>
               </div>
             )}
             {(detail?.logisticsChannelCode || detail?.logisticsChannel) && (
               <div className="bg-warm-50 rounded-xl px-3 py-2">
-                <p className="text-xs text-warm-500">Canal</p>
+                <p className="text-xs text-warm-500">{t('surtido.validacion.channel')}</p>
                 <p className="font-semibold text-warm-800 truncate">{detail.logisticsChannelCode || detail.logisticsChannel}</p>
               </div>
             )}
             <div className="bg-primary-50 rounded-xl px-3 py-2">
-              <p className="text-xs text-primary-600">Cajas esperadas</p>
+              <p className="text-xs text-primary-600">{t('surtido.validacion.expected_boxes')}</p>
               <p className="font-bold text-primary-700 text-lg">{packageList.length || detail?.totalQty || '?'}</p>
             </div>
             {productList.length > 0 && (
               <div className="bg-accent-50 rounded-xl px-3 py-2">
-                <p className="text-xs text-accent-600">Productos</p>
+                <p className="text-xs text-accent-600">{t('surtido.validacion.products')}</p>
                 <p className="font-bold text-accent-700 text-lg">{productList.length}</p>
               </div>
             )}
@@ -223,9 +223,9 @@ function PreviewStep({ obc, detailData, onStart, onBack, isStarting }) {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-warm-50/60">
-                    <th className="table-header">Tipo</th>
-                    <th className="table-header">Ref. personalizada</th>
-                    <th className="table-header text-right">Cantidad</th>
+                    <th className="table-header">{t('surtido.validacion.preview.type')}</th>
+                    <th className="table-header">{t('surtido.validacion.preview.ref')}</th>
+                    <th className="table-header text-right">{t('surtido.validacion.preview.qty')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
@@ -269,7 +269,7 @@ function ItemsTable({ items, itemCounts, t, onManualAdjust }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-warm-50/60">
-              <th className="table-header">Código</th>
+              <th className="table-header">{t('surtido.validacion.code_header')}</th>
               <th className="table-header text-right">{t('surtido.escaneo.expected')}</th>
               <th className="table-header text-right">{t('surtido.escaneo.scanned')}</th>
               <th className="table-header text-right">{t('surtido.escaneo.pending')}</th>
@@ -536,7 +536,7 @@ export default function SurtidoValidacion() {
   if (detailLoading && step !== 'search') {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('surtido.escaneo.title')} subtitle="Surtido WMS" />
+        <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -546,7 +546,7 @@ export default function SurtidoValidacion() {
   if (step === 'search' || step === 'preview') {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('surtido.escaneo.title')} subtitle="Surtido WMS" />
+        <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} />
         {step === 'search' && <SearchStep onFound={foundObc => { setObc(foundObc); setStep('preview') }} />}
         {step === 'preview' && (
           <PreviewStep
@@ -563,7 +563,7 @@ export default function SurtidoValidacion() {
   /* ─── ACTIVE SESSION ─────────────────────────────────── */
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('surtido.escaneo.title')} subtitle={`Surtido WMS · ${obc || ''}`}
+      <Header title={t('surtido.validacion.title')} subtitle={`${t('nav.surtido_wms')} · ${obc || ''}`}
         actions={
           <div className="flex items-center gap-1.5">
             {pendingSync.length > 0 && (

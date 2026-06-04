@@ -19,12 +19,12 @@ import {
 } from '../services/surtidoService'
 
 const STATUS_META = {
-  pending_assignment: { label: 'Sin asignar',      cls: 'bg-warm-100 text-warm-600' },
-  assigned:           { label: 'Asignado',          cls: 'bg-accent-100 text-accent-700' },
-  sorting:            { label: 'Surtiendo',         cls: 'bg-warning-100 text-warning-700' },
-  pending_validation: { label: 'Pend. validación',  cls: 'bg-primary-100 text-primary-700' },
-  validating:         { label: 'Validando',         cls: 'bg-success-100 text-success-700' },
-  complete:           { label: 'Completo',          cls: 'bg-success-200 text-success-800' },
+  pending_assignment: { labelKey: 'surtido.ordenes.status.pending_assignment', cls: 'bg-warm-100 text-warm-600' },
+  assigned:           { labelKey: 'surtido.ordenes.status.assigned',           cls: 'bg-accent-100 text-accent-700' },
+  sorting:            { labelKey: 'surtido.ordenes.status.sorting',            cls: 'bg-warning-100 text-warning-700' },
+  pending_validation: { labelKey: 'surtido.ordenes.status.pending_validation', cls: 'bg-primary-100 text-primary-700' },
+  validating:         { labelKey: 'surtido.ordenes.status.validating',         cls: 'bg-success-100 text-success-700' },
+  complete:           { labelKey: 'surtido.ordenes.status.complete',           cls: 'bg-success-200 text-success-800' },
 }
 
 const fmtDate = (v) => {
@@ -161,9 +161,9 @@ function DetailPanel({ order, tracking, onClose }) {
         {/* Key info grid */}
         <div className="grid grid-cols-2 gap-2">
           {[
-            { label: 'Almacén', value: detail?.warehouseCode },
-            { label: 'Canal', value: detail?.logisticsChannelCode || detail?.logisticsChannel },
-            { label: 'Tracking', value: detail?.trackingNumber || detail?.thirdWaybillCode, mono: true },
+            { label: t('surtido.ordenes.detail.warehouse'), value: detail?.warehouseCode },
+            { label: t('surtido.ordenes.detail.channel'), value: detail?.logisticsChannelCode || detail?.logisticsChannel },
+            { label: t('surtido.ordenes.detail.tracking'), value: detail?.trackingNumber || detail?.thirdWaybillCode, mono: true },
             { label: t('surtido.ordenes.surtidor'), value: tracking?.surtidor_nombre },
           ].filter(i => i.value).map((item, i) => (
             <div key={i} className="bg-warm-50 rounded-lg px-2.5 py-2">
@@ -292,7 +292,7 @@ export default function Ordenes() {
   if (wmsLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('surtido.ordenes.title')} subtitle="Surtido WMS" />
+        <Header title={t('surtido.ordenes.title')} subtitle={t('nav.surtido_wms')} />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -300,7 +300,7 @@ export default function Ordenes() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('surtido.ordenes.title')} subtitle="Surtido WMS"
+      <Header title={t('surtido.ordenes.title')} subtitle={t('nav.surtido_wms')}
         actions={
           <button className="btn-ghost text-xs flex items-center gap-1.5"
             onClick={() => setShowSurtidoresModal(true)}>
@@ -321,7 +321,7 @@ export default function Ordenes() {
         <select className="input-field text-sm h-9 w-auto" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">{t('surtido.ordenes.status')} — {t('common.all')}</option>
           {Object.entries(STATUS_META).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
+            <option key={k} value={k}>{t(v.labelKey)}</option>
           ))}
         </select>
 
@@ -419,7 +419,7 @@ export default function Ordenes() {
                           </td>
 
                           <td className="table-cell">
-                            <span className={`badge text-[11px] font-medium ${meta.cls}`}>{meta.label}</span>
+                            <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
                           </td>
 
                           <td className="table-cell text-right">
@@ -431,7 +431,7 @@ export default function Ordenes() {
                               className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-800 px-2.5 py-1.5 rounded-lg hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
                               onClick={e => { e.stopPropagation(); navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`) }}
                             >
-                              <Play size={11} /> Validar
+                              <Play size={11} /> {t('surtido.ordenes.validate_btn')}
                             </button>
                           </td>
                         </tr>
@@ -449,7 +449,7 @@ export default function Ordenes() {
                   totalItems={total}
                   onPageChange={setPage}
                   onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-                  itemLabel="órdenes"
+                  itemLabel={t('surtido.ordenes.item_label')}
                 />
               )}
             </div>

@@ -9,10 +9,10 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { getInventorySessions, getInventorySession, deleteInventorySession } from '../services/inventarioService'
 
-const STATUS_META = {
-  ok:      { label: 'Disponible', icon: CheckCircle2, bg: 'bg-success-100 text-success-700' },
-  blocked: { label: 'Bloqueado',  icon: AlertTriangle, bg: 'bg-warning-100 text-warning-700' },
-  nowms:   { label: 'Sin WMS',    icon: Ban, bg: 'bg-danger-100 text-danger-700' },
+const STATUS_META_KEYS = {
+  ok:      { labelKey: 'inventario.escaneo.group_disponible', icon: CheckCircle2, bg: 'bg-success-100 text-success-700' },
+  blocked: { labelKey: 'inventario.escaneo.group_bloqueado',  icon: AlertTriangle, bg: 'bg-warning-100 text-warning-700' },
+  nowms:   { labelKey: 'inventario.escaneo.group_nowms',      icon: Ban, bg: 'bg-danger-100 text-danger-700' },
 }
 
 function DetailModal({ session, isOpen, onClose }) {
@@ -29,7 +29,7 @@ function DetailModal({ session, isOpen, onClose }) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={`${t('inventario.registros.detail')} · ${session?.scan_type === 'clasificacion' ? 'Clasificación' : 'Unificado'}`}
+      title={`${t('inventario.registros.detail')} · ${session?.scan_type === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado')}`}
       icon={Eye}
       footer={<button className="btn-ghost" onClick={onClose}><X size={14} /> {t('common.close')}</button>}
     >
@@ -40,12 +40,12 @@ function DetailModal({ session, isOpen, onClose }) {
           {/* Summary counters */}
           <div className="grid grid-cols-3 gap-2 text-xs">
             {['ok', 'blocked', 'nowms'].map(s => {
-              const meta = STATUS_META[s]
+              const meta = STATUS_META_KEYS[s]
               const count = scans.filter(sc => sc.scan_status === s).length
               return (
                 <div key={s} className={`rounded-xl px-3 py-3 text-center ${meta.bg}`}>
                   <p className="text-2xl font-bold leading-none">{count}</p>
-                  <p className="mt-1 font-medium">{meta.label}</p>
+                  <p className="mt-1 font-medium">{t(meta.labelKey)}</p>
                 </div>
               )
             })}
@@ -57,12 +57,12 @@ function DetailModal({ session, isOpen, onClose }) {
               <p className="text-xs text-warm-400 text-center py-6">{t('common.noData')}</p>
             ) : (
               scans.map((scan, i) => {
-                const meta = STATUS_META[scan.scan_status] ?? STATUS_META.nowms
+                const meta = STATUS_META_KEYS[scan.scan_status] ?? STATUS_META_KEYS.nowms
                 const Icon = meta.icon
                 return (
                   <div key={i} className="flex items-start gap-2.5 py-2.5">
                     <span className={`badge mt-0.5 ${meta.bg} inline-flex items-center gap-1 shrink-0`}>
-                      <Icon size={10} /> {meta.label}
+                      <Icon size={10} /> {t(meta.labelKey)}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="font-mono text-xs font-bold truncate text-warm-800">{scan.normalized_code}</p>
@@ -121,7 +121,7 @@ export default function InventarioRegistros() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.registros.title')} subtitle="Inventario" />
+        <Header title={t('inventario.registros.title')} subtitle={t('nav.inventario')} />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -129,7 +129,7 @@ export default function InventarioRegistros() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.registros.title')} subtitle="Inventario" />
+      <Header title={t('inventario.registros.title')} subtitle={t('nav.inventario')} />
 
       <div className="flex-1 overflow-y-auto p-4">
         {records.length === 0 ? (
@@ -167,7 +167,7 @@ export default function InventarioRegistros() {
                             ? 'bg-accent-100 text-accent-700'
                             : 'bg-primary-100 text-primary-700'
                         }`}>
-                          {r.scan_type === 'clasificacion' ? 'Clasificación' : 'Unificado'}
+                          {r.scan_type === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado')}
                         </span>
                       </td>
                       <td className="table-cell hidden md:table-cell text-warm-600 text-xs">
@@ -215,7 +215,7 @@ export default function InventarioRegistros() {
                 totalItems={total}
                 onPageChange={setPage}
                 onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-                itemLabel="registros"
+                itemLabel={t('inventario.registros.title').toLowerCase()}
               />
             )}
           </div>

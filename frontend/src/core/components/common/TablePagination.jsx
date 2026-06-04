@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { useI18nStore } from '../../stores/i18nStore'
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 
@@ -9,19 +10,21 @@ export default function TablePagination({
   totalItems,
   onPageChange,
   onPageSizeChange,
-  itemLabel = 'registros',
+  itemLabel,
 }) {
+  const { t } = useI18nStore()
   const safeTotalPages = Math.max(1, totalPages || 1)
   const safePage = Math.min(Math.max(1, page || 1), safeTotalPages)
   const start = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1
   const end = totalItems === 0 ? 0 : Math.min(safePage * pageSize, totalItems)
+  const label = itemLabel ?? t('common.pagination.records')
 
   return (
     <div className="flex flex-col gap-2 border-t border-warm-100 bg-warm-50/30 px-5 py-3 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-wrap items-center gap-3 text-xs text-warm-500">
-        <span>{start}–{end} de {totalItems} {itemLabel}</span>
+        <span>{start}–{end} {t('common.pagination.of')} {totalItems} {label}</span>
         <label className="flex items-center gap-2">
-          <span>Ver</span>
+          <span>{t('common.pagination.show')}</span>
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
@@ -35,7 +38,7 @@ export default function TablePagination({
       </div>
 
       <div className="flex items-center justify-between gap-2 md:justify-end">
-        <span className="text-xs text-warm-400">Pág. {safePage} / {safeTotalPages}</span>
+        <span className="text-xs text-warm-400">{t('common.pagination.page')} {safePage} / {safeTotalPages}</span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => onPageChange(1)}

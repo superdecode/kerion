@@ -13,16 +13,16 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getScanSessions, getScanSession } from '../services/surtidoService'
 
 const STATUS_META = {
-  open:               { label: 'En curso',        cls: 'bg-warning-100 text-warning-700' },
-  complete:           { label: 'Completo',         cls: 'bg-success-100 text-success-700' },
-  with_discrepancies: { label: 'Con diferencias',  cls: 'bg-danger-100 text-danger-700' },
-  cancelled:          { label: 'Cancelado',        cls: 'bg-warm-100 text-warm-600' },
+  open:               { labelKey: 'surtido.registros.status.open',               cls: 'bg-warning-100 text-warning-700' },
+  complete:           { labelKey: 'surtido.registros.status.complete',           cls: 'bg-success-100 text-success-700' },
+  with_discrepancies: { labelKey: 'surtido.registros.status.with_discrepancies', cls: 'bg-danger-100 text-danger-700' },
+  cancelled:          { labelKey: 'surtido.registros.status.cancelled',          cls: 'bg-warm-100 text-warm-600' },
 }
 
 const RESULT_META = {
-  ok:        { label: 'OK',        icon: CheckCircle2, cls: 'text-success-600' },
-  rejected:  { label: 'Rechazado', icon: XCircle,      cls: 'text-danger-600' },
-  duplicate: { label: 'Duplicado', icon: AlertTriangle, cls: 'text-warning-600' },
+  ok:        { labelKey: 'surtido.registros.result.ok',        icon: CheckCircle2, cls: 'text-success-600' },
+  rejected:  { labelKey: 'surtido.registros.result.rejected',  icon: XCircle,      cls: 'text-danger-600' },
+  duplicate: { labelKey: 'surtido.registros.result.duplicate', icon: AlertTriangle, cls: 'text-warning-600' },
 }
 
 function durationLabel(startedAt, endedAt) {
@@ -53,7 +53,7 @@ function DetailModal({ sessionId, isOpen, onClose }) {
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={session.outbound_order_no ? `OBC · ${session.outbound_order_no}` : 'Detalle de sesión'}
+      title={session.outbound_order_no ? `OBC · ${session.outbound_order_no}` : t('surtido.registros.detail.title_fallback')}
       icon={ScanBarcode}
       footer={<button className="btn-ghost" onClick={onClose}><X size={14} /> {t('common.close')}</button>}
     >
@@ -64,10 +64,10 @@ function DetailModal({ sessionId, isOpen, onClose }) {
           {/* Header info */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             {[
-              { label: 'Surtidor', value: session.operator_nombre },
-              { label: 'Duración', value: durationLabel(session.started_at, session.ended_at) },
-              { label: 'Inicio', value: session.started_at ? new Date(session.started_at).toLocaleString() : null },
-              { label: 'Estado', value: STATUS_META[session.status]?.label },
+              { label: t('surtido.registros.detail.operator'), value: session.operator_nombre },
+              { label: t('surtido.registros.detail.duration'), value: durationLabel(session.started_at, session.ended_at) },
+              { label: t('surtido.registros.detail.start'), value: session.started_at ? new Date(session.started_at).toLocaleString() : null },
+              { label: t('surtido.registros.detail.status'), value: STATUS_META[session.status]?.labelKey ? t(STATUS_META[session.status].labelKey) : null },
             ].filter(i => i.value).map((item, i) => (
               <div key={i} className="bg-warm-50 rounded-lg px-3 py-2">
                 <p className="text-warm-400 text-[10px] uppercase tracking-wide">{item.label}</p>
@@ -80,15 +80,15 @@ function DetailModal({ sessionId, isOpen, onClose }) {
           <div className="grid grid-cols-3 gap-2 text-xs text-center">
             <div className="bg-success-50 rounded-xl py-3">
               <p className="text-2xl font-bold text-success-600 leading-none">{totalOk}</p>
-              <p className="text-success-600 mt-1 font-medium">Validados</p>
+              <p className="text-success-600 mt-1 font-medium">{t('surtido.registros.detail.validated')}</p>
             </div>
             <div className="bg-danger-50 rounded-xl py-3">
               <p className="text-2xl font-bold text-danger-600 leading-none">{totalRej}</p>
-              <p className="text-danger-600 mt-1 font-medium">Rechazados</p>
+              <p className="text-danger-600 mt-1 font-medium">{t('surtido.registros.detail.rejected_count')}</p>
             </div>
             <div className="bg-warning-50 rounded-xl py-3">
               <p className="text-2xl font-bold text-warning-600 leading-none">{totalDup}</p>
-              <p className="text-warning-600 mt-1 font-medium">Duplicados</p>
+              <p className="text-warning-600 mt-1 font-medium">{t('surtido.registros.detail.duplicated')}</p>
             </div>
           </div>
 
@@ -96,7 +96,7 @@ function DetailModal({ sessionId, isOpen, onClose }) {
           {notFound.length > 0 && (
             <div className="bg-danger-50 rounded-xl p-3">
               <p className="text-xs font-semibold text-danger-700 mb-2">
-                Códigos no encontrados ({notFound.length})
+                {t('surtido.registros.detail.not_found')} ({notFound.length})
               </p>
               <div className="flex flex-wrap gap-1">
                 {notFound.map((code, i) => (
@@ -111,7 +111,7 @@ function DetailModal({ sessionId, isOpen, onClose }) {
           {/* Notes */}
           {session.notes && (
             <div className="bg-warm-50 rounded-xl p-3">
-              <p className="text-[10px] font-semibold text-warm-400 uppercase tracking-wide mb-1">Notas del operador</p>
+              <p className="text-[10px] font-semibold text-warm-400 uppercase tracking-wide mb-1">{t('surtido.registros.detail.notes')}</p>
               <p className="text-xs text-warm-700">{session.notes}</p>
             </div>
           )}
@@ -119,11 +119,11 @@ function DetailModal({ sessionId, isOpen, onClose }) {
           {/* Event timeline */}
           <div>
             <p className="text-[10px] font-semibold text-warm-500 uppercase tracking-wide mb-2">
-              Eventos de escaneo ({events.length})
+              {t('surtido.registros.detail.events')} ({events.length})
             </p>
             <div className="max-h-60 overflow-y-auto divide-y divide-warm-100 -mx-1 px-1">
               {events.length === 0 ? (
-                <p className="text-xs text-warm-400 py-4 text-center">Sin eventos registrados</p>
+                <p className="text-xs text-warm-400 py-4 text-center">{t('surtido.registros.detail.no_events')}</p>
               ) : (
                 events.map((ev, i) => {
                   const meta = RESULT_META[ev.result] ?? RESULT_META.rejected
@@ -132,7 +132,7 @@ function DetailModal({ sessionId, isOpen, onClose }) {
                     <div key={i} className="flex items-center gap-2 py-2">
                       <Icon size={12} className={`shrink-0 ${meta.cls}`} />
                       <span className="font-mono text-xs flex-1 truncate text-warm-700">{ev.normalized_code || ev.code}</span>
-                      <span className={`text-[10px] font-semibold shrink-0 ${meta.cls}`}>{meta.label}</span>
+                      <span className={`text-[10px] font-semibold shrink-0 ${meta.cls}`}>{t(meta.labelKey)}</span>
                       <span className="text-[10px] text-warm-400 shrink-0 tabular-nums">
                         {ev.scan_time ? new Date(ev.scan_time).toLocaleTimeString() : ''}
                       </span>
@@ -176,7 +176,7 @@ export default function SurtidoRegistros() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('surtido.registros.title')} subtitle="Surtido WMS" />
+        <Header title={t('surtido.registros.title')} subtitle={t('nav.surtido_wms')} />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -184,7 +184,7 @@ export default function SurtidoRegistros() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('surtido.registros.title')} subtitle="Surtido WMS" />
+      <Header title={t('surtido.registros.title')} subtitle={t('nav.surtido_wms')} />
 
       <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-lg border-b border-warm-100 px-4 py-2.5 shadow-sm">
         <div className="relative max-w-sm">
@@ -257,7 +257,7 @@ export default function SurtidoRegistros() {
                           </span>
                         </td>
                         <td className="table-cell">
-                          <span className={`badge text-[11px] font-medium ${meta.cls}`}>{meta.label}</span>
+                          <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
                         </td>
                         <td className="table-cell text-right">
                           <button
@@ -283,7 +283,7 @@ export default function SurtidoRegistros() {
                 totalItems={total}
                 onPageChange={setPage}
                 onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-                itemLabel="sesiones"
+                itemLabel={t('surtido.historial.sessions')}
               />
             )}
           </div>

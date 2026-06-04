@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, ArrowLeftRight, ClipboardList, Search, X, Check, LayoutGrid, AlertCircle } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 const TABS = [
   { id: 'ajuste',     label: 'Ajuste de cantidad', icon: ClipboardList },
@@ -55,6 +56,7 @@ function LocationCombo({ ubicaciones, value, onChange, placeholder = 'Selecciona
 }
 
 export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', inventario = [], ubicaciones = [], onSubmit, saving = false, submitResult = null }) {
+  const { t } = useI18nStore()
   const [tipo, setTipo] = useState(initialTipo)
   const [descripcion, setDescripcion] = useState('')
   const [ajustes, setAjustes] = useState([])
@@ -145,10 +147,10 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
     const errs = {}
     if (tipo === 'ajuste') {
       const valid = ajustes.filter(r => r.inventario_id && r.cantidad_nueva !== '')
-      if (!valid.length) errs.ajustes = 'Agrega al menos un item'
+      if (!valid.length) errs.ajustes = t('dev.ajuste.err.ajustes')
     } else {
-      if (!selectedIds.length) errs.ids = 'Selecciona al menos un item'
-      if (!destinoId) errs.destino = 'Selecciona una ubicación destino'
+      if (!selectedIds.length) errs.ids = t('dev.ajuste.err.ids')
+      if (!destinoId) errs.destino = t('dev.ajuste.err.destino')
     }
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -193,19 +195,19 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={tipo === 'ajuste' ? 'Ajuste de inventario' : 'Mover mercancía'}
+      title={t(`dev.ajuste.title.${tipo}`)}
       icon={tipo === 'ajuste' ? ClipboardList : ArrowLeftRight}
       size="xl"
       footer={
         <>
-          <button onClick={onClose} className="btn-ghost">Cancelar</button>
+          <button onClick={onClose} className="btn-ghost">{t('dev.ajuste.cancelar')}</button>
           <button
             onClick={handleSubmit}
             disabled={saving || !canSubmit}
             className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
-            {saving ? 'Guardando...' : 'Confirmar'}
+            {saving ? t('dev.ajuste.guardando') : t('dev.ajuste.confirmar')}
           </button>
         </>
       }
@@ -215,7 +217,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
         {submitResult?.summary?.fallidos > 0 && (
           <div className="rounded-xl border border-warning-200 bg-warning-50 px-4 py-3 text-xs text-warning-800 space-y-1">
             <div className="font-semibold">
-              Resultado parcial: {submitResult.summary.creados || 0} creados, {submitResult.summary.actualizados || 0} actualizados, {submitResult.summary.fallidos || 0} fallidos.
+              {t('dev.ajuste.resultado_parcial')}: {submitResult.summary.creados || 0} {t('dev.ajuste.result.creados')}, {submitResult.summary.actualizados || 0} {t('dev.ajuste.result.actualizados')}, {submitResult.summary.fallidos || 0} {t('dev.ajuste.result.fallidos')}.
             </div>
             {Array.isArray(submitResult.errors) && submitResult.errors.length > 0 && (
               <div className="space-y-1">
@@ -232,22 +234,22 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
 
         {/* Tipo tabs */}
         <div className="flex gap-1 border-b border-warm-100 -mx-1">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => setTipo(t.id)}
+          {TABS.map(tabItem => (
+            <button key={tabItem.id} onClick={() => setTipo(tabItem.id)}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px ${
-                tipo === t.id ? 'border-primary-500 text-primary-600' : 'border-transparent text-warm-400 hover:text-warm-600'
+                tipo === tabItem.id ? 'border-primary-500 text-primary-600' : 'border-transparent text-warm-400 hover:text-warm-600'
               }`}
             >
-              <t.icon className="w-3.5 h-3.5" /> {t.label}
+              <tabItem.icon className="w-3.5 h-3.5" /> {t(`dev.ajuste.tab.${tabItem.id}`)}
             </button>
           ))}
         </div>
 
         {/* Descripción */}
         <div>
-          <label className={labelCls}>Descripción / motivo general</label>
+          <label className={labelCls}>{t('dev.ajuste.descripcion')}</label>
           <input value={descripcion} onChange={e => setDescripcion(e.target.value)}
-            className={inputCls} placeholder="Ej. Conteo físico mensual" />
+            className={inputCls} placeholder={t('dev.ajuste.desc_ph')} />
         </div>
 
         {/* ── AJUSTE ── */}
@@ -256,11 +258,11 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
 
             {/* Search to add */}
             <div className="relative">
-              <label className={labelCls}>Buscar y agregar items al ajuste</label>
+              <label className={labelCls}>{t('dev.ajuste.buscar_ajuste')}</label>
               <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-2">
                 <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
                 <input type="text" value={searchAjuste} onChange={e => setSearchAjuste(e.target.value)}
-                  placeholder="SKU, código o descripción..."
+                  placeholder={t('dev.ajuste.search_ph_ajuste')}
                   className="text-sm outline-none bg-transparent text-warm-700 flex-1" />
                 {searchAjuste && <button onClick={() => setSearchAjuste('')} className="text-warm-400 hover:text-warm-600"><X className="w-3.5 h-3.5" /></button>}
               </div>
@@ -268,7 +270,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
               {searchAjuste.trim() && (
                 <div className="absolute z-10 mt-1 w-full bg-white rounded-xl border border-warm-200 shadow-xl max-h-48 overflow-y-auto">
                   {invParaAjuste.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-warm-400">Sin resultados</div>
+                    <div className="px-4 py-3 text-sm text-warm-400">{t('dev.ajuste.sin_resultados')}</div>
                   ) : invParaAjuste.slice(0, 12).map(inv => {
                     const ya = alreadyInAjuste.has(String(inv.id))
                     return (
@@ -280,7 +282,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
                           <p className="text-xs text-warm-400 font-mono">{inv.codigo_trazabilidad}</p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="text-xs font-bold text-warm-700">{inv.cantidad_disponible} disp.</p>
+                          <p className="text-xs font-bold text-warm-700">{inv.cantidad_disponible} {t('dev.ajuste.disp')}</p>
                           {(inv.ubicacion_codigo || inv.ubicacion_nombre) && <p className="text-[10px] text-warm-400">{inv.ubicacion_codigo || inv.ubicacion_nombre}</p>}
                         </div>
                         {ya && <Check className="w-4 h-4 text-success-500 shrink-0" />}
@@ -301,20 +303,20 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
             {ajustes.length === 0 ? (
               <div className="flex flex-col items-center py-10 text-warm-300 border border-dashed border-warm-200 rounded-xl gap-2">
                 <ClipboardList className="w-8 h-8" />
-                <p className="text-sm">Busca y agrega items para ajustar</p>
+                <p className="text-sm">{t('dev.ajuste.agrega_items')}</p>
               </div>
             ) : (
               <div className="border border-warm-100 rounded-xl overflow-hidden">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-warm-50 border-b border-warm-100 text-warm-500 text-left">
-                      <th className="px-3 py-2.5 w-6">#</th>
-                      <th className="px-3 py-2.5">SKU</th>
-                      <th className="px-3 py-2.5">Código</th>
-                      <th className="px-3 py-2.5">Ubicación</th>
-                      <th className="px-3 py-2.5 text-right w-20">Actual</th>
-                      <th className="px-3 py-2.5 w-28">Cantidad real</th>
-                      <th className="px-3 py-2.5">Observación</th>
+                      <th className="px-3 py-2.5 w-6">{t('dev.ajuste.col.num')}</th>
+                      <th className="px-3 py-2.5">{t('dev.ajuste.col.sku')}</th>
+                      <th className="px-3 py-2.5">{t('dev.ajuste.col.codigo')}</th>
+                      <th className="px-3 py-2.5">{t('dev.ajuste.col.ubicacion')}</th>
+                      <th className="px-3 py-2.5 text-right w-20">{t('dev.ajuste.col.actual')}</th>
+                      <th className="px-3 py-2.5 w-28">{t('dev.ajuste.col.cant_real')}</th>
+                      <th className="px-3 py-2.5">{t('dev.ajuste.col.observacion')}</th>
                       <th className="px-3 py-2.5 w-8" />
                     </tr>
                   </thead>
@@ -345,7 +347,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
                           </td>
                           <td className="px-3 py-2.5">
                             <input value={row.observacion} onChange={e => updateRow(i, 'observacion', e.target.value)}
-                              placeholder={descripcion || 'Nota...'}
+                              placeholder={descripcion || t('dev.ajuste.nota_ph')}
                               className="w-full px-2 py-1.5 rounded-lg border border-warm-200 text-xs focus:outline-none focus:ring-2 focus:ring-primary-200"
                             />
                           </td>
@@ -370,12 +372,12 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
 
             {/* Destino */}
             <div>
-              <label className={labelCls}>Ubicación destino *</label>
+              <label className={labelCls}>{t('dev.ajuste.destino')}</label>
               <LocationCombo
                 ubicaciones={ubicaciones}
                 value={destinoId}
                 onChange={setDestinoId}
-                placeholder="Escribir o buscar ubicación destino..."
+                placeholder={t('dev.ajuste.destino_ph')}
               />
               {errors.destino && (
                 <p className="text-[11px] text-danger-500 mt-1 flex items-center gap-1">
@@ -387,17 +389,17 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
             {/* Search */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className={labelCls}>Items a mover</label>
+                <label className={labelCls}>{t('dev.ajuste.items_mover')}</label>
                 {invParaMov.length > 0 && (
                   <button onClick={toggleAll} className="text-xs text-primary-600 font-semibold hover:text-primary-700">
-                    {selectedIds.length === invParaMov.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                    {selectedIds.length === invParaMov.length ? t('dev.ajuste.desel_todo') : t('dev.ajuste.sel_todo')}
                   </button>
                 )}
               </div>
               <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-2 mb-2">
                 <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
                 <input type="text" value={searchMov} onChange={e => setSearchMov(e.target.value)}
-                  placeholder="Filtrar por SKU, código o ubicación..."
+                  placeholder={t('dev.ajuste.search_ph_mov')}
                   className="text-sm outline-none bg-transparent text-warm-700 flex-1" />
                 {searchMov && <button onClick={() => setSearchMov('')} className="text-warm-400 hover:text-warm-600"><X className="w-3.5 h-3.5" /></button>}
               </div>
@@ -410,20 +412,20 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
 
               <div className="border border-warm-100 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
                 {inventario.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-warm-400">Sin inventario disponible</div>
+                  <div className="px-4 py-8 text-center text-sm text-warm-400">{t('dev.ajuste.sin_inv_mov')}</div>
                 ) : invParaMov.length === 0 ? (
-                  <div className="px-4 py-6 text-center text-sm text-warm-400">Sin resultados</div>
+                  <div className="px-4 py-6 text-center text-sm text-warm-400">{t('dev.ajuste.sin_resultados')}</div>
                 ) : (
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="text-left text-[10px] uppercase text-warm-400 border-b border-warm-100 bg-warm-50">
                         <th className="px-3 py-2 w-8" />
-                        <th className="px-3 py-2 w-6">#</th>
-                        <th className="px-3 py-2">SKU</th>
-                        <th className="px-3 py-2">Código</th>
-                        <th className="px-3 py-2 flex items-center gap-0.5"><LayoutGrid className="w-3 h-3" />Ubicación</th>
-                        <th className="px-3 py-2 text-right">Disp.</th>
-                        <th className="px-3 py-2 text-right w-24">Traslado</th>
+                        <th className="px-3 py-2 w-6">{t('dev.ajuste.col.num')}</th>
+                        <th className="px-3 py-2">{t('dev.ajuste.col.sku')}</th>
+                        <th className="px-3 py-2">{t('dev.ajuste.col.codigo')}</th>
+                        <th className="px-3 py-2 flex items-center gap-0.5"><LayoutGrid className="w-3 h-3" />{t('dev.ajuste.col.ubicacion')}</th>
+                        <th className="px-3 py-2 text-right">{t('dev.ajuste.col.disp')}</th>
+                        <th className="px-3 py-2 text-right w-24">{t('dev.ajuste.col.traslado')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -467,7 +469,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
 
               {selectedIds.length > 0 && (
                 <p className="text-xs text-primary-600 font-semibold mt-1.5">
-                  {selectedIds.length} item{selectedIds.length !== 1 ? 's' : ''} seleccionado{selectedIds.length !== 1 ? 's' : ''}
+                  {selectedIds.length} {t('dev.ajuste.sel_count')}
                 </p>
               )}
             </div>
