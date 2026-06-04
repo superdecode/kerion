@@ -1062,6 +1062,10 @@ const translations = {
     'wmshub.config.sheet_test_ok':          '表格可访问',
     'wmshub.config.sheet_refresh':          '刷新',
     'wmshub.config.datos_al':               '数据截至',
+    'wmshub.config.status_no_url':          '未配置数据源',
+    'wmshub.config.status_ok':              '数据源正常',
+    'wmshub.config.status_pending':         '已配置，待验证',
+    'wmshub.config.status_error':           '部分数据源无法访问',
 
     // ── Inventario ────────────────────────────────────────────────────────
     'inventario.dashboard.title': 'WMS 库存',
@@ -3115,6 +3119,10 @@ const translations = {
     'wmshub.config.sheet_test_ok':          'Hoja accesible',
     'wmshub.config.sheet_refresh':          'Actualizar',
     'wmshub.config.datos_al':               'Datos al',
+    'wmshub.config.status_no_url':          'Fuente de datos no configurada',
+    'wmshub.config.status_ok':              'Fuente de datos operativa',
+    'wmshub.config.status_pending':         'Configurada, pendiente de verificar',
+    'wmshub.config.status_error':           'Algunas hojas no son accesibles',
 
     // ── Inventario ────────────────────────────────────────────────────────
     'inventario.dashboard.title': 'Inventario',

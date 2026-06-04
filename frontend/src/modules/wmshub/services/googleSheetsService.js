@@ -57,37 +57,110 @@ function parseCSV(text) {
 function normalizeHeader(str) {
   return str
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[̀-ͯ]/g, '')   // strip combining diacritics
     .toLowerCase()
     .trim()
-    .replace(/[\s\-]+/g, '_')
+    .replace(/[.\s\-\/]+/g, '_')       // replace ., spaces, hyphens, slashes
+    .replace(/_+/g, '_')               // deduplicate underscores
+    .replace(/^_|_$/g, '')             // trim leading/trailing _
 }
 
 // ── Column alias tables ────────────────────────────────────────────────────
+// Each list starts with the exact WMS-exported column name (normalized),
+// followed by generic fallback aliases.
+
 const INVENTORY_ALIASES = {
-  customizeBarcode: ['customize_barcode', 'barcode', 'codigo_barras', '条形码', '自定义条码', 'caja', 'box_code', 'box_barcode'],
-  availableAmount:  ['available_amount', 'available', 'disponible', '可用数量', '库存数量', 'cantidad_disponible', 'qty_available'],
-  lockAmount:       ['lock_amount', 'locked', 'bloqueado', '锁定数量', 'cantidad_bloqueada', 'qty_locked'],
-  customizeCode:    ['customize_code', 'sku', 'codigo', '物品编码', 'item_code', 'product_code'],
-  boxType:          ['box_type', 'tipo_caja', '箱型', 'tipo', 'type'],
-  productName:      ['product_name', 'nombre', '品名', 'descripcion', 'name'],
+  // "Customize Barcode/自定义箱条码"
+  customizeBarcode: [
+    'customize_barcode_自定义箱条码',
+    'customize_barcode', 'barcode', 'codigo_barras', 'caja', 'box_code', 'box_barcode',
+  ],
+  // "Available stock/可用库存"
+  availableAmount: [
+    'available_stock_可用库存',
+    'available_amount', 'available_stock', 'available', 'disponible', 'qty_available',
+  ],
+  // "Locked Inventory/锁定库存"
+  lockAmount: [
+    'locked_inventory_锁定库存',
+    'lock_amount', 'locked_inventory', 'locked', 'bloqueado',
+  ],
+  // "sku"
+  customizeCode: [
+    'sku',
+    'customize_code', 'codigo', 'item_code', 'product_code',
+  ],
+  // "Box type No./箱类型号"
+  boxType: [
+    'box_type_no_箱类型号',
+    'box_type', 'tipo_caja', 'tipo', 'type',
+  ],
+  // "Product name/产品名称"
+  productName: [
+    'product_name_产品名称',
+    'product_name', 'nombre', 'name', 'descripcion',
+  ],
 }
 
 const OUTBOUND_ALIASES = {
-  outboundOrderNo:  ['outbound_order_no', 'obc', '出库单号', 'orden', 'order_no', 'outbound_no'],
-  logisticsChannel: ['logistics_channel', 'channel', 'canal', '物流渠道', 'canal_logistico', 'carrier'],
-  logisticsTrackNo: ['logistics_track_no', 'tracking', 'guia', '物流单号', 'tracking_no', 'track_no'],
-  thirdOrderNo:     ['third_order_no', 'reference', 'referencia', '参考号', '第三方单号', 'ref', 'po_number'],
-  customerCode:     ['customer_code', 'cliente', '客户编码', '客户', 'customer', 'client_code'],
-  receiverName:     ['receiver_name', 'recipient', 'destinatario', '收件人', 'receiver', 'consignee'],
-  orderCreateTime:  ['order_create_time', 'created_at', 'fecha_creacion', '创建时间', 'fecha', 'create_time'],
-  outboundTime:     ['outbound_time', 'fecha_salida', '出库时间', 'delivery_time', 'shipped_at'],
-  outboundBoxCount: ['outbound_box_count', 'box_count', 'cajas', '箱数', 'total_cajas', 'total_boxes'],
-  whCode:           ['wh_code', 'warehouse', 'almacen', '仓库代码', 'warehouse_code'],
-  status:           ['status', 'estado', '状态'],
-  boxType:          ['box_type', 'tipo_caja', '箱型', 'tipo'],
-  customizeCode:    ['customize_code', 'sku', 'codigo', '物品编码'],
-  quantity:         ['quantity', 'qty', 'cantidad', '数量'],
+  // "Outbound_出库单号"
+  outboundOrderNo: [
+    'outbound_出库单号',
+    'outbound_order_no', 'obc', 'orden', 'order_no', 'outbound_no',
+  ],
+  // "Shipping service_物流渠道"
+  logisticsChannel: [
+    'shipping_service_物流渠道',
+    'logistics_channel', 'shipping_service', 'channel', 'canal', 'carrier',
+  ],
+  // "货件追踪码/Reference ID"
+  logisticsTrackNo: [
+    '货件追踪码_reference_id',
+    'logistics_track_no', 'tracking', 'guia', 'track_no', 'reference_id',
+  ],
+  // "Reference order No._参考单号"
+  thirdOrderNo: [
+    'reference_order_no_参考单号',
+    'third_order_no', 'reference_order_no', 'reference', 'referencia', 'ref',
+  ],
+  // (no customerCode column in the exported sheet)
+  customerCode: [
+    'customer_code', 'cliente', 'customer', 'client_code',
+  ],
+  // "Recipient_收件人"
+  receiverName: [
+    'recipient_收件人',
+    'receiver_name', 'recipient', 'destinatario', 'receiver', 'consignee',
+  ],
+  // (no orderCreateTime in the exported sheet — kept for other sheet variants)
+  orderCreateTime: [
+    'order_create_time', 'created_at', 'fecha_creacion', 'create_time',
+  ],
+  // "Expected Arrival Time _ 期望到仓时间"
+  outboundTime: [
+    'expected_arrival_time_期望到仓时间',
+    'outbound_time', 'expected_arrival_time', 'fecha_salida', 'delivery_time',
+  ],
+  // (computed from row count; kept for sheets that do export it)
+  outboundBoxCount: [
+    'outbound_box_count', 'box_count', 'cajas', 'total_cajas', 'total_boxes',
+  ],
+  // (no warehouse column in the exported sheet)
+  whCode: ['wh_code', 'warehouse', 'almacen'],
+  // (no status column in the exported sheet)
+  status: ['status', 'estado'],
+  // "Box type No_箱类型号"
+  boxType: [
+    'box_type_no_箱类型号',
+    'box_type', 'tipo_caja', 'tipo',
+  ],
+  // "Custom box barcode_自定义箱条码"
+  customizeCode: [
+    'custom_box_barcode_自定义箱条码',
+    'customize_code', 'custom_box_barcode', 'sku', 'codigo',
+  ],
+  // (no explicit quantity column; each row = 1 box)
+  quantity: ['quantity', 'qty', 'cantidad'],
 }
 
 function buildHeaderMap(headers, aliases) {
@@ -254,23 +327,23 @@ export async function getOutboundList() {
   const [headerRow, ...dataRows] = rows
   const map = buildHeaderMap(headerRow, OUTBOUND_ALIASES)
 
-  // Group rows by OBC; accumulate box count from package rows when not explicit
+  // Group rows by OBC; box count = number of rows (each row = one box)
   const orderMap = new Map()
+  const boxCountMap = new Map()
+
   for (const row of dataRows) {
     const r = mapRowToOutbound(row, map)
     if (!r.outboundOrderNo) continue
+    boxCountMap.set(r.outboundOrderNo, (boxCountMap.get(r.outboundOrderNo) || 0) + 1)
     if (!orderMap.has(r.outboundOrderNo)) {
       orderMap.set(r.outboundOrderNo, { ...r })
-    } else if (!r.outboundBoxCount) {
-      const existing = orderMap.get(r.outboundOrderNo)
-      orderMap.set(r.outboundOrderNo, {
-        ...existing,
-        outboundBoxCount: (existing.outboundBoxCount || 0) + (r.quantity || 0),
-      })
     }
   }
 
-  const records = Array.from(orderMap.values())
+  const records = Array.from(orderMap.values()).map(r => ({
+    ...r,
+    outboundBoxCount: r.outboundBoxCount || boxCountMap.get(r.outboundOrderNo) || 0,
+  }))
   return { success: true, data: { records, total: records.length } }
 }
 
@@ -287,9 +360,9 @@ export async function getOutboundDetail(orderNo) {
 
   const base = orderRows[0]
   const packageList = orderRows.map(r => ({
-    boxType:       r.boxType,
-    customizeCode: r.customizeCode,
-    quantity:      r.quantity,
+    boxType:           r.boxType,
+    customizeCode:     r.customizeCode,
+    quantity:          r.quantity,
     boxSkuQueryVOList: [],
   }))
 
@@ -297,6 +370,7 @@ export async function getOutboundDetail(orderNo) {
     success: true,
     data: {
       ...base,
+      outboundBoxCount: base.outboundBoxCount || orderRows.length,
       packageList,
       outboundBoxList: packageList,
     },

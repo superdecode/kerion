@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { RefreshCw, CheckCircle2, XCircle, Loader2, Save, Link2 } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, Loader2, Save, Link2, Wifi, WifiOff } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -53,6 +53,26 @@ export default function Configuracion() {
     }
   }
 
+  const hasInventoryUrl = !!configData?.data?.sheet_inventory_url
+  const hasOutboundUrl  = !!configData?.data?.sheet_outbound_url
+  const hasAnyUrl       = hasInventoryUrl || hasOutboundUrl
+  const bothTested      = sheetTestResults.inventory?.ok && sheetTestResults.outbound?.ok
+  const anyFailed       = sheetTestResults.inventory?.ok === false || sheetTestResults.outbound?.ok === false
+
+  const statusColor = !hasAnyUrl
+    ? { bg: 'bg-danger-50',  border: 'border-danger-200',  icon: 'text-danger-600',  dot: 'bg-danger-500',  label: 'text-danger-700' }
+    : bothTested
+      ? { bg: 'bg-success-50', border: 'border-success-200', icon: 'text-success-600', dot: 'bg-success-500', label: 'text-success-700' }
+      : { bg: 'bg-primary-50', border: 'border-primary-200', icon: 'text-primary-600', dot: 'bg-primary-500', label: 'text-primary-700' }
+
+  const statusText = !hasAnyUrl
+    ? t('wmshub.config.status_no_url')
+    : bothTested
+      ? t('wmshub.config.status_ok')
+      : anyFailed
+        ? t('wmshub.config.status_error')
+        : t('wmshub.config.status_pending')
+
   function fmtTs(ts) {
     if (!ts) return t('wmshub.config.sheet_never')
     return new Date(ts).toLocaleTimeString()
@@ -63,8 +83,32 @@ export default function Configuracion() {
       <Header title={t('wmshub.config.title')} subtitle={t('wms.title')} />
 
       <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-2xl mx-auto space-y-4">
 
+          {/* Status card */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className={`card border ${statusColor.border} ${statusColor.bg}`}>
+            <div className="px-5 py-4 flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${statusColor.bg}`}>
+                {!hasAnyUrl
+                  ? <WifiOff className={`w-4 h-4 ${statusColor.icon}`} />
+                  : <Wifi className={`w-4 h-4 ${statusColor.icon}`} />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${statusColor.dot}`} />
+                  <span className={`text-sm font-semibold ${statusColor.label}`}>
+                    Google Sheets
+                  </span>
+                </div>
+                <p className={`text-xs mt-0.5 ${statusColor.label}`}>{statusText}</p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Sheets config card */}
           <motion.div
             initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
