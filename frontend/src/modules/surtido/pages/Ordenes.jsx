@@ -134,9 +134,20 @@ function AssignModal({ isOpen, order, onClose, onAssign }) {
 function WmsDetailModal({ order, onClose }) {
   const { t } = useI18nStore()
   if (!order) return null
-  const detail = order._detail
-  const packageList = detail?.packageList ?? []
-  const productList = detail?.productList ?? []
+  const d = order._detail ?? order
+  const packageList = d?.packageList ?? d?.outboundBoxList ?? d?.boxList ?? []
+
+  const infoRows = [
+    { label: 'OBC',                        value: order.outboundOrderNo,                                   mono: true, span: true },
+    { label: t('surtido.ordenes.cliente'),  value: d?.customerCode  || order.customerCode  || d?.customerName },
+    { label: t('surtido.ordenes.referencia'), value: d?.thirdOrderNo || order.thirdOrderNo || d?.referenceNo },
+    { label: t('surtido.ordenes.canal'),    value: d?.logisticsChannel || order.logisticsChannel,           span: true },
+    { label: t('surtido.ordenes.detail.tracking'), value: d?.logisticsTrackNo || order.logisticsTrackNo,    mono: true, span: true },
+    { label: t('surtido.ordenes.detail.warehouse'), value: d?.whCode || order.whCode },
+    { label: t('surtido.ordenes.receiver'), value: d?.receiverName || order.receiverName },
+    { label: t('surtido.ordenes.fecha_creacion'), value: fmtDate(order.orderCreateTime) },
+    { label: t('surtido.ordenes.fecha_entrega'),  value: fmtDate(d?.expectedTime || order.outboundTime) },
+  ].filter(i => i.value)
 
   return (
     <Modal isOpen={!!order} onClose={onClose} title="Detalles WMS" icon={Package2}
@@ -144,24 +155,15 @@ function WmsDetailModal({ order, onClose }) {
     >
       <div className="space-y-4 text-xs">
         <div className="grid grid-cols-2 gap-2">
-          {[
-            { label: 'OBC', value: order.outboundOrderNo, mono: true, span: true },
-            { label: t('surtido.ordenes.detail.warehouse'), value: detail?.whCode || order.whCode },
-            { label: t('surtido.ordenes.detail.channel'), value: detail?.logisticsChannel || order.logisticsChannel },
-            { label: t('surtido.ordenes.detail.tracking'), value: detail?.logisticsTrackNo, mono: true },
-            { label: t('surtido.ordenes.fecha_creacion'), value: fmtDate(order.orderCreateTime) },
-            { label: t('surtido.ordenes.fecha_entrega'), value: fmtDate(detail?.expectedTime || order.outboundTime) },
-            { label: 'Cliente', value: detail?.receiver || detail?.receiverName || order.receiverName || order.buyerName },
-            { label: 'Destino', value: detail?.countryRegionName },
-          ].filter(i => i.value).map((item, i) => (
+          {infoRows.map((item, i) => (
             <div key={i} className={`bg-warm-50 rounded-lg px-2.5 py-2 ${item.span ? 'col-span-2' : ''}`}>
               <p className="text-warm-400 text-[10px] uppercase tracking-wide">{item.label}</p>
-              <p className={`font-semibold text-warm-800 truncate ${item.mono ? 'font-mono text-[11px]' : ''}`}>{item.value}</p>
+              <p className={`font-semibold text-warm-800 break-all ${item.mono ? 'font-mono text-[11px]' : ''}`}>{item.value}</p>
             </div>
           ))}
         </div>
 
-        {!detail && (
+        {!order._detail && (
           <div className="flex items-center justify-center py-8 text-warm-400 gap-2">
             <Loader2 size={16} className="animate-spin" /> {t('common.loading')}
           </div>
@@ -176,49 +178,24 @@ function WmsDetailModal({ order, onClose }) {
               <table className="w-full">
                 <thead>
                   <tr className="bg-warm-50/60">
-                    <th className="table-header">Barcode</th>
-                    <th className="table-header">SKUs</th>
-                    <th className="table-header text-right">Cant</th>
+                    <th className="table-header">Tipo</th>
+                    <th className="table-header">{t('surtido.ordenes.referencia')}</th>
+                    <th className="table-header text-right">{t('surtido.ordenes.cajas')}</th>
+                    <th className="table-header text-right">Uds.</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
-                  {packageList.map((p, i) => (
-                    <tr key={i} className="hover:bg-warm-50 transition-colors">
-                      <td className="table-cell font-mono font-semibold text-warm-800 text-[11px]">{p.customizeCode || '—'}</td>
-                      <td className="table-cell text-warm-500 text-[10px] truncate max-w-[140px]">
-                        {p.boxSkuQueryVOList?.map(s => s.sku).join(', ') || '—'}
-                      </td>
-                      <td className="table-cell text-right font-semibold">{p.quantity ?? '?'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {productList.length > 0 && (
-          <div>
-            <p className="font-semibold text-warm-500 mb-2 uppercase tracking-wider text-[10px] flex items-center gap-1">
-              <ScanBarcode size={10} /> {t('surtido.escaneo.tab_productos')} ({productList.length})
-            </p>
-            <div className="card overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-warm-50/60">
-                    <th className="table-header">SKU</th>
-                    <th className="table-header">Producto</th>
-                    <th className="table-header text-right">Cant</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-warm-50">
-                  {productList.map((p, i) => (
-                    <tr key={i} className="hover:bg-warm-50 transition-colors">
-                      <td className="table-cell font-mono font-semibold text-warm-800 text-[11px]">{p.sku || '—'}</td>
-                      <td className="table-cell text-warm-500 text-[10px] truncate max-w-[160px]">{p.productName || '—'}</td>
-                      <td className="table-cell text-right font-semibold">{p.quantity ?? '?'}</td>
-                    </tr>
-                  ))}
+                  {packageList.map((p, i) => {
+                    const unitQty = (p.boxSkuQueryVOList ?? []).reduce((s, x) => s + (x.quantity ?? 0), 0)
+                    return (
+                      <tr key={i} className="hover:bg-warm-50 transition-colors">
+                        <td className="table-cell text-warm-500 text-[10px]">{p.boxType || '—'}</td>
+                        <td className="table-cell font-mono font-semibold text-warm-800 text-[11px]">{p.customizeCode || '—'}</td>
+                        <td className="table-cell text-right font-semibold">{p.quantity ?? 1}</td>
+                        <td className="table-cell text-right text-warm-500">{unitQty || '—'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -468,9 +445,11 @@ export default function Ordenes() {
                   <tr className="bg-warm-50/60">
                     <th className="table-header font-semibold">OBC</th>
                     <th className="table-header hidden md:table-cell font-semibold">{t('surtido.ordenes.fecha_creacion')}</th>
-                    <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.fecha_entrega')}</th>
-                    <th className="table-header hidden xl:table-cell font-semibold">Cliente</th>
-                    <th className="table-header text-right font-semibold">{t('surtido.ordenes.total_qty')}</th>
+                    <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.cliente')}</th>
+                    <th className="table-header hidden xl:table-cell font-semibold">{t('surtido.ordenes.receiver')}</th>
+                    <th className="table-header hidden xl:table-cell font-semibold">{t('surtido.ordenes.canal')}</th>
+                    <th className="table-header hidden 2xl:table-cell font-semibold">{t('surtido.ordenes.referencia')}</th>
+                    <th className="table-header text-right font-semibold">{t('surtido.ordenes.cajas')}</th>
                     <th className="table-header font-semibold">{t('surtido.ordenes.surtidor')}</th>
                     <th className="table-header font-semibold">{t('surtido.ordenes.status')}</th>
                     <th className="table-header text-right font-semibold">Acciones</th>
@@ -483,8 +462,11 @@ export default function Ordenes() {
                     const status = tracking?.status || 'pending_assignment'
                     const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
                     const noSurtidor = !tracking?.surtidor_nombre
-                    const cliente = r.receiverName || r.receiverCompany || r.buyerName || r.customerName || '—'
-                    const qty = r.totalBoxQty ?? r.totalProductQty ?? r.totalQty ?? r.packageCount ?? r.qty ?? '—'
+                    const cliente = r.customerCode || r.customerNo || r.customerName || '—'
+                    const destino = r.receiverName || '—'
+                    const canal = r.logisticsChannel || '—'
+                    const referencia = r.thirdOrderNo || r.referenceNo || '—'
+                    const cajas = r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? '—'
                     const isLoadingDetail = loadDetailMut.isPending && loadDetailMut.variables === obc
 
                     return (
@@ -501,18 +483,26 @@ export default function Ordenes() {
                         </td>
 
                         <td className="table-cell hidden lg:table-cell">
+                          <span className="font-mono text-primary-700 text-xs font-semibold">{cliente}</span>
+                        </td>
+
+                        <td className="table-cell hidden xl:table-cell">
                           <span className="text-warm-600 text-xs flex items-center gap-1">
                             <Truck size={10} className="text-warm-300" />
-                            {fmtDate(r.outboundTime)}
+                            <span className="truncate max-w-[100px] block">{destino}</span>
                           </span>
                         </td>
 
                         <td className="table-cell hidden xl:table-cell">
-                          <span className="text-warm-600 text-xs truncate max-w-[120px] block">{cliente}</span>
+                          <span className="text-warm-600 text-xs truncate max-w-[120px] block">{canal}</span>
+                        </td>
+
+                        <td className="table-cell hidden 2xl:table-cell">
+                          <span className="font-mono text-xs text-warm-600">{referencia}</span>
                         </td>
 
                         <td className="table-cell text-right">
-                          <span className="font-semibold text-warm-700">{qty}</span>
+                          <span className="font-semibold text-warm-700">{cajas}</span>
                         </td>
 
                         <td className="table-cell">
