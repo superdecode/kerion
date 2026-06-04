@@ -208,3 +208,365 @@ export async function getBigOutboundDetail(tenantId, outboundOrderNoList) {
 }
 
 export { getConfig as _getConfig }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 2: Backend proxy routes — upapex.routes.js (WMS API portions)
+// Original file: backend/src/modules/upapex/routes/upapex.routes.js
+// These routes forwarded browser requests to the xlwms OpenAPI.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/*
+// Archived imports (were at top of upapex.routes.js):
+import { encrypt } from '../../../shared/services/wmsCredentials.js'
+import {
+  testConnection,
+  getBoxStock,
+  getIntegratedInventory,
+  getBigOutboundList,
+  getBigOutboundDetail,
+  invalidateConfigCache,
+} from '../services/upapexApiClient.js'
+
+// POST /api/upapex/config — save or update WMS API credentials
+router.post('/config',
+  authenticateToken, loadFullUser,
+  requirePermission('sistema.wms', 'editar'),
+  async (req, res) => {
+    try {
+      const { app_key, app_secret } = req.body
+      if (!app_key || !app_key.trim()) {
+        return res.status(400).json({ success: false, error: 'app_key es requerido' })
+      }
+      if (!app_secret || !app_secret.trim()) {
+        return res.status(400).json({ success: false, error: 'app_secret es requerido' })
+      }
+      const key = app_key.trim()
+      const secretEncrypted = encrypt(app_secret.trim())
+
+      const existing = await req.tQuery(
+        'SELECT id FROM wms_config WHERE tenant_id = $1 LIMIT 1',
+        [req.tenantId]
+      )
+      if (existing.rows.length > 0) {
+        await req.tQuery(
+          'UPDATE wms_config SET app_key = $1, app_secret_encrypted = $2, updated_at = now() WHERE tenant_id = $3',
+          [key, secretEncrypted, req.tenantId]
+        )
+      } else {
+        await req.tQuery(
+          'INSERT INTO wms_config (tenant_id, app_key, app_secret_encrypted) VALUES ($1, $2, $3)',
+          [req.tenantId, key, secretEncrypted]
+        )
+      }
+
+      invalidateConfigCache(req.tenantId)
+      await auditLog(req, 'UPAPEX_CONFIG_UPDATED', 'wms_config', null, { app_key_tail: key.slice(-4) })
+      res.json({ success: true })
+    } catch (err) {
+      console.error('POST upapex/config error:', err.message)
+      const userMsg = err.message.includes('WMS_ENCRYPTION_KEY')
+        ? 'El servidor no tiene configurada la clave de encriptación WMS. Contacta al administrador.'
+        : 'Error guardando configuración Upapex'
+      res.status(500).json({ success: false, error: userMsg })
+    }
+  }
+)
+
+// POST /api/upapex/test-connection
+router.post('/test-connection',
+  authenticateToken, loadFullUser,
+  requirePermission('sistema.wms', 'ver'),
+  async (req, res) => {
+    try {
+      await testConnection(req.tenantId)
+      await req.tQuery(
+        'UPDATE wms_config SET last_verified_at = now() WHERE tenant_id = $1',
+        [req.tenantId]
+      )
+      invalidateConfigCache(req.tenantId)
+      res.json({ success: true, message: 'Conexión Upapex WMS exitosa' })
+    } catch (err) {
+      if (err.code === 'UPAPEX_NOT_CONFIGURED') {
+        return res.status(400).json({ success: false, error: 'Upapex WMS no configurado' })
+      }
+      console.error('Upapex test-connection error:', err.message)
+      res.status(502).json({
+        success: false,
+        error: err.wmsMsg || err.message,
+        wmsCode: err.wmsCode || null,
+      })
+    }
+  }
+)
+
+// POST /api/upapex/debug-raw — returns raw xlwms response (admin only)
+router.post('/debug-raw',
+  authenticateToken, loadFullUser,
+  requirePermission('sistema.wms', 'editar'),
+  async (req, res) => {
+    try {
+      const cfg = await import('../services/upapexApiClient.js').then(m => m._getConfig(req.tenantId))
+      if (!cfg) return res.json({ success: false, error: 'No config' })
+
+      const { createHmac } = await import('crypto')
+      const reqTime = String(Math.floor(Date.now() / 1000))
+      const data = { page: 1, pageSize: 1 }
+
+      let url = 'https://api.xlwms.com/openapi/v1/integratedInventory/pageOpen'
+      if (cfg.app_secret) {
+        const params = { appKey: cfg.app_key, data: JSON.stringify(data), reqTime }
+        const paramStr = Object.keys(params).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())).map(k => params[k]).join('')
+        const authcode = createHmac('sha256', cfg.app_secret).update(paramStr).digest('hex')
+        url += `?authcode=${authcode}`
+        res.json({
+          debug: {
+            appKey: `****${cfg.app_key.slice(-4)}`,
+            hasSecret: !!cfg.app_secret,
+            reqTime,
+            paramStr,
+            authcode,
+            url: url.replace(authcode, authcode.slice(0,8) + '...'),
+          }
+        })
+      } else {
+        res.json({ debug: { error: 'No secret configured' } })
+      }
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message })
+    }
+  }
+)
+
+// GET /api/upapex/box-stock
+router.get('/box-stock',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.escaneo', 'ver'),
+  async (req, res) => {
+    try {
+      const { page, pageSize, boxTypeList, skuList, isHideInventory, stockCountKind, startValue, endValue, whCodeList } = req.query
+      const params = {
+        page: parseInt(page) || 1,
+        pageSize: Math.min(parseInt(pageSize) || 25, 100),
+      }
+      if (boxTypeList) params.boxTypeList = String(boxTypeList).split(',').filter(Boolean)
+      if (skuList) params.skuList = String(skuList).split(',').filter(Boolean)
+      if (whCodeList) params.whCodeList = String(whCodeList).split(',').filter(Boolean)
+      if (isHideInventory !== undefined) params.isHideInventory = parseInt(isHideInventory)
+      if (stockCountKind) params.stockCountKind = stockCountKind
+      if (startValue !== undefined) params.startValue = parseInt(startValue)
+      if (endValue !== undefined) params.endValue = parseInt(endValue)
+
+      const data = await getBoxStock(req.tenantId, params)
+      res.json({ success: true, data })
+    } catch (err) {
+      if (err.code === 'UPAPEX_NOT_CONFIGURED') return res.status(400).json({ success: false, error: 'Upapex WMS no configurado' })
+      console.error('upapex/box-stock error:', err.message)
+      res.status(502).json({ success: false, error: err.wmsMsg || err.message })
+    }
+  }
+)
+
+// GET /api/upapex/integrated-inventory
+router.get('/integrated-inventory',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.escaneo', 'ver'),
+  async (req, res) => {
+    try {
+      const { page, pageSize, skuList, whCodeList, startTime, endTime, stockType } = req.query
+      const params = {
+        page: parseInt(page) || 1,
+        pageSize: Math.min(parseInt(pageSize) || 25, 100),
+      }
+      if (skuList) params.skuList = skuList
+      if (whCodeList) params.whCodeList = whCodeList
+      if (startTime) params.startTime = startTime
+      if (endTime) params.endTime = endTime
+      if (stockType !== undefined) params.stockType = parseInt(stockType)
+
+      const data = await getIntegratedInventory(req.tenantId, params)
+      res.json({ success: true, data })
+    } catch (err) {
+      if (err.code === 'UPAPEX_NOT_CONFIGURED') return res.status(400).json({ success: false, error: 'Upapex WMS no configurado' })
+      console.error('upapex/integrated-inventory error:', err.message)
+      res.status(502).json({ success: false, error: err.wmsMsg || err.message })
+    }
+  }
+)
+
+// GET /api/upapex/outbound-list
+router.get('/outbound-list',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'ver'),
+  async (req, res) => {
+    try {
+      const { page, pageSize, outboundOrderNos, startTime, endTime } = req.query
+      const params = {
+        page: parseInt(page) || 1,
+        pageSize: Math.min(parseInt(pageSize) || 25, 100),
+      }
+      if (outboundOrderNos) {
+        params.outboundOrderNos = String(outboundOrderNos).split(',').map(s => s.trim()).filter(Boolean)
+      }
+      if (startTime) params.startTime = startTime
+      if (endTime) params.endTime = endTime
+
+      const data = await getBigOutboundList(req.tenantId, params)
+      res.json({ success: true, data })
+    } catch (err) {
+      if (err.code === 'UPAPEX_NOT_CONFIGURED') return res.status(400).json({ success: false, error: 'Upapex WMS no configurado' })
+      console.error('upapex/outbound-list error:', err.message)
+      res.status(502).json({ success: false, error: err.wmsMsg || err.message })
+    }
+  }
+)
+
+// GET /api/upapex/outbound-detail/:orderNo
+router.get('/outbound-detail/:orderNo',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'ver'),
+  async (req, res) => {
+    try {
+      const { orderNo } = req.params
+      const data = await getBigOutboundDetail(req.tenantId, [orderNo])
+      res.json({ success: true, data })
+    } catch (err) {
+      if (err.code === 'UPAPEX_NOT_CONFIGURED') return res.status(400).json({ success: false, error: 'Upapex WMS no configurado' })
+      console.error('upapex/outbound-detail error:', err.message)
+      res.status(502).json({ success: false, error: err.wmsMsg || err.message })
+    }
+  }
+)
+*/
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 3: Frontend service functions — wmsHubService.js (API portions)
+// Original file: frontend/src/modules/wmshub/services/wmsHubService.js
+// ═══════════════════════════════════════════════════════════════════════════
+
+/*
+export const saveConfig = ({ app_key, app_secret }) =>
+  api.post('/upapex/config', { app_key, app_secret }).then(r => r.data)
+
+export const testConnection = () =>
+  api.post('/upapex/test-connection').then(r => r.data)
+*/
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 4: Frontend store — wmsHubStore.js (API-specific state)
+// Original file: frontend/src/modules/wmshub/stores/wmsHubStore.js
+// The full store is still live. These fields tracked API connection state
+// and are no longer populated with the Google Sheets source.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/*
+// Fields in the zustand store that were driven by WMS API:
+
+lastTest: null,   // { ok: bool, testedAt: ISO string, latencyMs: number }
+lastSync: null,   // { boxStock: ISO string, outbound: ISO string }
+
+recordTest: (ok, latencyMs) => set({
+  lastTest: { ok, testedAt: new Date().toISOString(), latencyMs },
+}),
+
+recordSync: (type) => set((state) => ({
+  lastSync: {
+    ...(state.lastSync || {}),
+    [type]: new Date().toISOString(),
+  },
+})),
+*/
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 5: Configuracion.jsx — WMS API UI cards
+// Original file: frontend/src/modules/wmshub/pages/Configuracion.jsx
+// These four cards were replaced by a single Google Sheets card.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/*
+// ── Archived state variables ──────────────────────────────────────────────
+
+const [appKey, setAppKey] = useState('')
+const [appSecret, setAppSecret] = useState('')
+const [showKey, setShowKey] = useState(false)
+const [showSecret, setShowSecret] = useState(false)
+const [confirmOpen, setConfirmOpen] = useState(false)
+const [testStart, setTestStart] = useState(null)
+
+const { lastTest, lastSync, recordTest } = useWmsHubStore()
+const isConnected = lastTest?.ok === true
+const canSave = appKey.trim().length > 0 && appSecret.trim().length > 0
+
+// ── Archived mutations ────────────────────────────────────────────────────
+
+const saveMut = useMutation({
+  mutationFn: () => saveConfig({ app_key: appKey, app_secret: appSecret }),
+  onSuccess: () => {
+    toast.success(t('wmshub.config.saved'))
+    setAppKey(''); setAppSecret(''); setConfirmOpen(false)
+    qc.invalidateQueries({ queryKey: ['upapex-config'] })
+  },
+  onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+})
+
+const testMut = useMutation({
+  mutationFn: () => { setTestStart(Date.now()); return testConnection() },
+  onSuccess: () => {
+    const latency = testStart ? Date.now() - testStart : null
+    recordTest(true, latency)
+    toast.success(t('wmshub.config.test_ok'))
+    qc.invalidateQueries({ queryKey: ['upapex-config'] })
+  },
+  onError: (err) => {
+    recordTest(false, null)
+    toast.error(err.response?.data?.error || t('wmshub.config.test_fail'))
+  },
+})
+
+// ── Archived JSX cards ────────────────────────────────────────────────────
+
+// Status card — showed WMS connection status banner
+<motion.div
+  initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+  className={`rounded-2xl p-5 text-white overflow-hidden relative ${
+    config && isConnected     ? 'bg-gradient-to-r from-success-600 to-success-700' :
+    config                   ? 'bg-gradient-to-r from-primary-600 to-primary-700' :
+    'border border-red-300/55 bg-gradient-to-r from-red-700 via-rose-600 to-red-500 shadow-lg shadow-red-700/25'
+  }`}>
+  ...status, WiFi icon, last-test latency badge...
+</motion.div>
+
+// Credentials card — App Key / App Secret inputs with save button
+<motion.div className="card">
+  <div className="px-5 pt-5 pb-4 border-b border-warm-100 flex items-center gap-3">
+    <Key className="w-4 h-4 text-primary-600" />
+    <h2>{t('wmshub.config.credentials')}</h2>
+  </div>
+  <div className="p-5">
+    ...app_key_masked display, App Key input, App Secret input, Save button...
+  </div>
+</motion.div>
+
+// Connection test card — "Probar conexión" button with latency display
+<motion.div className="card">
+  <RefreshCw className="w-4 h-4 text-accent-600" />
+  <h2>{t('wmshub.config.test_title')}</h2>
+  ...test button, last_test timestamp, latency ms...
+</motion.div>
+
+// Sync status card — showed last boxStock / outbound sync timestamps
+<motion.div className="card">
+  <ArrowUpDown className="w-4 h-4 text-success-600" />
+  <h2>{t('wmshub.config.sync_title')}</h2>
+  ...sync_box_stock, sync_outbound, sync_never...
+</motion.div>
+
+// Confirm save modal — appeared before overwriting API credentials
+<Modal isOpen={confirmOpen} onClose={() => setConfirmOpen(false)} title={t('wmshub.config.confirm_title')} icon={Key}>
+  <p>{t('wmshub.config.confirm_body')}</p>
+</Modal>
+*/
