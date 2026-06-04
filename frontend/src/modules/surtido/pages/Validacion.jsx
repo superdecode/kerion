@@ -277,54 +277,52 @@ function ItemsTable({ items, itemCounts, t, onManualAdjust }) {
     </div>
   )
   return (
-    <div className="card overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-warm-50/60">
-              <th className="table-header">{t('surtido.validacion.code_header')}</th>
-              <th className="table-header text-right">{t('surtido.escaneo.expected')}</th>
-              <th className="table-header text-right">{t('surtido.escaneo.scanned')}</th>
-              <th className="table-header text-right">{t('surtido.escaneo.pending')}</th>
-              <th className="table-header">{t('common.status')}</th>
-              <th className="table-header" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-warm-50">
-            {items.map((item, i) => {
-              const scanned = itemCounts.get(item.displayCode) || 0
-              const expected = item.expectedQty || 1
-              const pending = Math.max(0, expected - scanned)
-              const rowBg = scanned === 0 ? '' : scanned >= expected ? 'bg-success-50/40' : 'bg-warning-50/30'
-              return (
-                <tr key={i} className={`${rowBg} hover:bg-primary-50/20 transition-colors`}>
-                  <td className="table-cell font-mono font-semibold text-warm-800">{item.displayCode}</td>
-                  <td className="table-cell text-right text-warm-500">{expected}</td>
-                  <td className="table-cell text-right font-semibold text-success-700">{scanned}</td>
-                  <td className={`table-cell text-right font-semibold ${pending > 0 ? 'text-warning-700' : 'text-success-600'}`}>{pending}</td>
-                  <td className="table-cell">
-                    <span className={`badge ${
-                      scanned === 0 ? 'bg-warm-100 text-warm-500' :
-                      scanned >= expected ? 'bg-success-100 text-success-700' :
-                      'bg-warning-100 text-warning-700'
-                    }`}>
-                      {scanned === 0 ? '—' : scanned >= expected ? t('surtido.escaneo.match_complete') : `${Math.round((scanned/expected)*100)}%`}
-                    </span>
-                  </td>
-                  <td className="table-cell">
-                    <div className="flex items-center gap-1 justify-end">
-                      <button className="w-6 h-6 rounded-lg text-xs bg-warm-100 hover:bg-warm-200 font-bold flex items-center justify-center transition-colors"
-                        onClick={() => onManualAdjust(item.displayCode, -1)}>−</button>
-                      <button className="w-6 h-6 rounded-lg text-xs bg-primary-100 hover:bg-primary-200 font-bold flex items-center justify-center text-primary-700 transition-colors"
-                        onClick={() => onManualAdjust(item.displayCode, 1)}>+</button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+    <div className="max-h-80 overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
+      <table className="w-full text-xs">
+        <thead className="bg-warm-50 sticky top-0 z-10 border-b border-warm-100">
+          <tr>
+            <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('surtido.validacion.code_header')}</th>
+            <th className="text-right px-3 py-2.5 font-bold text-warm-500">{t('surtido.escaneo.expected')}</th>
+            <th className="text-right px-3 py-2.5 font-bold text-warm-500">{t('surtido.escaneo.scanned')}</th>
+            <th className="text-right px-3 py-2.5 font-bold text-warm-500">{t('surtido.escaneo.pending')}</th>
+            <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('common.status')}</th>
+            <th className="px-3 py-2.5" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-warm-50">
+          {items.map((item, i) => {
+            const scanned = itemCounts.get(item.displayCode) || 0
+            const expected = item.expectedQty || 1
+            const pending = Math.max(0, expected - scanned)
+            const rowBg = scanned === 0 ? '' : scanned >= expected ? 'bg-success-50/40' : 'bg-warning-50/30'
+            return (
+              <tr key={i} className={`${rowBg} hover:bg-warm-50/50 transition-colors`}>
+                <td className="px-3 py-2 font-mono font-semibold text-warm-700">{item.displayCode}</td>
+                <td className="px-3 py-2 text-right text-warm-500">{expected}</td>
+                <td className="px-3 py-2 text-right font-semibold text-success-700">{scanned}</td>
+                <td className={`px-3 py-2 text-right font-semibold ${pending > 0 ? 'text-warning-700' : 'text-success-600'}`}>{pending}</td>
+                <td className="px-3 py-2">
+                  <span className={`badge ${
+                    scanned === 0 ? 'bg-warm-100 text-warm-500' :
+                    scanned >= expected ? 'bg-success-100 text-success-700' :
+                    'bg-warning-100 text-warning-700'
+                  }`}>
+                    {scanned === 0 ? '—' : scanned >= expected ? t('surtido.escaneo.match_complete') : `${Math.round((scanned/expected)*100)}%`}
+                  </span>
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-1 justify-end">
+                    <button className="w-6 h-6 rounded-lg text-xs bg-warm-100 hover:bg-warm-200 font-bold flex items-center justify-center transition-colors"
+                      onClick={() => onManualAdjust(item.displayCode, -1)}>−</button>
+                    <button className="w-6 h-6 rounded-lg text-xs bg-primary-100 hover:bg-primary-200 font-bold flex items-center justify-center text-primary-700 transition-colors"
+                      onClick={() => onManualAdjust(item.displayCode, 1)}>+</button>
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -338,33 +336,31 @@ function RejectedTable({ items, t }) {
     </div>
   )
   return (
-    <div className="card overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-warm-50/60">
-              <th className="table-header">{t('surtido.validacion.code_header')}</th>
-              <th className="table-header">{t('common.status')}</th>
-              <th className="table-header text-right">Hora</th>
+    <div className="max-h-80 overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
+      <table className="w-full text-xs">
+        <thead className="bg-warm-50 sticky top-0 z-10 border-b border-warm-100">
+          <tr>
+            <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('surtido.validacion.code_header')}</th>
+            <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('common.status')}</th>
+            <th className="text-right px-3 py-2.5 font-bold text-warm-500">Hora</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-warm-50">
+          {items.map((e, i) => (
+            <tr key={i} className="hover:bg-warm-50/50 transition-colors">
+              <td className="px-3 py-2 font-mono font-semibold text-danger-700">{e.code}</td>
+              <td className="px-3 py-2">
+                <span className={`badge ${
+                  e.result === 'duplicate' ? 'bg-warning-100 text-warning-700' : 'bg-danger-100 text-danger-700'
+                }`}>
+                  {e.result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-right text-warm-400 tabular-nums">{new Date(e.ts).toLocaleTimeString()}</td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-warm-50">
-            {items.map((e, i) => (
-              <tr key={i} className="hover:bg-danger-50/20 transition-colors">
-                <td className="table-cell font-mono font-semibold text-danger-800">{e.code}</td>
-                <td className="table-cell">
-                  <span className={`badge ${
-                    e.result === 'duplicate' ? 'bg-warning-100 text-warning-700' : 'bg-danger-100 text-danger-700'
-                  }`}>
-                    {e.result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
-                  </span>
-                </td>
-                <td className="table-cell text-right text-warm-400 tabular-nums">{new Date(e.ts).toLocaleTimeString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -1018,12 +1014,12 @@ export default function SurtidoValidacion() {
             <div className="flex gap-1 border-b border-warm-100">
               {['registros', 'rechazados'].map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)}
-                  className={`pb-2.5 px-4 text-sm font-semibold transition-all border-b-2 ${
-                    activeTab === tab ? 'text-primary-700 border-primary-500' : 'text-warm-500 border-transparent hover:text-warm-700'
+                  className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px ${
+                    activeTab === tab ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
                   }`}>
                   {t(`surtido.escaneo.tab_${tab}`)}
                   {tab === 'rechazados' && rejectedHistory.length > 0 && (
-                    <span className="ml-1.5 bg-danger-100 text-danger-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{rejectedHistory.length}</span>
+                    <span className="ml-1.5 bg-danger-100 text-danger-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{rejectedHistory.length}</span>
                   )}
                 </button>
               ))}
@@ -1044,49 +1040,55 @@ export default function SurtidoValidacion() {
         </div>
 
         {/* Right sidebar: orders with progress */}
-        <div className="hidden lg:flex flex-col w-60 shrink-0 border-l border-warm-100 bg-warm-50/60">
-          <div className="px-4 py-3 border-b border-warm-100 bg-white">
-            <h3 className="text-xs font-bold text-warm-600 uppercase tracking-wide flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5" /> {t('surtido.validacion.sidebar_title')}
+        <div className="hidden lg:flex w-80 border-l border-warm-100 bg-white flex-col shrink-0">
+          <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50">
+            <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
+              <Zap className="w-3.5 h-3.5 text-primary-500" /> {t('surtido.validacion.sidebar_title')}
             </h3>
           </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2">
             {/* Current order */}
             {obc && (
-              <div className="px-2.5 py-2 rounded-xl bg-primary-50 border border-primary-200 text-xs">
-                <p className="font-mono font-bold text-primary-700 truncate">{obc}</p>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-primary-600">{totalScanned}/{totalExpected}</span>
-                  {totalExpected > 0 && (
-                    <div className="w-12 h-1.5 bg-primary-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-primary-500 rounded-full" style={{ width: `${progress}%` }} />
-                    </div>
-                  )}
+              <div className="p-3 rounded-xl border border-primary-200 bg-primary-50/50 shadow-sm">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-bold text-warm-700 font-mono truncate mr-2">{obc}</span>
+                  <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">ACTIVA</span>
+                </div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] text-warm-500 font-medium">{totalScanned}/{totalExpected} cajas</span>
+                  <span className="text-[10px] font-bold text-primary-600">{progress}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-primary-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-primary-400 to-accent-500 rounded-full transition-all duration-500"
+                    style={{ width: `${progress}%` }} />
                 </div>
               </div>
             )}
             {sessionList.length === 0 ? (
-              <p className="text-xs text-warm-400 text-center py-4">{t('surtido.validacion.history_empty')}</p>
+              <div className="py-8 text-center text-xs text-warm-400">{t('surtido.validacion.history_empty')}</div>
             ) : (
               sessionList.filter(s => s.outbound_order_no !== obc).map((s, i) => {
-                const pct = s.total_expected > 0 ? Math.min(100, Math.round((s.total_scanned / s.total_expected) * 100)) : 0
+                const pct = s.total_expected > 0 ? Math.min(100, Math.round(((s.total_scanned ?? 0) / s.total_expected) * 100)) : 0
                 const isComplete = s.status === 'complete'
                 return (
-                  <div key={s.id || i} className="px-2.5 py-2 rounded-xl bg-white border border-warm-100 text-xs">
-                    <p className="font-mono font-semibold text-warm-700 truncate">{s.outbound_order_no}</p>
-                    <div className="flex items-center justify-between mt-1">
-                      {isComplete ? (
-                        <span className="text-success-600 font-semibold flex items-center gap-1">
-                          <CheckCircle2 size={10} /> 100%
+                  <div key={s.id || i} className="p-3 rounded-xl border border-warm-100 hover:border-warm-200 hover:bg-warm-50 transition-all">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-warm-700 font-mono truncate mr-2">{s.outbound_order_no}</span>
+                      <span className={`badge text-[9px] ${isComplete ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-600'}`}>
+                        {isComplete ? '100%' : `${pct}%`}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] text-warm-400 font-medium">{s.total_scanned ?? 0}/{s.total_expected ?? '?'} cajas</span>
+                      {isComplete && (
+                        <span className="text-[10px] text-success-600 flex items-center gap-1">
+                          <CheckCircle2 size={9} /> Completa
                         </span>
-                      ) : (
-                        <span className="text-warm-500">{s.total_scanned ?? 0}/{s.total_expected ?? '?'}</span>
                       )}
-                      {!isComplete && s.total_expected > 0 && (
-                        <div className="w-10 h-1.5 bg-warm-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-primary-400 rounded-full" style={{ width: `${pct}%` }} />
-                        </div>
-                      )}
+                    </div>
+                    <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${isComplete ? 'bg-success-400' : 'bg-primary-400'}`}
+                        style={{ width: `${pct}%` }} />
                     </div>
                   </div>
                 )

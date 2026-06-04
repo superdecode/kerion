@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
   Search, UserCheck, Users, Plus, Trash2, X, ChevronDown, Play, Loader2,
   Package2, Truck, ScanBarcode, Copy, Check, Info, Activity,
@@ -358,19 +359,19 @@ function OrderDetailModal({ obc, tracking, onClose }) {
               {/* Tabs */}
               <div className="flex gap-1 border-b border-warm-100">
                 <button onClick={() => setDetailTab('registros')}
-                  className={`pb-2.5 px-4 text-sm font-semibold transition-all border-b-2 flex items-center gap-1.5 ${
-                    detailTab === 'registros' ? 'text-primary-700 border-primary-500' : 'text-warm-500 border-transparent hover:text-warm-700'
+                  className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
+                    detailTab === 'registros' ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
                   }`}>
-                  <CheckCircle2 size={13} /> {t('surtido.escaneo.tab_registros')}
-                  <span className="bg-success-100 text-success-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{okEvents.length}</span>
+                  <CheckCircle2 size={12} /> {t('surtido.escaneo.tab_registros')}
+                  <span className="bg-success-100 text-success-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{okEvents.length}</span>
                 </button>
                 <button onClick={() => setDetailTab('rechazados')}
-                  className={`pb-2.5 px-4 text-sm font-semibold transition-all border-b-2 flex items-center gap-1.5 ${
-                    detailTab === 'rechazados' ? 'text-primary-700 border-primary-500' : 'text-warm-500 border-transparent hover:text-warm-700'
+                  className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
+                    detailTab === 'rechazados' ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
                   }`}>
-                  <XCircle size={13} /> {t('surtido.escaneo.tab_rechazados')}
+                  <XCircle size={12} /> {t('surtido.escaneo.tab_rechazados')}
                   {badEvents.length > 0 && (
-                    <span className="bg-danger-100 text-danger-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{badEvents.length}</span>
+                    <span className="bg-danger-100 text-danger-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{badEvents.length}</span>
                   )}
                 </button>
               </div>
@@ -404,41 +405,39 @@ function EventsTable({ events, t, showResult = false }) {
     </div>
   )
   return (
-    <div className="card overflow-hidden">
-      <div className="overflow-x-auto max-h-80">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10">
-            <tr className="bg-warm-50/90 backdrop-blur-sm">
-              <th className="table-header font-semibold">#</th>
-              <th className="table-header font-semibold">{t('surtido.validacion.code_header')}</th>
-              {showResult && <th className="table-header font-semibold">Tipo</th>}
-              <th className="table-header font-semibold text-right">Hora escaneo</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-warm-50">
-            {events.map((e, i) => (
-              <tr key={e.id || i} className={`hover:bg-primary-50/20 transition-colors ${
-                showResult && e.scan_result === 'duplicate' ? 'bg-warning-50/30' : ''
-              }`}>
-                <td className="table-cell text-warm-400 tabular-nums">{i + 1}</td>
-                <td className="table-cell font-mono font-semibold text-warm-800">{e.normalized_code || e.scanned_code}</td>
-                {showResult && (
-                  <td className="table-cell">
-                    <span className={`badge text-[10px] ${
-                      e.scan_result === 'duplicate' ? 'bg-warning-100 text-warning-700' : 'bg-danger-100 text-danger-700'
-                    }`}>
-                      {e.scan_result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
-                    </span>
-                  </td>
-                )}
-                <td className="table-cell text-right text-warm-400 tabular-nums">
-                  {String(e.scanned_at || '').slice(11, 19)}
+    <div className="max-h-80 overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
+      <table className="w-full text-xs">
+        <thead className="bg-warm-50 sticky top-0 z-10 border-b border-warm-100">
+          <tr>
+            <th className="text-left px-3 py-2.5 font-bold text-warm-500">#</th>
+            <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('surtido.validacion.code_header')}</th>
+            {showResult && <th className="text-left px-3 py-2.5 font-bold text-warm-500">Tipo</th>}
+            <th className="text-right px-3 py-2.5 font-bold text-warm-500">Hora escaneo</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-warm-50">
+          {events.map((e, i) => (
+            <tr key={e.id || i} className={`hover:bg-warm-50/50 transition-colors ${
+              showResult && e.scan_result === 'duplicate' ? 'bg-warning-50/30' : ''
+            }`}>
+              <td className="px-3 py-2 text-warm-400 tabular-nums font-bold">{i + 1}</td>
+              <td className="px-3 py-2 font-mono font-semibold text-warm-700">{e.normalized_code || e.scanned_code}</td>
+              {showResult && (
+                <td className="px-3 py-2">
+                  <span className={`badge text-[10px] ${
+                    e.scan_result === 'duplicate' ? 'bg-warning-100 text-warning-700' : 'bg-danger-100 text-danger-700'
+                  }`}>
+                    {e.scan_result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
+                  </span>
                 </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              )}
+              <td className="px-3 py-2 text-right text-warm-400 tabular-nums">
+                {String(e.scanned_at || '').slice(11, 19)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -673,7 +672,7 @@ export default function Ordenes() {
       </div>
 
       {/* Filter bar */}
-      <div className="bg-white/90 backdrop-blur-lg border-b border-warm-100 px-4 py-2.5 space-y-2 shadow-sm">
+      <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5 space-y-2">
         {/* Status chips — top row */}
         <StatusChips selected={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(1) }} t={t} />
         {/* Search + date + surtidor — second row */}
@@ -684,24 +683,25 @@ export default function Ordenes() {
               placeholder={t('surtido.ordenes.search_placeholder')}
               value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
           </div>
-          <div className="flex items-center gap-1.5">
-            <input type="date" className="input-field text-sm h-9 w-36" value={dateFrom}
+          <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5">
+            <Clock size={13} className="text-warm-400 shrink-0" />
+            <input type="date" value={dateFrom}
               onChange={e => { setDateFrom(e.target.value); setPage(1) }}
-              title={t('surtido.ordenes.date_from')} />
-            <span className="text-warm-400 text-xs">–</span>
-            <input type="date" className="input-field text-sm h-9 w-36" value={dateTo}
+              className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
+            <span className="text-warm-300 text-xs">→</span>
+            <input type="date" value={dateTo}
               onChange={e => { setDateTo(e.target.value); setPage(1) }}
-              title={t('surtido.ordenes.date_to')} />
+              className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
           </div>
           {surtidores.length > 0 && (
-            <select className="input-field text-sm h-9 w-auto" value={filterSurtidor} onChange={e => setFilterSurtidor(e.target.value)}>
+            <select className="px-2.5 py-1.5 rounded-xl border border-warm-200 text-xs text-warm-700 outline-none focus:border-primary-400 bg-warm-50" value={filterSurtidor} onChange={e => setFilterSurtidor(e.target.value)}>
               <option value="">{t('surtido.ordenes.surtidor')} — {t('common.all')}</option>
               {surtidores.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
             </select>
           )}
           {hasFilters && (
-            <button className="btn-ghost text-xs h-9 px-2" onClick={clearFilters}>
-              <X size={13} />
+            <button className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors" onClick={clearFilters}>
+              <X size={12} /> {t('common.clear')}
             </button>
           )}
         </div>
@@ -764,11 +764,13 @@ export default function Ordenes() {
 
 function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, onProgress, onValidate, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
   return (
-    <div className="card overflow-hidden">
+    <motion.div className="card overflow-hidden"
+      initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-warm-50/60">
+            <tr className="bg-warm-50 border-b border-warm-100">
               <th className="table-header font-semibold">OBC</th>
               <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.cliente')}</th>
               <th className="table-header hidden xl:table-cell font-semibold">{t('surtido.ordenes.receiver')}</th>
@@ -876,17 +878,19 @@ function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, o
           itemLabel={t('surtido.ordenes.item_label')}
         />
       )}
-    </div>
+    </motion.div>
   )
 }
 
 function ValidacionTable({ records, wmsMap, onProgress, onValidate, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
   return (
-    <div className="card overflow-hidden">
+    <motion.div className="card overflow-hidden"
+      initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-warm-50/60">
+            <tr className="bg-warm-50 border-b border-warm-100">
               <th className="table-header font-semibold">OBC</th>
               <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.cliente')}</th>
               <th className="table-header font-semibold">{t('surtido.ordenes.surtidor')}</th>
@@ -964,6 +968,6 @@ function ValidacionTable({ records, wmsMap, onProgress, onValidate, t, page, tot
           itemLabel={t('surtido.ordenes.item_label')}
         />
       )}
-    </div>
+    </motion.div>
   )
 }
