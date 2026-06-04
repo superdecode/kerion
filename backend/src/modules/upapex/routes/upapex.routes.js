@@ -113,7 +113,50 @@ router.post('/test-connection',
         return res.status(400).json({ success: false, error: 'Upapex WMS no configurado' })
       }
       console.error('Upapex test-connection error:', err.message)
-      res.status(502).json({ success: false, error: err.wmsMsg || err.message })
+      res.status(502).json({
+        success: false,
+        error: err.wmsMsg || err.message,
+        wmsCode: err.wmsCode || null,
+      })
+    }
+  }
+)
+
+// POST /api/upapex/debug-raw — returns raw xlwms response (admin only, temporary)
+router.post('/debug-raw',
+  authenticateToken, loadFullUser,
+  requirePermission('sistema.wms', 'editar'),
+  async (req, res) => {
+    try {
+      const cfg = await import('../services/upapexApiClient.js').then(m => m._getConfig(req.tenantId))
+      if (!cfg) return res.json({ success: false, error: 'No config' })
+
+      const { createHmac } = await import('crypto')
+      const reqTime = String(Math.floor(Date.now() / 1000))
+      const data = { page: 1, pageSize: 1 }
+      const body = JSON.stringify({ appKey: cfg.app_key, reqTime, data })
+
+      let url = 'https://api.xlwms.com/openapi/v1/integratedInventory/pageOpen'
+      if (cfg.app_secret) {
+        const params = { appKey: cfg.app_key, data: JSON.stringify(data), reqTime }
+        const paramStr = Object.keys(params).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())).map(k => params[k]).join('')
+        const authcode = createHmac('sha256', cfg.app_secret).update(paramStr).digest('hex')
+        url += `?authcode=${authcode}`
+        res.json({
+          debug: {
+            appKey: `****${cfg.app_key.slice(-4)}`,
+            hasSecret: !!cfg.app_secret,
+            reqTime,
+            paramStr,
+            authcode,
+            url: url.replace(authcode, authcode.slice(0,8) + '...'),
+          }
+        })
+      } else {
+        res.json({ debug: { error: 'No secret configured' } })
+      }
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message })
     }
   }
 )

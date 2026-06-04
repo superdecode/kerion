@@ -71,10 +71,13 @@ async function upapexPost(tenantId, endpoint, data) {
   const body = JSON.stringify({ appKey: config.app_key, reqTime, data })
 
   let url = `${BASE_URL}${endpoint}`
+  let authcode = null
   if (config.app_secret) {
-    const authcode = buildAuthCode(config.app_key, config.app_secret, data, reqTime)
+    authcode = buildAuthCode(config.app_key, config.app_secret, data, reqTime)
     url += `?authcode=${authcode}`
   }
+
+  console.log(`[xlwms] POST ${endpoint} appKey=****${config.app_key.slice(-4)} reqTime=${reqTime} authcode=${authcode ? authcode.slice(0,8) + '...' : 'NONE'}`)
 
   let lastErr
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -89,7 +92,7 @@ async function upapexPost(tenantId, endpoint, data) {
       const json = await res.json()
       if (json.code !== 200) {
         const msg = json.msg ? `[${json.code}] ${json.msg}` : `WMS error code ${json.code}`
-        console.error(`xlwms error: code=${json.code} msg=${json.msg} endpoint=${endpoint}`)
+        console.error(`[xlwms] ERROR code=${json.code} msg="${json.msg}" endpoint=${endpoint}`)
         const err = new Error(msg)
         err.wmsCode = json.code
         err.wmsMsg = msg
