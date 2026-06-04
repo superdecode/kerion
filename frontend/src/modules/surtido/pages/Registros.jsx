@@ -419,17 +419,15 @@ export default function SurtidoRegistros() {
               </table>
             </div>
 
-            {totalPages > 1 && (
-              <TablePagination
-                page={page}
-                totalPages={totalPages}
-                pageSize={pageSize}
-                totalItems={total}
-                onPageChange={setPage}
-                onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-                itemLabel={t('surtido.historial.sessions')}
-              />
-            )}
+            <TablePagination
+              page={page}
+              totalPages={totalPages}
+              pageSize={pageSize}
+              totalItems={total}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+              itemLabel={t('surtido.historial.sessions')}
+            />
           </div>
         )}
       </div>

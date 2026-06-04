@@ -902,14 +902,12 @@ function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, o
           </tbody>
         </table>
       </div>
-      {totalPages > 1 && (
-        <TablePagination
-          page={page} totalPages={totalPages} pageSize={pageSize} totalItems={total}
-          onPageChange={onPageChange}
-          onPageSizeChange={onPageSizeChange}
-          itemLabel={t('surtido.ordenes.item_label')}
-        />
-      )}
+      <TablePagination
+        page={page} totalPages={totalPages} pageSize={pageSize} totalItems={total}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        itemLabel={t('surtido.ordenes.item_label')}
+      />
     </motion.div>
   )
 }
@@ -1078,14 +1076,12 @@ function ValidacionTable({ records, wmsMap, onProgress, onValidate, onStatusChan
           </tbody>
         </table>
       </div>
-      {totalPages > 1 && (
-        <TablePagination
-          page={page} totalPages={totalPages} pageSize={pageSize} totalItems={total}
-          onPageChange={onPageChange}
-          onPageSizeChange={onPageSizeChange}
-          itemLabel={t('surtido.ordenes.item_label')}
-        />
-      )}
+      <TablePagination
+        page={page} totalPages={totalPages} pageSize={pageSize} totalItems={total}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        itemLabel={t('surtido.ordenes.item_label')}
+      />
     </motion.div>
   )
 }
