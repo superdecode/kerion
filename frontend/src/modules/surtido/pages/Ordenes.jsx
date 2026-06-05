@@ -510,21 +510,52 @@ function StatusChips({ selected, onChange, t }) {
   )
 }
 
+function validateOrderBoxData(detailData) {
+  const detail = detailData?.data ?? detailData
+  if (!detail) return { ok: false, reason: 'no_data' }
+  const packageList = detail.packageList ?? detail.details ?? detail.items ?? []
+  if (packageList.length === 0) return { ok: false, reason: 'no_boxes' }
+  const noCode = packageList.filter(p => !p.customizeCode && !p.boxType && !p.boxCode)
+  if (noCode.length === packageList.length) return { ok: false, reason: 'no_codes' }
+  return { ok: true, packageList }
+}
+
 function ValidateConfirmModal({ obc, wmsRecord, tracking, isOpen, onClose, onConfirm, t }) {
+  const [detailData, setDetailData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen || !obc) return
+    setDetailData(null); setFetchError(false); setLoading(true)
+    getOutboundDetail(obc)
+      .then(d => setDetailData(d))
+      .catch(() => setFetchError(true))
+      .finally(() => setLoading(false))
+  }, [isOpen, obc])
+
   if (!obc) return null
-  const cliente  = wmsRecord?.customerCode || wmsRecord?.customerName || '—'
-  const destino  = wmsRecord?.receiverName || '—'
-  const cajas    = wmsRecord?.outboundBoxCount ?? wmsRecord?.packageCount ?? wmsRecord?.totalQty ?? '?'
-  const status   = tracking?.status || 'pending_assignment'
-  const meta     = STATUS_META[status] ?? STATUS_META.pending_assignment
+
+  const cliente = wmsRecord?.customerCode || wmsRecord?.customerName || '—'
+  const destino = wmsRecord?.receiverName || '—'
+  const cajas   = wmsRecord?.outboundBoxCount ?? wmsRecord?.packageCount ?? wmsRecord?.totalQty ?? '?'
+  const status  = tracking?.status || 'pending_assignment'
+  const meta    = STATUS_META[status] ?? STATUS_META.pending_assignment
+
+  const validation = detailData ? validateOrderBoxData(detailData) : null
+  const canStart   = !loading && !fetchError && validation?.ok === true
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.ordenes.validate_btn')} icon={ScanBarcode}
       footer={
         <div className="flex gap-3 justify-end">
           <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
-          <button className="btn-primary inline-flex items-center gap-2" onClick={onConfirm}>
-            <Play size={14} /> Iniciar validación
+          <button
+            className="btn-primary inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={onConfirm}
+            disabled={!canStart}>
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            {loading ? t('surtido.ordenes.validate_loading') : t('surtido.ordenes.validate_start')}
           </button>
         </div>
       }
@@ -539,12 +570,13 @@ function ValidateConfirmModal({ obc, wmsRecord, tracking, isOpen, onClose, onCon
             <span className={`badge text-xs mt-1 ${meta.cls}`}>{t(meta.labelKey)}</span>
           </div>
         </div>
+
         <div className="grid grid-cols-2 gap-2 text-xs">
           {[
-            { label: t('surtido.ordenes.cliente'),   value: cliente },
-            { label: t('surtido.ordenes.receiver'),  value: destino },
-            { label: t('surtido.ordenes.cajas'),     value: cajas },
-            { label: t('surtido.ordenes.surtidor'),  value: tracking?.surtidor_nombre || '—' },
+            { label: t('surtido.ordenes.cliente'),  value: cliente },
+            { label: t('surtido.ordenes.receiver'), value: destino },
+            { label: t('surtido.ordenes.cajas'),    value: cajas },
+            { label: t('surtido.ordenes.surtidor'), value: tracking?.surtidor_nombre || '—' },
           ].map(item => (
             <div key={item.label} className="bg-warm-50 rounded-xl px-3 py-2">
               <p className="text-warm-400 text-[10px] uppercase tracking-wide">{item.label}</p>
@@ -552,6 +584,40 @@ function ValidateConfirmModal({ obc, wmsRecord, tracking, isOpen, onClose, onCon
             </div>
           ))}
         </div>
+
+        {loading && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary-50 text-primary-600 text-sm">
+            <Loader2 size={13} className="animate-spin shrink-0" />
+            <span>{t('surtido.ordenes.validate_loading')}</span>
+          </div>
+        )}
+
+        {!loading && fetchError && (
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-danger-50 border border-danger-200">
+            <AlertCircle size={14} className="text-danger-500 shrink-0 mt-0.5" />
+            <p className="text-xs text-danger-700">{t('surtido.validacion.error_no_data')}</p>
+          </div>
+        )}
+
+        {!loading && !fetchError && validation && !validation.ok && (
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-danger-50 border border-danger-200">
+            <AlertCircle size={14} className="text-danger-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-danger-700 mb-0.5">{t('surtido.validacion.box_validation_error')}</p>
+              <p className="text-xs text-danger-600">
+                {validation.reason === 'no_boxes' && t('surtido.validacion.error_no_boxes')}
+                {validation.reason === 'no_codes' && t('surtido.validacion.error_no_codes')}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!loading && !fetchError && validation?.ok && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-success-50 border border-success-100 text-xs text-success-700">
+            <CheckCircle2 size={13} className="text-success-500 shrink-0" />
+            <span>{t('surtido.ordenes.validate_boxes_ok').replace('{n}', validation.packageList.length)}</span>
+          </div>
+        )}
       </div>
     </Modal>
   )

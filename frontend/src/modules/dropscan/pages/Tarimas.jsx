@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import api from '../../../core/services/api'
-import { deleteFolio } from '../../fep/services/fepService'
+import { eliminarFolio as deleteFolio } from '../../fep/services/fepService'
 import * as XLSX from 'xlsx'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -458,7 +458,7 @@ export default function Tarimas() {
 
       <div className="flex-1 overflow-y-auto">
         {/* Filter bar */}
-        <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5 space-y-2">
+        <div data-tour="tarimas-filtros" className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5 space-y-2">
           {/* Row 1: Date range + quick presets */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5">
@@ -679,6 +679,7 @@ export default function Tarimas() {
           <div className="max-w-full mx-auto">
             {/* Table */}
             <motion.div
+              data-tour="tarimas-tabla"
               className="card overflow-hidden"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -736,7 +737,7 @@ export default function Tarimas() {
                           )}
                           <td className="table-cell">
                             <div className="flex items-center gap-1.5">
-                              <span className="font-mono font-semibold text-warm-700">{row.codigo}</span>
+                              <span className="font-mono text-xs font-semibold text-primary-700">{row.codigo}</span>
                               <button
                                 onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(row.codigo) }}
                                 className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-all"
@@ -849,7 +850,7 @@ export default function Tarimas() {
           detail ? (
             <div className="flex flex-col gap-0.5 leading-tight">
               <div className="flex items-center gap-2 group/tcode">
-                <span className="font-mono font-bold">{detail.codigo}</span>
+                <span className="font-mono text-primary-700 font-bold">{detail.codigo}</span>
                 <button
                   onClick={(e) => { e.stopPropagation(); copyTarimaCode(detail.codigo) }}
                   className="opacity-0 group-hover/tcode:opacity-100 p-0.5 rounded hover:bg-primary-100/60 text-warm-400 hover:text-primary-600 transition-all"
@@ -1192,7 +1193,7 @@ export default function Tarimas() {
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-200 space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-warm-500 font-medium">{t('history.pallet')}</span>
-                <span className="text-sm font-bold font-mono text-warm-800">{deletingTarima.codigo}</span>
+                <span className="text-sm font-bold font-mono text-primary-700">{deletingTarima.codigo}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-warm-500 font-medium">{t('history.company')}</span>
@@ -1289,7 +1290,7 @@ export default function Tarimas() {
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-200 space-y-1">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-warm-500 font-medium">Tarima</span>
-                <span className="text-sm font-bold font-mono text-warm-800">{blockedEditTarima.codigo}</span>
+                <span className="text-sm font-bold font-mono text-primary-700">{blockedEditTarima.codigo}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-warm-500 font-medium">Folio asignado</span>
