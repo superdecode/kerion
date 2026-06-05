@@ -4,6 +4,14 @@ import {
   getOutboundDetail as getOutboundDetailFromSheets,
 } from '../../WmsHub/services/googleSheetsService'
 
+export const getRecords = (payload) => {
+  if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.records)) return payload.records
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.data?.records)) return payload.data.records
+  return []
+}
+
 export const getOutboundList = () => getOutboundListFromSheets()
 
 export const getOutboundDetail = (orderNo) => getOutboundDetailFromSheets(orderNo)

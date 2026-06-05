@@ -421,6 +421,12 @@ async function runMigrations() {
        created_at TIMESTAMPTZ DEFAULT now(),
        updated_at TIMESTAMPTZ DEFAULT now()
      )`,
+    `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS app_key TEXT`,
+    `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS base_url TEXT DEFAULT 'https://api.xlwms.com/openapi'`,
+    `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`,
+    `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS last_verified_at TIMESTAMPTZ`,
+    `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()`,
+    `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`,
     `CREATE INDEX IF NOT EXISTS idx_wms_config_tenant ON wms_config(tenant_id)`,
 
     // ── 037: Picking scan sessions ────────────────────────────────────────

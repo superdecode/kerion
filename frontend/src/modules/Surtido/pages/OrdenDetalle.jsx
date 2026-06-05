@@ -20,6 +20,7 @@ import {
   getScanSessions,
   upsertOrderTracking,
   getSurtidores,
+  getRecords,
 } from '../services/surtidoService'
 
 const STATUS_META = {
@@ -232,7 +233,7 @@ function AssignSurtidorModal({ isOpen, obc, onClose, onAssigned, t }) {
     staleTime: 30000,
     enabled: isOpen,
   })
-  const surtidores = data?.data ?? []
+  const surtidores = getRecords(data)
   const [selected, setSelected] = useState(undefined)
 
   return (
@@ -312,11 +313,11 @@ export default function OrdenDetalle() {
     staleTime: 30000,
   })
 
-  const allWmsRecords = wmsListData?.data?.records ?? wmsListData?.data ?? []
+  const allWmsRecords = getRecords(wmsListData)
   const wmsRecord = allWmsRecords.find(r => r.outboundOrderNo === obc)
   const detail = rawDetail?.data ?? rawDetail ?? null
   const tracking = trackingRaw?.data ?? null
-  const sessions = sessionsRaw?.data?.records ?? sessionsRaw?.data ?? []
+  const sessions = getRecords(sessionsRaw)
 
   const d = detail ?? wmsRecord ?? {}
   const packageList = d?.packageList ?? d?.outboundBoxList ?? d?.boxList ?? []

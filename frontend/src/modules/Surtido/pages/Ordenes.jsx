@@ -20,6 +20,7 @@ import {
   getOutboundList,
   getSurtidores, createSurtidor, deleteSurtidor,
   getOrderTracking, upsertOrderTracking, getScanSessions,
+  getRecords,
 } from '../services/surtidoService'
 import { refreshSheet, getCacheTimestamp } from '../../WmsHub/services/googleSheetsService'
 
@@ -47,7 +48,7 @@ function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
   const [nombre, setNombre] = useState('')
 
   const { data } = useQuery({ queryKey: ['upapex-surtidores'], queryFn: getSurtidores, staleTime: 30000, enabled: isOpen })
-  const surtidores = data?.data ?? []
+  const surtidores = getRecords(data)
 
   const addMut = useMutation({
     mutationFn: createSurtidor,
@@ -104,7 +105,7 @@ function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
 function AssignModal({ isOpen, order, onClose, onAssign }) {
   const { t } = useI18nStore()
   const { data } = useQuery({ queryKey: ['upapex-surtidores'], queryFn: getSurtidores, staleTime: 30000, enabled: isOpen })
-  const surtidores = data?.data ?? []
+  const surtidores = getRecords(data)
   const [selected, setSelected] = useState(null)
 
   return (
@@ -465,9 +466,9 @@ export default function Ordenes() {
     staleTime: 60000,
   })
 
-  const allWmsRecords = wmsData?.data?.records ?? wmsData?.data ?? []
-  const trackingList  = trackingData?.data ?? []
-  const surtidores    = surtidoresData?.data ?? []
+  const allWmsRecords = getRecords(wmsData)
+  const trackingList  = getRecords(trackingData)
+  const surtidores    = getRecords(surtidoresData)
 
   const trackingMap = trackingList.reduce((m, tr) => {
     m[tr.outbound_order_no] = tr; return m

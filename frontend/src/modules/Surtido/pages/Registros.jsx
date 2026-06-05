@@ -13,7 +13,7 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { getScanSessions, getScanSession, getOutboundList } from '../services/surtidoService'
+import { getScanSessions, getScanSession, getOutboundList, getRecords } from '../services/surtidoService'
 
 const getToday = () => new Date().toISOString().slice(0, 10)
 const TH_CLASS = 'table-header whitespace-nowrap'
@@ -131,7 +131,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport }) {
     staleTime: 5 * 60 * 1000,
     enabled: isOpen && !!session.outbound_order_no,
   })
-  const wmsOrder = (wmsData?.data?.records ?? wmsData?.data ?? [])
+  const wmsOrder = getRecords(wmsData)
     .find(r => r.outboundOrderNo === session.outbound_order_no)
 
   const validados  = events.filter(e => e.scan_result === 'ok')
@@ -314,7 +314,7 @@ export default function SurtidoRegistros() {
     staleTime: 30000,
   })
 
-  const records = data?.data?.records ?? []
+  const records = getRecords(data)
   const total = data?.data?.total ?? 0
   const totalPages = Math.ceil(total / pageSize) || 1
 

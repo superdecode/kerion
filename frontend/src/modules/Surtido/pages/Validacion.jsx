@@ -6,7 +6,7 @@ import {
   Search, CheckCircle2, XCircle, AlertCircle, Loader2, Wifi, WifiOff,
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
   ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck,
-  MapPin, XOctagon, Plus, Pencil, X, AlertTriangle,
+  MapPin, XOctagon, Plus, Pencil, X, AlertTriangle, Copy, Check,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -19,7 +19,7 @@ import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import {
   getOutboundList, getOutboundDetail,
   createScanSession, updateScanSession, addScanEvent, clearSessionEvents,
-  upsertOrderTracking, getScanSessions,
+  upsertOrderTracking, getScanSessions, getRecords,
 } from '../services/surtidoService'
 import { getUbicaciones } from '../../WmsHub/services/wmsHubService'
 
@@ -87,6 +87,13 @@ const fmtElapsed = (secs) => {
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
 }
 
+const fmtDateTime = (value) => {
+  if (!value) return '—'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 19).replace('T', ' ')
+  return d.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })
+}
+
 /* ─── Search step ─────────────────────────────────────────── */
 function SearchStep({ onFound }) {
   const { t } = useI18nStore()
@@ -103,7 +110,7 @@ function SearchStep({ onFound }) {
     setLoading(true)
     try {
       const data = await getOutboundList()
-      const all = data?.data?.records ?? data?.data ?? []
+      const all = getRecords(data)
       const norm = q.trim().toLowerCase()
       const filtered = all.filter(r => (r.outboundOrderNo || '').toLowerCase().includes(norm))
       if (filtered.length === 0) { toast.error(t('surtido.escaneo.order_not_found') + ': ' + q); setResults([]); return }
@@ -581,7 +588,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
   }, [isOpen])
 
   const trackingMap = useMemo(() => {
-    const raw = trackingData?.data?.records ?? trackingData?.data ?? []
+    const raw = getRecords(trackingData)
     const map = new Map()
     raw.forEach(s => { if (s.outbound_order_no) map.set(s.outbound_order_no, s) })
     return map
@@ -593,7 +600,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     setSearchError(null)
     try {
       const data = await getOutboundList()
-      const all = data?.data?.records ?? data?.data ?? []
+      const all = getRecords(data)
       if (all.length === 0) {
         setSearchError('La hoja de salidas no contiene registros. Verifica la configuracion en WmsHub.')
         setResults([])
@@ -736,7 +743,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                     <button
                       className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 active:bg-primary-800 transition-colors shadow-sm"
                       onClick={() => { onValidate(r.outboundOrderNo); onClose() }}>
-                      <Play size={11} /> {t('surtido.validacion.card_validate')}
+                      <ScanBarcode size={11} /> {t('surtido.validacion.card_validate')}
                     </button>
                   </div>
                 </div>
@@ -804,6 +811,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const scanRef = useRef(null)
+  const copyTimeoutRef = useRef(null)
   const lastKeyTimeRef = useRef(0)
 
   const [step, setStep] = useState('search')
@@ -831,6 +839,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const [showLocationNotFound, setShowLocationNotFound] = useState(false)
   const [locationNotFoundCode, setLocationNotFoundCode] = useState('')
   const [locationFlash, setLocationFlash] = useState(false)
+  const [obcCopied, setObcCopied] = useState(false)
   const locationRef = useRef(null)
 
   const sessionElapsed = useSessionTimer(sessionStart)
@@ -964,6 +973,17 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     setUbicacionConfirmed(false); setLocationInputValue('')
     onUpdateTab({ obc: null, step: 'search' })
   }
+
+  const copyObc = () => {
+    if (!obc) return
+    navigator.clipboard.writeText(obc).then(() => {
+      setObcCopied(true)
+      window.clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = window.setTimeout(() => setObcCopied(false), 1400)
+    }).catch(() => toast.error(t('toast.error')))
+  }
+
+  useEffect(() => () => window.clearTimeout(copyTimeoutRef.current), [])
 
   const createSessionMut = useMutation({
     mutationFn: () => {
@@ -1142,8 +1162,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   })
 
   const sessionList = useMemo(() => {
-    const raw = trackingData?.data?.records ?? trackingData?.data ?? []
-    return raw
+    return getRecords(trackingData)
   }, [trackingData])
 
   const sessionListFiltered = useMemo(() => {
@@ -1196,10 +1215,21 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                   <Package className="w-5 h-5 text-primary-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-black text-warm-900 truncate leading-none font-mono text-xl tracking-tight">{obc}</p>
+                  <div className="flex items-center gap-2 min-w-0 group">
+                    <p className="font-black text-warm-900 truncate leading-none font-mono text-xl tracking-tight">{obc}</p>
+                    <button
+                      type="button"
+                      onClick={copyObc}
+                      className="shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200"
+                      title={obcCopied ? 'Copiado' : 'Copiar OBC'}
+                      aria-label={obcCopied ? 'Copiado' : 'Copiar número de orden'}
+                    >
+                      {obcCopied ? <Check size={14} className="text-success-600" /> : <Copy size={14} />}
+                    </button>
+                  </div>
                   {(() => {
                     const d = detailData?.data ?? detailData
-                    const delivery = d?.outboundTime?.slice(0, 10) || null
+                    const delivery = d?.outboundTime ? fmtDateTime(d.outboundTime) : null
                     const destination = d?.receiverName || null
                     const ref = d?.thirdOrderNo || null
                     const track = d?.logisticsTrackNo || null
@@ -1491,18 +1521,18 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
             </div>
           )}
           <div className="space-y-2 pb-1">
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="grid grid-cols-4 gap-1.5">
               {['', 'complete', 'with_discrepancies', 'cancelled'].map(key => (
                 <button
                   key={key || 'all'}
                   onClick={() => setSessionStatusFilter(key)}
-                  className={`px-2.5 py-1.5 h-9 rounded-full text-[10px] font-semibold border transition-colors ${
+                  className={`w-full min-w-0 px-2 py-1.5 h-9 rounded-full text-[10px] font-semibold border transition-colors truncate ${
                     sessionStatusFilter === key
-                      ? 'bg-primary-600 text-white border-primary-600'
-                      : 'bg-white text-warm-500 border-warm-200 hover:border-primary-300 hover:text-primary-700'
+                      ? 'bg-primary-50 text-primary-700 border-primary-200'
+                      : 'bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100'
                   }`}
                 >
-                  {key ? t(`surtido.registros.status.${key}`) : t('common.all')}
+                  {key ? (key === 'with_discrepancies' ? 'Diferencias' : t(`surtido.registros.status.${key}`)) : t('common.all')}
                 </button>
               ))}
             </div>
@@ -1671,7 +1701,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
 function TabBar({ tabs, activeTabId, onSelect, onAdd, onClose, canAdd }) {
   return (
     <div className="flex items-center px-4 pt-3 pb-0 border-b border-warm-100 bg-white shrink-0 min-w-0">
-      <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto">
+      <div className="flex items-center gap-1.5 flex-1 min-w-0 max-w-full overflow-x-auto overflow-y-hidden">
         {tabs.map(tab => (
           <button key={tab.id}
             onClick={() => onSelect(tab.id)}

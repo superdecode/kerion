@@ -5,7 +5,7 @@ import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { getScanSessions } from '../services/surtidoService'
+import { getScanSessions, getRecords } from '../services/surtidoService'
 
 export default function SurtidoHistorial() {
   const { t } = useI18nStore()
@@ -19,7 +19,7 @@ export default function SurtidoHistorial() {
     staleTime: 30000,
   })
 
-  const records = data?.data?.records ?? []
+  const records = getRecords(data)
   const total = data?.data?.total ?? 0
   const totalPages = Math.ceil(total / pageSize) || 1
 
