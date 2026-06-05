@@ -281,7 +281,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
               ref={locationRef}
               type="text"
               className="w-full pl-10 pr-4 py-3 text-base bg-white border-2 border-accent-200 rounded-2xl
-                focus:border-accent-500 focus:ring-4 focus:ring-accent-100
+                focus:border-accent-500 focus:shadow-md
                 transition-all outline-none placeholder:text-warm-300 font-mono"
               placeholder="UB-XXX"
               value={inputValue}
@@ -1182,7 +1182,7 @@ export default function Escaneo() {
                       ref={scanRef}
                       type="text"
                       className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warm-200 rounded-2xl
-                        focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
+                        focus:border-primary-500 focus:shadow-glow
                         transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
                       placeholder={t('inventario.escaneo.scan_placeholder')}
                       onKeyDown={e => { if (e.key === 'Enter') { processScan(e.target.value.trim()); e.target.value = '' } }}
@@ -1207,7 +1207,7 @@ export default function Escaneo() {
                         ref={code2Ref}
                         type="text"
                         className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warning-300 rounded-2xl
-                          focus:border-warning-500 focus:ring-4 focus:ring-warning-100
+                          focus:border-warning-500 focus:shadow-md
                           transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
                         placeholder={t('inventario.escaneo.code2_placeholder')}
                         onKeyDown={e => { if (e.key === 'Enter') { processCode2(e.target.value.trim()); e.target.value = '' } }}

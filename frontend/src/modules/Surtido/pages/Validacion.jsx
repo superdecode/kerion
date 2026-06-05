@@ -133,7 +133,7 @@ function SearchStep({ onFound }) {
           <p className="text-sm text-warm-500 mb-8 leading-relaxed">{t('surtido.escaneo.search_placeholder')}</p>
 
           <div className="flex gap-2 max-w-md mx-auto">
-            <div className="flex-1 flex items-center gap-1.5 h-12 bg-warm-50 border border-warm-200 rounded-2xl px-4 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+            <div className="flex-1 flex items-center gap-1.5 h-12 bg-warm-50 border border-warm-200 rounded-2xl px-4 transition-all focus-within:border-primary-400 focus-within:shadow-sm">
               <Search className="w-5 h-5 text-warm-300 shrink-0" />
               <input
                 ref={inputRef}
@@ -613,7 +613,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.validacion.quick_search_title')} icon={Search} size="lg">
       <div className="space-y-4">
         <div className="flex gap-2">
-          <div className="flex-1 flex items-center gap-2 h-12 bg-warm-50 border-2 border-warm-200 rounded-2xl px-4 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
+          <div className="flex-1 flex items-center gap-2 h-12 bg-warm-50 border-2 border-warm-200 rounded-2xl px-4 transition-all focus-within:border-primary-400 focus-within:shadow-sm">
             <ScanBarcode className="w-4 h-4 text-warm-300 shrink-0" />
             <input
               ref={inputRef}
@@ -1222,7 +1222,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                       ref={locationRef}
                       type="text"
                       className="w-full pl-10 pr-4 py-3 text-base bg-white border-2 border-accent-200 rounded-2xl
-                        focus:border-accent-500 focus:ring-4 focus:ring-accent-100
+                        focus:border-accent-500 focus:shadow-md
                         transition-all outline-none placeholder:text-warm-300 font-mono"
                       placeholder="UB-XXX"
                       value={locationInputValue}
@@ -1264,7 +1264,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                 ref={scanRef}
                 type="text"
                 className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warm-200 rounded-2xl
-                  focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
+                  focus:border-primary-500 focus:shadow-glow
                   transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
                 placeholder={t('surtido.validacion.scan_placeholder')}
                 onKeyDown={handleKeyDown}
@@ -1383,7 +1383,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 transition-all focus-within:border-primary-400 focus-within:shadow-sm">
               <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
               <input
                 type="text"
