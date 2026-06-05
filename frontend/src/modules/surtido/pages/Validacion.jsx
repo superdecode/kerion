@@ -417,6 +417,41 @@ function RejectedTable({ items, t }) {
   )
 }
 
+/* ─── Scan feed table ────────────────────────────────────── */
+function ScanFeedTable({ items, t }) {
+  if (items.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-12 text-warm-400 gap-3">
+      <ScanBarcode size={36} className="opacity-20" />
+      <p className="text-sm">{t('surtido.validacion.scan_to_start')}</p>
+    </div>
+  )
+  return (
+    <div className="max-h-80 overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
+      <table className="w-full text-xs">
+        <thead className="bg-warm-50 sticky top-0 z-10 border-b border-warm-100">
+          <tr>
+            <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('surtido.validacion.code_header')}</th>
+            <th className="text-right px-3 py-2.5 font-bold text-warm-500">Hora</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-warm-50">
+          {items.map((e, i) => (
+            <tr key={i} className="hover:bg-warm-50/50 transition-colors">
+              <td className="px-3 py-2 font-mono font-semibold text-success-700">
+                <span className="inline-flex items-center gap-1.5">
+                  <CheckCircle2 size={10} className="text-success-500 shrink-0" />
+                  {e.code}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-right text-warm-400 tabular-nums">{new Date(e.ts).toLocaleTimeString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 /* ─── Recount modal ───────────────────────────────────────── */
 function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
   const [recountInput, setRecountInput] = useState('')
@@ -511,7 +546,7 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
 
 /* ═══════════════════════════════════════════════════════════ */
 /* ─── TabSession ─────────────────────────────────────────── */
-function TabSession({ tabId, isActive, initialObc, onUpdateTab }) {
+function TabSession({ tabId, isActive, initialObc, initialAutoStart, onUpdateTab }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
@@ -533,6 +568,7 @@ function TabSession({ tabId, isActive, initialObc, onUpdateTab }) {
   const [showMissing, setShowMissing] = useState(false)
   const [showFinalize, setShowFinalize] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [autoStartPending, setAutoStartPending] = useState(initialAutoStart ?? false)
   const [finalNotes, setFinalNotes] = useState('')
   const [activeTab, setActiveTab] = useState('registros')
   const [ubicacionConfirmed, setUbicacionConfirmed] = useState(false)
@@ -623,6 +659,14 @@ function TabSession({ tabId, isActive, initialObc, onUpdateTab }) {
       setTimeout(() => scanRef.current?.focus(), 80)
     }
   }, [step, ubicacionConfirmed, isActive])
+
+  useEffect(() => {
+    if (!autoStartPending || step !== 'preview' || detailLoading || !detailData) return
+    const validation = validateOrderBoxData(detailData)
+    if (!validation.ok) return
+    setAutoStartPending(false)
+    createSessionMut.mutate()
+  }, [autoStartPending, step, detailLoading, detailData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -850,42 +894,44 @@ function TabSession({ tabId, isActive, initialObc, onUpdateTab }) {
 
   /* ─── ACTIVE SESSION ─────────────────────────────────── */
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* Main area */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Session action bar */}
-        <div className="sticky top-0 z-[4] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-4 py-2 flex items-center gap-1.5">
-          <div className="flex-1 flex items-center gap-2 min-w-0">
-            <span className="font-mono font-bold text-warm-800 text-sm truncate">{obc}</span>
-            <span className="text-warm-400 text-xs font-mono tabular-nums">{fmtElapsed(sessionElapsed)}</span>
-          </div>
-          {pendingSync.length > 0 && (
-            <span className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
-              {isSyncing ? <Loader2 size={12} className="animate-spin" /> : <WifiOff size={12} />}
-              {pendingSync.length}
-            </span>
-          )}
-          <button className="px-3 py-1.5 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
-            onClick={() => setShowRecount(true)}>
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{t('surtido.escaneo.recount')}</span>
-          </button>
-          <button className="px-3 py-1.5 rounded-xl text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
-            onClick={() => setShowMissing(true)}>
-            <List className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{t('surtido.escaneo.missing')}</span>
-          </button>
-          <button className="px-3 py-1.5 rounded-xl text-danger-600 bg-danger-50 hover:bg-danger-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
-            onClick={handleCancel}>
-            <XOctagon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{t('surtido.escaneo.cancel')}</span>
-          </button>
-          <button className="btn-danger inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
-            onClick={() => setShowFinalize(true)}>
-            <Square className="w-3.5 h-3.5" /> {t('surtido.escaneo.finalize')}
-          </button>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Session action bar — fixed outside scroll */}
+      <div className="bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-4 py-2 flex items-center gap-1.5 shrink-0">
+        <div className="flex-1 flex items-center gap-2 min-w-0">
+          <span className="font-mono font-bold text-warm-800 text-sm truncate">{obc}</span>
+          <span className="text-warm-400 text-xs font-mono tabular-nums">{fmtElapsed(sessionElapsed)}</span>
         </div>
+        {pendingSync.length > 0 && (
+          <span className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
+            {isSyncing ? <Loader2 size={12} className="animate-spin" /> : <WifiOff size={12} />}
+            {pendingSync.length}
+          </span>
+        )}
+        <button className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-2 text-sm font-semibold"
+          onClick={() => setShowRecount(true)}>
+          <RotateCcw className="w-4 h-4" />
+          <span className="hidden sm:inline">{t('surtido.escaneo.recount')}</span>
+        </button>
+        <button className="px-3 py-2 rounded-xl text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
+          onClick={() => setShowMissing(true)}>
+          <List className="w-4 h-4" />
+          <span className="hidden sm:inline">{t('surtido.escaneo.missing')}</span>
+        </button>
+        <button className="px-3 py-2 rounded-xl text-warning-600 bg-warning-50 hover:bg-warning-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
+          onClick={handleCancel}>
+          <XOctagon className="w-4 h-4" />
+          <span className="hidden sm:inline">{t('surtido.escaneo.cancel')}</span>
+        </button>
+        <button className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+          onClick={() => setShowFinalize(true)}>
+          <Square className="w-4 h-4" /> {t('surtido.escaneo.finalize')}
+        </button>
+      </div>
 
+      {/* Main content row */}
+      <div className="flex-1 flex overflow-hidden">
+      {/* Main scroll area */}
+      <div className="flex-1 overflow-y-auto">
         <div className="p-6">
           <div className="max-w-3xl mx-auto space-y-4">
 
@@ -1091,12 +1137,7 @@ function TabSession({ tabId, isActive, initialObc, onUpdateTab }) {
             </div>
 
             {activeTab === 'registros' && (
-              <ItemsTable items={allItems.filter(i => i.type === 'box')} itemCounts={itemCounts} t={t}
-                onManualAdjust={(code, delta) => {
-                  setItemCounts(m => { const next = new Map(m); next.set(code, Math.max(0, (m.get(code) || 0) + delta)); return next })
-                  if (delta > 0 && sessionId)
-                    addEventMut.mutate({ session_id: sessionId, scanned_code: code, normalized_code: code, scan_result: 'ok', quantity: 1, _dedupeKey: `MAN_${code}_${Date.now()}` })
-                }} />
+              <ScanFeedTable items={history.filter(h => h.result === 'ok')} t={t} />
             )}
             {activeTab === 'rechazados' && (
               <RejectedTable items={rejectedHistory} t={t} />
@@ -1160,6 +1201,7 @@ function TabSession({ tabId, isActive, initialObc, onUpdateTab }) {
             })
           )}
         </div>
+      </div>
       </div>
 
       {/* Recount modal */}
@@ -1284,14 +1326,14 @@ function TabSession({ tabId, isActive, initialObc, onUpdateTab }) {
 /* ─── Tab bar ─────────────────────────────────────────────── */
 function TabBar({ tabs, activeTabId, onSelect, onAdd, onClose }) {
   return (
-    <div className="flex items-center border-b border-warm-100 bg-white/60 backdrop-blur-2xl px-2 overflow-x-auto shrink-0">
+    <div className="flex items-center gap-1.5 px-4 pt-3 pb-0 border-b border-warm-100 bg-white overflow-x-auto shrink-0">
       {tabs.map(tab => (
         <button key={tab.id}
           onClick={() => onSelect(tab.id)}
-          className={`group flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all whitespace-nowrap shrink-0 ${
+          className={`group relative flex items-center gap-1.5 px-3.5 py-2 rounded-t-xl text-xs font-semibold transition-all whitespace-nowrap shrink-0 border-2 border-b-0 ${
             tab.id === activeTabId
-              ? 'border-primary-500 text-primary-700 bg-primary-50/40'
-              : 'border-transparent text-warm-500 hover:text-warm-700 hover:bg-warm-50'
+              ? 'bg-white border-warm-200 text-warm-800 shadow-sm -mb-px z-10'
+              : 'bg-warm-50 border-transparent text-warm-500 hover:text-warm-700 hover:bg-warm-100'
           }`}>
           <ScanBarcode size={12} className={tab.id === activeTabId ? 'text-primary-500' : 'text-warm-400'} />
           <span className="max-w-[120px] truncate">{tab.label}</span>
@@ -1337,6 +1379,7 @@ export default function SurtidoValidacion() {
   })
 
   const obcParam = searchParams.get('obc')
+  const autoStartParam = searchParams.get('autostart') === 'true'
   const [initialObcConsumed, setInitialObcConsumed] = useState(false)
 
   useEffect(() => {
@@ -1404,6 +1447,7 @@ export default function SurtidoValidacion() {
               tabId={tab.id}
               isActive={tab.id === activeTabId}
               initialObc={tab.id === activeTabId && !initialObcConsumed ? obcParam : null}
+              initialAutoStart={tab.id === activeTabId && !initialObcConsumed ? autoStartParam : false}
               onUpdateTab={(data) => handleUpdateTab(tab.id, data)}
             />
           </div>
