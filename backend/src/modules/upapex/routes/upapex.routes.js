@@ -1,8 +1,60 @@
 import { Router } from 'express'
+import crypto from 'crypto'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
-import { requirePermission } from '../../../shared/middleware/permissions.js'
+import { requirePermission, getPermissionLevel, resolvePermission } from '../../../shared/middleware/permissions.js'
+import { getToday } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
+const DEFAULT_TZ = 'America/Mexico_City'
+
+function tenantLockKey(tenantId, suffix = '') {
+  const buf = crypto.createHash('sha256').update(`${tenantId}:${suffix}`).digest()
+  const val = buf.readBigUInt64BE(0) & BigInt('0x7FFFFFFFFFFFFFFF')
+  return val.toString()
+}
+
+function getTimezone(req) {
+  return req.fullUser?.zona_horaria || DEFAULT_TZ
+}
+
+function requireAnyPermission(requirements) {
+  return (req, res, next) => {
+    const user = req.fullUser
+    if (!user) return res.status(401).json({ error: 'No autenticado' })
+    if (user.rol_nombre === 'Administrador') return next()
+
+    const hasAny = requirements.some(({ modulePath, action }) => {
+      const level = getPermissionLevel(user.permisos, modulePath)
+      return resolvePermission(level, action)
+    })
+
+    if (!hasAny) return res.status(403).json({ error: 'No tienes permisos para esta acción' })
+    next()
+  }
+}
+
+function isValidSectionCode(code) {
+  return /^SEC-\d{8}M\d{2,}$/.test(String(code || '').trim())
+}
+
+async function generateInventorySectionCode(client, tenantId, tz) {
+  const dayKey = getToday(tz).replace(/-/g, '')
+  const seqRes = await client.query(
+    `SELECT COALESCE(MAX(CAST(SUBSTRING(tarima_code FROM 14) AS INTEGER)), 0) + 1 AS n
+     FROM inv_sessions
+     WHERE tenant_id = $1
+       AND tarima_code LIKE $2
+       AND tarima_code ~ '^SEC-[0-9]{8}M[0-9]+$'`,
+    [tenantId, `SEC-${dayKey}M%`]
+  )
+  return `SEC-${dayKey}M${String(seqRes.rows[0].n).padStart(2, '0')}`
+}
+
+function generatedTarimaCode(sectionCode, index) {
+  const dayMatch = String(sectionCode || '').match(/^SEC-(\d{8})M\d+$/)
+  const dayKey = dayMatch ? dayMatch[1] : getToday().replace(/-/g, '')
+  return `PAL-${dayKey}-${String(index + 1).padStart(2, '0')}`
+}
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
@@ -126,7 +178,10 @@ router.post('/scan-session',
 // GET /api/upapex/scan-sessions — list with pagination
 router.get('/scan-sessions',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.registros', 'ver'),
+  requireAnyPermission([
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'ver' },
+  ]),
   async (req, res) => {
     try {
       const { page = 1, pageSize = 20, status, operator_id, fecha_inicio, fecha_fin, outbound_order_no } = req.query
@@ -179,7 +234,10 @@ router.get('/scan-sessions',
 // GET /api/upapex/scan-session/:id
 router.get('/scan-session/:id',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.registros', 'ver'),
+  requireAnyPermission([
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'ver' },
+  ]),
   async (req, res) => {
     try {
       const [sessionRes, eventsRes] = await Promise.all([
@@ -211,7 +269,7 @@ router.get('/scan-session/:id',
 // PUT /api/upapex/scan-session/:id — update (complete, add notes, update counts)
 router.put('/scan-session/:id',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.validacion', 'crear'),
+  requirePermission('surtido.validacion', 'actualizar'),
   async (req, res) => {
     try {
       const { status, notes, total_scanned, ubicacion_id } = req.body
@@ -310,13 +368,33 @@ router.post('/inventory-session',
   authenticateToken, loadFullUser,
   requirePermission('inventario.escaneo', 'crear'),
   async (req, res) => {
+    const client = await req.tGetClient()
     try {
-      const { scan_type, scans = [], notes, ubicacion_id } = req.body
+      const { scan_type, scans = [], notes, ubicacion_id, tarima_code } = req.body
       if (!scan_type || !['unificado', 'clasificacion'].includes(scan_type)) {
         return res.status(400).json({ success: false, error: 'scan_type inválido' })
       }
+      const tz = getTimezone(req)
 
-      const totals = scans.reduce((acc, s) => {
+      await client.query('BEGIN')
+      await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [tenantLockKey(req.tenantId, 'inventory-section')])
+      const sectionCode = isValidSectionCode(tarima_code)
+        ? String(tarima_code).trim()
+        : await generateInventorySectionCode(client, req.tenantId, tz)
+
+      const groupCodeMap = new Map()
+      scans.forEach(s => {
+        const key = String(s.group_assignment || 'auto').trim()
+        if (!groupCodeMap.has(key)) {
+          groupCodeMap.set(key, generatedTarimaCode(sectionCode, groupCodeMap.size))
+        }
+      })
+      const normalizedScans = scans.map(s => ({
+        ...s,
+        group_assignment: groupCodeMap.get(String(s.group_assignment || 'auto').trim()) || sectionCode,
+      }))
+
+      const totals = normalizedScans.reduce((acc, s) => {
         acc.total++
         if (s.scan_status === 'ok') acc.ok++
         else if (s.scan_status === 'blocked') acc.blocked++
@@ -324,37 +402,32 @@ router.post('/inventory-session',
         return acc
       }, { total: 0, ok: 0, blocked: 0, nowms: 0 })
 
-      const sessionRes = await req.tQuery(
-        ubicacion_id
-          ? `INSERT INTO inv_sessions
-               (tenant_id, operator_id, scan_type, status, completed_at, notes, ubicacion_id,
-                total_scans, total_ok, total_blocked, total_nowms)
-             VALUES ($1, $2, $3, 'saved', now(), $4, $5, $6, $7, $8, $9)
-             RETURNING *`
-          : `INSERT INTO inv_sessions
-               (tenant_id, operator_id, scan_type, status, completed_at, notes,
-                total_scans, total_ok, total_blocked, total_nowms)
-             VALUES ($1, $2, $3, 'saved', now(), $4, $5, $6, $7, $8)
-             RETURNING *`,
-        ubicacion_id
-          ? [req.tenantId, req.user.id, scan_type, notes || null, ubicacion_id,
-             totals.total, totals.ok, totals.blocked, totals.nowms]
-          : [req.tenantId, req.user.id, scan_type, notes || null,
-             totals.total, totals.ok, totals.blocked, totals.nowms]
+      const normalizedNotes = scan_type === 'clasificacion'
+        ? JSON.stringify({ section_code: sectionCode, tarimas: Object.fromEntries(groupCodeMap), previous_notes: notes || null })
+        : notes || null
+
+      const sessionRes = await client.query(
+        `INSERT INTO inv_sessions
+           (tenant_id, operator_id, scan_type, status, completed_at, notes, ubicacion_id,
+            tarima_code, total_scans, total_ok, total_blocked, total_nowms)
+         VALUES ($1,$2,$3,'saved',now(),$4,$5,$6,$7,$8,$9,$10)
+         RETURNING *`,
+        [req.tenantId, req.user.id, scan_type, normalizedNotes, ubicacion_id || null,
+         sectionCode, totals.total, totals.ok, totals.blocked, totals.nowms]
       )
       const session = sessionRes.rows[0]
 
-      if (scans.length > 0) {
-        const values = scans.map((_, i) => {
+      if (normalizedScans.length > 0) {
+        const values = normalizedScans.map((_, i) => {
           const b = i * 9
           return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9})`
         }).join(',')
-        const params = scans.flatMap(s => [
+        const params = normalizedScans.flatMap(s => [
           session.id, s.scanned_code, s.normalized_code, s.code2 || null,
           s.was_swapped || false, s.scan_status, s.sku || null,
           s.product_name || null, s.group_assignment || 'auto',
         ])
-        await req.tQuery(
+        await client.query(
           `INSERT INTO inv_scans
              (session_id, scanned_code, normalized_code, code2, was_swapped,
               scan_status, sku, product_name, group_assignment)
@@ -363,10 +436,14 @@ router.post('/inventory-session',
         )
       }
 
+      await client.query('COMMIT')
       res.status(201).json({ success: true, data: session })
     } catch (err) {
+      await client.query('ROLLBACK').catch(() => {})
       console.error('POST upapex/inventory-session error:', err.message)
       res.status(500).json({ success: false, error: 'Error guardando sesión de inventario' })
+    } finally {
+      client.release()
     }
   }
 )
@@ -377,23 +454,44 @@ router.get('/inventory-sessions',
   requirePermission('inventario.registros', 'ver'),
   async (req, res) => {
     try {
-      const { page = 1, pageSize = 20 } = req.query
+      const { page = 1, pageSize = 20, scan_type, date_from, date_to, q } = req.query
       const limit = Math.min(parseInt(pageSize) || 20, 100)
       const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit
+
+      const filters = ['s.tenant_id = $1', "s.status = 'saved'"]
+      const params = [req.tenantId]
+      if (scan_type && ['unificado', 'clasificacion'].includes(scan_type)) {
+        filters.push(`s.scan_type = $${params.push(scan_type)}`)
+      }
+      if (q?.trim()) {
+        const term = `%${String(q).trim()}%`
+        filters.push(`(
+          s.tarima_code ILIKE $${params.push(term)}
+          OR EXISTS (
+            SELECT 1 FROM usuarios u2
+            WHERE u2.id = s.operator_id
+              AND u2.nombre_completo ILIKE $${params.push(term)}
+          )
+          OR COALESCE(s.notes, '') ILIKE $${params.push(term)}
+        )`)
+      }
+      if (date_from) filters.push(`s.completed_at >= $${params.push(date_from)}`)
+      if (date_to)   filters.push(`s.completed_at <  $${params.push(date_to + 'T23:59:59')}`)
+      const where = filters.join(' AND ')
 
       const [rows, countRes] = await Promise.all([
         req.tQuery(
           `SELECT s.*, u.nombre_completo as operator_nombre
            FROM inv_sessions s
            LEFT JOIN usuarios u ON u.id = s.operator_id
-           WHERE s.tenant_id = $1 AND s.status = 'saved'
+           WHERE ${where}
            ORDER BY s.completed_at DESC
-           LIMIT $2 OFFSET $3`,
-          [req.tenantId, limit, offset]
+           LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+          [...params, limit, offset]
         ),
         req.tQuery(
-          'SELECT COUNT(*) as total FROM inv_sessions WHERE tenant_id = $1 AND status = $2',
-          [req.tenantId, 'saved']
+          `SELECT COUNT(*) as total FROM inv_sessions s WHERE ${where}`,
+          params
         ),
       ])
       res.json({
@@ -438,7 +536,7 @@ router.get('/inventory-session/:id',
 // DELETE /api/upapex/inventory-session/:id — only most recent allowed
 router.delete('/inventory-session/:id',
   authenticateToken, loadFullUser,
-  requirePermission('inventario.admin', 'eliminar'),
+  requirePermission('inventario.registros', 'eliminar'),
   async (req, res) => {
     try {
       const mostRecent = await req.tQuery(
@@ -482,7 +580,7 @@ router.get('/surtidores',
 
 router.post('/surtidores',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.assign', 'crear'),
+  requirePermission('surtido.ordenes', 'actualizar'),
   async (req, res) => {
     try {
       const { nombre } = req.body
@@ -501,7 +599,7 @@ router.post('/surtidores',
 
 router.delete('/surtidores/:id',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.admin', 'eliminar'),
+  requirePermission('surtido.ordenes', 'eliminar'),
   async (req, res) => {
     try {
       await req.tQuery(
@@ -563,7 +661,7 @@ router.get('/order-tracking/:obc',
 
 router.put('/order-tracking/:obc',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.assign', 'crear'),
+  requirePermission('surtido.ordenes', 'actualizar'),
   async (req, res) => {
     try {
       const { surtidor_id, status, notes, third_order_no } = req.body
@@ -592,7 +690,21 @@ router.put('/order-tracking/:obc',
       const fields = ['updated_at = now()']
       const params = []
       let p = 1
-      if (status !== undefined) { fields.push(`status = $${p++}`); params.push(status) }
+      if (status !== undefined) {
+        fields.push(`status = $${p++}`); params.push(status)
+        const userNombre = req.fullUser?.nombre_completo || null
+        if (status === 'assigned') {
+          fields.push(`assigned_at = now()`)
+          fields.push(`assigned_by = $${p++}`); params.push(userNombre)
+        }
+        if (status === 'sorting')            fields.push(`sorting_started_at = now()`)
+        if (status === 'pending_validation') fields.push(`sorting_completed_at = now()`)
+        if (status === 'validating')         fields.push(`validation_started_at = now()`)
+        if (status === 'complete') {
+          fields.push(`validation_completed_at = now()`)
+          fields.push(`validated_by = $${p++}`); params.push(userNombre)
+        }
+      }
       if (surtidor_id !== undefined) {
         fields.push(`surtidor_id = $${p++}`); params.push(surtidor_id || null)
         fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
@@ -616,7 +728,7 @@ router.put('/order-tracking/:obc',
 // DELETE scan session events (for recount)
 router.delete('/scan-session/:id/events',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.validacion', 'crear'),
+  requirePermission('surtido.validacion', 'eliminar'),
   async (req, res) => {
     try {
       const sessionRes = await req.tQuery(
@@ -640,6 +752,11 @@ router.delete('/scan-session/:id/events',
 // GET /api/upapex/ubicaciones?modulo= — shared ubicaciones for Inventario and Surtido
 router.get('/ubicaciones',
   authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'inventario.escaneo', action: 'crear' },
+    { modulePath: 'inventario.registros', action: 'ver' },
+  ]),
   async (req, res) => {
     try {
       const { modulo } = req.query

@@ -524,7 +524,7 @@ router.delete('/:tarimaId/guias/:guiaId',
 // GET /api/dropscan/tarimas/:id/log
 router.get('/:id/log',
   authenticateToken, loadFullUser,
-  requirePermission('dropscan.historial', 'ver'),
+  requirePermission('dropscan.tarimas', 'ver'),
   async (req, res) => {
     try {
       const { id } = req.params

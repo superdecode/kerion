@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, X, Check } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 
-export default function MultiSelect({ options = [], selected = [], onChange, placeholder = 'Seleccionar...', label, icon: Icon }) {
+export default function MultiSelect({ options = [], selected = [], onChange, placeholder = 'Seleccionar...', label, icon: Icon, className = '' }) {
   const { t } = useI18nStore()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -41,14 +41,14 @@ export default function MultiSelect({ options = [], selected = [], onChange, pla
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-2 w-full min-w-[180px] px-3 py-2 rounded-lg border text-sm text-left transition-all outline-none ${
+        className={`flex items-center gap-2 w-full min-w-[180px] h-10 px-3 pr-2 rounded-xl border text-sm text-left transition-all outline-none ${className} ${
           open
-            ? 'border-primary-400 ring-2 ring-primary-100 bg-white'
-            : 'border-slate-300 bg-white hover:border-slate-400'
+            ? 'border-primary-400 ring-2 ring-primary-100 bg-white shadow-sm'
+            : 'border-warm-200 bg-warm-50 hover:border-warm-300'
         }`}
       >
         {Icon && <Icon className="w-4 h-4 text-warm-400 shrink-0" />}
-        <span className="flex-1 truncate">
+        <span className="flex-1 min-w-0 truncate">
           {selected.length === 0 ? (
             <span className="text-warm-400">{placeholder}</span>
           ) : selected.length <= 2 ? (
@@ -58,11 +58,11 @@ export default function MultiSelect({ options = [], selected = [], onChange, pla
           )}
         </span>
         {selected.length > 0 && (
-          <button onClick={clearAll} className="p-0.5 rounded hover:bg-warm-100 transition-colors shrink-0">
+          <button onClick={clearAll} className="p-0.5 rounded hover:bg-warm-100 transition-colors shrink-0 mr-0.5">
             <X className="w-3.5 h-3.5 text-warm-400" />
           </button>
         )}
-        <ChevronDown className={`w-4 h-4 text-warm-400 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-warm-400 shrink-0 transition-transform duration-200 ml-0.5 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       <AnimatePresence>

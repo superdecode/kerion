@@ -315,7 +315,7 @@ router.post('/:id/confirmar',
 
 router.post('/:id/cancelar',
   authenticateToken, loadFullUser,
-  requirePermission('devoluciones.entradas', 'actualizar'),
+  requirePermission('devoluciones.entradas', 'eliminar'),
   async (req, res) => {
     try {
       const result = await req.tQuery(

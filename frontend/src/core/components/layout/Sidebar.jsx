@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore'
 import {
   LayoutDashboard,
   ScanBarcode,
+  BadgeCheck,
   History,
   Settings2,
   LogOut,
@@ -16,7 +17,6 @@ import {
   PackagePlus,
   PackageMinus,
   Package,
-  BadgeCheck,
   Wifi,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
@@ -28,37 +28,37 @@ const getNavItems = (t) => [
     label: 'DropScan',
     items: [
       { path: '/dropscan',              tourId: 'nav-dashboard',      label: t('nav.dashboard'),     icon: LayoutDashboard, permission: 'dropscan.dashboard' },
-      { path: '/dropscan/escaneo',      tourId: 'nav-escaneo',        label: t('nav.scanning'),      icon: ScanBarcode,     permission: 'dropscan.escaneo' },
-      { path: '/dropscan/historial',    tourId: 'nav-historial',      label: t('nav.history'),       icon: History,         permission: 'dropscan.historial' },
-      { path: '/dropscan/folios',       tourId: 'nav-folios',         label: t('nav.fep'),           icon: FileText,        permission: 'fep.folios' },
-      { path: '/dropscan/reportes',     tourId: 'nav-reportes',       label: t('nav.reports'),       icon: BarChart3,       permission: 'dropscan.reportes' },
-      { path: '/dropscan/configuracion',tourId: 'nav-configuracion',  label: t('nav.configuration'), icon: Settings,        permission: 'dropscan.configuracion' },
+      { path: '/DropScan/escaneo',      tourId: 'nav-escaneo',        label: t('nav.scanning'),      icon: ScanBarcode,     permission: 'dropscan.escaneo' },
+      { path: '/DropScan/tarimas',      tourId: 'nav-tarimas',        label: t('nav.tarimas'),       icon: History,         permission: 'dropscan.tarimas' },
+      { path: '/DropScan/folios',       tourId: 'nav-folios',         label: t('nav.fep'),           icon: FileText,        permission: 'fep.folios' },
+      { path: '/DropScan/reportes',     tourId: 'nav-reportes',       label: t('nav.reports'),       icon: BarChart3,       permission: 'dropscan.reportes' },
+      { path: '/DropScan/configuracion',tourId: 'nav-configuracion',  label: t('nav.configuration'), icon: Settings,        permission: 'dropscan.configuracion' },
     ],
   },
   {
     id: 'devoluciones',
     label: t('nav.devoluciones'),
     items: [
-      { path: '/devoluciones/entradas',   tourId: 'nav-dev-entradas',   label: t('nav.dev.entradas'),   icon: PackagePlus,  permission: 'devoluciones.entradas' },
-      { path: '/devoluciones/inventario', tourId: 'nav-dev-inventario', label: t('nav.dev.inventario'), icon: Boxes,        permission: 'devoluciones.inventario' },
-      { path: '/devoluciones/salidas',    tourId: 'nav-dev-salidas',    label: t('nav.dev.salidas'),    icon: PackageMinus, permission: 'devoluciones.salidas' },
+      { path: '/Devoluciones/entradas',   tourId: 'nav-dev-entradas',   label: t('nav.dev.entradas'),   icon: PackagePlus,  permission: 'devoluciones.entradas' },
+      { path: '/Devoluciones/inventario', tourId: 'nav-dev-inventario', label: t('nav.dev.inventario'), icon: Boxes,        permission: 'devoluciones.inventario' },
+      { path: '/Devoluciones/salidas',    tourId: 'nav-dev-salidas',    label: t('nav.dev.salidas'),    icon: PackageMinus, permission: 'devoluciones.salidas' },
     ],
   },
   {
     id: 'inventario',
     label: t('nav.inventario'),
     items: [
-      { path: '/inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode,   permission: 'inventario.escaneo' },
-      { path: '/inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: Package,       permission: 'inventario.registros' },
+      { path: '/Inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode,   permission: 'inventario.escaneo' },
+      { path: '/Inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: Package,       permission: 'inventario.registros' },
     ],
   },
   {
     id: 'surtido',
     label: t('nav.surtido'),
     items: [
-      { path: '/surtido',            tourId: 'nav-sur-ordenes',   label: t('nav.sur.ordenes'),      icon: FileText,    permission: 'surtido.ordenes' },
-      { path: '/surtido/validacion',  tourId: 'nav-sur-validacion', label: t('nav.sur.validacion'),   icon: BadgeCheck,  permission: 'surtido.validacion' },
-      { path: '/surtido/registros',  tourId: 'nav-sur-registros', label: t('nav.sur.registros'),    icon: History,     permission: 'surtido.registros' },
+      { path: '/Surtido/validacion', tourId: 'nav-sur-validacion', label: t('nav.sur.validacion'),  icon: BadgeCheck,  permission: 'surtido.validacion' },
+      { path: '/surtido',            tourId: 'nav-sur-ordenes',    label: t('nav.sur.ordenes'),     icon: FileText,    permission: 'surtido.ordenes' },
+      { path: '/Surtido/registros',  tourId: 'nav-sur-registros',  label: t('nav.sur.registros'),   icon: History,     permission: 'surtido.registros' },
     ],
   },
 ]
@@ -150,7 +150,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav data-tour="sidebar" className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+      <nav data-tour="sidebar" className="flex-1 p-2 space-y-0.5 overflow-y-auto scrollbar-thin sidebar-scrollbar">
         {navItems.map((group) => {
           const visibleItems = group.items.filter(item => canView(item.permission))
           if (visibleItems.length === 0) return null

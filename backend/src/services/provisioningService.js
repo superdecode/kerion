@@ -136,6 +136,7 @@ export async function provisionTenant(requestId, approvedByAdminId) {
             fep: { folios: 'eliminar' },
             inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
             devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
+            surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
           })]
         )
         const roleId = roleRes.rows[0].id

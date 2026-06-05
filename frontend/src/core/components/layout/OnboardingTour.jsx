@@ -16,14 +16,14 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const STEP_PATHS = [
   null,                        // 0: welcome
   null,                        // 1: sidebar overview (sidebar always visible)
-  '/dropscan/configuracion',   // 2: config tab bar
-  '/dropscan/configuracion',   // 3: config empresas content
-  '/dropscan/configuracion',   // 4: config canales tab button
-  '/dropscan/configuracion',   // 5: config operadores tab button
-  '/dropscan/escaneo',         // 6: escaneo start screen
-  '/dropscan/historial',       // 7: historial filter bar
-  '/dropscan/historial',       // 8: historial table
-  '/dropscan/folios',          // 9: folios table
+  '/DropScan/configuracion',   // 2: config tab bar
+  '/DropScan/configuracion',   // 3: config empresas content
+  '/DropScan/configuracion',   // 4: config canales tab button
+  '/DropScan/configuracion',   // 5: config operadores tab button
+  '/DropScan/escaneo',         // 6: escaneo start screen
+  '/DropScan/tarimas',         // 7: tarimas filter bar
+  '/DropScan/tarimas',         // 8: tarimas table
+  '/DropScan/folios',          // 9: folios table
   null,                        // 10: finish
 ]
 
@@ -32,7 +32,7 @@ const STEP_NAV_IDS = [
   null, null,
   'nav-configuracion', 'nav-configuracion', 'nav-configuracion', 'nav-configuracion',
   'nav-escaneo',
-  'nav-historial', 'nav-historial',
+  'nav-tarimas', 'nav-tarimas',
   'nav-folios',
   null,
 ]
@@ -127,9 +127,9 @@ export default function OnboardingTour() {
           align: 'center',
         },
       },
-      // 7: Historial filter bar
+      // 7: Tarimas filter bar
       {
-        element: '[data-tour="historial-filtros"]',
+        element: '[data-tour="tarimas-filtros"]',
         popover: {
           title: t('tour.tarimas.title'),
           description: t('tour.tarimas.description'),
@@ -137,9 +137,9 @@ export default function OnboardingTour() {
           align: 'start',
         },
       },
-      // 8: Historial table
+      // 8: Tarimas table
       {
-        element: '[data-tour="historial-tabla"]',
+        element: '[data-tour="tarimas-tabla"]',
         popover: {
           title: t('tour.historial_tabla.title'),
           description: t('tour.historial_tabla.description'),
@@ -306,14 +306,14 @@ export default function OnboardingTour() {
     return [
       null,                        // 0: welcome
       null,                        // 1: sidebar
-      '/dropscan/configuracion',   // 2: config tabs
-      '/dropscan/configuracion',   // 3: config empresas
-      '/dropscan/configuracion',   // 4: config canales
-      '/dropscan/configuracion',   // 5: config operadores
-      '/dropscan/escaneo',         // 6: escaneo
-      '/dropscan/historial',       // 7: historial filtros
-      '/dropscan/historial',       // 8: historial tabla
-      '/dropscan/folios',          // 9: folios
+      '/DropScan/configuracion',   // 2: config tabs
+      '/DropScan/configuracion',   // 3: config empresas
+      '/DropScan/configuracion',   // 4: config canales
+      '/DropScan/configuracion',   // 5: config operadores
+      '/DropScan/escaneo',         // 6: escaneo
+      '/DropScan/tarimas',         // 7: tarimas filtros
+      '/DropScan/tarimas',         // 8: tarimas tabla
+      '/DropScan/folios',          // 9: folios
       null,                        // 10: finish
     ]
   }

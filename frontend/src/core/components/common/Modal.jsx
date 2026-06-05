@@ -55,7 +55,7 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
 
           {/* Content */}
           <motion.div
-            className={`${sizes[size]} w-full bg-white rounded-2xl shadow-depth border border-warm-100 max-h-[90vh] flex flex-col relative z-10`}
+            className={`${sizes[size]} w-full bg-white rounded-2xl shadow-depth border border-warm-100 max-h-[96vh] flex flex-col relative z-10`}
             initial={{ opacity: 0, scale: 0.96, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98, y: 4 }}
@@ -87,7 +87,7 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
               {children}
             </div>
             {footer && (
-              <div className="px-6 py-4 border-t border-warm-100/60 flex items-center justify-end gap-3 bg-warm-50/30 rounded-b-2xl">
+              <div className="px-6 py-2.5 border-t border-warm-100/60 flex items-center justify-end gap-3 bg-warm-50/30 rounded-b-2xl">
                 {footer}
               </div>
             )}

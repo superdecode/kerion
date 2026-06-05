@@ -14,6 +14,7 @@ const DEFAULT_ROLES = [
       dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
       inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
       devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
+      surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
     }
   },
   {
@@ -24,6 +25,7 @@ const DEFAULT_ROLES = [
       dropscan: { dashboard: 'ver', escaneo: 'actualizar', tarimas: 'actualizar', reportes: 'crear', configuracion: 'ver', folios: 'actualizar' },
       inventory: { escaneo: 'actualizar', tarimas: 'actualizar', reportes: 'crear' },
       devoluciones: { entradas: 'actualizar', inventario: 'actualizar', salidas: 'actualizar' },
+      surtido: { ordenes: 'actualizar', validacion: 'actualizar', registros: 'actualizar' },
     }
   },
   {
@@ -34,6 +36,7 @@ const DEFAULT_ROLES = [
       dropscan: { dashboard: 'ver', escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso', configuracion: 'sin_acceso', folios: 'crear' },
       inventory: { escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso' },
       devoluciones: { entradas: 'crear', inventario: 'ver', salidas: 'crear' },
+      surtido: { ordenes: 'ver', validacion: 'crear', registros: 'ver' },
     }
   },
   {
@@ -44,6 +47,7 @@ const DEFAULT_ROLES = [
       dropscan: { dashboard: 'ver', escaneo: 'sin_acceso', tarimas: 'ver', reportes: 'ver', configuracion: 'sin_acceso', folios: 'ver' },
       inventory: { escaneo: 'sin_acceso', tarimas: 'ver', reportes: 'ver' },
       devoluciones: { entradas: 'ver', inventario: 'ver', salidas: 'ver' },
+      surtido: { ordenes: 'ver', validacion: 'ver', registros: 'ver' },
     }
   }
 ]

@@ -1,6 +1,6 @@
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
-import { useAdminAuthStore } from '../../../modules/superadmin/stores/adminAuthStore'
+import { useAdminAuthStore } from '../../../modules/SuperAdmin/stores/adminAuthStore'
 
 export default function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore()

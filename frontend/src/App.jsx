@@ -12,16 +12,16 @@ import Login from './core/components/auth/Login'
 import ProtectedRoute, { PermissionRoute } from './core/components/auth/ProtectedRoute'
 
 // Super Admin panel
-import AdminLogin from './modules/superadmin/pages/AdminLogin'
-import AdminLayout from './modules/superadmin/components/AdminLayout'
-import AdminDashboard from './modules/superadmin/pages/AdminDashboard'
-import AdminSolicitudes from './modules/superadmin/pages/AdminSolicitudes'
-import AdminTenants from './modules/superadmin/pages/AdminTenants'
-import AdminTenantDetalle from './modules/superadmin/pages/AdminTenantDetalle'
-import AdminNotificaciones from './modules/superadmin/pages/AdminNotificaciones'
-import AdminAnalytics from './modules/superadmin/pages/AdminAnalytics'
-import AdminSuscripciones from './modules/superadmin/pages/AdminSuscripciones'
-import { useAdminAuthStore } from './modules/superadmin/stores/adminAuthStore'
+import AdminLogin from './modules/SuperAdmin/pages/AdminLogin'
+import AdminLayout from './modules/SuperAdmin/components/AdminLayout'
+import AdminDashboard from './modules/SuperAdmin/pages/AdminDashboard'
+import AdminSolicitudes from './modules/SuperAdmin/pages/AdminSolicitudes'
+import AdminTenants from './modules/SuperAdmin/pages/AdminTenants'
+import AdminTenantDetalle from './modules/SuperAdmin/pages/AdminTenantDetalle'
+import AdminNotificaciones from './modules/SuperAdmin/pages/AdminNotificaciones'
+import AdminAnalytics from './modules/SuperAdmin/pages/AdminAnalytics'
+import AdminSuscripciones from './modules/SuperAdmin/pages/AdminSuscripciones'
+import { useAdminAuthStore } from './modules/SuperAdmin/stores/adminAuthStore'
 
 // Landing page
 import Landing from './pages/Landing'
@@ -32,32 +32,33 @@ import GlobalDashboard from './pages/GlobalDashboard'
 import Administracion from './pages/Administracion'
 
 // DropScan Module
-import DropScanDashboard from './modules/dropscan/pages/Dashboard'
-import Escaneo from './modules/dropscan/pages/Escaneo'
-import Historial from './modules/dropscan/pages/Historial'
-import Reportes from './modules/dropscan/pages/Reportes'
-import Configuracion from './modules/dropscan/pages/Configuracion'
+import DropScanDashboard from './modules/DropScan/pages/Dashboard'
+import Escaneo from './modules/DropScan/pages/Escaneo'
+import Tarimas from './modules/DropScan/pages/Tarimas'
+import Reportes from './modules/DropScan/pages/Reportes'
+import Configuracion from './modules/DropScan/pages/Configuracion'
 
 // FEP Module
-import Folios from './modules/fep/pages/Folios'
-import FolioDetalle from './modules/fep/pages/FolioDetalle'
-import Entradas from './modules/devoluciones/pages/Entradas'
-import EntradaDetalle from './modules/devoluciones/pages/EntradaDetalle'
-import InventarioDevoluciones from './modules/devoluciones/pages/Inventario'
-import Salidas from './modules/devoluciones/pages/Salidas'
-import SalidaDetalle from './modules/devoluciones/pages/SalidaDetalle'
+import Folios from './modules/Fep/pages/Folios'
+import FolioDetalle from './modules/Fep/pages/FolioDetalle'
+import Entradas from './modules/Devoluciones/pages/Entradas'
+import EntradaDetalle from './modules/Devoluciones/pages/EntradaDetalle'
+import InventarioDevoluciones from './modules/Devoluciones/pages/Inventario'
+import Salidas from './modules/Devoluciones/pages/Salidas'
+import SalidaDetalle from './modules/Devoluciones/pages/SalidaDetalle'
 
 // Inventario Module
-import InventarioRegistros from './modules/inventario/pages/Registros'
-import InventarioEscaneo from './modules/inventario/pages/Escaneo'
+import InventarioRegistros from './modules/Inventario/pages/Registros'
+import InventarioEscaneo from './modules/Inventario/pages/Escaneo'
 
 // Surtido Module
-import SurtidoOrdenes from './modules/surtido/pages/Ordenes'
-import SurtidoValidacion from './modules/surtido/pages/Validacion'
-import SurtidoRegistros from './modules/surtido/pages/Registros'
+import SurtidoOrdenes from './modules/Surtido/pages/Ordenes'
+import SurtidoOrdenDetalle from './modules/Surtido/pages/OrdenDetalle'
+import SurtidoValidacion from './modules/Surtido/pages/Validacion'
+import SurtidoRegistros from './modules/Surtido/pages/Registros'
 
 // WMS Hub Module
-import WMSHubConfiguracion from './modules/wmshub/pages/Configuracion'
+import WMSHubConfiguracion from './modules/WmsHub/pages/Configuracion'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,20 +74,20 @@ const queryClient = new QueryClient({
 const MODULE_ROUTES = [
   { module: 'global.inicio', path: '/' },
   { module: 'dropscan.dashboard', path: '/dropscan' },
-  { module: 'dropscan.escaneo', path: '/dropscan/escaneo' },
-  { module: 'dropscan.historial', path: '/dropscan/historial' },
-  { module: 'dropscan.reportes', path: '/dropscan/reportes' },
-  { module: 'dropscan.configuracion', path: '/dropscan/configuracion' },
-  { module: 'fep.folios', path: '/dropscan/folios' },
-  { module: 'devoluciones.entradas', path: '/devoluciones/entradas' },
-  { module: 'devoluciones.inventario', path: '/devoluciones/inventario' },
-  { module: 'devoluciones.salidas', path: '/devoluciones/salidas' },
+  { module: 'dropscan.escaneo', path: '/DropScan/escaneo' },
+  { module: 'dropscan.tarimas', path: '/DropScan/tarimas' },
+  { module: 'dropscan.reportes', path: '/DropScan/reportes' },
+  { module: 'dropscan.configuracion', path: '/DropScan/configuracion' },
+  { module: 'fep.folios', path: '/DropScan/folios' },
+  { module: 'devoluciones.entradas', path: '/Devoluciones/entradas' },
+  { module: 'devoluciones.inventario', path: '/Devoluciones/inventario' },
+  { module: 'devoluciones.salidas', path: '/Devoluciones/salidas' },
   { module: 'global.administracion', path: '/admin' },
-  { module: 'inventario.escaneo', path: '/inventario/escaneo' },
-  { module: 'inventario.registros', path: '/inventario/registros' },
+  { module: 'inventario.escaneo', path: '/Inventario/escaneo' },
+  { module: 'inventario.registros', path: '/Inventario/registros' },
   { module: 'surtido.ordenes', path: '/surtido' },
-  { module: 'surtido.validacion', path: '/surtido/validacion' },
-  { module: 'surtido.registros', path: '/surtido/registros' },
+  { module: 'surtido.validacion', path: '/Surtido/validacion' },
+  { module: 'surtido.registros', path: '/Surtido/registros' },
   { module: 'sistema.wms', path: '/wmshub' },
 ]
 
@@ -168,11 +169,11 @@ function AppRoutes() {
         <Route path="dropscan/escaneo" element={
           <PermissionRoute module="dropscan.escaneo"><ErrorBoundary><Escaneo /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="dropscan/historial" element={
-          <PermissionRoute module="dropscan.historial"><ErrorBoundary><Historial /></ErrorBoundary></PermissionRoute>
-        } />
         <Route path="dropscan/tarimas" element={
-          <Navigate to="/dropscan/historial" replace />
+          <PermissionRoute module="dropscan.tarimas"><ErrorBoundary><Tarimas /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="dropscan/historial" element={
+          <Navigate to="/DropScan/tarimas" replace />
         } />
         <Route path="dropscan/reportes" element={
           <PermissionRoute module="dropscan.reportes"><ErrorBoundary><Reportes /></ErrorBoundary></PermissionRoute>
@@ -215,19 +216,22 @@ function AppRoutes() {
         } />
 
         {/* Inventario Module */}
-        <Route path="inventario" element={<Navigate to="/inventario/registros" replace />} />
+        <Route path="inventario" element={<Navigate to="/Inventario/registros" replace />} />
         <Route path="inventario/registros" element={
           <PermissionRoute module="inventario.registros"><ErrorBoundary><InventarioRegistros /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="inventario/escaneo" element={
           <PermissionRoute module="inventario.escaneo"><ErrorBoundary><InventarioEscaneo /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="inventario/stock" element={<Navigate to="/inventario/registros" replace />} />
-        <Route path="inventario/historial" element={<Navigate to="/inventario/registros" replace />} />
+        <Route path="inventario/stock" element={<Navigate to="/Inventario/registros" replace />} />
+        <Route path="inventario/historial" element={<Navigate to="/Inventario/registros" replace />} />
 
         {/* Surtido Module */}
         <Route path="surtido" element={
           <PermissionRoute module="surtido.ordenes"><ErrorBoundary><SurtidoOrdenes /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="surtido/ordenes/:obc" element={
+          <PermissionRoute module="surtido.ordenes"><ErrorBoundary><SurtidoOrdenDetalle /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="surtido/validacion" element={
           <PermissionRoute module="surtido.validacion"><ErrorBoundary><SurtidoValidacion /></ErrorBoundary></PermissionRoute>
@@ -235,8 +239,8 @@ function AppRoutes() {
         <Route path="surtido/registros" element={
           <PermissionRoute module="surtido.registros"><ErrorBoundary><SurtidoRegistros /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="surtido/escaneo" element={<Navigate to="/surtido/validacion" replace />} />
-        <Route path="surtido/historial" element={<Navigate to="/surtido/registros" replace />} />
+        <Route path="surtido/escaneo" element={<Navigate to="/Surtido/validacion" replace />} />
+        <Route path="surtido/historial" element={<Navigate to="/Surtido/registros" replace />} />
 
         {/* Administration */}
         <Route path="admin" element={

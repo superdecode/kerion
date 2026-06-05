@@ -34,7 +34,7 @@ export default function SearchBar() {
     setLoading(true)
     setOpen(true)
     try {
-      const { data } = await api.get('/dropscan/dashboard/guias/search', { params: { q } })
+      const { data } = await api.get('/DropScan/dashboard/guias/search', { params: { q } })
       setResults(data.guias || [])
     } catch (e) {
       setResults([])
@@ -69,12 +69,12 @@ export default function SearchBar() {
     setOpen(false)
     setQuery('')
     setResults([])
-    navigate(`/dropscan/historial?tarima_id=${guia.tarima_id}&highlight_guia=${encodeURIComponent(guia.codigo_guia)}`)
+    navigate(`/DropScan/tarimas?tarima_id=${guia.tarima_id}&highlight_guia=${encodeURIComponent(guia.codigo_guia)}`)
   }
 
   return (
     <div ref={wrapperRef} className="relative w-full max-w-[780px]">
-      <div className="relative">
+      <div className="relative rounded-xl transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
         <input
           ref={inputRef}
@@ -85,7 +85,7 @@ export default function SearchBar() {
           onFocus={() => query.length >= 2 && results.length > 0 && setOpen(true)}
           placeholder={t('common.searchGuide')}
           className="w-full pl-10 pr-10 py-2 text-sm bg-warm-50 border border-warm-200 rounded-xl
-                     focus:bg-white focus:border-primary-400 focus:ring-2 focus:ring-primary-100
+                     focus:bg-white focus:border-primary-400 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0
                      transition-all outline-none placeholder:text-warm-400"
         />
         {query && (
@@ -142,10 +142,10 @@ export default function SearchBar() {
                         className="px-4 py-3 hover:bg-primary-50/50 cursor-pointer border-b border-warm-50 last:border-b-0 transition-colors group"
                       >
                         {/* Line 1: Guide code full width */}
-                        <p className="text-sm font-mono font-bold text-warm-800">{g.codigo_guia}</p>
+                        <p className="code-main">{g.codigo_guia}</p>
                         {/* Line 2: Tarima, folio, status chip */}
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[11px] font-mono text-warm-600 font-semibold">{g.tarima_codigo}</span>
+                          <span className="code-main">{g.tarima_codigo}</span>
                           {g.folio_asignado && (
                             <>
                               <span className="text-warm-300 text-[10px]">·</span>

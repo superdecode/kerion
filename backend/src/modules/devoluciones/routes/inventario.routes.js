@@ -237,7 +237,7 @@ router.get('/ajustes',
 
 router.post('/ajustes',
   authenticateToken, loadFullUser,
-  requirePermission('devoluciones.inventario', 'crear'),
+  requirePermission('devoluciones.inventario', 'actualizar'),
   async (req, res) => {
     let client
     try {
@@ -556,7 +556,7 @@ router.delete('/ajustes/:id',
 
 router.post('/importar',
   authenticateToken, loadFullUser,
-  requirePermission('devoluciones.inventario', 'crear'),
+  requirePermission('devoluciones.inventario', 'actualizar'),
   async (req, res) => {
     let client
     try {

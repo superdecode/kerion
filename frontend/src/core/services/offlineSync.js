@@ -36,7 +36,7 @@ export async function syncOfflineQueue() {
     }
 
     try {
-      await api.post(`/dropscan/sessions/${item.sessionId}/scan`, {
+      await api.post(`/DropScan/sessions/${item.sessionId}/scan`, {
         codigo_guia: item.codigo_guia,
         tarima_id: item.tarimaId,
       })

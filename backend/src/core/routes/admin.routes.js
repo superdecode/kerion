@@ -493,6 +493,7 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       fep: { folios: 'eliminar' },
       inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
       devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
+      surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
     }
     const roleRes = await client.query(
       `INSERT INTO roles (tenant_id, nombre, permisos, is_default)

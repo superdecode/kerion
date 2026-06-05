@@ -631,6 +631,39 @@ async function runMigrations() {
      )
      WHERE permisos->'surtido' ? 'escaneo'`,
 
+    // ── 049: Canonical Devoluciones + Surtido permission keys ─────────────
+    `UPDATE roles
+     SET permisos = jsonb_set(
+       permisos,
+       '{devoluciones}',
+       COALESCE(permisos->'devoluciones', '{}'::jsonb)
+         || '{"entradas":"sin_acceso","inventario":"sin_acceso","salidas":"sin_acceso"}'::jsonb,
+       true
+     )
+     WHERE NOT (permisos ? 'devoluciones')`,
+    `UPDATE roles
+     SET permisos = jsonb_set(
+       permisos,
+       '{surtido}',
+      jsonb_build_object(
+        'ordenes', COALESCE(permisos->'surtido'->>'ordenes', 'sin_acceso'),
+        'validacion', COALESCE(permisos->'surtido'->>'validacion', 'sin_acceso'),
+        'registros', COALESCE(permisos->'surtido'->>'registros', 'sin_acceso')
+      ),
+      true
+    )
+     WHERE permisos ? 'surtido'
+      AND (
+         NOT (permisos->'surtido' ? 'ordenes')
+         OR NOT (permisos->'surtido' ? 'validacion')
+         OR NOT (permisos->'surtido' ? 'registros')
+         OR permisos->'surtido' ? 'assign'
+         OR permisos->'surtido' ? 'admin'
+       )`,
+    `UPDATE roles
+     SET permisos = permisos || '{"devoluciones":{"entradas":"eliminar","inventario":"eliminar","salidas":"eliminar"},"surtido":{"ordenes":"eliminar","validacion":"eliminar","registros":"eliminar"}}'::jsonb
+     WHERE nombre = 'Administrador'`,
+
     // ── 043: modulo_uso filter on ubicaciones ─────────────────────────────
     `ALTER TABLE dev_ubicaciones ADD COLUMN IF NOT EXISTS modulo_uso TEXT[] DEFAULT ARRAY['todos']`,
 
@@ -643,6 +676,18 @@ async function runMigrations() {
     `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS sheet_outbound_url  TEXT`,
     `ALTER TABLE wms_config ALTER COLUMN app_key DROP NOT NULL`,
     `ALTER TABLE wms_config ALTER COLUMN base_url DROP NOT NULL`,
+
+    // ── 047: tarima_code on inv_sessions ─────────────────────────────────
+    `ALTER TABLE inv_sessions ADD COLUMN IF NOT EXISTS tarima_code TEXT`,
+
+    // ── 048: Operational traceability milestones on pick_order_tracking ──
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS assigned_by TEXT`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS sorting_started_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS sorting_completed_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS validation_started_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS validation_completed_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS validated_by TEXT`,
 
     // ── 040: Enable RLS on every public-schema table ──────────────────────
     // Blocks all access through Supabase REST/anon key (deny-by-default: no
