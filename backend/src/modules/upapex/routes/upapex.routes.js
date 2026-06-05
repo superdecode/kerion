@@ -97,7 +97,7 @@ router.get('/config',
 // POST /api/upapex/config/sheets — save Google Sheets URLs
 router.post('/config/sheets',
   authenticateToken, loadFullUser,
-  requirePermission('sistema.wms', 'editar'),
+  requirePermission('sistema.wms', 'actualizar'),
   async (req, res) => {
     try {
       const { sheet_inventory_url, sheet_outbound_url } = req.body

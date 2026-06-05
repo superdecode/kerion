@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { RefreshCw, CheckCircle2, XCircle, Loader2, Save, Link2, Wifi, WifiOff } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, Loader2, Save, Link2, Wifi, WifiOff, Lock } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { useAuthStore } from '../../../core/stores/authStore'
 import { getConfig, saveSheetConfig } from '../services/wmsHubService'
 import { testSheetUrl, invalidateUrlCache, getCacheTimestamp } from '../services/googleSheetsService'
 
@@ -12,6 +13,9 @@ export default function Configuracion() {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
+  const { getPermissionLevel } = useAuthStore()
+  const wmsLevel = getPermissionLevel('sistema.wms')
+  const canEdit = ['actualizar', 'eliminar'].includes(wmsLevel)
 
   const [sheetInventoryUrl, setSheetInventoryUrl] = useState('')
   const [sheetOutboundUrl, setSheetOutboundUrl] = useState('')
@@ -132,22 +136,28 @@ export default function Configuracion() {
                 return (
                   <div key={key}>
                     <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">{label}</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="url"
-                        className="input-field flex-1 text-xs font-mono"
-                        placeholder={t('wmshub.config.sheet_placeholder')}
-                        value={value}
-                        onChange={e => { set(e.target.value); setSheetTestResults(p => ({ ...p, [key]: null })) }}
-                      />
-                      <button
-                        className="btn-ghost text-xs shrink-0 inline-flex items-center gap-1"
-                        disabled={!value.trim() || res?.loading}
-                        onClick={() => handleTestSheet(value.trim(), key)}>
-                        {res?.loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                        {t('wmshub.config.sheet_test_btn')}
-                      </button>
-                    </div>
+                    {canEdit ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          className="input-field flex-1 text-xs font-mono"
+                          placeholder={t('wmshub.config.sheet_placeholder')}
+                          value={value}
+                          onChange={e => { set(e.target.value); setSheetTestResults(p => ({ ...p, [key]: null })) }}
+                        />
+                        <button
+                          className="btn-ghost text-xs shrink-0 inline-flex items-center gap-1"
+                          disabled={!value.trim() || res?.loading}
+                          onClick={() => handleTestSheet(value.trim(), key)}>
+                          {res?.loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                          {t('wmshub.config.sheet_test_btn')}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 rounded-xl bg-warm-50 border border-warm-200 text-xs font-mono text-warm-600 truncate">
+                        {value || <span className="text-warm-400 italic">{t('wmshub.config.sheet_not_configured')}</span>}
+                      </div>
+                    )}
                     {res && !res.loading && (
                       <p className={`mt-1 text-[11px] flex items-center gap-1 ${res.ok ? 'text-success-600' : 'text-danger-600'}`}>
                         {res.ok
@@ -164,16 +174,23 @@ export default function Configuracion() {
                 )
               })}
 
-              <div className="flex justify-end">
-                <button
-                  className="btn-primary inline-flex items-center gap-2"
-                  disabled={saveSheetsMut.isPending}
-                  onClick={() => saveSheetsMut.mutate()}>
-                  {saveSheetsMut.isPending
-                    ? <><Loader2 size={14} className="animate-spin" /> {t('common.saving')}</>
-                    : <><Save size={14} /> {t('common.save')}</>}
-                </button>
-              </div>
+              {canEdit ? (
+                <div className="flex justify-end">
+                  <button
+                    className="btn-primary inline-flex items-center gap-2"
+                    disabled={saveSheetsMut.isPending}
+                    onClick={() => saveSheetsMut.mutate()}>
+                    {saveSheetsMut.isPending
+                      ? <><Loader2 size={14} className="animate-spin" /> {t('common.saving')}</>
+                      : <><Save size={14} /> {t('common.save')}</>}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-warm-50 border border-warm-200">
+                  <Lock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+                  <p className="text-xs text-warm-500">{t('wmshub.config.no_edit_permission')}</p>
+                </div>
+              )}
             </div>
           </motion.div>
 

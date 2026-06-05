@@ -220,22 +220,26 @@ function mapRowToOutbound(row, map) {
 }
 
 // ── Sheet URL cache ────────────────────────────────────────────────────────
+// TTL ensures all browser sessions pick up tenant config changes within 2 min.
+const URL_TTL = 2 * 60 * 1000
+
 let _sheetUrls = { inventory: null, outbound: null }
-let _urlsFetched = false
+let _urlsFetchedAt = 0
 
 async function loadSheetUrls() {
-  if (_urlsFetched) return _sheetUrls
+  const now = Date.now()
+  if (_urlsFetchedAt > 0 && (now - _urlsFetchedAt) < URL_TTL) return _sheetUrls
   const res = await api.get('/upapex/config').then(r => r.data)
   _sheetUrls = {
     inventory: res?.data?.sheet_inventory_url || null,
     outbound:  res?.data?.sheet_outbound_url  || null,
   }
-  _urlsFetched = true
+  _urlsFetchedAt = now
   return _sheetUrls
 }
 
 export function invalidateUrlCache() {
-  _urlsFetched = false
+  _urlsFetchedAt = 0
 }
 
 // ── Fetch raw CSV ──────────────────────────────────────────────────────────
@@ -292,6 +296,7 @@ async function loadSheet(type, forceRefresh = false) {
 
 export async function refreshSheet(type) {
   cache[type] = { data: null, ts: 0 }
+  invalidateUrlCache()
   return loadSheet(type, true)
 }
 

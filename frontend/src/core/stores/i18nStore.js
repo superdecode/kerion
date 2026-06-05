@@ -1038,6 +1038,7 @@ const translations = {
     'wmshub.config.sheet_last_fetch':       '上次加载',
     'wmshub.config.sheet_never':            '从未',
     'wmshub.config.sheet_no_url':           'URL 未配置',
+    'wmshub.config.sheet_not_configured':   '未配置',
     'wmshub.config.sheet_test_ok':          '表格可访问',
     'wmshub.config.sheet_refresh':          '刷新',
     'wmshub.config.datos_al':               '数据截至',
@@ -1045,6 +1046,7 @@ const translations = {
     'wmshub.config.status_ok':              '数据源正常',
     'wmshub.config.status_pending':         '已配置，待验证',
     'wmshub.config.status_error':           '部分数据源无法访问',
+    'wmshub.config.no_edit_permission':     '只有具备更新权限的用户才能修改此配置',
 
     // ── Inventario ────────────────────────────────────────────────────────
     'inventario.dashboard.title': 'Wms 库存',
@@ -3126,6 +3128,7 @@ const translations = {
     'wmshub.config.sheet_last_fetch':       'Ultima Carga',
     'wmshub.config.sheet_never':            'Nunca',
     'wmshub.config.sheet_no_url':           'Url No Configurada',
+    'wmshub.config.sheet_not_configured':   'No configurada',
     'wmshub.config.sheet_test_ok':          'Hoja Accesible',
     'wmshub.config.sheet_refresh':          'Actualizar',
     'wmshub.config.datos_al':               'Datos al',
@@ -3133,6 +3136,7 @@ const translations = {
     'wmshub.config.status_ok':              'Fuente de Datos Operativa',
     'wmshub.config.status_pending':         'Configurada, pendiente de verificar',
     'wmshub.config.status_error':           'Algunas Hojas No Son Accesibles',
+    'wmshub.config.no_edit_permission':     'Solo usuarios con permiso de actualizar pueden modificar esta configuración',
     // ── Inventario ────────────────────────────────────────────────────────
     'inventario.dashboard.title': 'Inventario',
     'inventario.dashboard.total_scanned': 'Total Escaneado',
