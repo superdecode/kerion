@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import { normalizeCodeFast } from '../../Shared/wms/normalizeCode'
+import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import { useInventarioStore } from '../stores/inventarioStore'
 import { getBoxStock } from '../services/inventarioService'
 

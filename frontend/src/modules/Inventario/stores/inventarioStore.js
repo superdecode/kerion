@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { generateTabId } from '../../Shared/wms/generatePalletId'
+import { generateTabId } from '../../Shared/Wms/generatePalletId'
 
 const MAX_TABS = 4
 

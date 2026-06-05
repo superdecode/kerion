@@ -11,3 +11,6 @@ export const getUbicaciones = (modulo) =>
 
 export const saveSheetConfig = ({ sheet_inventory_url, sheet_outbound_url }) =>
   api.post('/upapex/config/sheets', { sheet_inventory_url, sheet_outbound_url }).then(r => r.data)
+
+export const createUbicacion = ({ codigo, nombre, descripcion = '' }) =>
+  api.post('/Devoluciones/Inventario/ubicaciones', { codigo, nombre, descripcion }).then(r => r.data)

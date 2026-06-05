@@ -1,4 +1,4 @@
-import { normalizeCode } from '../../Shared/wms/normalizeCode'
+import { normalizeCode } from '../../Shared/Wms/normalizeCode'
 
 /**
  * Normalizes a raw scan and checks it against the OBC code set.

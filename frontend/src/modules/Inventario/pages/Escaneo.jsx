@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -7,6 +7,7 @@ import {
   Loader2, Wifi, WifiOff, Trash2, ArrowRight, MoveRight,
   Square, AlertCircle, ScanBarcode, Clock, Timer,
   RefreshCw, PanelRightClose, PanelRightOpen, Search, Maximize2,
+  MapPin, Pencil,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -15,11 +16,11 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useInventarioStore } from '../stores/inventarioStore'
 import { useAutoSync } from '../hooks/useAutoSync'
 import { useBoxStock } from '../hooks/useBoxStock'
-import { findCodeInInventory } from '../../Shared/wms/findCodeInInventory'
+import { findCodeInInventory } from '../../Shared/Wms/findCodeInInventory'
 import { classifyItem, resolveSwap } from '../utils/classify'
-import { playSound, initAudio } from '../../Shared/wms/playSound'
+import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import { saveInventorySession } from '../services/inventarioService'
-import { getConfig, getUbicaciones } from '../../WmsHub/services/wmsHubService'
+import { getConfig, getUbicaciones, createUbicacion } from '../../WmsHub/services/wmsHubService'
 
 const STATUS_META = {
   ok:      { labelKey: 'inventario.escaneo.group_disponible', bg: 'bg-success-100 text-success-700',  icon: CheckCircle2, border: 'border-l-success-400', dot: 'bg-success-400', flash: 'bg-success-50/80 border-success-200' },
@@ -152,7 +153,7 @@ function CloseTabModal({ isOpen, count, onConfirm, onClose }) {
   )
 }
 
-function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicaciones, ubicacionId, setUbicacionId }) {
+function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicacionValidated, onChangeUbicacion }) {
   const { t } = useI18nStore()
   if (!tab) return null
   const counts = tab.items.reduce((a, i) => { a[i.status] = (a[i.status] || 0) + 1; return a }, {})
@@ -197,22 +198,163 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
           <span className="text-warm-700">{t('inventario.escaneo.total')}</span>
           <span className="font-bold text-primary-700 text-lg">{tab.items.length}</span>
         </div>
-        {ubicaciones && ubicaciones.length > 0 && (
-          <div>
-            <label className="block text-xs font-semibold text-warm-600 mb-1.5 uppercase tracking-wide">
-              {t('inventario.escaneo.ubicacion_label')}
-            </label>
-            <select
-              className="input-field"
-              value={ubicacionId || ''}
-              onChange={e => setUbicacionId(e.target.value || null)}>
-              <option value="">{t('inventario.escaneo.ubicacion_placeholder')}</option>
-              {ubicaciones.map(u => (
-                <option key={u.id} value={u.id}>{u.codigo} — {u.nombre}</option>
-              ))}
-            </select>
+        {ubicacionValidated ? (
+          <div className="flex items-center gap-2 bg-accent-50 rounded-xl px-3 py-2.5 border border-accent-100">
+            <MapPin size={13} className="text-accent-600 shrink-0" />
+            <span className="font-mono font-semibold text-accent-700 text-xs">{ubicacionValidated.codigo}</span>
+            {ubicacionValidated.nombre && ubicacionValidated.nombre !== ubicacionValidated.codigo && (
+              <span className="text-accent-500 text-xs truncate">{ubicacionValidated.nombre}</span>
+            )}
+            <button className="ml-auto p-1 rounded-lg hover:bg-accent-200 text-accent-400 hover:text-accent-700 transition-colors"
+              onClick={onChangeUbicacion} title={t('inventario.escaneo.ubicacion_edit')}>
+              <Pencil size={10} />
+            </button>
+          </div>
+        ) : (
+          <button
+            className="w-full text-left px-3 py-2.5 rounded-xl border border-dashed border-warm-300 text-xs text-warm-400 hover:border-accent-300 hover:text-accent-600 transition-colors flex items-center gap-2"
+            onClick={onChangeUbicacion}>
+            <MapPin size={11} />
+            {t('inventario.escaneo.ubicacion_scan_title')}
+          </button>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacionConfirmed, onCreateRequest }) {
+  const { t } = useI18nStore()
+  const [inputValue, setInputValue] = useState('')
+  const [notFound, setNotFound] = useState(false)
+  const [notFoundCode, setNotFoundCode] = useState('')
+  const locationRef = useRef(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      setInputValue('')
+      setNotFound(false)
+      setNotFoundCode('')
+      setTimeout(() => locationRef.current?.focus(), 80)
+    }
+  }, [isOpen])
+
+  function handleConfirm() {
+    const val = inputValue.trim()
+    if (!val) return
+    const norm = val.toLowerCase()
+    const found = (ubicaciones ?? []).find(u =>
+      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
+    )
+    if (found) {
+      onUbicacionConfirmed({ id: found.id, codigo: found.codigo, nombre: found.nombre })
+    } else {
+      setNotFoundCode(val)
+      setNotFound(true)
+    }
+  }
+
+  const suggestions = (inputValue.trim() && !notFound)
+    ? (ubicaciones ?? []).filter(u =>
+        (u.codigo || '').toLowerCase().includes(inputValue.toLowerCase()) ||
+        (u.nombre || '').toLowerCase().includes(inputValue.toLowerCase())
+      ).slice(0, 5)
+    : []
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.ubicacion_scan_title')} icon={MapPin}
+      footer={
+        <div className="flex gap-3 justify-between w-full">
+          <button className="btn-ghost text-sm" onClick={onSkip}>{t('inventario.escaneo.ubicacion_skip')}</button>
+          <button className="btn-primary text-sm inline-flex items-center gap-2" onClick={handleConfirm} disabled={!inputValue.trim()}>
+            <CheckCircle2 size={14} /> {t('inventario.escaneo.ubicacion_continue')}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-warm-500">{t('inventario.escaneo.ubicacion_scan_label')}</p>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-300" />
+            <input
+              ref={locationRef}
+              type="text"
+              className="w-full pl-10 pr-4 py-3 text-base bg-white border-2 border-accent-200 rounded-2xl
+                focus:border-accent-500 focus:ring-4 focus:ring-accent-100
+                transition-all outline-none placeholder:text-warm-300 font-mono"
+              placeholder="UB-XXX"
+              value={inputValue}
+              onChange={e => { setInputValue(e.target.value); setNotFound(false) }}
+              onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
+              autoComplete="off"
+            />
+          </div>
+          <button className="btn-primary px-4 py-3 rounded-2xl" onClick={handleConfirm} disabled={!inputValue.trim()}>
+            <CheckCircle2 size={16} />
+          </button>
+        </div>
+
+        {suggestions.length > 0 && (
+          <div className="space-y-1 max-h-36 overflow-y-auto">
+            {suggestions.map(u => (
+              <button key={u.id}
+                className="w-full text-left px-3 py-1.5 rounded-xl hover:bg-accent-100 transition-colors text-xs flex items-center gap-2"
+                onClick={() => onUbicacionConfirmed({ id: u.id, codigo: u.codigo, nombre: u.nombre })}>
+                <MapPin size={10} className="text-accent-500 shrink-0" />
+                <span className="font-mono font-semibold text-accent-700">{u.codigo}</span>
+                <span className="text-warm-500 truncate">{u.nombre}</span>
+              </button>
+            ))}
           </div>
         )}
+
+        {notFound && (
+          <motion.div className="rounded-2xl border border-warning-200 bg-warning-50 p-4 space-y-3"
+            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-warning-500 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-warning-700">{t('inventario.escaneo.ubicacion_not_found_title')}</p>
+                <p className="text-xs text-warning-600 mt-0.5">
+                  <strong className="font-mono">{notFoundCode}</strong> — {t('inventario.escaneo.ubicacion_not_found_body')}
+                </p>
+              </div>
+            </div>
+            <button
+              className="w-full btn-primary text-sm inline-flex items-center justify-center gap-2"
+              onClick={() => onCreateRequest(notFoundCode)}>
+              <Plus size={14} /> {t('inventario.escaneo.ubicacion_create_btn')}
+            </button>
+          </motion.div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function UbicacionCreateConfirmModal({ isOpen, onClose, onConfirm, code, isCreating }) {
+  const { t } = useI18nStore()
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.ubicacion_confirm_title')} icon={MapPin}
+      footer={
+        <div className="flex gap-3 justify-end">
+          <button className="btn-ghost" onClick={onClose} disabled={isCreating}>{t('common.cancel')}</button>
+          <button className="btn-primary inline-flex items-center gap-2" onClick={onConfirm} disabled={isCreating}>
+            {isCreating ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            {t('inventario.escaneo.ubicacion_create_btn')}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-warm-700">
+          {t('inventario.escaneo.ubicacion_confirm_body').replace('{{code}}', code)}
+        </p>
+        <div className="bg-accent-50 rounded-xl px-4 py-3 flex items-center gap-2 border border-accent-100">
+          <MapPin size={14} className="text-accent-600 shrink-0" />
+          <span className="font-mono font-bold text-accent-700">{code}</span>
+        </div>
       </div>
     </Modal>
   )
@@ -595,6 +737,7 @@ export default function Escaneo() {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const scanRef = useRef(null)
   const code2Ref = useRef(null)
 
@@ -621,6 +764,10 @@ export default function Escaneo() {
 
   const [showTypeModal, setShowTypeModal] = useState(false)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
+  const [showUbicacionModal, setShowUbicacionModal] = useState(false)
+  const [ubicacionValidated, setUbicacionValidated] = useState(null)
+  const [ubicacionToCreate, setUbicacionToCreate] = useState('')
+  const [showCreateConfirm, setShowCreateConfirm] = useState(false)
   const [duplicatePending, setDuplicatePending] = useState(null)
   const [moveTarget, setMoveTarget] = useState(null)
   const [lastScan, setLastScan] = useState(null)
@@ -679,6 +826,45 @@ export default function Escaneo() {
     },
     onError: () => toast.error(t('toast.error')),
   })
+
+  const createUbicacionMut = useMutation({
+    mutationFn: ({ codigo }) => createUbicacion({ codigo, nombre: codigo }),
+    onSuccess: (data) => {
+      const u = data.ubicacion
+      setUbicacionValidated({ id: u.id, codigo: u.codigo, nombre: u.nombre })
+      setUbicacionId(u.id)
+      qc.invalidateQueries({ queryKey: ['upapex-ubicaciones'] })
+      setShowCreateConfirm(false)
+      setShowSummaryModal(true)
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  function handleFinalize() {
+    setUbicacionValidated(null)
+    setUbicacionId(null)
+    setShowUbicacionModal(true)
+  }
+
+  function handleUbicacionConfirmed(ubicacion) {
+    setUbicacionValidated(ubicacion)
+    setUbicacionId(ubicacion.id)
+    setShowUbicacionModal(false)
+    setShowSummaryModal(true)
+  }
+
+  function handleUbicacionSkip() {
+    setUbicacionValidated(null)
+    setUbicacionId(null)
+    setShowUbicacionModal(false)
+    setShowSummaryModal(true)
+  }
+
+  function handleCreateRequest(code) {
+    setUbicacionToCreate(code)
+    setShowUbicacionModal(false)
+    setShowCreateConfirm(true)
+  }
 
   function handleAddTab() { setShowTypeModal(true) }
 
@@ -875,7 +1061,7 @@ export default function Escaneo() {
             {activeTab && (
               <button
                 className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
-                onClick={() => setShowSummaryModal(true)}
+                onClick={handleFinalize}
                 disabled={activeTab.items.length === 0}>
                 <Square className="w-4 h-4" /> {t('inventario.escaneo.end_session')}
               </button>
@@ -1095,13 +1281,28 @@ export default function Escaneo() {
 
       {/* Modals */}
       <SessionTypeModal isOpen={showTypeModal} onStart={handleStartSession} onClose={() => setShowTypeModal(false)} />
+      <UbicacionInputModal
+        isOpen={showUbicacionModal}
+        onClose={() => setShowUbicacionModal(false)}
+        onSkip={handleUbicacionSkip}
+        ubicaciones={ubicacionesData?.data ?? []}
+        onUbicacionConfirmed={handleUbicacionConfirmed}
+        onCreateRequest={handleCreateRequest}
+      />
+      <UbicacionCreateConfirmModal
+        isOpen={showCreateConfirm}
+        onClose={() => { setShowCreateConfirm(false); setShowUbicacionModal(true) }}
+        onConfirm={() => createUbicacionMut.mutate({ codigo: ubicacionToCreate })}
+        code={ubicacionToCreate}
+        isCreating={createUbicacionMut.isPending}
+      />
       <SessionSummaryModal isOpen={showSummaryModal} tab={activeTab}
         onSave={() => saveSessionMut.mutate()}
         onContinue={() => setShowSummaryModal(false)}
         isSaving={saveSessionMut.isPending}
-        ubicaciones={ubicacionesData?.data ?? []}
-        ubicacionId={ubicacionId}
-        setUbicacionId={setUbicacionId} />
+        ubicacionValidated={ubicacionValidated}
+        onChangeUbicacion={() => { setShowSummaryModal(false); setShowUbicacionModal(true) }}
+      />
       <DuplicateModal isOpen={!!duplicatePending} code={duplicatePending?.code}
         onConfirm={() => {
           if (duplicatePending?.newItem) doAddItem(duplicatePending.newItem)
