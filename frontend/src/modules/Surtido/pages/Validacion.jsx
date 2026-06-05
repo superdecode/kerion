@@ -558,10 +558,10 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
 /* ─── Quick Search Modal ──────────────────────────────────── */
 function QuickSearchModal({ isOpen, onClose, onValidate }) {
   const { t } = useI18nStore()
-  const toast = useToastStore.getState()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState(null)
   const inputRef = useRef(null)
 
   const { data: trackingData } = useQuery({
@@ -575,6 +575,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     if (isOpen) {
       setQuery('')
       setResults(null)
+      setSearchError(null)
       setTimeout(() => inputRef.current?.focus(), 80)
     }
   }, [isOpen])
@@ -589,9 +590,15 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
   async function doSearch(q) {
     if (!q.trim()) return
     setIsSearching(true)
+    setSearchError(null)
     try {
       const data = await getOutboundList()
       const all = data?.data?.records ?? data?.data ?? []
+      if (all.length === 0) {
+        setSearchError('La hoja de salidas no contiene registros. Verifica la configuracion en WmsHub.')
+        setResults([])
+        return
+      }
       const norm = q.trim().toLowerCase()
       const filtered = all.filter(r =>
         (r.outboundOrderNo || '').toLowerCase().includes(norm) ||
@@ -602,8 +609,18 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
         (r.boxType || '').toLowerCase().includes(norm)
       )
       setResults(filtered.slice(0, 20))
-    } catch {
-      toast.error(t('toast.error'))
+    } catch (err) {
+      const code = err?.code
+      if (code === 'SHEET_NOT_CONFIGURED') {
+        setSearchError('La hoja de salidas no esta configurada. Ve a WmsHub -> Configuracion y guarda la URL de salidas.')
+      } else if (code === 'SHEET_EMPTY') {
+        setSearchError('La hoja de Google Sheets esta vacia o tiene menos de 2 filas. Verifica el contenido.')
+      } else if (err?.message?.includes('HTTP')) {
+        setSearchError(`Error al obtener la hoja: ${err.message}. Verifica la URL y los permisos de acceso.`)
+      } else {
+        setSearchError(`Error de conexion: ${err?.message ?? 'desconocido'}. Verifica tu red y la URL configurada en WmsHub.`)
+      }
+      setResults(null)
     } finally {
       setIsSearching(false)
     }
@@ -613,15 +630,15 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.validacion.quick_search_title')} icon={Search} size="lg">
       <div className="space-y-4">
         <div className="flex gap-2">
-          <div className="flex-1 flex items-center gap-2 h-12 bg-warm-50 border-2 border-warm-200 rounded-2xl px-4 transition-all focus-within:border-primary-400 focus-within:shadow-sm">
+          <div className="flex-1 flex items-center gap-2 h-12 bg-warm-50 border-2 border-warm-200 rounded-2xl px-4 transition-all focus-within:border-primary-400 focus-within:shadow-sm overflow-hidden">
             <ScanBarcode className="w-4 h-4 text-warm-300 shrink-0" />
             <input
               ref={inputRef}
               type="text"
-              className="flex-1 min-w-0 h-full text-base bg-transparent outline-none placeholder:text-warm-300 font-mono tracking-wide"
+              className="flex-1 min-w-0 h-full text-base bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-warm-300 font-mono tracking-wide"
               placeholder={t('surtido.validacion.quick_search_placeholder')}
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={e => { setQuery(e.target.value); setSearchError(null) }}
               onKeyDown={e => { if (e.key === 'Enter' && query.trim()) doSearch(query.trim()) }}
             />
           </div>
@@ -634,13 +651,20 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
           </motion.button>
         </div>
 
-        {results === null && (
+        {searchError && (
+          <div className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 flex items-start gap-3 text-sm">
+            <AlertTriangle className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
+            <p className="text-danger-700 leading-snug">{searchError}</p>
+          </div>
+        )}
+
+        {!searchError && results === null && (
           <div className="text-center py-10 text-sm text-warm-400">
             {t('surtido.validacion.quick_search_hint')}
           </div>
         )}
 
-        {results && results.length === 0 && (
+        {!searchError && results && results.length === 0 && (
           <div className="text-center py-10 text-sm text-warm-400">
             {t('surtido.validacion.quick_search_empty')}
           </div>
