@@ -510,6 +510,53 @@ function StatusChips({ selected, onChange, t }) {
   )
 }
 
+function ValidateConfirmModal({ obc, wmsRecord, tracking, isOpen, onClose, onConfirm, t }) {
+  if (!obc) return null
+  const cliente  = wmsRecord?.customerCode || wmsRecord?.customerName || '—'
+  const destino  = wmsRecord?.receiverName || '—'
+  const cajas    = wmsRecord?.outboundBoxCount ?? wmsRecord?.packageCount ?? wmsRecord?.totalQty ?? '?'
+  const status   = tracking?.status || 'pending_assignment'
+  const meta     = STATUS_META[status] ?? STATUS_META.pending_assignment
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.ordenes.validate_btn')} icon={ScanBarcode}
+      footer={
+        <div className="flex gap-3 justify-end">
+          <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="btn-primary inline-flex items-center gap-2" onClick={onConfirm}>
+            <Play size={14} /> Iniciar validación
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-4 py-1">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-primary-100 flex items-center justify-center shrink-0">
+            <Package2 size={20} className="text-primary-600" />
+          </div>
+          <div>
+            <p className="font-mono font-bold text-warm-900 text-xl leading-none">{obc}</p>
+            <span className={`badge text-xs mt-1 ${meta.cls}`}>{t(meta.labelKey)}</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          {[
+            { label: t('surtido.ordenes.cliente'),   value: cliente },
+            { label: t('surtido.ordenes.receiver'),  value: destino },
+            { label: t('surtido.ordenes.cajas'),     value: cajas },
+            { label: t('surtido.ordenes.surtidor'),  value: tracking?.surtidor_nombre || '—' },
+          ].map(item => (
+            <div key={item.label} className="bg-warm-50 rounded-xl px-3 py-2">
+              <p className="text-warm-400 text-[10px] uppercase tracking-wide">{item.label}</p>
+              <p className="font-semibold text-warm-800">{String(item.value)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function QuickSidebar({ obc, wmsRecord, tracking, onClose, onAssign, onProgress, onValidate, onStatusChange, t }) {
   const status = tracking?.status || 'pending_assignment'
   const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
@@ -636,13 +683,16 @@ export default function Ordenes() {
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterSurtidor, setFilterSurtidor] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
+  })
   const [dateTo, setDateTo] = useState('')
   const [showSurtidoresModal, setShowSurtidoresModal] = useState(false)
   const [assignTarget, setAssignTarget] = useState(null)
   const [wmsDetailOrder, setWmsDetailOrder] = useState(null)
   const [progressObc, setProgressObc] = useState(null)
   const [selectedObc, setSelectedObc] = useState(null)
+  const [confirmValidateObc, setConfirmValidateObc] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
 
@@ -798,21 +848,22 @@ export default function Ordenes() {
       />
 
       {/* Tab bar */}
-      <div className="sticky top-0 z-[5] bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6">
-        <div className="flex gap-1">
-          {tabs.map(item => (
+      <div className="flex items-center gap-1.5 px-4 pt-3 pb-0 border-b border-warm-100 bg-white overflow-x-auto shrink-0">
+        {tabs.map(item => {
+          const isActive = tab === item.key
+          return (
             <button key={item.key}
               onClick={() => { setTab(item.key); setPage(1) }}
-              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all duration-200 ${
-                tab === item.key
-                  ? 'border-primary-600 text-primary-700 bg-primary-50/50'
-                  : 'border-transparent text-warm-500 hover:text-warm-700 hover:bg-warm-50'
+              className={`relative flex items-center gap-2 pl-3 pr-4 py-2 rounded-t-xl text-sm font-semibold transition-all border-2 border-b-0 shrink-0 ${
+                isActive
+                  ? 'bg-white border-warm-200 text-warm-800 shadow-sm -mb-px z-10'
+                  : 'bg-warm-50 border-transparent text-warm-500 hover:text-warm-700 hover:bg-warm-100'
               }`}>
               <item.icon className="w-4 h-4" />
               {item.label}
             </button>
-          ))}
-        </div>
+          )
+        })}
       </div>
 
       {/* Filter bar */}
@@ -868,7 +919,7 @@ export default function Ordenes() {
               onSelect={obc => setSelectedObc(prev => prev === obc ? null : obc)}
               selectedObc={selectedObc}
               onProgress={obc => setProgressObc(obc)}
-              onValidate={obc => navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`)}
+              onValidate={obc => setConfirmValidateObc(obc)}
               t={t}
               page={page} totalPages={totalPages} pageSize={pageSize} total={total}
               onPageChange={setPage}
@@ -880,7 +931,7 @@ export default function Ordenes() {
               onSelect={obc => setSelectedObc(prev => prev === obc ? null : obc)}
               selectedObc={selectedObc}
               onProgress={obc => setProgressObc(obc)}
-              onValidate={obc => navigate(`/surtido/validacion?obc=${encodeURIComponent(obc)}`)}
+              onValidate={obc => setConfirmValidateObc(obc)}
               onStatusChange={(obcs, status) => statusMut.mutate({ obcs, status })}
               t={t}
               page={page} totalPages={totalPages} pageSize={pageSize} total={total}
@@ -899,13 +950,27 @@ export default function Ordenes() {
               onClose={() => setSelectedObc(null)}
               onAssign={() => setAssignTarget(wmsMap[selectedObc] || { outboundOrderNo: selectedObc })}
               onProgress={() => { setProgressObc(selectedObc); setSelectedObc(null) }}
-              onValidate={() => navigate(`/surtido/validacion?obc=${encodeURIComponent(selectedObc)}`)}
+              onValidate={() => setConfirmValidateObc(selectedObc)}
               onStatusChange={status => statusMut.mutate({ obcs: [selectedObc], status })}
               t={t}
             />
           )}
         </AnimatePresence>
       </div>
+
+      <ValidateConfirmModal
+        obc={confirmValidateObc}
+        wmsRecord={wmsMap[confirmValidateObc]}
+        tracking={trackingMap[confirmValidateObc]}
+        isOpen={!!confirmValidateObc}
+        onClose={() => setConfirmValidateObc(null)}
+        onConfirm={() => {
+          navigate(`/surtido/validacion?obc=${encodeURIComponent(confirmValidateObc)}&autostart=true`)
+          setConfirmValidateObc(null)
+          setSelectedObc(null)
+        }}
+        t={t}
+      />
 
       <SurtidoresModal isOpen={showSurtidoresModal} onClose={() => setShowSurtidoresModal(false)} />
 
