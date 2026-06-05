@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken'
 import { query } from '../../config/database.js'
 import env from '../../config/env.js'
 
@@ -18,6 +19,19 @@ function extractSlugFromHost(host) {
   return null
 }
 
+// Decode JWT without verification — only used for tenant routing in dev
+function extractTenantIdFromBearer(req) {
+  try {
+    const authHeader = req.headers['authorization']
+    const token = authHeader && authHeader.split(' ')[1]
+    if (!token) return null
+    const decoded = jwt.decode(token)
+    return decoded?.tenant_id || null
+  } catch {
+    return null
+  }
+}
+
 // Applies to all /api/* routes except /api/auth, /api/public, /api/admin, /api/health, /api/cron
 export async function tenantContext(req, res, next) {
   // x-forwarded-host takes priority (Vercel and other reverse proxies set this to the public hostname)
@@ -31,19 +45,27 @@ export async function tenantContext(req, res, next) {
 
   console.log('[tenantContext] host=' + host + ' baseDomain=' + env.TENANT_BASE_DOMAIN + ' slug=' + (slug || '(none)'))
 
-  // Fallback: no subdomain — use legacy tenant (single-domain production or local dev)
-  const useDevFallback = !slug && !!env.LEGACY_TENANT_ID
+  // In dev with no subdomain: use tenant_id from JWT (so localhost mirrors the
+  // logged-in user's real tenant rather than the placeholder LEGACY_TENANT_ID)
+  const jwtTenantId = (!slug && env.NODE_ENV !== 'production')
+    ? extractTenantIdFromBearer(req)
+    : null
 
-  if (!slug && !useDevFallback) {
+  // Final fallback: static legacy tenant for unauthenticated dev requests
+  const useDevFallback = !slug && !jwtTenantId && !!env.LEGACY_TENANT_ID
+
+  if (!slug && !jwtTenantId && !useDevFallback) {
     return res.status(400).json({ error: 'Tenant no identificado' })
   }
 
   try {
+    const tenantParam = slug || (jwtTenantId ?? env.LEGACY_TENANT_ID)
+    const byId = !!jwtTenantId || useDevFallback
     const result = await query(
-      useDevFallback
+      byId
         ? 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE id = $1 LIMIT 1'
         : 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE slug = $1 LIMIT 1',
-      [useDevFallback ? env.LEGACY_TENANT_ID : slug]
+      [tenantParam]
     )
 
     if (result.rows.length === 0) {
