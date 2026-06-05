@@ -331,12 +331,17 @@ export async function getOutboundList() {
   const orderMap = new Map()
   const boxCountMap = new Map()
 
+  const SPARSE_FIELDS = ['thirdOrderNo', 'logisticsTrackNo', 'logisticsChannel', 'receiverName', 'outboundTime', 'whCode']
+
   for (const row of dataRows) {
     const r = mapRowToOutbound(row, map)
     if (!r.outboundOrderNo) continue
     boxCountMap.set(r.outboundOrderNo, (boxCountMap.get(r.outboundOrderNo) || 0) + 1)
     if (!orderMap.has(r.outboundOrderNo)) {
       orderMap.set(r.outboundOrderNo, { ...r })
+    } else {
+      const existing = orderMap.get(r.outboundOrderNo)
+      SPARSE_FIELDS.forEach(f => { if (!existing[f] && r[f]) existing[f] = r[f] })
     }
   }
 
@@ -358,7 +363,14 @@ export async function getOutboundDetail(orderNo) {
 
   if (orderRows.length === 0) return { success: true, data: null }
 
-  const base = orderRows[0]
+  const base = { ...orderRows[0] }
+  const SPARSE_FIELDS = ['thirdOrderNo', 'logisticsTrackNo', 'logisticsChannel', 'receiverName', 'outboundTime', 'whCode']
+  SPARSE_FIELDS.forEach(f => {
+    if (!base[f]) {
+      const found = orderRows.find(r => r[f])
+      if (found) base[f] = found[f]
+    }
+  })
   const packageList = orderRows.map(r => ({
     boxType:           r.boxType,
     customizeCode:     r.customizeCode,

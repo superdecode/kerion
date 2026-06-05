@@ -749,6 +749,54 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
   )
 }
 
+function MissingList({ items, itemCounts, t }) {
+  const [q, setQ] = useState('')
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-6">
+        <CheckCircle2 size={28} className="text-success-500" />
+        <p className="text-sm text-success-600 font-medium">{t('surtido.validacion.all_complete')}</p>
+      </div>
+    )
+  }
+  const filtered = q.trim() ? items.filter(i => i.displayCode.toLowerCase().includes(q.toLowerCase())) : items
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 focus-within:border-primary-400 focus-within:shadow-sm transition-all">
+        <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+        <input
+          type="text"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Buscar codigo..."
+          className="flex-1 min-w-0 text-xs bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 text-warm-700 placeholder:text-warm-300"
+        />
+        {q && <button onClick={() => setQ('')} className="text-warm-400 hover:text-warm-600"><X size={12} /></button>}
+      </div>
+      <div className="space-y-1 max-h-80 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <p className="text-center text-xs text-warm-400 py-6">{t('common.noData')}</p>
+        ) : filtered.map((item, i) => {
+          const scanned = itemCounts.get(item.displayCode) || 0
+          const pct = item.expectedQty > 0 ? Math.round((scanned / item.expectedQty) * 100) : 0
+          return (
+            <div key={item.displayCode} className="flex items-center gap-3 px-3 py-2.5 bg-warm-50 rounded-xl border border-warm-100">
+              <span className="w-6 text-center text-[10px] font-bold text-warm-400 shrink-0 tabular-nums">{i + 1}</span>
+              <span className="font-mono text-xs font-semibold text-warm-800 flex-1 min-w-0 truncate">{item.displayCode}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="w-16 h-1.5 bg-warm-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-warning-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="text-warning-700 font-semibold tabular-nums text-xs">{scanned}/{item.expectedQty}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════ */
 /* ─── TabSession ─────────────────────────────────────────── */
 function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionChange, onUpdateTab, canCreate, canUpdate, canDelete }) {
@@ -1087,7 +1135,11 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     onError: () => toast.error(t('toast.error')),
   })
 
-  const missingItems = allItems.filter(item => (itemCounts.get(item.displayCode) || 0) < (item.expectedQty || 1))
+  const missingItems = allItems.filter(item => {
+    const normBoxType = normalizeCode(item.boxType || '')
+    if (normBoxType && normBoxType === item.displayCode) return false
+    return (itemCounts.get(item.displayCode) || 0) < (item.expectedQty || 1)
+  })
 
   const sessionList = useMemo(() => {
     const raw = trackingData?.data?.records ?? trackingData?.data ?? []
@@ -1136,31 +1188,78 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
           <div className="max-w-3xl mx-auto space-y-4">
 
             {/* Session info card */}
-            <motion.div className="card p-3 shadow-sm overflow-hidden relative"
+            <motion.div className="card p-4 shadow-sm overflow-hidden relative"
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 rounded-xl bg-primary-50 flex items-center justify-center shrink-0">
-                  <Package className="w-4 h-4 text-primary-600" />
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center shrink-0 mt-0.5">
+                  <Package className="w-5 h-5 text-primary-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-warm-800 truncate leading-tight font-mono">{obc}</p>
-                  <p className="text-[10px] text-warm-500 leading-tight mt-0.5">{t('surtido.validacion.in_progress')}</p>
+                  <p className="font-black text-warm-900 truncate leading-none font-mono text-xl tracking-tight">{obc}</p>
+                  {(() => {
+                    const d = detailData?.data ?? detailData
+                    const delivery = d?.outboundTime?.slice(0, 10) || null
+                    const destination = d?.receiverName || null
+                    const ref = d?.thirdOrderNo || null
+                    const track = d?.logisticsTrackNo || null
+                    return (delivery || destination || ref || track) ? (
+                      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5">
+                        {(delivery || destination) && (
+                          <div className="flex items-center gap-3">
+                            {delivery && (
+                              <div>
+                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">Entrega</p>
+                                <p className="text-xs font-semibold text-warm-700">{delivery}</p>
+                              </div>
+                            )}
+                            {destination && (
+                              <div className="border-l border-warm-200 pl-3">
+                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">Destino</p>
+                                <p className="text-xs font-semibold text-warm-700 max-w-[14rem] truncate">{destination}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {(ref || track) && (
+                          <div className="flex items-center gap-3">
+                            {ref && (
+                              <div>
+                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">Referencia</p>
+                                <p className="text-xs font-mono text-warm-600 truncate max-w-[10rem]">{ref}</p>
+                              </div>
+                            )}
+                            {track && (
+                              <div className="border-l border-warm-200 pl-3">
+                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">Tracking</p>
+                                <p className="text-xs font-mono text-warm-600 truncate max-w-[12rem]">{track}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : null
+                  })()}
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-3xl font-black text-warm-800 tracking-tighter leading-none">
-                    {totalScanned}<span className="text-xs font-medium text-warm-400">/{totalExpected}</span>
+                  <p className="text-4xl font-black text-warm-900 tracking-tighter leading-none">
+                    {totalScanned}
                   </p>
+                  <p className="text-xs font-medium text-warm-400 leading-tight">/{totalExpected}</p>
                 </div>
               </div>
 
-              <div className="w-full h-2.5 bg-warm-100 rounded-full overflow-hidden border border-warm-200/50 mb-1">
-                <div className={`h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r ${
-                  progress >= 100 ? 'from-success-400 to-success-600' :
-                  progress >= 80  ? 'from-primary-400 to-accent-500' :
-                  'from-primary-400 to-primary-600'
-                } ${progress > 0 ? 'min-w-[6px]' : ''}`}
-                  style={{ width: `${progress}%` }} />
+              <div className="relative w-full h-3 bg-warm-100 rounded-full overflow-hidden shadow-inner mb-1">
+                <div className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out shadow-sm ${
+                  progress >= 100 ? 'bg-gradient-to-r from-success-400 to-success-500 shadow-success-200' :
+                  progress >= 80  ? 'bg-gradient-to-r from-primary-400 to-accent-500 shadow-primary-200' :
+                  'bg-gradient-to-r from-primary-500 to-primary-400 shadow-primary-200'
+                } ${progress > 0 ? 'min-w-[8px]' : ''}`}
+                  style={{ width: `${progress}%` }}>
+                  {progress > 5 && (
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-b from-white/20 to-transparent" />
+                  )}
+                </div>
               </div>
 
               {/* Location separator — shown when confirmed */}
@@ -1507,25 +1606,13 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       {/* Missing items modal */}
       <Modal isOpen={showMissing} onClose={() => setShowMissing(false)} title={t('surtido.escaneo.missing_title')} icon={List}
         size="lg"
-        footer={<button className="btn-secondary" onClick={() => setShowMissing(false)}>{t('common.close')}</button>}>
-        <div className="space-y-1.5 max-h-96 overflow-y-auto">
-          {missingItems.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-6">
-              <CheckCircle2 size={28} className="text-success-500" />
-              <p className="text-sm text-success-600 font-medium">{t('surtido.validacion.all_complete')}</p>
-            </div>
-          ) : (
-            missingItems.map((item, i) => {
-              const scanned = itemCounts.get(item.displayCode) || 0
-              return (
-                <div key={i} className="flex items-center justify-between px-3 py-2 bg-warm-50 rounded-xl text-sm">
-                  <span className="font-mono text-xs font-semibold">{item.displayCode}</span>
-                  <span className="text-warning-700 font-medium tabular-nums">{scanned}/{item.expectedQty}</span>
-                </div>
-              )
-            })
-          )}
-        </div>
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <span className="text-xs text-warm-400">{missingItems.length} {t('surtido.escaneo.pending').toLowerCase()}</span>
+            <button className="btn-secondary" onClick={() => setShowMissing(false)}>{t('common.close')}</button>
+          </div>
+        }>
+        <MissingList items={missingItems} itemCounts={itemCounts} t={t} />
       </Modal>
 
       {/* Finalize modal */}

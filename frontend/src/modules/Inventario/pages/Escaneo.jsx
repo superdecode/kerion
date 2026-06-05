@@ -303,7 +303,9 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
                 onClick={() => onUbicacionConfirmed({ id: u.id, codigo: u.codigo, nombre: u.nombre })}>
                 <MapPin size={10} className="text-accent-500 shrink-0" />
                 <span className="font-mono font-semibold text-accent-700">{u.codigo}</span>
-                <span className="text-warm-500 truncate">{u.nombre}</span>
+                {u.nombre && u.nombre !== u.codigo && (
+                  <span className="text-warm-500 truncate">{u.nombre}</span>
+                )}
               </button>
             ))}
           </div>
