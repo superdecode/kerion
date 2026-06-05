@@ -174,8 +174,8 @@ function WmsDetailModal({ order, onClose }) {
             </p>
             <div className="card overflow-hidden">
               <table className="w-full">
-                <thead>
-                  <tr className="bg-warm-50/60">
+                <thead className="bg-warm-50 border-b border-warm-100">
+                  <tr>
                     <th className="table-header">Tipo</th>
                     <th className="table-header">{t('surtido.ordenes.referencia')}</th>
                     <th className="table-header text-right">{t('surtido.ordenes.cajas')}</th>
@@ -1001,17 +1001,17 @@ function WmsTable({ records, trackingMap, onAssign, onDetail, isLoadingDetail, o
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-warm-50 border-b border-warm-100">
-              <th className="table-header font-semibold">OBC</th>
-              <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.cliente')}</th>
-              <th className="table-header hidden xl:table-cell font-semibold">{t('surtido.ordenes.receiver')}</th>
-              <th className="table-header hidden xl:table-cell font-semibold">{t('surtido.ordenes.canal')}</th>
-              <th className="table-header hidden 2xl:table-cell font-semibold">{t('surtido.ordenes.referencia')}</th>
-              <th className="table-header text-right font-semibold">{t('surtido.ordenes.cajas')}</th>
-              <th className="table-header font-semibold">{t('surtido.ordenes.surtidor')}</th>
-              <th className="table-header font-semibold">{t('surtido.ordenes.status')}</th>
-              <th className="table-header text-right font-semibold">Acciones</th>
+          <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
+            <tr>
+              <th className="table-header">OBC</th>
+              <th className="table-header hidden lg:table-cell">{t('surtido.ordenes.cliente')}</th>
+              <th className="table-header hidden xl:table-cell">{t('surtido.ordenes.receiver')}</th>
+              <th className="table-header hidden xl:table-cell">{t('surtido.ordenes.canal')}</th>
+              <th className="table-header hidden 2xl:table-cell">{t('surtido.ordenes.referencia')}</th>
+              <th className="table-header text-right">{t('surtido.ordenes.cajas')}</th>
+              <th className="table-header">{t('surtido.ordenes.surtidor')}</th>
+              <th className="table-header">{t('surtido.ordenes.status')}</th>
+              <th className="table-header text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
@@ -1165,8 +1165,8 @@ function ValidacionTable({ records, wmsMap, onSelect, selectedObc, onProgress, o
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-warm-50 border-b border-warm-100">
+          <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
+            <tr>
               <th className="table-header w-8">
                 <input type="checkbox"
                   checked={allChecked}
@@ -1175,12 +1175,12 @@ function ValidacionTable({ records, wmsMap, onSelect, selectedObc, onProgress, o
                   className="rounded border-warm-300 text-primary-600 cursor-pointer"
                   onClick={e => e.stopPropagation()} />
               </th>
-              <th className="table-header font-semibold">OBC</th>
-              <th className="table-header hidden lg:table-cell font-semibold">{t('surtido.ordenes.cliente')}</th>
-              <th className="table-header font-semibold">{t('surtido.ordenes.surtidor')}</th>
-              <th className="table-header text-right font-semibold">{t('surtido.escaneo.scanned')}</th>
-              <th className="table-header font-semibold">{t('surtido.ordenes.status')}</th>
-              <th className="table-header text-right font-semibold">Acciones</th>
+              <th className="table-header">OBC</th>
+              <th className="table-header hidden lg:table-cell">{t('surtido.ordenes.cliente')}</th>
+              <th className="table-header">{t('surtido.ordenes.surtidor')}</th>
+              <th className="table-header text-right">{t('surtido.escaneo.scanned')}</th>
+              <th className="table-header">{t('surtido.ordenes.status')}</th>
+              <th className="table-header text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">

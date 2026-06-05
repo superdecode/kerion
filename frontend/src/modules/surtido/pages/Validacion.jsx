@@ -546,7 +546,7 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
 
 /* ═══════════════════════════════════════════════════════════ */
 /* ─── TabSession ─────────────────────────────────────────── */
-function TabSession({ tabId, isActive, initialObc, initialAutoStart, onUpdateTab }) {
+function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionChange, onUpdateTab }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
@@ -669,6 +669,19 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onUpdateTab
   }, [autoStartPending, step, detailLoading, detailData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (!onSessionChange) return
+    if (step !== 'session' || !isActive) { onSessionChange(null); return }
+    onSessionChange({
+      pendingCount: pendingSync.length,
+      isSyncing,
+      onRecount:  () => setShowRecount(true),
+      onMissing:  () => setShowMissing(true),
+      onCancel:   handleCancel,
+      onFinalize: () => setShowFinalize(true),
+    })
+  }, [step, isActive, pendingSync.length, isSyncing]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     const interval = setInterval(async () => {
       if (pendingSync.length === 0 || isSyncing) return
       setIsSyncing(true)
@@ -720,23 +733,25 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onUpdateTab
 
   const updateUbicacionMut = useMutation({
     mutationFn: (ubicacion) => updateScanSession(sessionId, { ubicacion_id: ubicacion?.id || null }),
-    onSuccess: (_, ubicacion) => {
-      setSelectedUbicacion(ubicacion)
-      setUbicacionConfirmed(true)
-      setLocationInputValue('')
-      setLocationFlash(true)
-      setTimeout(() => setLocationFlash(false), 1200)
-      const saved = sessionStorage.getItem(storageKey)
-      if (saved) {
-        try {
-          const s = JSON.parse(saved)
-          sessionStorage.setItem(storageKey, JSON.stringify({ ...s, ubicacion, ubicacionConfirmed: true }))
-        } catch {}
-      }
-      setTimeout(() => scanRef.current?.focus(), 80)
-    },
-    onError: () => toast.error(t('toast.error')),
+    onSuccess: (_, ubicacion) => confirmUbicacionLocally(ubicacion),
+    onError:   (_, ubicacion) => confirmUbicacionLocally(ubicacion),
   })
+
+  function confirmUbicacionLocally(ubicacion) {
+    setSelectedUbicacion(ubicacion)
+    setUbicacionConfirmed(true)
+    setLocationInputValue('')
+    setLocationFlash(true)
+    setTimeout(() => setLocationFlash(false), 1200)
+    const saved = sessionStorage.getItem(storageKey)
+    if (saved) {
+      try {
+        const s = JSON.parse(saved)
+        sessionStorage.setItem(storageKey, JSON.stringify({ ...s, ubicacion, ubicacionConfirmed: true }))
+      } catch {}
+    }
+    setTimeout(() => scanRef.current?.focus(), 80)
+  }
 
   function tryConfirmUbicacion(raw) {
     const val = raw.trim()
@@ -894,43 +909,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onUpdateTab
 
   /* ─── ACTIVE SESSION ─────────────────────────────────── */
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Session action bar — fixed outside scroll */}
-      <div className="bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-4 py-2 flex items-center gap-1.5 shrink-0">
-        <div className="flex-1 flex items-center gap-2 min-w-0">
-          <span className="font-mono font-bold text-warm-800 text-sm truncate">{obc}</span>
-          <span className="text-warm-400 text-xs font-mono tabular-nums">{fmtElapsed(sessionElapsed)}</span>
-        </div>
-        {pendingSync.length > 0 && (
-          <span className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
-            {isSyncing ? <Loader2 size={12} className="animate-spin" /> : <WifiOff size={12} />}
-            {pendingSync.length}
-          </span>
-        )}
-        <button className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-          onClick={() => setShowRecount(true)}>
-          <RotateCcw className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('surtido.escaneo.recount')}</span>
-        </button>
-        <button className="px-3 py-2 rounded-xl text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-          onClick={() => setShowMissing(true)}>
-          <List className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('surtido.escaneo.missing')}</span>
-        </button>
-        <button className="px-3 py-2 rounded-xl text-warning-600 bg-warning-50 hover:bg-warning-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-          onClick={handleCancel}>
-          <XOctagon className="w-4 h-4" />
-          <span className="hidden sm:inline">{t('surtido.escaneo.cancel')}</span>
-        </button>
-        <button className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
-          onClick={() => setShowFinalize(true)}>
-          <Square className="w-4 h-4" /> {t('surtido.escaneo.finalize')}
-        </button>
-      </div>
-
-      {/* Main content row */}
-      <div className="flex-1 flex overflow-hidden">
-      {/* Main scroll area */}
+    <div className="flex-1 flex overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="p-6">
           <div className="max-w-3xl mx-auto space-y-4">
@@ -1202,7 +1181,6 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onUpdateTab
           )}
         </div>
       </div>
-      </div>
 
       {/* Recount modal */}
       <RecountModal
@@ -1430,9 +1408,41 @@ export default function SurtidoValidacion() {
     }))
   }
 
+  const [activeSession, setActiveSession] = useState(null)
+
+  const headerActions = activeSession ? (
+    <div className="flex items-center gap-1.5">
+      {activeSession.pendingCount > 0 && (
+        <span className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
+          {activeSession.isSyncing ? <Loader2 size={12} className="animate-spin" /> : <WifiOff size={12} />}
+          {activeSession.pendingCount}
+        </span>
+      )}
+      <button className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-2 text-sm font-semibold"
+        onClick={activeSession.onRecount}>
+        <RotateCcw className="w-4 h-4" />
+        <span className="hidden sm:inline">{t('surtido.escaneo.recount')}</span>
+      </button>
+      <button className="px-3 py-2 rounded-xl text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
+        onClick={activeSession.onMissing}>
+        <List className="w-4 h-4" />
+        <span className="hidden sm:inline">{t('surtido.escaneo.missing')}</span>
+      </button>
+      <button className="px-3 py-2 rounded-xl text-warning-600 bg-warning-50 hover:bg-warning-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
+        onClick={activeSession.onCancel}>
+        <XOctagon className="w-4 h-4" />
+        <span className="hidden sm:inline">{t('surtido.escaneo.cancel')}</span>
+      </button>
+      <button className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+        onClick={activeSession.onFinalize}>
+        <Square className="w-4 h-4" /> {t('surtido.escaneo.finalize')}
+      </button>
+    </div>
+  ) : null
+
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} />
+      <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} actions={headerActions} />
       <TabBar
         tabs={tabs}
         activeTabId={activeTabId}
@@ -1448,6 +1458,7 @@ export default function SurtidoValidacion() {
               isActive={tab.id === activeTabId}
               initialObc={tab.id === activeTabId && !initialObcConsumed ? obcParam : null}
               initialAutoStart={tab.id === activeTabId && !initialObcConsumed ? autoStartParam : false}
+              onSessionChange={tab.id === activeTabId ? setActiveSession : undefined}
               onUpdateTab={(data) => handleUpdateTab(tab.id, data)}
             />
           </div>
