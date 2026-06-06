@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
+import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useInventarioStore } from '../stores/inventarioStore'
@@ -21,6 +22,7 @@ import { classifyItem, resolveSwap } from '../utils/classify'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import { saveInventorySession } from '../services/inventarioService'
 import { getConfig, getUbicaciones, createUbicacion } from '../../WmsHub/services/wmsHubService'
+import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
 
 const STATUS_META = {
   ok:      { labelKey: 'inventario.escaneo.group_disponible', bg: 'bg-success-100 text-success-700',  icon: CheckCircle2, border: 'border-l-success-400', dot: 'bg-success-400', flash: 'bg-success-50/80 border-success-200' },
@@ -362,6 +364,121 @@ function UbicacionCreateConfirmModal({ isOpen, onClose, onConfirm, code, isCreat
   )
 }
 
+function UbicacionInlineSection({ ubicaciones, onUbicacionConfirmed, onCreateRequest, ubicacionValidated, onClear }) {
+  const { t } = useI18nStore()
+  const [inputValue, setInputValue] = useState('')
+  const [notFound, setNotFound] = useState(false)
+  const [notFoundCode, setNotFoundCode] = useState('')
+  const locationRef = useRef(null)
+
+  useEffect(() => {
+    if (!ubicacionValidated) {
+      setTimeout(() => locationRef.current?.focus(), 80)
+    }
+  }, [ubicacionValidated])
+
+  function handleConfirm() {
+    const val = inputValue.trim()
+    if (!val) return
+    const norm = val.toLowerCase()
+    const found = (ubicaciones ?? []).find(u =>
+      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
+    )
+    if (found) {
+      onUbicacionConfirmed({ id: found.id, codigo: found.codigo, nombre: found.nombre })
+      setInputValue('')
+    } else {
+      setNotFoundCode(val)
+      setNotFound(true)
+    }
+  }
+
+  const suggestions = (inputValue.trim() && !notFound)
+    ? (ubicaciones ?? []).filter(u =>
+        (u.codigo || '').toLowerCase().includes(inputValue.toLowerCase()) ||
+        (u.nombre || '').toLowerCase().includes(inputValue.toLowerCase())
+      ).slice(0, 5)
+    : []
+
+  if (ubicacionValidated) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-accent-200 bg-accent-50">
+        <MapPin className="w-4 h-4 text-accent-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] text-accent-500 font-semibold uppercase tracking-wide">{t('inventario.escaneo.ubicacion_scan_title')}</p>
+          <p className="font-mono font-bold text-accent-700 truncate">{ubicacionValidated.codigo}</p>
+        </div>
+        <button onClick={onClear} className="p-1.5 rounded-lg hover:bg-accent-200 text-accent-500 transition-colors" title={t('inventario.escaneo.ubicacion_edit')}>
+          <Pencil size={13} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+      className="card p-4 space-y-3 border-l-4 border-l-accent-400">
+      <div className="flex items-center gap-2">
+        <MapPin className="w-4 h-4 text-accent-500 shrink-0" />
+        <p className="text-sm font-semibold text-accent-700">{t('inventario.escaneo.ubicacion_scan_title')}</p>
+      </div>
+      <p className="text-xs text-warm-500">{t('inventario.escaneo.ubicacion_scan_label')}</p>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-300" />
+          <input
+            ref={locationRef}
+            type="text"
+            className="w-full pl-10 pr-4 py-3 text-base bg-white border-2 border-accent-200 rounded-2xl
+              focus:border-accent-500 focus:shadow-md transition-all outline-none placeholder:text-warm-300 font-mono"
+            placeholder="UB-XXX"
+            value={inputValue}
+            onChange={e => { setInputValue(e.target.value); setNotFound(false) }}
+            onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
+            autoComplete="off"
+          />
+        </div>
+        <button className="btn-primary px-4 py-3 rounded-2xl" onClick={handleConfirm} disabled={!inputValue.trim()}>
+          <CheckCircle2 size={16} />
+        </button>
+      </div>
+      {suggestions.length > 0 && (
+        <div className="space-y-1 max-h-36 overflow-y-auto">
+          {suggestions.map(u => (
+            <button key={u.id}
+              className="w-full text-left px-3 py-1.5 rounded-xl hover:bg-accent-100 transition-colors text-xs flex items-center gap-2"
+              onClick={() => { onUbicacionConfirmed({ id: u.id, codigo: u.codigo, nombre: u.nombre }); setInputValue('') }}>
+              <MapPin size={10} className="text-accent-500 shrink-0" />
+              <span className="font-mono font-semibold text-accent-700">{u.codigo}</span>
+              {u.nombre && u.nombre !== u.codigo && <span className="text-warm-500 truncate">{u.nombre}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {notFound && (
+        <motion.div className="rounded-2xl border border-warning-200 bg-warning-50 p-4 space-y-3"
+          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-warning-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-warning-700">{t('inventario.escaneo.ubicacion_not_found_title')}</p>
+              <p className="text-xs text-warning-600 mt-0.5">
+                <strong className="font-mono">{notFoundCode}</strong> — {t('inventario.escaneo.ubicacion_not_found_body')}
+              </p>
+            </div>
+          </div>
+          <button className="w-full btn-primary text-sm inline-flex items-center justify-center gap-2"
+            onClick={() => onCreateRequest(notFoundCode)}>
+            <Plus size={14} /> {t('inventario.escaneo.ubicacion_create_btn')}
+          </button>
+        </motion.div>
+      )}
+    </motion.div>
+  )
+}
+
 function GroupDetailModal({
   isOpen,
   group,
@@ -577,6 +694,9 @@ function ClasificacionPanel({
   onMove,
   onToggleMarked,
   onOpenDetail,
+  ubicacionValidated,
+  onConfirm,
+  onSend,
 }) {
   const { t } = useI18nStore()
   const grouped = { ok: [], blocked: [], nowms: [] }
@@ -590,6 +710,7 @@ function ClasificacionPanel({
       {GROUPS.map(g => {
         const meta = STATUS_META[g]
         const groupItems = grouped[g]
+        const hasItems = groupItems.length > 0
         return (
           <div
             key={g}
@@ -639,19 +760,30 @@ function ClasificacionPanel({
                 ))
               )}
             </div>
-            <div className="mt-auto px-3 py-3 border-t border-warm-100 bg-warm-50/40 flex items-center justify-between gap-3">
-              <div className="text-[11px] text-warm-500">
-                {t('inventario.escaneo.marked_count')}: <span className="font-semibold text-warm-700">{groupItems.filter(item => item.marked).length}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => onOpenDetail(g)}
-                disabled={groupItems.length === 0}
-                className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-primary-50 text-primary-700 text-xs font-semibold hover:bg-primary-100 disabled:opacity-50 transition-colors"
-              >
-                <Maximize2 size={13} />
-                Ver tarima
-              </button>
+            {/* Footer: marked count + per-tarima action button */}
+            <div className="shrink-0 px-3 py-2 border-t border-warm-100 bg-warm-50/40 flex items-center gap-2">
+              <span className="text-[11px] text-warm-500 truncate">
+                {t('inventario.escaneo.marked_count')}: <span className="font-semibold text-warm-700">{groupItems.filter(i => i.marked).length}</span>
+              </span>
+              {ubicacionValidated ? (
+                <button
+                  type="button"
+                  disabled={!hasItems}
+                  onClick={onSend}
+                  className="ml-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Square size={11} /> {t('inventario.escaneo.clasificacion_send')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!hasItems}
+                  onClick={onConfirm}
+                  className="ml-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-50 text-primary-700 text-xs font-semibold hover:bg-primary-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <CheckCircle2 size={11} /> {t('inventario.escaneo.clasificacion_confirm')}
+                </button>
+              )}
             </div>
           </div>
         )
@@ -753,6 +885,7 @@ export default function Escaneo() {
 
   const boxStockQuery = useBoxStock()
   const { isPending: isSyncing, pendingCount } = useAutoSync()
+  const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('inventory'))
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? null
   const sessionElapsed = useSessionTimer(activeTab?.createdAt)
@@ -763,13 +896,26 @@ export default function Escaneo() {
     if (item.marked) acc.marked++
     return acc
   }, { ok: 0, blocked: 0, nowms: 0, total: 0, marked: 0 }) ?? { ok: 0, blocked: 0, nowms: 0, total: 0, marked: 0 }
+  const inventoryRecords = boxStockQuery.data?.data?.records?.length ?? 0
+  const inventoryPartial = getCacheStatus('inventory').partial
+  const inventoryHeaderSummary = (
+    <DataSyncStatus
+      records={inventoryRecords}
+      updatedAt={sheetTs}
+      partial={inventoryPartial}
+      onRefresh={handleSheetRefresh}
+      refreshing={boxStockQuery.isFetching}
+    />
+  )
 
   const [showTypeModal, setShowTypeModal] = useState(false)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
   const [showUbicacionModal, setShowUbicacionModal] = useState(false)
+  const [showUbicacionSection, setShowUbicacionSection] = useState(false)
   const [ubicacionValidated, setUbicacionValidated] = useState(null)
   const [ubicacionToCreate, setUbicacionToCreate] = useState('')
   const [showCreateConfirm, setShowCreateConfirm] = useState(false)
+  const isInlineUbicacionFlow = useRef(false)
   const [duplicatePending, setDuplicatePending] = useState(null)
   const [moveTarget, setMoveTarget] = useState(null)
   const [lastScan, setLastScan] = useState(null)
@@ -801,6 +947,12 @@ export default function Escaneo() {
     if (!pendingCode1) setTimeout(() => scanRef.current?.focus(), 80)
     else setTimeout(() => code2Ref.current?.focus(), 80)
   }, [activeTabId, pendingCode1])
+
+  useEffect(() => {
+    setShowUbicacionSection(false)
+    setUbicacionValidated(null)
+    setUbicacionId(null)
+  }, [activeTabId])
 
   const saveSessionMut = useMutation({
     mutationFn: () => {
@@ -837,7 +989,10 @@ export default function Escaneo() {
       setUbicacionId(u.id)
       qc.invalidateQueries({ queryKey: ['upapex-ubicaciones'] })
       setShowCreateConfirm(false)
-      setShowSummaryModal(true)
+      if (!isInlineUbicacionFlow.current) {
+        setShowSummaryModal(true)
+      }
+      isInlineUbicacionFlow.current = false
     },
     onError: () => toast.error(t('toast.error')),
   })
@@ -862,9 +1017,20 @@ export default function Escaneo() {
     setShowSummaryModal(true)
   }
 
+  function handleInlineUbicacionConfirmed(ubicacion) {
+    setUbicacionValidated(ubicacion)
+    setUbicacionId(ubicacion.id)
+  }
+
   function handleCreateRequest(code) {
     setUbicacionToCreate(code)
     setShowUbicacionModal(false)
+    setShowCreateConfirm(true)
+  }
+
+  function handleInlineCreateRequest(code) {
+    isInlineUbicacionFlow.current = true
+    setUbicacionToCreate(code)
     setShowCreateConfirm(true)
   }
 
@@ -893,6 +1059,12 @@ export default function Escaneo() {
     } else {
       setCloseTabPending({ tabId: activeTabId, count: activeTab.items.length })
     }
+  }
+
+  async function handleSheetRefresh() {
+    await refreshSheet('inventory')
+    setSheetTs(getCacheTimestamp('inventory'))
+    await boxStockQuery.refetch()
   }
 
   function confirmCloseTab() {
@@ -953,7 +1125,7 @@ export default function Escaneo() {
   if (tabs.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')} />
+        <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')} actions={inventoryHeaderSummary} />
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-2xl mx-auto">
             <motion.div className="text-center mb-8"
@@ -1022,23 +1194,14 @@ export default function Escaneo() {
     <div className="flex flex-col h-full">
       <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')}
         actions={
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {inventoryHeaderSummary}
             {pendingCount > 0 && (
               <span className="px-3 py-2 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
                 {isSyncing ? <Loader2 size={13} className="animate-spin" /> : <WifiOff size={13} />}
                 {pendingCount}
               </span>
             )}
-            {/* Sync button */}
-            <button
-              onClick={() => boxStockQuery.refetch()}
-              disabled={boxStockQuery.isFetching}
-              className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-2 text-sm font-semibold disabled:opacity-50"
-              title={t('inventario.escaneo.sync_btn')}
-            >
-              <RefreshCw size={14} className={boxStockQuery.isFetching ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">{t('inventario.escaneo.sync_btn')}</span>
-            </button>
             {/* Panel toggle */}
             <button
               onClick={() => setShowPanel(v => !v)}
@@ -1257,13 +1420,28 @@ export default function Escaneo() {
 
               {/* Items panel */}
               {activeTab.scanType === 'clasificacion' ? (
-                <ClasificacionPanel
-                  items={activeTab.items}
-                  onRemove={idx => removeItem(activeTabId, idx)}
-                  onMove={idx => setMoveTarget(idx)}
-                  onToggleMarked={idx => toggleItemMarked(activeTabId, idx)}
-                  onOpenDetail={setGroupDetail}
-                />
+                <div className="space-y-4">
+                  <ClasificacionPanel
+                    items={activeTab.items}
+                    onRemove={idx => removeItem(activeTabId, idx)}
+                    onMove={idx => setMoveTarget(idx)}
+                    onToggleMarked={idx => toggleItemMarked(activeTabId, idx)}
+                    onOpenDetail={setGroupDetail}
+                    ubicacionValidated={ubicacionValidated}
+                    onConfirm={() => setShowUbicacionSection(true)}
+                    onSend={() => setShowSummaryModal(true)}
+                  />
+                  {/* Inline ubicación section — appears after any Confirmar is clicked */}
+                  {showUbicacionSection && (
+                    <UbicacionInlineSection
+                      ubicaciones={ubicacionesData?.data ?? []}
+                      onUbicacionConfirmed={handleInlineUbicacionConfirmed}
+                      onCreateRequest={handleInlineCreateRequest}
+                      ubicacionValidated={ubicacionValidated}
+                      onClear={() => { setUbicacionValidated(null); setUbicacionId(null) }}
+                    />
+                  )}
+                </div>
               ) : (
                 <UnificadoPanel
                   items={activeTab.items}
