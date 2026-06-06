@@ -609,6 +609,8 @@ export default function Ordenes() {
   const [search, setSearch] = useState('')
   const [statusDraft, setStatusDraft] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [clientDraft, setClientDraft] = useState('')
+  const [filterClient, setFilterClient] = useState('')
   const [surtidorDraft, setSurtidorDraft] = useState('')
   const [filterSurtidor, setFilterSurtidor] = useState('')
   const [destinationDraft, setDestinationDraft] = useState('')
@@ -621,6 +623,7 @@ export default function Ordenes() {
   const [timeToDraft, setTimeToDraft] = useState('')
   const [timeFrom, setTimeFrom] = useState('')
   const [timeTo, setTimeTo] = useState('')
+  const [showTimeFilters, setShowTimeFilters] = useState(false)
   const [showSurtidoresModal, setShowSurtidoresModal] = useState(false)
   const [showReasonsModal, setShowReasonsModal] = useState(false)
   const [assignTarget, setAssignTarget] = useState(null)
@@ -642,6 +645,7 @@ export default function Ordenes() {
         setTimeToDraft(saved.timeTo || '')
         setTimeFrom(saved.timeFrom || '')
         setTimeTo(saved.timeTo || '')
+        if (saved.timeFrom || saved.timeTo) setShowTimeFilters(true)
       }
       const savedDestination = sessionStorage.getItem(destinationFilterKey) || ''
       if (savedDestination) {
@@ -709,6 +713,22 @@ export default function Ordenes() {
     )).sort((a, b) => a.localeCompare(b, 'es'))
   ), [allWmsRecords])
 
+  const customerOptions = useMemo(() => (
+    Array.from(new Set(
+      allWmsRecords
+        .map((record) => record.customerCode || record.customerNo || record.customerName || '')
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'es'))
+  ), [allWmsRecords])
+
+  const destinationSuggestions = useMemo(() => {
+    const term = destinationDraft.trim().toLowerCase()
+    const base = term
+      ? destinationOptions.filter((option) => option.toLowerCase().includes(term))
+      : destinationOptions
+    return base.slice(0, 12)
+  }, [destinationDraft, destinationOptions])
+
   const q = search.trim().toLowerCase()
 
   function matchesDateFilter(dateStr) {
@@ -722,6 +742,7 @@ export default function Ordenes() {
   function applyFilters() {
     setSearch(searchInput.trim())
     setFilterStatus(statusDraft)
+    setFilterClient(clientDraft)
     setFilterSurtidor(surtidorDraft)
     setFilterDestination(destinationDraft)
     setDateFrom(dateFromDraft)
@@ -736,8 +757,9 @@ export default function Ordenes() {
   const filteredWms = allWmsRecords.filter(r => {
     const tracking = trackingMap[r.outboundOrderNo]
     if (filterStatus && (tracking?.status || 'pending_assignment') !== filterStatus) return false
+    if (filterClient && (r.customerCode || r.customerNo || r.customerName || '') !== filterClient) return false
     if (filterSurtidor && tracking?.surtidor_nombre !== filterSurtidor) return false
-    if (filterDestination && (r.receiverName || '') !== filterDestination) return false
+    if (filterDestination && !(r.receiverName || '').toLowerCase().includes(filterDestination.toLowerCase())) return false
     if (!matchesDateFilter(r.orderCreateTime)) return false
     if (!withinTimeRange(r.outboundTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(r.outboundOrderNo)) return false
@@ -750,9 +772,10 @@ export default function Ordenes() {
 
   const filteredValidacion = trackingList.filter(tr => {
     if (filterStatus && tr.status !== filterStatus) return false
-    if (filterSurtidor && tr.surtidor_nombre !== filterSurtidor) return false
     const wms = wmsMap[tr.outbound_order_no]
-    if (filterDestination && (wms?.receiverName || '') !== filterDestination) return false
+    if (filterClient && (wms?.customerCode || wms?.customerNo || wms?.customerName || '') !== filterClient) return false
+    if (filterSurtidor && tr.surtidor_nombre !== filterSurtidor) return false
+    if (filterDestination && !(wms?.receiverName || '').toLowerCase().includes(filterDestination.toLowerCase())) return false
     if (!matchesDateFilter(wms?.orderCreateTime || tr.updated_at)) return false
     if (!withinTimeRange(wms?.outboundTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
@@ -791,6 +814,8 @@ export default function Ordenes() {
     setSearch('')
     setStatusDraft('')
     setFilterStatus('')
+    setClientDraft('')
+    setFilterClient('')
     setSurtidorDraft('')
     setFilterSurtidor('')
     setDestinationDraft('')
@@ -810,7 +835,7 @@ export default function Ordenes() {
     sessionStorage.removeItem(destinationFilterKey)
   }
 
-  const hasFilters = filterStatus || filterSurtidor || filterDestination || search || dateTo || timeFrom || timeTo || bulkSearchCodes.length > 0
+  const hasFilters = filterStatus || filterClient || filterSurtidor || filterDestination || search || dateTo || timeFrom || timeTo || bulkSearchCodes.length > 0
 
   function buildWmsRows(records) {
     return records.map(r => {
@@ -949,7 +974,7 @@ export default function Ordenes() {
 
       {/* Filter bar */}
       <div className="sticky top-[3.5rem] z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5">
-        <div className="flex items-center gap-2 flex-wrap justify-between">
+        <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
               <Clock size={13} className="text-warm-400 shrink-0" />
@@ -962,52 +987,113 @@ export default function Ordenes() {
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
             </div>
 
-            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
-              <CalendarClock size={13} className="text-warm-400 shrink-0" />
-              <input type="time" value={timeFromDraft} onChange={e => setTimeFromDraft(e.target.value)}
-                className="text-xs outline-none bg-transparent text-warm-700 w-[84px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
-              <span className="text-warm-300 text-xs">→</span>
-              <input type="time" value={timeToDraft} onChange={e => setTimeToDraft(e.target.value)}
-                className="text-xs outline-none bg-transparent text-warm-700 w-[84px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
-            </div>
+            <button
+              type="button"
+              className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all ${
+                showTimeFilters || timeFromDraft || timeToDraft
+                  ? 'border-primary-300 bg-primary-50 text-primary-700'
+                  : 'border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100'
+              }`}
+              onClick={() => setShowTimeFilters((prev) => !prev)}
+              title={t('inventario.escaneo.time_label')}
+            >
+              <CalendarClock size={14} />
+              <span>Hora</span>
+            </button>
 
-            {[
-              { label: 'Manana', from: '06:00', to: '12:00' },
-              { label: 'Tarde', from: '12:00', to: '18:00' },
-              { label: 'Noche', from: '18:00', to: '23:59' },
-            ].map((preset) => (
-              <button
-                key={preset.label}
-                className="rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-2 text-[11px] font-semibold text-warm-600 hover:bg-warm-100"
-                onClick={() => { setTimeFromDraft(preset.from); setTimeToDraft(preset.to) }}
-              >
-                {preset.label}
-              </button>
-            ))}
+            <AnimatePresence initial={false}>
+              {showTimeFilters && (
+                <motion.div
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -8 }}
+                  transition={{ duration: 0.18 }}
+                  className="flex items-center gap-2 flex-wrap"
+                >
+                  <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
+                    <input type="time" value={timeFromDraft} onChange={e => setTimeFromDraft(e.target.value)}
+                      className="text-xs outline-none bg-transparent text-warm-700 w-[84px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
+                    <span className="text-warm-300 text-xs">→</span>
+                    <input type="time" value={timeToDraft} onChange={e => setTimeToDraft(e.target.value)}
+                      className="text-xs outline-none bg-transparent text-warm-700 w-[84px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
+                  </div>
 
-            {surtidores.length > 0 && (
-              <select
-                className="h-10 pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
-                value={surtidorDraft}
-                onChange={e => setSurtidorDraft(e.target.value)}
-              >
-                <option value="">{t('surtido.ordenes.surtidor')} — {t('common.all')}</option>
-                {surtidores.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
-              </select>
+                  {[
+                    { label: 'Mañana', from: '06:00', to: '12:00' },
+                    { label: 'Tarde', from: '12:00', to: '18:00' },
+                    { label: 'Noche', from: '18:00', to: '23:59' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      className="rounded-full border border-warm-200 bg-warm-50 px-3 py-2 text-[11px] font-semibold text-warm-600 hover:bg-warm-100"
+                      onClick={() => { setTimeFromDraft(preset.from); setTimeToDraft(preset.to) }}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {bulkSearchCodes.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-[11px] font-semibold text-primary-700">
+                <ListFilter size={12} /> {bulkSearchCodes.length} {t('surtido.ordenes.bulk_codes')}
+                <button type="button" onClick={() => { setBulkSearchText(''); setBulkSearchCodes([]) }}>
+                  <X size={12} />
+                </button>
+              </span>
             )}
 
-            {destinationOptions.length > 0 && (
-              <select
-                className="h-10 min-w-[170px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              {canCreateValidation && (
+                <button
+                  className="btn-primary inline-flex items-center gap-2 text-sm py-2 px-4 h-10"
+                  onClick={() => navigate('/Surtido/validacion')}
+                >
+                  <BadgeCheck size={15} />
+                  {t('surtido.ordenes.validate_btn')}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              className="h-10 min-w-[180px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
+              value={clientDraft}
+              onChange={e => setClientDraft(e.target.value)}
+            >
+              <option value="">{t('surtido.ordenes.cliente')} — {t('common.all')}</option>
+              {customerOptions.map((customer) => <option key={customer} value={customer}>{customer}</option>)}
+            </select>
+
+            <select
+              className="h-10 min-w-[180px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
+              value={surtidorDraft}
+              onChange={e => setSurtidorDraft(e.target.value)}
+            >
+              <option value="">{t('surtido.ordenes.surtidor')} — {t('common.all')}</option>
+              {surtidores.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+            </select>
+
+            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[220px] flex-1 sm:flex-none sm:w-[260px] transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+              <MapPin size={13} className="text-warm-400 shrink-0" />
+              <input
+                list="surtido-destinos"
+                type="text"
+                className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                placeholder={t('surtido.ordenes.receiver')}
                 value={destinationDraft}
                 onChange={(e) => setDestinationDraft(e.target.value)}
-              >
-                <option value="">Destino — {t('common.all')}</option>
-                {destinationOptions.map((destination) => <option key={destination} value={destination}>{destination}</option>)}
-              </select>
-            )}
+              />
+              <datalist id="surtido-destinos">
+                {destinationSuggestions.map((destination) => (
+                  <option key={destination} value={destination} />
+                ))}
+              </datalist>
+            </div>
 
-            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[260px] flex-1 max-w-xs transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[240px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
               <Search size={13} className="text-warm-400 shrink-0" />
               <input
                 type="text"
@@ -1028,57 +1114,29 @@ export default function Ordenes() {
 
             {hasFilters && (
               <button
-                className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors"
+                className="inline-flex items-center gap-1 h-10 px-3 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors"
                 onClick={clearFilters}
               >
                 <X className="w-3 h-3" /> {t('common.clear')}
               </button>
             )}
+
             <button
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 px-3 py-2 text-xs font-semibold text-white hover:bg-primary-700"
+              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-100 px-4 text-xs font-semibold text-violet-700 hover:bg-violet-200"
               onClick={applyFilters}
             >
               <Filter size={13} /> {t('common.apply')}
             </button>
-            {bulkSearchCodes.length > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-[11px] font-semibold text-primary-700">
-                <ListFilter size={12} /> {bulkSearchCodes.length} {t('surtido.ordenes.bulk_codes')}
-                <button type="button" onClick={() => { setBulkSearchText(''); setBulkSearchCodes([]) }}>
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {canExportOrders && (
-              <button
-                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 h-10 rounded-xl bg-success-50 text-success-700 border border-success-200 hover:bg-success-100 transition-all"
-                onClick={() => tab === 'wms' ? handleExportWmsAll() : handleExportValAll()}
-                title={`${t('common.export')} ${t('common.all')}`}
-              >
-                <Download size={13} /> {t('common.export')}
-              </button>
-            )}
-            {canCreateValidation && (
-              <button
-                className="btn-primary inline-flex items-center gap-2 text-sm py-2 px-4 h-10"
-                onClick={() => navigate('/Surtido/validacion')}
-              >
-                <BadgeCheck size={15} />
-                {t('surtido.ordenes.validate_btn')}
-              </button>
-            )}
           </div>
         </div>
       </div>
 
-      <div className="sticky top-[7.1rem] z-[4] bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-6">
+      <div className="sticky top-[8.7rem] z-[4] bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-6">
         <StatusTabs selected={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(1) }} t={t} />
       </div>
 
       {/* Table */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-hidden p-4">
         {pagedRecords.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400">
             <Package2 size={40} className="opacity-30" />
@@ -1209,7 +1267,7 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
   })
 
   return (
-    <motion.div className="card overflow-hidden table-shell"
+    <motion.div className="card overflow-hidden table-shell h-full"
       initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
 
@@ -1304,9 +1362,10 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                   <td className="table-cell col-code"><CopyableObc obc={obc} /></td>
 
                   <td className="table-cell hidden xl:table-cell col-date">
-                    <span className="text-xs text-warm-600" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
-                      {r.outboundTime ? formatDateTz(r.outboundTime) : '—'}
-                    </span>
+                    <div className="leading-none" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
+                      <span className="block text-xs text-warm-700">{r.outboundTime ? formatDateTz(r.outboundTime) : '—'}</span>
+                      <span className="mt-1 block text-[10px] text-warm-400">{r.outboundTime ? fmtTimeShort(r.outboundTime) : ''}</span>
+                    </div>
                   </td>
 
                   <td className="table-cell hidden lg:table-cell col-name">
@@ -1315,13 +1374,16 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
 
                   <td className="table-cell hidden xl:table-cell col-name">
                     <span className="text-warm-600 text-xs flex items-center gap-1">
-                      <Truck size={10} className="text-warm-300" />
+                      <MapPin size={10} className="text-warm-300" />
                       <span className="block max-w-[160px] truncate" title={destino}>{destino}</span>
                     </span>
                   </td>
 
                   <td className="table-cell hidden xl:table-cell col-name">
-                    <span className="block max-w-[120px] truncate text-warm-600 text-xs" title={canal}>{canal}</span>
+                    <span className="text-warm-600 text-xs flex items-center gap-1">
+                      <Truck size={10} className="text-warm-300" />
+                      <span className="block max-w-[120px] truncate" title={canal}>{canal}</span>
+                    </span>
                   </td>
 
                   <td className="table-cell hidden 2xl:table-cell col-name">
@@ -1483,7 +1545,7 @@ function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onV
   }
 
   return (
-    <motion.div className="card overflow-hidden table-shell"
+    <motion.div className="card overflow-hidden table-shell h-full"
       initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
 
@@ -1578,9 +1640,10 @@ function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onV
 
                   <td className="table-cell col-code"><CopyableObc obc={obc} /></td>
                   <td className="table-cell hidden lg:table-cell col-date">
-                    <span className="text-xs text-warm-600" title={wms?.outboundTime ? formatDateTimeTz(wms.outboundTime) : '—'}>
-                      {wms?.outboundTime ? formatDateTz(wms.outboundTime) : '—'}
-                    </span>
+                    <div className="leading-none" title={wms?.outboundTime ? formatDateTimeTz(wms.outboundTime) : '—'}>
+                      <span className="block text-xs text-warm-700">{wms?.outboundTime ? formatDateTz(wms.outboundTime) : '—'}</span>
+                      <span className="mt-1 block text-[10px] text-warm-400">{wms?.outboundTime ? fmtTimeShort(wms.outboundTime) : ''}</span>
+                    </div>
                   </td>
                   <td className="table-cell hidden lg:table-cell col-name">
                     <span className="block truncate font-mono text-xs font-semibold text-primary-700" title={wms?.customerCode || wms?.customerName || '—'}>
