@@ -364,120 +364,6 @@ function UbicacionCreateConfirmModal({ isOpen, onClose, onConfirm, code, isCreat
   )
 }
 
-function UbicacionInlineSection({ ubicaciones, onUbicacionConfirmed, onCreateRequest, ubicacionValidated, onClear }) {
-  const { t } = useI18nStore()
-  const [inputValue, setInputValue] = useState('')
-  const [notFound, setNotFound] = useState(false)
-  const [notFoundCode, setNotFoundCode] = useState('')
-  const locationRef = useRef(null)
-
-  useEffect(() => {
-    if (!ubicacionValidated) {
-      setTimeout(() => locationRef.current?.focus(), 80)
-    }
-  }, [ubicacionValidated])
-
-  function handleConfirm() {
-    const val = inputValue.trim()
-    if (!val) return
-    const norm = val.toLowerCase()
-    const found = (ubicaciones ?? []).find(u =>
-      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
-    )
-    if (found) {
-      onUbicacionConfirmed({ id: found.id, codigo: found.codigo, nombre: found.nombre })
-      setInputValue('')
-    } else {
-      setNotFoundCode(val)
-      setNotFound(true)
-    }
-  }
-
-  const suggestions = (inputValue.trim() && !notFound)
-    ? (ubicaciones ?? []).filter(u =>
-        (u.codigo || '').toLowerCase().includes(inputValue.toLowerCase()) ||
-        (u.nombre || '').toLowerCase().includes(inputValue.toLowerCase())
-      ).slice(0, 5)
-    : []
-
-  if (ubicacionValidated) {
-    return (
-      <div className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-accent-200 bg-accent-50">
-        <MapPin className="w-4 h-4 text-accent-500 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] text-accent-500 font-semibold uppercase tracking-wide">{t('inventario.escaneo.ubicacion_scan_title')}</p>
-          <p className="font-mono font-bold text-accent-700 truncate">{ubicacionValidated.codigo}</p>
-        </div>
-        <button onClick={onClear} className="p-1.5 rounded-lg hover:bg-accent-200 text-accent-500 transition-colors" title={t('inventario.escaneo.ubicacion_edit')}>
-          <Pencil size={13} />
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className="card p-4 space-y-3 border-l-4 border-l-accent-400">
-      <div className="flex items-center gap-2">
-        <MapPin className="w-4 h-4 text-accent-500 shrink-0" />
-        <p className="text-sm font-semibold text-accent-700">{t('inventario.escaneo.ubicacion_scan_title')}</p>
-      </div>
-      <p className="text-xs text-warm-500">{t('inventario.escaneo.ubicacion_scan_label')}</p>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-300" />
-          <input
-            ref={locationRef}
-            type="text"
-            className="w-full pl-10 pr-4 py-3 text-base bg-white border-2 border-accent-200 rounded-2xl
-              focus:border-accent-500 focus:shadow-md transition-all outline-none placeholder:text-warm-300 font-mono"
-            placeholder="UB-XXX"
-            value={inputValue}
-            onChange={e => { setInputValue(e.target.value); setNotFound(false) }}
-            onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
-            autoComplete="off"
-          />
-        </div>
-        <button className="btn-primary px-4 py-3 rounded-2xl" onClick={handleConfirm} disabled={!inputValue.trim()}>
-          <CheckCircle2 size={16} />
-        </button>
-      </div>
-      {suggestions.length > 0 && (
-        <div className="space-y-1 max-h-36 overflow-y-auto">
-          {suggestions.map(u => (
-            <button key={u.id}
-              className="w-full text-left px-3 py-1.5 rounded-xl hover:bg-accent-100 transition-colors text-xs flex items-center gap-2"
-              onClick={() => { onUbicacionConfirmed({ id: u.id, codigo: u.codigo, nombre: u.nombre }); setInputValue('') }}>
-              <MapPin size={10} className="text-accent-500 shrink-0" />
-              <span className="font-mono font-semibold text-accent-700">{u.codigo}</span>
-              {u.nombre && u.nombre !== u.codigo && <span className="text-warm-500 truncate">{u.nombre}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-      {notFound && (
-        <motion.div className="rounded-2xl border border-warning-200 bg-warning-50 p-4 space-y-3"
-          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-warning-500 shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-warning-700">{t('inventario.escaneo.ubicacion_not_found_title')}</p>
-              <p className="text-xs text-warning-600 mt-0.5">
-                <strong className="font-mono">{notFoundCode}</strong> — {t('inventario.escaneo.ubicacion_not_found_body')}
-              </p>
-            </div>
-          </div>
-          <button className="w-full btn-primary text-sm inline-flex items-center justify-center gap-2"
-            onClick={() => onCreateRequest(notFoundCode)}>
-            <Plus size={14} /> {t('inventario.escaneo.ubicacion_create_btn')}
-          </button>
-        </motion.div>
-      )}
-    </motion.div>
-  )
-}
 
 function GroupDetailModal({
   isOpen,
@@ -692,31 +578,82 @@ function ClasificacionPanel({
   items,
   onRemove,
   onMove,
-  onToggleMarked,
   onOpenDetail,
-  ubicacionValidated,
-  onConfirm,
+  ubicaciones,
+  groupUbicacion,
+  onGroupUbicacionChange,
+  onCreateRequest,
   onSend,
 }) {
   const { t } = useI18nStore()
+  const [activeInputGroup, setActiveInputGroup] = useState(null)
+  const [inputValue, setInputValue] = useState('')
+  const [notFound, setNotFound] = useState(false)
+  const [notFoundCode, setNotFoundCode] = useState('')
+  const inputRef = useRef(null)
+
+  useEffect(() => {
+    if (activeInputGroup) setTimeout(() => inputRef.current?.focus(), 50)
+  }, [activeInputGroup])
+
   const grouped = { ok: [], blocked: [], nowms: [] }
   items.forEach((item, idx) => {
     const group = getItemGroup(item)
     if (grouped[group]) grouped[group].push({ ...item, _idx: idx })
     else grouped.nowms.push({ ...item, _idx: idx })
   })
+
+  function openInput(g) {
+    setActiveInputGroup(g)
+    setInputValue('')
+    setNotFound(false)
+    setNotFoundCode('')
+  }
+
+  function closeInput() {
+    setActiveInputGroup(null)
+    setInputValue('')
+    setNotFound(false)
+    setNotFoundCode('')
+  }
+
+  function confirmInput(g) {
+    const val = inputValue.trim()
+    if (!val) return
+    const norm = val.toLowerCase()
+    const found = (ubicaciones ?? []).find(u =>
+      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
+    )
+    if (found) {
+      onGroupUbicacionChange(g, { id: found.id, codigo: found.codigo, nombre: found.nombre })
+      closeInput()
+    } else {
+      setNotFoundCode(val)
+      setNotFound(true)
+    }
+  }
+
+  const suggestions = (activeInputGroup && inputValue.trim() && !notFound)
+    ? (ubicaciones ?? []).filter(u =>
+        (u.codigo || '').toLowerCase().includes(inputValue.toLowerCase()) ||
+        (u.nombre || '').toLowerCase().includes(inputValue.toLowerCase())
+      ).slice(0, 4)
+    : []
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 xl:gap-5">
       {GROUPS.map(g => {
         const meta = STATUS_META[g]
         const groupItems = grouped[g]
         const hasItems = groupItems.length > 0
+        const ub = groupUbicacion[g]
+        const isInputActive = activeInputGroup === g
         return (
           <div
             key={g}
             className={`card overflow-hidden border-t-4 flex flex-col min-h-[22rem] sm:min-h-[24rem] lg:min-h-[26rem] xl:min-h-0 xl:h-[clamp(24rem,52vh,32rem)] ${meta.border.replace('border-l-', 'border-t-')}`}
           >
-            <div className={`flex items-center gap-2 px-4 py-2.5 ${meta.bg} border-b border-current/10`}>
+            <div className={`flex items-center gap-2 px-4 py-2.5 ${meta.bg} border-b border-current/10 shrink-0`}>
               <meta.icon size={14} />
               <span className="font-semibold text-sm">{t(meta.labelKey)}</span>
               <span className="inline-flex items-center justify-center min-w-[2.2rem] px-2.5 py-1 rounded-full bg-current/10 border border-current/10 text-xs font-bold">
@@ -760,29 +697,104 @@ function ClasificacionPanel({
                 ))
               )}
             </div>
-            {/* Footer: marked count + per-tarima action button */}
-            <div className="shrink-0 px-3 py-2 border-t border-warm-100 bg-warm-50/40 flex items-center gap-2">
-              <span className="text-[11px] text-warm-500 truncate">
-                {t('inventario.escaneo.marked_count')}: <span className="font-semibold text-warm-700">{groupItems.filter(i => i.marked).length}</span>
-              </span>
-              {ubicacionValidated ? (
-                <button
-                  type="button"
-                  disabled={!hasItems}
-                  onClick={onSend}
-                  className="ml-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Square size={11} /> {t('inventario.escaneo.clasificacion_send')}
-                </button>
+            {/* Footer: inline ubicación input or action button — no marked count */}
+            <div className="shrink-0 border-t border-warm-100 bg-warm-50/40">
+              {isInputActive ? (
+                <div className="px-2 py-2 space-y-1">
+                  <div className="flex items-center gap-1">
+                    <div className="relative flex-1">
+                      <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-warm-300" />
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        className="w-full pl-6 pr-2 py-1.5 text-[11px] bg-white border border-accent-200 rounded-lg
+                          focus:border-accent-500 focus:ring-1 focus:ring-accent-200
+                          outline-none placeholder:text-warm-300 font-mono"
+                        placeholder="UB-XXX"
+                        value={inputValue}
+                        onChange={e => { setInputValue(e.target.value); setNotFound(false) }}
+                        onKeyDown={e => { if (e.key === 'Enter') confirmInput(g) }}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <button
+                      onClick={() => confirmInput(g)}
+                      disabled={!inputValue.trim()}
+                      className="p-1.5 rounded-lg bg-accent-500 text-white hover:bg-accent-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+                    >
+                      <CheckCircle2 size={12} />
+                    </button>
+                    <button
+                      onClick={closeInput}
+                      className="p-1.5 rounded-lg bg-warm-200 text-warm-600 hover:bg-warm-300 transition-colors shrink-0"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  {suggestions.length > 0 && (
+                    <div className="space-y-0.5 max-h-[4.5rem] overflow-y-auto">
+                      {suggestions.map(u => (
+                        <button key={u.id}
+                          className="w-full text-left px-2 py-0.5 rounded hover:bg-accent-50 transition-colors text-[10px] flex items-center gap-1"
+                          onClick={() => {
+                            onGroupUbicacionChange(g, { id: u.id, codigo: u.codigo, nombre: u.nombre })
+                            closeInput()
+                          }}>
+                          <MapPin size={8} className="text-accent-400 shrink-0" />
+                          <span className="font-mono font-semibold text-accent-700">{u.codigo}</span>
+                          {u.nombre && u.nombre !== u.codigo && (
+                            <span className="text-warm-400 truncate">{u.nombre}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {notFound && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-warning-50 border border-warning-200">
+                      <AlertTriangle size={10} className="text-warning-500 shrink-0" />
+                      <span className="text-[10px] text-warning-700 flex-1 truncate font-mono">{notFoundCode}</span>
+                      <button
+                        className="text-[10px] text-primary-600 hover:underline font-semibold shrink-0 whitespace-nowrap"
+                        onClick={() => onCreateRequest(notFoundCode, g)}
+                      >
+                        + {t('inventario.escaneo.ubicacion_create_btn')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : ub ? (
+                <div className="px-2 py-2 flex items-center gap-2">
+                  <div className="flex items-center gap-1 flex-1 min-w-0 px-2 py-1 rounded-lg bg-accent-50 border border-accent-100">
+                    <MapPin size={9} className="text-accent-500 shrink-0" />
+                    <span className="font-mono text-[11px] font-semibold text-accent-700 truncate">{ub.codigo}</span>
+                    <button
+                      onClick={() => onGroupUbicacionChange(g, null)}
+                      className="ml-auto p-0.5 rounded hover:bg-accent-200 text-accent-400 transition-colors shrink-0"
+                      title={t('inventario.escaneo.ubicacion_edit')}
+                    >
+                      <Pencil size={9} />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!hasItems}
+                    onClick={() => onSend(g, ub)}
+                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary-600 text-white text-[11px] font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Square size={10} /> {t('inventario.escaneo.clasificacion_send')}
+                  </button>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  disabled={!hasItems}
-                  onClick={onConfirm}
-                  className="ml-auto shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-50 text-primary-700 text-xs font-semibold hover:bg-primary-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <CheckCircle2 size={11} /> {t('inventario.escaneo.clasificacion_confirm')}
-                </button>
+                <div className="px-2 py-2 flex items-center justify-end">
+                  <button
+                    type="button"
+                    disabled={!hasItems}
+                    onClick={() => openInput(g)}
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-50 text-primary-700 text-xs font-semibold hover:bg-primary-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <CheckCircle2 size={11} /> {t('inventario.escaneo.clasificacion_confirm')}
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -911,11 +923,11 @@ export default function Escaneo() {
   const [showTypeModal, setShowTypeModal] = useState(false)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
   const [showUbicacionModal, setShowUbicacionModal] = useState(false)
-  const [showUbicacionSection, setShowUbicacionSection] = useState(false)
   const [ubicacionValidated, setUbicacionValidated] = useState(null)
   const [ubicacionToCreate, setUbicacionToCreate] = useState('')
   const [showCreateConfirm, setShowCreateConfirm] = useState(false)
-  const isInlineUbicacionFlow = useRef(false)
+  const [groupUbicacion, setGroupUbicacion] = useState({ ok: null, blocked: null, nowms: null })
+  const [pendingInlineGroup, setPendingInlineGroup] = useState(null)
   const [duplicatePending, setDuplicatePending] = useState(null)
   const [moveTarget, setMoveTarget] = useState(null)
   const [lastScan, setLastScan] = useState(null)
@@ -949,9 +961,10 @@ export default function Escaneo() {
   }, [activeTabId, pendingCode1])
 
   useEffect(() => {
-    setShowUbicacionSection(false)
     setUbicacionValidated(null)
     setUbicacionId(null)
+    setGroupUbicacion({ ok: null, blocked: null, nowms: null })
+    setPendingInlineGroup(null)
   }, [activeTabId])
 
   const saveSessionMut = useMutation({
@@ -985,14 +998,17 @@ export default function Escaneo() {
     mutationFn: ({ codigo }) => createUbicacion({ codigo, nombre: codigo }),
     onSuccess: (data) => {
       const u = data.ubicacion
-      setUbicacionValidated({ id: u.id, codigo: u.codigo, nombre: u.nombre })
-      setUbicacionId(u.id)
+      const newUbicacion = { id: u.id, codigo: u.codigo, nombre: u.nombre }
       qc.invalidateQueries({ queryKey: ['upapex-ubicaciones'] })
       setShowCreateConfirm(false)
-      if (!isInlineUbicacionFlow.current) {
+      if (pendingInlineGroup) {
+        setGroupUbicacion(prev => ({ ...prev, [pendingInlineGroup]: newUbicacion }))
+        setPendingInlineGroup(null)
+      } else {
+        setUbicacionValidated(newUbicacion)
+        setUbicacionId(u.id)
         setShowSummaryModal(true)
       }
-      isInlineUbicacionFlow.current = false
     },
     onError: () => toast.error(t('toast.error')),
   })
@@ -1017,21 +1033,22 @@ export default function Escaneo() {
     setShowSummaryModal(true)
   }
 
-  function handleInlineUbicacionConfirmed(ubicacion) {
-    setUbicacionValidated(ubicacion)
-    setUbicacionId(ubicacion.id)
-  }
-
   function handleCreateRequest(code) {
     setUbicacionToCreate(code)
     setShowUbicacionModal(false)
     setShowCreateConfirm(true)
   }
 
-  function handleInlineCreateRequest(code) {
-    isInlineUbicacionFlow.current = true
+  function handleClasificacionCreateRequest(code, group) {
+    setPendingInlineGroup(group)
     setUbicacionToCreate(code)
     setShowCreateConfirm(true)
+  }
+
+  function handleClasificacionSend(group, ubicacion) {
+    setUbicacionValidated(ubicacion)
+    setUbicacionId(ubicacion?.id ?? null)
+    setShowSummaryModal(true)
   }
 
   function handleAddTab() { setShowTypeModal(true) }
@@ -1420,28 +1437,17 @@ export default function Escaneo() {
 
               {/* Items panel */}
               {activeTab.scanType === 'clasificacion' ? (
-                <div className="space-y-4">
-                  <ClasificacionPanel
-                    items={activeTab.items}
-                    onRemove={idx => removeItem(activeTabId, idx)}
-                    onMove={idx => setMoveTarget(idx)}
-                    onToggleMarked={idx => toggleItemMarked(activeTabId, idx)}
-                    onOpenDetail={setGroupDetail}
-                    ubicacionValidated={ubicacionValidated}
-                    onConfirm={() => setShowUbicacionSection(true)}
-                    onSend={() => setShowSummaryModal(true)}
-                  />
-                  {/* Inline ubicación section — appears after any Confirmar is clicked */}
-                  {showUbicacionSection && (
-                    <UbicacionInlineSection
-                      ubicaciones={ubicacionesData?.data ?? []}
-                      onUbicacionConfirmed={handleInlineUbicacionConfirmed}
-                      onCreateRequest={handleInlineCreateRequest}
-                      ubicacionValidated={ubicacionValidated}
-                      onClear={() => { setUbicacionValidated(null); setUbicacionId(null) }}
-                    />
-                  )}
-                </div>
+                <ClasificacionPanel
+                  items={activeTab.items}
+                  onRemove={idx => removeItem(activeTabId, idx)}
+                  onMove={idx => setMoveTarget(idx)}
+                  onOpenDetail={setGroupDetail}
+                  ubicaciones={ubicacionesData?.data ?? []}
+                  groupUbicacion={groupUbicacion}
+                  onGroupUbicacionChange={(g, ub) => setGroupUbicacion(prev => ({ ...prev, [g]: ub }))}
+                  onCreateRequest={handleClasificacionCreateRequest}
+                  onSend={handleClasificacionSend}
+                />
               ) : (
                 <UnificadoPanel
                   items={activeTab.items}
@@ -1471,7 +1477,10 @@ export default function Escaneo() {
       />
       <UbicacionCreateConfirmModal
         isOpen={showCreateConfirm}
-        onClose={() => { setShowCreateConfirm(false); setShowUbicacionModal(true) }}
+        onClose={() => {
+          setShowCreateConfirm(false)
+          if (pendingInlineGroup) { setPendingInlineGroup(null) } else { setShowUbicacionModal(true) }
+        }}
         onConfirm={() => createUbicacionMut.mutate({ codigo: ubicacionToCreate })}
         code={ubicacionToCreate}
         isCreating={createUbicacionMut.isPending}
