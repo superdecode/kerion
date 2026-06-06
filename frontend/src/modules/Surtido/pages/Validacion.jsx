@@ -969,6 +969,31 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     }
   }, [step, ubicacionConfirmed, isActive])
 
+  const createSessionMut = useMutation({
+    mutationFn: () => {
+      const packageList = (detailData?.data ?? detailData)?.packageList ?? (detailData?.data ?? detailData)?.details ?? (detailData?.data ?? detailData)?.items ?? []
+      return createScanSession({
+        outbound_order_no: obc,
+        third_order_no: (detailData?.data ?? detailData)?.thirdOrderNo || null,
+        total_expected: packageList.reduce((s, p) => s + (p.quantity ?? p.totalPackageQty ?? p.qty ?? 1), 0),
+        ubicacion_id: null,
+      })
+    },
+    onSuccess: (data) => {
+      const sid = data.data.id; const now = new Date()
+      setSessionId(sid); setSessionStart(now); setStep('session')
+      setSelectedUbicacion(null); setUbicacionConfirmed(false)
+      autoFinalizeLockRef.current = false
+      persistSession(obc, sid, now, null)
+      upsertOrderTracking(obc, { status: 'validating' }).catch(() => {})
+      onUpdateTab({ obc, step: 'session' })
+    },
+    onError: () => {
+      autoFinalizeLockRef.current = false
+      toast.error(t('toast.error'))
+    },
+  })
+
   useEffect(() => {
     if (!autoStartPending || step !== 'session' || detailLoading || !detailData || sessionId || createSessionMut.isPending) return
     const validation = validateOrderBoxData(detailData)
@@ -1051,31 +1076,6 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   }
 
   useEffect(() => () => window.clearTimeout(copyTimeoutRef.current), [])
-
-  const createSessionMut = useMutation({
-    mutationFn: () => {
-      const packageList = (detailData?.data ?? detailData)?.packageList ?? (detailData?.data ?? detailData)?.details ?? (detailData?.data ?? detailData)?.items ?? []
-      return createScanSession({
-        outbound_order_no: obc,
-        third_order_no: (detailData?.data ?? detailData)?.thirdOrderNo || null,
-        total_expected: packageList.reduce((s, p) => s + (p.quantity ?? p.totalPackageQty ?? p.qty ?? 1), 0),
-        ubicacion_id: null,
-      })
-    },
-    onSuccess: (data) => {
-      const sid = data.data.id; const now = new Date()
-      setSessionId(sid); setSessionStart(now); setStep('session')
-      setSelectedUbicacion(null); setUbicacionConfirmed(false)
-      autoFinalizeLockRef.current = false
-      persistSession(obc, sid, now, null)
-      upsertOrderTracking(obc, { status: 'validating' }).catch(() => {})
-      onUpdateTab({ obc, step: 'session' })
-    },
-    onError: () => {
-      autoFinalizeLockRef.current = false
-      toast.error(t('toast.error'))
-    },
-  })
 
   const updateUbicacionMut = useMutation({
     mutationFn: (ubicacion) => updateScanSession(sessionId, { ubicacion_id: ubicacion?.id || null }),
