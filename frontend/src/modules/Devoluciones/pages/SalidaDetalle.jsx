@@ -159,7 +159,7 @@ function HojaSurtidoContent({ salida, groupedItems, printExtraCols, totalPiezas,
       {/* Footer */}
       <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div style={{ fontSize: '8px', color: '#9ca3af' }}>
-          Generado: {new Date().toLocaleString('es-MX')}
+          Generado: {fmtDateTime(new Date())}
         </div>
         <div style={{ textAlign: 'center' }}>
           <div style={{ width: '180px', borderTop: '1px solid #374151', paddingTop: '4px' }}>

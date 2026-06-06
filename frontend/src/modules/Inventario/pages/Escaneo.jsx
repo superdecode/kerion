@@ -18,11 +18,13 @@ import { useInventarioStore } from '../stores/inventarioStore'
 import { useAutoSync } from '../hooks/useAutoSync'
 import { useBoxStock } from '../hooks/useBoxStock'
 import { findCodeInInventory } from '../../Shared/Wms/findCodeInInventory'
+import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 import { classifyItem, resolveSwap } from '../utils/classify'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
-import { saveInventorySession } from '../services/inventarioService'
+import { checkInventoryDuplicates, saveInventorySession } from '../services/inventarioService'
 import { getConfig, getUbicaciones, createUbicacion } from '../../WmsHub/services/wmsHubService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
+import { fmtDateTime } from '../../../core/utils/dateFormat'
 
 const STATUS_META = {
   ok:      { labelKey: 'inventario.escaneo.group_disponible', bg: 'bg-success-100 text-success-700',  icon: CheckCircle2, border: 'border-l-success-400', dot: 'bg-success-400', flash: 'bg-success-50/80 border-success-200' },
@@ -61,6 +63,29 @@ const fmtElapsed = (secs) => {
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
 }
 
+const buildCodeVariantSet = (...codes) => {
+  const variants = new Set()
+  codes.filter(Boolean).forEach((code) => {
+    generateCodeVariations(code).forEach((variant) => variants.add(variant))
+  })
+  return variants
+}
+
+const itemMatchesDuplicateSet = (item, variantSet) => {
+  const itemCodes = [item?.code, item?.code2].filter(Boolean)
+  return itemCodes.some((code) => generateCodeVariations(code).some((variant) => variantSet.has(variant)))
+}
+
+const formatConflictDate = (value, locale = 'es') => {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+  return date.toLocaleString(locale === 'zh' ? 'zh-CN' : 'es-MX', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  })
+}
+
 /* ─── Modals ─────────────────────────────────────────────── */
 
 function SessionTypeModal({ isOpen, onStart, onClose }) {
@@ -95,8 +120,11 @@ function SessionTypeModal({ isOpen, onStart, onClose }) {
   )
 }
 
-function DuplicateModal({ isOpen, code, onConfirm, onDiscard }) {
-  const { t } = useI18nStore()
+function DuplicateModal({ isOpen, code, conflicts = [], onConfirm, onDiscard }) {
+  const { t, locale } = useI18nStore()
+  const sessionConflicts = conflicts.filter((item) => item.source === 'session')
+  const dbConflicts = conflicts.filter((item) => item.source === 'database')
+
   return (
     <Modal isOpen={isOpen} onClose={onDiscard} title={t('inventario.escaneo.duplicate_title')} icon={AlertCircle}
       footer={
@@ -106,10 +134,54 @@ function DuplicateModal({ isOpen, code, onConfirm, onDiscard }) {
         </div>
       }
     >
-      <p className="text-sm text-warm-700">
-        <code className="font-mono bg-warm-100 px-2 py-0.5 rounded">{code}</code>
-        <span className="mt-1 block">{t('inventario.escaneo.duplicate_body')}</span>
-      </p>
+      <div className="space-y-4">
+        <p className="text-sm text-warm-700">
+          <code className="font-mono bg-warm-100 px-2 py-0.5 rounded">{code}</code>
+          <span className="mt-1 block">{t('inventario.escaneo.duplicate_body')}</span>
+        </p>
+
+        {sessionConflicts.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-warning-700">
+              {t('inventario.escaneo.duplicate_session_matches')}
+            </p>
+            {sessionConflicts.map((conflict) => (
+              <div key={conflict.id} className="rounded-xl border border-warning-200 bg-warning-50/70 px-3 py-2.5 text-sm text-warning-900">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono font-semibold">{conflict.primary_code || '—'}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-warning-700">{t('inventario.escaneo.duplicate_source_session')}</span>
+                </div>
+                <div className="mt-1 grid grid-cols-1 gap-1 text-xs text-warning-800 sm:grid-cols-2">
+                  <span>{t('inventario.escaneo.duplicate_label_code2')}: <strong className="font-mono">{conflict.code2 || '—'}</strong></span>
+                  <span>{t('inventario.escaneo.duplicate_label_time')}: <strong>{formatConflictDate(conflict.scanned_at, locale)}</strong></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {dbConflicts.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-danger-700">
+              {t('inventario.escaneo.duplicate_db_matches')}
+            </p>
+            {dbConflicts.map((conflict) => (
+              <div key={conflict.id} className="rounded-xl border border-danger-200 bg-danger-50/70 px-3 py-2.5 text-sm text-danger-900">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono font-semibold">{conflict.normalized_code || '—'}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-danger-700">{t('inventario.escaneo.duplicate_source_db')}</span>
+                </div>
+                <div className="mt-1 grid grid-cols-1 gap-1 text-xs text-danger-800 sm:grid-cols-2">
+                  <span>{t('inventario.escaneo.duplicate_label_code2')}: <strong className="font-mono">{conflict.code2 || '—'}</strong></span>
+                  <span>{t('inventario.escaneo.duplicate_label_user')}: <strong>{conflict.operator_nombre || '—'}</strong></span>
+                  <span>{t('inventario.escaneo.duplicate_label_time')}: <strong>{formatConflictDate(conflict.scanned_at, locale)}</strong></span>
+                  <span>{t('inventario.escaneo.duplicate_label_tarima')}: <strong>{conflict.tarima_code || conflict.group_assignment || '—'}</strong></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </Modal>
   )
 }
@@ -480,7 +552,7 @@ function GroupDetailModal({
                     {index + 1}
                   </div>
                   <div className="text-[11px] text-warm-500 whitespace-nowrap">
-                    {item.ts ? new Date(item.ts).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                    {item.ts ? fmtDateTime(item.ts) : '—'}
                   </div>
                   <div className="font-mono text-xs font-normal text-warm-700 truncate">{item.code}</div>
                   <div className="font-mono text-xs text-warm-500 truncate">{item.code2 || '—'}</div>
@@ -542,7 +614,7 @@ function UnificadoPanel({ items, onRemove, onMove }) {
                 <tr key={idx} className={`border-l-4 ${meta.border} table-row`}>
                   <td className="table-cell text-warm-400 text-xs">{idx + 1}</td>
                   <td className="table-cell text-warm-500 text-xs whitespace-nowrap">
-                    {item.ts ? new Date(item.ts).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                    {item.ts ? fmtDateTime(item.ts) : '—'}
                   </td>
                   <td className="table-cell font-mono text-xs text-warm-700">{item.code}</td>
                   <td className="table-cell font-mono text-xs text-warm-500">{item.code2 || '—'}</td>
@@ -682,7 +754,7 @@ function ClasificacionPanel({
                         {item.code}{item.code2 ? ` / ${item.code2}` : ''}
                       </p>
                       <p className="text-[10px] text-warm-400 mt-0.5 truncate">
-                        {item.ts ? new Date(item.ts).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                        {item.ts ? fmtDateTime(item.ts) : '—'}
                         {' / '}
                         {item.location || '—'}
                       </p>
@@ -865,7 +937,7 @@ function SidePanel({ items }) {
                   </p>
                 )}
                 <p className="text-[10px] text-warm-400 truncate mt-0.5">
-                  {item.ts ? new Date(item.ts).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                  {item.ts ? fmtDateTime(item.ts) : '—'}
                   {' / '}
                   {item.location || '—'}
                 </p>
@@ -936,6 +1008,46 @@ export default function Escaneo() {
   const [showPanel, setShowPanel] = useState(false)
   const [closeTabPending, setCloseTabPending] = useState(null) // { tabId, count }
   const [groupDetail, setGroupDetail] = useState(null)
+
+  const buildSessionDuplicateConflicts = useCallback((codes) => {
+    if (!activeTab) return []
+    const variantSet = buildCodeVariantSet(...codes)
+    return activeTab.items
+      .map((item, index) => {
+        if (!itemMatchesDuplicateSet(item, variantSet)) return null
+        return {
+          id: `session-${index}-${item.code}-${item.code2 || 'none'}`,
+          source: 'session',
+          primary_code: item.code,
+          code2: item.code2 || null,
+          scanned_at: item.ts ? new Date(item.ts).toISOString() : null,
+        }
+      })
+      .filter(Boolean)
+  }, [activeTab])
+
+  const confirmPotentialDuplicate = useCallback(async ({ codes, displayCode, onAccept }) => {
+    const sessionConflicts = buildSessionDuplicateConflicts(codes)
+    let dbConflicts = []
+
+    try {
+      const response = await checkInventoryDuplicates({ codes: [...buildCodeVariantSet(...codes)] })
+      dbConflicts = response?.data?.matches || []
+    } catch {
+      toast.error(t('toast.error'))
+      return
+    }
+
+    const conflicts = [...sessionConflicts, ...dbConflicts]
+    if (conflicts.length === 0) {
+      onAccept()
+      return
+    }
+
+    playSound('warning')
+    setLastScan({ status: 'duplicate', code: displayCode })
+    setDuplicatePending({ code: displayCode, conflicts, onConfirm: onAccept })
+  }, [buildSessionDuplicateConflicts, t, toast])
 
   const { data: configData } = useQuery({
     queryKey: ['upapex-config'], queryFn: getConfig, staleTime: 60000,
@@ -1097,45 +1209,48 @@ export default function Escaneo() {
     setLastScan({ status: newItem.status, code: newItem.code })
   }, [addScanItem])
 
-  function processScan(rawCode) {
+  async function processScan(rawCode) {
     if (!rawCode.trim()) return
     if (!activeTab) { toast.warning(t('inventario.escaneo.no_tab')); return }
     const inv = inventorySnapshot instanceof Map ? inventorySnapshot : new Map()
     const { code, item } = findCodeInInventory(rawCode, inv)
-    if (!item) {
-      setPendingCode1({ raw: rawCode, code })
-      playSound('error')
-      toast.warning(t('inventario.escaneo.enter_code2'))
-      setLastScan({ status: 'nowms', code })
-      return
-    }
-    const isDup = activeTab.items.some(i => i.code === code)
-    if (isDup) {
+    const acceptScan = () => {
+      if (!item) {
+        setPendingCode1({ raw: rawCode, code })
+        playSound('error')
+        toast.warning(t('inventario.escaneo.enter_code2'))
+        setLastScan({ status: 'nowms', code })
+        return
+      }
       const { status, label } = classifyItem(item)
-      const newItem = { raw: rawCode, code, code2: null, wasSwapped: false, status, label,
-        sku: item.sku || '-', product: item.productName || '-', location: item.cellNo || '-', groupAssignment: 'auto' }
-      setDuplicatePending({ raw: rawCode, code, newItem })
-      playSound('warning')
-      setLastScan({ status: 'duplicate', code })
+      doAddItem({ raw: rawCode, code, code2: null, wasSwapped: false, status, label,
+        sku: item.sku || '-', product: item.productName || '-', location: item.cellNo || '-', groupAssignment: 'auto' })
+    }
+
+    if (!item) {
+      await confirmPotentialDuplicate({ codes: [code], displayCode: code, onAccept: acceptScan })
       return
     }
-    clearPendingCode1()
-    const { status, label } = classifyItem(item)
-    doAddItem({ raw: rawCode, code, code2: null, wasSwapped: false, status, label,
-      sku: item.sku || '-', product: item.productName || '-', location: item.cellNo || '-', groupAssignment: 'auto' })
+    await confirmPotentialDuplicate({ codes: [code], displayCode: code, onAccept: acceptScan })
   }
 
-  function processCode2(rawCode2) {
+  async function processCode2(rawCode2) {
     if (!rawCode2.trim() || !pendingCode1) return
-    clearPendingCode1()
     const inv = inventorySnapshot instanceof Map ? inventorySnapshot : new Map()
     const code2Result = findCodeInInventory(rawCode2, inv)
     if (pendingCode1.code === code2Result.code) {
       toast.warning(t('inventario.escaneo.same_codes')); playSound('warning'); return
     }
     const newItem = { ...resolveSwap(pendingCode1, code2Result, rawCode2), groupAssignment: 'auto' }
-    doAddItem(newItem)
-    setTimeout(() => scanRef.current?.focus(), 80)
+    await confirmPotentialDuplicate({
+      codes: [pendingCode1.code, code2Result.code],
+      displayCode: `${newItem.code}${newItem.code2 ? ` / ${newItem.code2}` : ''}`,
+      onAccept: () => {
+        clearPendingCode1()
+        doAddItem(newItem)
+        setTimeout(() => scanRef.current?.focus(), 80)
+      },
+    })
   }
 
   /* ─── NO SESSION: empty state ─────────────────────────── */
@@ -1236,7 +1351,7 @@ export default function Escaneo() {
                 className="px-3 py-2 rounded-xl text-warning-600 bg-warning-50 hover:bg-warning-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
               >
                 <Ban size={14} />
-                <span className="hidden sm:inline">{t('inventario.escaneo.cancel_session')}</span>
+                <span className="hidden sm:inline">{t('common.cancel')}</span>
               </button>
             )}
             {/* Finalizar session */}
@@ -1245,7 +1360,7 @@ export default function Escaneo() {
                 className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
                 onClick={handleFinalize}
                 disabled={activeTab.items.length === 0}>
-                <Square className="w-4 h-4" /> {t('inventario.escaneo.end_session')}
+                <Square className="w-4 h-4" /> {t('common.finalize')}
               </button>
             )}
           </div>
@@ -1492,9 +1607,9 @@ export default function Escaneo() {
         ubicacionValidated={ubicacionValidated}
         onChangeUbicacion={() => { setShowSummaryModal(false); setShowUbicacionModal(true) }}
       />
-      <DuplicateModal isOpen={!!duplicatePending} code={duplicatePending?.code}
+      <DuplicateModal isOpen={!!duplicatePending} code={duplicatePending?.code} conflicts={duplicatePending?.conflicts || []}
         onConfirm={() => {
-          if (duplicatePending?.newItem) doAddItem(duplicatePending.newItem)
+          duplicatePending?.onConfirm?.()
           setDuplicatePending(null)
           setTimeout(() => scanRef.current?.focus(), 80)
         }}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, TrendingUp, MousePointerClick, FileText, Users, BarChart3, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import adminApi from '../services/adminApi'
+import { fmtDateTimeMini, fmtDateStringShort } from '../../../core/utils/dateFormat'
 
 const EVENT_LABELS = {
   page_visit:    'Visita',
@@ -125,7 +126,7 @@ export default function AdminAnalytics() {
                     return (
                       <div key={d.date} className="flex items-center gap-3">
                         <span className="text-gray-500 text-xs w-24 flex-shrink-0">
-                          {new Date(d.date).toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })}
+                          {fmtDateStringShort(d.date)}
                         </span>
                         <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
                           <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
@@ -183,7 +184,7 @@ export default function AdminAnalytics() {
                           </td>
                           <td className="py-2.5">
                             <span className="text-gray-500 text-xs">
-                              {new Date(e.created_at).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              {fmtDateTimeMini(e.created_at)}
                             </span>
                           </td>
                         </tr>

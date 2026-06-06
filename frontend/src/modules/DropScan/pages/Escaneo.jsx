@@ -1987,7 +1987,7 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose
                 <p>{prevReq?.plan || planName}</p>
                 {prevReq?.sentAt && (
                   <p className="text-warm-400">
-                    {new Date(prevReq.sentAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                    {fmtTimeShort(prevReq.sentAt)}
                   </p>
                 )}
               </div>

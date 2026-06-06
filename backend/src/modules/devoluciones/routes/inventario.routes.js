@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { generateDevCodigo, generateImportDocumento, generateImportTrazabilidad } from '../utils/codigos.js'
+import { instantDateInTZ } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
 
@@ -156,6 +157,7 @@ router.get('/historial',
   async (req, res) => {
     try {
       const { tipo = '', fecha_inicio = '', fecha_fin = '', fecha_desde = '', fecha_hasta = '' } = req.query
+      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       const params = [req.tenantId]
       const where = ['m.tenant_id = $1']
       if (tipo) {
@@ -172,11 +174,11 @@ router.get('/historial',
       const fechaFin = fecha_fin || fecha_hasta
       if (fechaIni) {
         params.push(fechaIni)
-        where.push(`DATE(m.created_at) >= $${params.length}`)
+        where.push(`${instantDateInTZ('m.created_at', tz)} >= $${params.length}`)
       }
       if (fechaFin) {
         params.push(fechaFin)
-        where.push(`DATE(m.created_at) <= $${params.length}`)
+        where.push(`${instantDateInTZ('m.created_at', tz)} <= $${params.length}`)
       }
       const result = await req.tQuery(
         `SELECT m.*,

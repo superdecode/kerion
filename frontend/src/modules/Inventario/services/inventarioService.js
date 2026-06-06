@@ -18,3 +18,15 @@ export const getInventorySession = (id) =>
 
 export const deleteInventorySession = (id) =>
   api.delete(`/upapex/inventory-session/${id}`).then(r => r.data)
+
+export const createInventoryScan = (body) =>
+  api.post('/upapex/inventory-scan', body).then(r => r.data)
+
+export const checkInventoryDuplicates = (body) =>
+  api.post('/upapex/inventory-duplicates/check', body).then(r => r.data)
+
+export const updateInventoryScan = (id, body) =>
+  api.put(`/upapex/inventory-scan/${id}`, body).then(r => r.data)
+
+export const deleteInventoryScan = (id) =>
+  api.delete(`/upapex/inventory-scan/${id}`).then(r => r.data)

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { query } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
+import { dateInTZ } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
 
@@ -11,6 +12,7 @@ router.get('/',
   requirePermission('inventory.historial', 'ver'),
   async (req, res) => {
     try {
+      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       const {
         page = 1,
         limit = 50,
@@ -35,11 +37,11 @@ router.get('/',
         params.push(`%${barcode}%`)
       }
       if (date_from) {
-        conditions.push(`s.created_at >= $${idx++}`)
+        conditions.push(`${dateInTZ('s.created_at', tz)} >= $${idx++}::date`)
         params.push(date_from)
       }
       if (date_to) {
-        conditions.push(`s.created_at < ($${idx++}::date + INTERVAL '1 day')`)
+        conditions.push(`${dateInTZ('s.created_at', tz)} <= $${idx++}::date`)
         params.push(date_to)
       }
       if (user_id) {
@@ -85,17 +87,18 @@ router.get('/reports',
   requirePermission('inventory.reportes', 'ver'),
   async (req, res) => {
     try {
+      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       const { date_from, date_to } = req.query
       const conditions = []
       const params = []
       let idx = 1
 
       if (date_from) {
-        conditions.push(`created_at >= $${idx++}`)
+        conditions.push(`${dateInTZ('created_at', tz)} >= $${idx++}::date`)
         params.push(date_from)
       }
       if (date_to) {
-        conditions.push(`created_at < ($${idx++}::date + INTERVAL '1 day')`)
+        conditions.push(`${dateInTZ('created_at', tz)} <= $${idx++}::date`)
         params.push(date_to)
       }
 
@@ -120,9 +123,9 @@ router.get('/reports',
           params
         ),
         query(
-          `SELECT DATE(created_at) as day, status, COUNT(*) as count
+          `SELECT ${dateInTZ('created_at', tz)} as day, status, COUNT(*) as count
            FROM inventory_scans ${where}
-           GROUP BY DATE(created_at), status
+           GROUP BY ${dateInTZ('created_at', tz)}, status
            ORDER BY day`,
           params
         ),

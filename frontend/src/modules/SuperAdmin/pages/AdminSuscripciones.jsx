@@ -4,6 +4,7 @@ import {
   CreditCard, Package, Eye, EyeOff, Save, ChevronUp, ChevronDown, Search, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
+import { fmtDate, fmtDateString, toDateKey } from '../../../core/utils/dateFormat'
 
 // ── Plans CRUD ────────────────────────────────────────────────────────────────
 
@@ -323,7 +324,7 @@ function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
   const [form, setForm] = useState({
     plan_id: sub.plan_id || '',
     subscription_type: sub.subscription_type || 'monthly',
-    expires_at: sub.expires_at ? sub.expires_at.slice(0, 10) : '',
+    expires_at: sub.expires_at ? toDateKey(sub.expires_at) : '',
     expires_at_time: extractTime(sub.expires_at),
     status: sub.status || 'active',
     price_amount: sub.subscription_price_amount ?? sub.price_amount ?? '',
@@ -738,8 +739,8 @@ function SubscriptionsTab() {
                         </td>
                         <td className="px-4 py-3 text-gray-300 text-sm">{s.plan_name}</td>
                         <td className="px-4 py-3 text-gray-400 text-xs">{getTypeLabel(s.subscription_type)}</td>
-                        <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.started_at).toLocaleDateString('es-MX')}</td>
-                        <td className="px-4 py-3 text-gray-400 text-xs">{new Date(s.expires_at).toLocaleDateString('es-MX')}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{fmtDate(s.started_at)}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{fmtDate(s.expires_at)}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusColor(s.status)}`}>
                             {s.status === 'active' ? 'Activa' : s.status === 'expired' ? 'Vencida' : 'Cancelada'}

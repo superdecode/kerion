@@ -18,7 +18,7 @@ import {
 } from 'recharts'
 import * as XLSX from 'xlsx'
 import {
-  fmtDate, fmtDateTime, fmtDateString, fmtDateStringShort, getToday, subtractDays
+  fmtDate, fmtDateTime, fmtDateString, fmtDateStringShort, getToday, subtractDays, toDateKey
 } from '../../../core/utils/dateFormat'
 
 const PIE_COLORS = ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#84cc16']
@@ -132,7 +132,7 @@ export default function Reportes() {
     const folios = foliosData?.folios || []
     const map = {}
     folios.forEach(f => {
-      const day = f.created_at ? f.created_at.slice(0, 10) : null
+      const day = f.created_at ? toDateKey(f.created_at) : null
       if (!day) return
       map[day] = (map[day] || 0) + 1
     })

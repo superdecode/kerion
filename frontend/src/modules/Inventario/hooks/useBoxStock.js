@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
+import { generateCodeVariations, normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import { useInventarioStore } from '../stores/inventarioStore'
 import { getBoxStock } from '../services/inventarioService'
 
@@ -22,7 +22,10 @@ export function useBoxStock() {
       if (!code) continue
       const isAvailable = (item.availableAmount ?? 0) > 0
       const isBlocked = (item.lockAmount ?? 0) > 0 && !isAvailable
-      map.set(code, { ...item, isAvailable, isBlocked })
+      const enrichedItem = { ...item, isAvailable, isBlocked }
+      for (const variant of generateCodeVariations(code)) {
+        map.set(variant, enrichedItem)
+      }
     }
     setSnapshot(map)
   }, [query.data, setSnapshot])

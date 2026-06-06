@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { generateDevCodigo } from '../utils/codigos.js'
+import { instantDateInTZ } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
 
@@ -60,6 +61,7 @@ router.get('/',
   async (req, res) => {
     try {
       const { estado = '', fecha_inicio = '', fecha_fin = '', fecha_desde = '', fecha_hasta = '', q = '' } = req.query
+      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       const params = [req.tenantId]
       const where = ['s.tenant_id = $1']
       if (estado) {
@@ -70,11 +72,11 @@ router.get('/',
       const fechaFin = fecha_fin || fecha_hasta
       if (fechaIni) {
         params.push(fechaIni)
-        where.push(`DATE(s.created_at) >= $${params.length}`)
+        where.push(`${instantDateInTZ('s.created_at', tz)} >= $${params.length}`)
       }
       if (fechaFin) {
         params.push(fechaFin)
-        where.push(`DATE(s.created_at) <= $${params.length}`)
+        where.push(`${instantDateInTZ('s.created_at', tz)} <= $${params.length}`)
       }
       if (q.trim()) {
         params.push(`%${q.trim()}%`)

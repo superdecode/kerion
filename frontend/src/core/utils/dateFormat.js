@@ -91,6 +91,10 @@ export const fmtDateTimeMini = (date) =>
 export const getToday = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: _tz }).format(new Date())
 
+/** Returns a date as 'YYYY-MM-DD' in the active timezone. */
+export const toDateKey = (date = new Date()) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: _tz }).format(new Date(date))
+
 /** @deprecated Use getToday() */
 export const getTodayMX = getToday
 

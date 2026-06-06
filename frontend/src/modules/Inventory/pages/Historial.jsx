@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import Header from '../../../core/components/layout/Header'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { fmtDateTime } from '../../../core/utils/dateFormat'
 import { getHistory } from '../services/inventoryService'
 import { CheckCircle, AlertTriangle, XCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from 'lucide-react'
 
@@ -155,7 +156,7 @@ export default function InvHistorial() {
                       </td>
                       <td className="px-5 py-3 text-warm-600">{scan.user_name || '—'}</td>
                       <td className="px-5 py-3 text-warm-500 text-xs whitespace-nowrap">
-                        {new Date(scan.created_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}
+                        {fmtDateTime(scan.created_at)}
                       </td>
                     </tr>
                   )

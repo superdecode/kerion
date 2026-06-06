@@ -42,7 +42,7 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
+          transition={{ duration: 0.12, ease: 'easeOut' }}
         >
           {/* Backdrop */}
           <motion.div
@@ -50,16 +50,17 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            transition={{ duration: 0.12, ease: 'easeOut' }}
           />
 
           {/* Content */}
           <motion.div
             className={`${sizes[size]} w-full bg-white rounded-2xl shadow-depth border border-warm-100 max-h-[96vh] flex flex-col relative z-10`}
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            style={{ transformOrigin: 'center center', willChange: 'transform, opacity' }}
+            initial={{ opacity: 0, scale: 0.985, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: 4 }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ opacity: 0, scale: 0.99, y: 6 }}
+            transition={{ type: 'spring', stiffness: 520, damping: 40, mass: 0.75 }}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-primary-100/60
                             bg-gradient-to-r from-primary-50/80 via-primary-100/50 to-accent-50/40 rounded-t-2xl">

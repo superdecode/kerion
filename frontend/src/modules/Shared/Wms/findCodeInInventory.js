@@ -1,4 +1,4 @@
-import { normalizeCode } from './normalizeCode'
+import { normalizeCode, generateCodeVariations } from './normalizeCode'
 
 /**
  * Searches a normalized-code Map with slash/dash fallback variants.
@@ -11,20 +11,19 @@ import { normalizeCode } from './normalizeCode'
  */
 export function findCodeInInventory(rawCode, inventory) {
   const normalized = normalizeCode(rawCode)
+  const variations = generateCodeVariations(normalized)
 
-  let item = inventory.get(normalized)
-  if (item) return { code: normalized, item, variant: 'original' }
+  for (const variant of variations) {
+    const item = inventory.get(variant)
+    if (!item) continue
 
-  if (normalized.includes('/')) {
-    const withDash = normalized.replace(/\//g, '-')
-    item = inventory.get(withDash)
-    if (item) return { code: withDash, item, variant: 'dash' }
-  }
-
-  if (normalized.includes('-')) {
-    const withSlash = normalized.replace(/-/g, '/')
-    item = inventory.get(withSlash)
-    if (item) return { code: withSlash, item, variant: 'slash' }
+    let matchVariant = 'original'
+    if (variant !== normalized) {
+      if (variant.includes('/') && normalized.includes('-')) matchVariant = 'slash'
+      else if (variant.includes('-') && normalized.includes('/')) matchVariant = 'dash'
+      else matchVariant = 'base'
+    }
+    return { code: variant, item, variant: matchVariant }
   }
 
   return { code: normalized, item: null, variant: 'none' }

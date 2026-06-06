@@ -13,6 +13,7 @@ import {
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
+import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -25,7 +26,7 @@ import {
   getRecords,
 } from '../services/surtidoService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
-import { fmtDateTime as formatDateTimeTz, fmtDate as formatDateTz, fmtTimeShort } from '../../../core/utils/dateFormat'
+import { fmtDateTime as formatDateTimeTz, fmtDate as formatDateTz, fmtTimeShort, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
 
 const STATUS_META = {
   pending_assignment: { labelKey: 'surtido.ordenes.status.pending_assignment', cls: 'bg-warm-100 text-warm-600' },
@@ -42,8 +43,6 @@ const STATUS_META = {
 const STATUS_FILTER_KEYS = ['pending_assignment', 'sorting', 'validating', 'complete', 'partial', 'cancelled']
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
-const getToday = () => new Date().toISOString().slice(0, 10)
-
 function parseBulkCodes(text) {
   return Array.from(new Set(
     String(text || '')
@@ -474,9 +473,7 @@ const SESSION_STATUS = {
 
 function fmtDateTime(value) {
   if (!value) return '—'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })
+  return formatDateTimeTz(value)
 }
 
 function ObcCopyHeader({ obc, meta, t }) {
@@ -616,9 +613,7 @@ export default function Ordenes() {
   const [filterSurtidor, setFilterSurtidor] = useState('')
   const [destinationDraft, setDestinationDraft] = useState('')
   const [filterDestination, setFilterDestination] = useState('')
-  const [dateFromDraft, setDateFromDraft] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
-  })
+  const [dateFromDraft, setDateFromDraft] = useState(() => subtractDays(getToday(), 30))
   const [dateToDraft, setDateToDraft] = useState('')
   const [dateFrom, setDateFrom] = useState(dateFromDraft)
   const [dateTo, setDateTo] = useState(dateToDraft)
@@ -718,7 +713,7 @@ export default function Ordenes() {
 
   function matchesDateFilter(dateStr) {
     if (!dateStr) return true
-    const d = String(dateStr).slice(0, 10)
+    const d = toDateKey(dateStr)
     if (dateFrom && d < dateFrom) return false
     if (dateTo   && d > dateTo)   return false
     return true
@@ -802,8 +797,7 @@ export default function Ordenes() {
     setFilterDestination('')
     setDateToDraft('')
     setDateTo('')
-    const d = new Date(); d.setDate(d.getDate() - 30)
-    const baseDate = d.toISOString().slice(0, 10)
+    const baseDate = subtractDays(getToday(), 30)
     setDateFromDraft(baseDate)
     setDateFrom(baseDate)
     setTimeFromDraft('')
@@ -902,19 +896,14 @@ export default function Ordenes() {
     <div className="flex flex-col h-full">
       <Header title={t('surtido.ordenes.title')} subtitle={t('nav.surtido_wms')}
         actions={
-          <div className="flex items-center gap-2">
-            <button
-              className="btn-ghost text-xs flex items-center gap-1.5"
-              onClick={handleRefresh}
-              disabled={refreshing}>
-              {refreshing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-              {t('wmshub.config.sheet_refresh')}
-              {sheetTs > 0 && (
-                <span className="text-warm-400 font-normal">
-                  {t('wmshub.config.datos_al')} {new Date(sheetTs).toLocaleTimeString()}
-                </span>
-              )}
-            </button>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <DataSyncStatus
+              records={allWmsRecords.length}
+              updatedAt={sheetTs}
+              partial={isPartial}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+            />
             {canUpdateOrders && (
               <button className="btn-ghost text-xs flex items-center gap-1.5" onClick={() => setShowSurtidoresModal(true)}>
                 <Users size={14} /> {t('surtido.ordenes.manage_surtidores')}

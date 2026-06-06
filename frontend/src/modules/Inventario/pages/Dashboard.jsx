@@ -8,6 +8,7 @@ import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useInventarioStore } from '../stores/inventarioStore'
 import { getScanSessions } from '../services/inventarioService'
+import { fmtDate, toDateKey } from '../../../core/utils/dateFormat'
 
 function KPICard({ icon: Icon, label, value, gradient, iconBg, index }) {
   return (
@@ -62,7 +63,7 @@ export default function InventarioDashboard() {
   const chartData = useMemo(() => {
     const dayMap = {}
     sessions.forEach(s => {
-      const day = (s.started_at || '').slice(0, 10)
+      const day = s.started_at ? toDateKey(s.started_at) : ''
       if (!day) return
       dayMap[day] = (dayMap[day] || 0) + (s.total_scanned || 0)
     })
@@ -143,7 +144,7 @@ export default function InventarioDashboard() {
                 <tbody>
                   {sessions.slice(0, 10).map(s => (
                     <tr key={s.id} className="table-row">
-                      <td className="table-cell text-warm-500">{(s.started_at || '').slice(0, 10)}</td>
+                      <td className="table-cell text-warm-500">{s.started_at ? fmtDate(s.started_at) : '—'}</td>
                       <td className="table-cell code-main">{s.outbound_order_no || '—'}</td>
                       <td className="table-cell">
                         <span className={`badge ${s.status === 'open' ? 'bg-warning-100 text-warning-700' : 'bg-success-100 text-success-700'}`}>

@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { AlertTriangle, Clock, X, RefreshCw, CheckCircle2, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useI18nStore } from '../../stores/i18nStore'
+import { fmtDate, fmtTimeShort, getToday } from '../../utils/dateFormat'
 
 const BANNER_DISMISS_KEY = 'sb_banner_dismiss'
 const RENEWAL_TODAY_KEY = 'sb_renewal_sent'
 
 function getTodayKey() {
-  return new Date().toISOString().slice(0, 10)
+  return getToday()
 }
 
 function getRenewalSentToday() {
@@ -27,7 +28,7 @@ function saveRenewalSent(form, tenantName) {
       contact_name: form.contact_name,
       contact_email: form.contact_email,
       tenant_name: tenantName || '',
-      sent_at: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+      sent_at: fmtTimeShort(new Date()),
     }))
   } catch {}
 }
@@ -293,7 +294,7 @@ function CountdownBanner({ state, onRenew, onDismiss }) {
             {state.days === 1 ? `1 ${t('sub.day')}` : `${state.days} ${t('sub.days')}`}
           </span>
           <span className={`text-xs ${colors.text} opacity-70`}>
-            ({new Date(state.expiresAt).toLocaleDateString('es-MX', { month: 'short', day: 'numeric', year: 'numeric' })})
+            ({fmtDate(state.expiresAt)})
           </span>
         </div>
       </div>

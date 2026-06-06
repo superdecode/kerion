@@ -83,3 +83,22 @@ export function extractBaseCode(code) {
   if (zeroMatch) base = zeroMatch[1]
   return base || code.toUpperCase()
 }
+
+/**
+ * Generates lookup-safe code variations following the shared upapex rules.
+ * Keeps the normalized code first, then slash/dash swaps, then the base code.
+ */
+export function generateCodeVariations(rawCode) {
+  const code = normalizeCode(rawCode)
+  if (!code) return []
+
+  const variations = [code]
+
+  if (code.includes('-')) variations.push(code.replace(/-/g, '/'))
+  if (code.includes('/')) variations.push(code.replace(/\//g, '-'))
+
+  const baseCode = extractBaseCode(code)
+  if (baseCode && baseCode !== code) variations.push(baseCode)
+
+  return [...new Set(variations)]
+}

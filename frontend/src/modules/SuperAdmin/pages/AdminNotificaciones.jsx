@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, Bell, CheckCircle2, XCircle, Clock, AlertCircle, RotateCcw, Search, Trash2, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import adminApi from '../services/adminApi'
+import { fmtDateTimeMini } from '../../../core/utils/dateFormat'
 
 const STATUS_CFG = {
   pending: { label: 'Pendiente', bg: 'bg-amber-500/15',   text: 'text-amber-300',   border: 'border-amber-500/25',   icon: Clock },
@@ -292,8 +293,8 @@ export default function AdminNotificaciones() {
                   <td className="px-4 py-3.5 hidden lg:table-cell">
                     <span className="text-gray-500 text-xs">
                       {n.sent_at
-                        ? new Date(n.sent_at).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                        : new Date(n.created_at).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        ? fmtDateTimeMini(n.sent_at)
+                        : fmtDateTimeMini(n.created_at)}
                     </span>
                   </td>
                   <td className="px-4 py-3.5 hidden xl:table-cell">

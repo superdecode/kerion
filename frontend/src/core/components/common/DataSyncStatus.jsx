@@ -1,10 +1,12 @@
 import { Database, RefreshCw, ShieldCheck } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
+import { getTimezone } from '../../utils/dateFormat'
 
 function formatSyncDate(ts, locale) {
   if (!ts) return '—'
   try {
     return new Date(ts).toLocaleString(locale === 'zh' ? 'zh-CN' : 'es-MX', {
+      timeZone: getTimezone(),
       dateStyle: 'short',
       timeStyle: 'short',
     })

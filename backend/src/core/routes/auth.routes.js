@@ -117,7 +117,8 @@ router.post('/login', async (req, res) => {
         [tenant.id]
       ),
       query(
-        `SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email, contact_phone, current_plan_id FROM tenants WHERE id = $1`,
+        `SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email, contact_phone, current_plan_id, zona_horaria
+         FROM tenants WHERE id = $1`,
         [tenant.id]
       ),
     ])
@@ -155,7 +156,7 @@ router.post('/login', async (req, res) => {
         rol_nombre: user.rol_nombre,
         permisos,
         avatar_url: user.avatar_url,
-        zona_horaria: user.zona_horaria || 'America/Mexico_City',
+        zona_horaria: user.zona_horaria || tenantInfo.zona_horaria || 'America/Mexico_City',
         must_change_password: user.must_change_password || false,
         modules,
         slug: tenant.slug,
@@ -186,7 +187,7 @@ router.get('/me', authenticateToken, async (req, res) => {
         [req.user.id]
       ),
       req.user.tenant_id
-        ? query(`SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email FROM tenants WHERE id = $1`, [req.user.tenant_id])
+        ? query(`SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email, zona_horaria FROM tenants WHERE id = $1`, [req.user.tenant_id])
         : Promise.resolve({ rows: [] }),
     ])
 
@@ -209,7 +210,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       avatar_url: user.avatar_url,
       estado: user.estado,
       ultimo_acceso: user.ultimo_acceso,
-      zona_horaria: user.zona_horaria || 'America/Mexico_City',
+      zona_horaria: user.zona_horaria || tenantInfo.zona_horaria || 'America/Mexico_City',
       tenant_status: tenantInfo.status || req.user.tenant_status,
       tenant_name: tenantInfo.legal_name || '',
       tenant_contact_email: tenantInfo.contact_email || user.email,
@@ -274,6 +275,38 @@ router.put('/preferences', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Preferences error:', error)
     res.status(500).json({ error: 'Error actualizando preferencias' })
+  }
+})
+
+// PUT /api/auth/profile
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    const { nombre, apellido } = req.body
+    const safeNombre = String(nombre || '').trim()
+    const safeApellido = String(apellido || '').trim()
+    const nombreCompleto = [safeNombre, safeApellido].filter(Boolean).join(' ').trim()
+
+    if (!safeNombre || !safeApellido) {
+      return res.status(400).json({ error: 'Nombre y apellido son requeridos' })
+    }
+
+    const result = await query(
+      `UPDATE usuarios
+       SET nombre_completo = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2
+       RETURNING id, codigo, nombre_completo, email, rol_id, estado, avatar_url, zona_horaria`,
+      [nombreCompleto, req.user.id]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' })
+    }
+
+    auditLog(req, 'UPDATE_PROFILE', 'usuario', req.user.id, { nombre_completo: nombreCompleto })
+    res.json({ success: true, user: result.rows[0] })
+  } catch (error) {
+    console.error('Profile update error:', error)
+    res.status(500).json({ error: 'Error actualizando perfil' })
   }
 })
 

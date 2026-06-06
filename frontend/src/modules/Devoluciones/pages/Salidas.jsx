@@ -211,11 +211,11 @@ export default function Salidas() {
   const handleExportSelected = useCallback(() => {
     const rows = salidas.filter(r => selectedIds.has(r.id))
     if (!rows.length) return
-    exportToXlsx(buildRows(rows), `salidas-seleccionadas-${new Date().toISOString().slice(0, 10)}`)
+    exportToXlsx(buildRows(rows), `salidas-seleccionadas-${getToday()}`)
   }, [salidas, selectedIds])
 
   const doExportAll = useCallback(() => {
-    exportToXlsx(buildRows(salidas), `salidas-${new Date().toISOString().slice(0, 10)}`)
+    exportToXlsx(buildRows(salidas), `salidas-${getToday()}`)
   }, [salidas])
 
   const handleExportAll = useCallback(() => {

@@ -3,6 +3,7 @@ import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middl
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { generateDevCodigo, generateItemTrazabilidad } from '../utils/codigos.js'
 import { uploadEvidence, deleteEvidence, getEvidencePublicUrl } from '../utils/storage.js'
+import { instantDateInTZ } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
 
@@ -81,6 +82,7 @@ router.get('/',
   async (req, res) => {
     try {
       const { q = '', estado = '', responsable_id = '', fecha_inicio = '', fecha_fin = '', fecha_desde = '', fecha_hasta = '' } = req.query
+      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       const params = [req.tenantId]
       const where = [`s.tenant_id = $1`]
 
@@ -96,11 +98,11 @@ router.get('/',
       const fechaFin = fecha_fin || fecha_hasta
       if (fechaIni) {
         params.push(fechaIni)
-        where.push(`DATE(s.created_at) >= $${params.length}`)
+        where.push(`${instantDateInTZ('s.created_at', tz)} >= $${params.length}`)
       }
       if (fechaFin) {
         params.push(fechaFin)
-        where.push(`DATE(s.created_at) <= $${params.length}`)
+        where.push(`${instantDateInTZ('s.created_at', tz)} <= $${params.length}`)
       }
       if (q.trim()) {
         params.push(`%${q.trim()}%`)

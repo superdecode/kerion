@@ -9,13 +9,13 @@ import api from '../../services/api'
 import { useToastStore } from '../../stores/toastStore'
 import {
   Search, X, User, LogOut, Key, Settings, Globe, ChevronDown,
-  Shield, Clock, Activity, HelpCircle
+  Shield, Clock, Activity, HelpCircle, Pencil, Check
 } from 'lucide-react'
 import { useTourStore } from '../../stores/tourStore'
 import { tourHelpVisible } from './OnboardingTour'
 
 const DISPLAY_PARENT = { fep: 'dropscan' }
-const ALLOWED_PERM_MODULES = new Set(['dropscan'])
+const ALLOWED_PERM_MODULES = new Set(['dropscan', 'devoluciones', 'inventario', 'surtido', 'global', 'sistema'])
 
 export default function Header({ title, subtitle, actions, showSearch = false }) {
   const [searchOpen, setSearchOpen] = useState(false)
@@ -26,11 +26,14 @@ export default function Header({ title, subtitle, actions, showSearch = false })
   const [changePassError, setChangePassError] = useState('')
   const [changePassLoading, setChangePassLoading] = useState(false)
   const [changePassSuccess, setChangePassSuccess] = useState(false)
-  const { user, logout, updateTimezone } = useAuthStore()
+  const { user, logout, updateTimezone, updateProfile } = useAuthStore()
   const { locale, setLocale, t } = useI18nStore()
   const triggerTour = useTourStore((s) => s.trigger)
   const showTourHelp = tourHelpVisible(user?.id)
   const [savingTz, setSavingTz] = useState(false)
+  const [profileDraft, setProfileDraft] = useState({ nombre: '', apellido: '' })
+  const [editingName, setEditingName] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
   const navigate = useNavigate()
   const menuRef = useRef(null)
 
@@ -61,6 +64,30 @@ export default function Header({ title, subtitle, actions, showSearch = false })
     setChangePassData({ current: '', nuevo: '', confirmar: '' })
     setChangePassError('')
     setChangePassSuccess(false)
+  }
+
+  useEffect(() => {
+    if (!profileOpen || !user?.nombre_completo) return
+    const parts = String(user.nombre_completo).trim().split(/\s+/)
+    setProfileDraft({
+      nombre: parts.shift() || '',
+      apellido: parts.join(' '),
+    })
+    setEditingName(false)
+  }, [profileOpen, user?.nombre_completo])
+
+  const handleProfileSave = async () => {
+    if (!profileDraft.nombre.trim() || !profileDraft.apellido.trim()) return
+    setSavingProfile(true)
+    try {
+      await updateProfile(profileDraft)
+      useToastStore.getState().success('Perfil actualizado')
+      setEditingName(false)
+    } catch (err) {
+      useToastStore.getState().error(err?.response?.data?.error || 'Error actualizando perfil')
+    } finally {
+      setSavingProfile(false)
+    }
   }
 
   const handleChangePassword = async () => {
@@ -305,10 +332,64 @@ export default function Header({ title, subtitle, actions, showSearch = false })
                             text-white flex items-center justify-center text-xl font-bold shadow-lg">
               {initials}
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-warm-800">{user?.nombre_completo}</h3>
-              <p className="text-sm text-warm-500">{user?.email}</p>
-              <span className="badge bg-primary-100 text-primary-700 mt-1">{user?.rol_nombre}</span>
+            <div className="min-w-0 flex-1">
+              <div className="group flex items-start gap-2">
+                {editingName ? (
+                  <div className="w-full space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        value={profileDraft.nombre}
+                        onChange={(e) => setProfileDraft((prev) => ({ ...prev, nombre: e.target.value }))}
+                        className="w-36 rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-warm-800 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                        placeholder={t('auth.firstName')}
+                      />
+                      <input
+                        value={profileDraft.apellido}
+                        onChange={(e) => setProfileDraft((prev) => ({ ...prev, apellido: e.target.value }))}
+                        onKeyDown={(e) => e.key === 'Enter' && handleProfileSave()}
+                        className="w-44 rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-warm-800 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                        placeholder={t('auth.lastName')}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleProfileSave}
+                        disabled={savingProfile || !profileDraft.nombre.trim() || !profileDraft.apellido.trim()}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-primary-700 disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {savingProfile ? <div className="h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        {t('common.save')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingName(false)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-warm-600 hover:bg-warm-50 whitespace-nowrap"
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2 min-w-0">
+                    <h3 className="text-lg font-bold text-warm-800 truncate">{user?.nombre_completo}</h3>
+                    <button
+                      type="button"
+                      onClick={() => setEditingName(true)}
+                      className="mt-0.5 rounded-lg p-1.5 text-warm-300 transition-all hover:bg-primary-50 hover:text-primary-600"
+                      title={t('auth.editName')}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+              {!editingName && (
+                <>
+                  <p className="text-sm text-warm-500">{user?.email}</p>
+                  <span className="badge bg-primary-100 text-primary-700 mt-1">{user?.rol_nombre}</span>
+                </>
+              )}
             </div>
           </div>
 

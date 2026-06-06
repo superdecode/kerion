@@ -6,6 +6,7 @@ import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getScanSessions, getRecords } from '../services/surtidoService'
+import { fmtDateTime } from '../../../core/utils/dateFormat'
 
 export default function SurtidoHistorial() {
   const { t } = useI18nStore()
@@ -77,7 +78,7 @@ export default function SurtidoHistorial() {
                 ) : (
                   filtered.map(s => (
                     <tr key={s.id} className="table-row">
-                      <td className="table-cell text-warm-500 text-xs">{(s.started_at || '').slice(0, 16).replace('T', ' ')}</td>
+                      <td className="table-cell text-warm-500 text-xs">{s.started_at ? fmtDateTime(s.started_at) : '—'}</td>
                       <td className="table-cell font-mono font-semibold text-primary-700">{s.outbound_order_no || '—'}</td>
                       <td className="table-cell hidden md:table-cell text-warm-600">{s.operator_nombre || '—'}</td>
                       <td className="table-cell">
@@ -87,7 +88,11 @@ export default function SurtidoHistorial() {
                           s.status === 'with_discrepancies' ? 'bg-danger-100 text-danger-700' :
                           'bg-warm-100 text-warm-600'
                         }`}>
-                          {t(`surtido.registros.status.${s.status}`) || s.status}
+                          {(() => {
+                            const key = `surtido.registros.status.${s.status}`
+                            const label = t(key)
+                            return label === key ? t('common.status') : label
+                          })()}
                         </span>
                       </td>
                       <td className="table-cell text-right font-semibold">{s.total_scanned ?? 0}</td>

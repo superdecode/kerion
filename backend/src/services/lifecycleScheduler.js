@@ -9,7 +9,7 @@ export async function runLifecycleTasks() {
   // ── 1. Enqueue trial_5d_warning ──────────────────────────────────────────────
   // Tenants whose trial expires within 2 days and haven't received the warning.
   const warningRes = await query(`
-    SELECT t.id, t.contact_name, t.contact_email, t.slug, t.trial_expires_at
+    SELECT t.id, t.contact_name, t.contact_email, t.slug, t.trial_expires_at, t.zona_horaria
     FROM tenants t
     WHERE t.status = 'trial'
       AND t.trial_expires_at IS NOT NULL
@@ -29,7 +29,9 @@ export async function runLifecycleTasks() {
          VALUES ($1,$2,'trial_5d_warning',$3)`,
         [row.id, row.contact_email, JSON.stringify({
           contact_name: row.contact_name,
-          expires_at: new Date(row.trial_expires_at).toLocaleDateString('es-MX'),
+          expires_at: new Date(row.trial_expires_at).toLocaleDateString('es-MX', {
+            timeZone: row.zona_horaria || 'America/Mexico_City',
+          }),
         })]
       )
       log.push({ action: 'trial_5d_warning_enqueued', tenant: row.slug })

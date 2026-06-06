@@ -181,6 +181,14 @@ export const useAuthStore = create(
         return data
       },
 
+      updateProfile: async ({ nombre, apellido }) => {
+        const { data } = await api.put('/auth/profile', { nombre, apellido })
+        if (data.success && data.user) {
+          set((state) => ({ user: { ...state.user, ...data.user } }))
+        }
+        return data
+      },
+
       // Permission check: hasPermission('dropscan.escaneo', 'crear')
       hasPermission: (modulePath, action) => {
         const { user } = get()

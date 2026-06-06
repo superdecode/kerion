@@ -65,9 +65,11 @@ export async function loadFullUser(req, res, next) {
     // load a user from tenant B even if both have the same numeric user id.
     const tenantId = req.user.tenant_id || req.tenantId
     const result = await query(
-      `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos
+      `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos,
+              t.zona_horaria as tenant_zona_horaria
        FROM usuarios u
        LEFT JOIN roles r ON u.rol_id = r.id
+       LEFT JOIN tenants t ON t.id = u.tenant_id
        WHERE u.id = $1 AND u.tenant_id = $2 AND u.estado = 'ACTIVO'`,
       [req.user.id, tenantId]
     )
@@ -86,7 +88,7 @@ export async function loadFullUser(req, res, next) {
       rol_nombre: user.rol_nombre,
       permisos: user.permisos_override || user.rol_permisos || {},
       estado: user.estado,
-      zona_horaria: user.zona_horaria || 'America/Mexico_City',
+      zona_horaria: user.zona_horaria || user.tenant_zona_horaria || 'America/Mexico_City',
     }
     next()
   } catch (err) {

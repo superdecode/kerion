@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { PackageCheck, Search, X, ChevronsUpDown, ChevronUp, ChevronDown, CheckCheck, Printer, AlertTriangle } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
-import { fmtDate } from '../../../core/utils/dateFormat'
+import { fmtDate, fmtDateString } from '../../../core/utils/dateFormat'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 
 function Toggle({ checked, onChange }) {
@@ -85,7 +85,7 @@ export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salid
 
   const handlePrint = () => {
     const win = window.open('', '_blank', 'width=900,height=700')
-    const now = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })
+    const now = fmtDateString(new Date())
     const codigo = salida?.codigo || '—'
     const responsable = salida?.responsable_nombre || '—'
     const fecha = salida?.created_at ? fmtDate(salida.created_at) : '—'

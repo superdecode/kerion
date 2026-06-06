@@ -153,10 +153,10 @@ app.use('/api/inventory/historial', tenantContext, tenantDB, moduleGuard('invent
 app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)
 
 // Devoluciones module
-app.use('/api/devoluciones/entradas', tenantContext, tenantDB, devEntradasRoutes)
-app.use('/api/devoluciones/inventario', tenantContext, tenantDB, devInventarioRoutes)
-app.use('/api/devoluciones/salidas', tenantContext, tenantDB, devSalidasRoutes)
-app.use('/api/devoluciones', tenantContext, tenantDB, devUtilsRoutes)
+app.use('/api/devoluciones/entradas', tenantContext, tenantDB, moduleGuard('devoluciones'), devEntradasRoutes)
+app.use('/api/devoluciones/inventario', tenantContext, tenantDB, moduleGuard('devoluciones'), devInventarioRoutes)
+app.use('/api/devoluciones/salidas', tenantContext, tenantDB, moduleGuard('devoluciones'), devSalidasRoutes)
+app.use('/api/devoluciones', tenantContext, tenantDB, moduleGuard('devoluciones'), devUtilsRoutes)
 
 // Upapex module
 app.use('/api/upapex', tenantContext, tenantDB, upapexRoutes)
@@ -464,6 +464,12 @@ async function runMigrations() {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_pick_events_session ON pick_events(session_id)`,
     `CREATE INDEX IF NOT EXISTS idx_pick_events_result ON pick_events(session_id, scan_result)`,
+    `ALTER TABLE pick_events ADD COLUMN IF NOT EXISTS input_method TEXT NOT NULL DEFAULT 'scanner'`,
+    `ALTER TABLE pick_events ADD COLUMN IF NOT EXISTS manual_reason_id INTEGER`,
+    `ALTER TABLE pick_events ADD COLUMN IF NOT EXISTS manual_reason_label TEXT`,
+    `ALTER TABLE pick_events ADD COLUMN IF NOT EXISTS manual_notes TEXT`,
+    `ALTER TABLE pick_events ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_events ADD COLUMN IF NOT EXISTS edited_by INTEGER REFERENCES usuarios(id)`,
 
     // ── 037: Upapex permissions on existing roles ─────────────────────────
     `UPDATE roles SET permisos = jsonb_set(permisos, '{upapex}',
@@ -517,6 +523,10 @@ async function runMigrations() {
      )`,
     `CREATE INDEX IF NOT EXISTS idx_inv_scans_session ON inv_scans(session_id)`,
     `CREATE INDEX IF NOT EXISTS idx_inv_scans_status ON inv_scans(session_id, scan_status)`,
+    `ALTER TABLE inv_scans ADD COLUMN IF NOT EXISTS input_method TEXT NOT NULL DEFAULT 'scanner'`,
+    `ALTER TABLE inv_scans ADD COLUMN IF NOT EXISTS manual_notes TEXT`,
+    `ALTER TABLE inv_scans ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ`,
+    `ALTER TABLE inv_scans ADD COLUMN IF NOT EXISTS edited_by INTEGER REFERENCES usuarios(id)`,
 
     // ── 038: Pickers list ─────────────────────────────────────────────────
     `CREATE TABLE IF NOT EXISTS pick_surtidores (
@@ -545,6 +555,27 @@ async function runMigrations() {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_pick_order_tracking_unique ON pick_order_tracking(tenant_id, outbound_order_no)`,
     `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_tenant ON pick_order_tracking(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_status ON pick_order_tracking(tenant_id, status)`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS assigned_by TEXT`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS sorting_started_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS sorting_completed_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS validation_started_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS validation_completed_at TIMESTAMPTZ`,
+    `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS validated_by TEXT`,
+
+    // ── 042: Manual entry reasons for Surtido ─────────────────────────────
+    `CREATE TABLE IF NOT EXISTS pick_manual_reasons (
+       id SERIAL PRIMARY KEY,
+       tenant_id UUID REFERENCES tenants(id) NOT NULL,
+       nombre TEXT NOT NULL,
+       activo BOOLEAN DEFAULT true,
+       created_at TIMESTAMPTZ DEFAULT now(),
+       updated_at TIMESTAMPTZ DEFAULT now()
+     )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_pick_manual_reasons_unique
+       ON pick_manual_reasons(tenant_id, nombre) WHERE activo = true`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_manual_reasons_tenant
+       ON pick_manual_reasons(tenant_id)`,
 
     // ── 041: Migrate upapex.* permissions to domain-specific permission sets ─
     // Inventario module: escaneo, registros, admin
@@ -694,6 +725,21 @@ async function runMigrations() {
     `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS validation_started_at TIMESTAMPTZ`,
     `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS validation_completed_at TIMESTAMPTZ`,
     `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS validated_by TEXT`,
+    `DO $$
+     BEGIN
+       IF EXISTS (
+         SELECT 1
+         FROM pg_constraint
+         WHERE conname = 'pick_order_tracking_status_check'
+       ) THEN
+         ALTER TABLE pick_order_tracking DROP CONSTRAINT pick_order_tracking_status_check;
+       END IF;
+       ALTER TABLE pick_order_tracking
+         ADD CONSTRAINT pick_order_tracking_status_check
+         CHECK (status IN ('pending_assignment','assigned','sorting','pending_validation','validating','complete','partial','cancelled'));
+     EXCEPTION
+       WHEN duplicate_object THEN NULL;
+     END $$`,
 
     // ── 040: Enable RLS on every public-schema table ──────────────────────
     // Blocks all access through Supabase REST/anon key (deny-by-default: no

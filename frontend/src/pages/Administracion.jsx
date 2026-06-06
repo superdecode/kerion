@@ -7,6 +7,7 @@ import LoadingSpinner from '../core/components/common/LoadingSpinner'
 import { useAuthStore } from '../core/stores/authStore'
 import { useToastStore } from '../core/stores/toastStore'
 import { useI18nStore } from '../core/stores/i18nStore'
+import { getToday, fmtDate } from '../core/utils/dateFormat'
 import api from '../core/services/api'
 import {
   Users, Shield, Plus, Search, Edit3, Trash2, ToggleLeft, ToggleRight,
@@ -135,7 +136,7 @@ function PlanTab() {
   const guideBarColor = guidePercent > 90 ? 'bg-red-500' : guidePercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'
 
   function getTodayStr() {
-    return new Date().toISOString().slice(0, 10)
+    return getToday()
   }
 
   async function handleRenewSubmit(e) {
@@ -240,7 +241,7 @@ function PlanTab() {
                 {expiresAt ? (
                   <>
                     <p className="text-warm-800 text-sm font-medium">
-                      {new Date(expiresAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric', timeZone: user?.zona_horaria || 'America/Mexico_City' })}
+                      {fmtDate(expiresAt)}
                     </p>
                     <p className={`text-xs font-bold ${daysColor}`}>
                       {days === null ? '' : days < 0 ? t('plan.expired') : days === 0 ? t('plan.expires_today') : `${days} ${t('plan.days_remaining')}`}

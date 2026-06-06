@@ -6,6 +6,7 @@ import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getScanSessions } from '../services/inventarioService'
+import { fmtDateTime } from '../../../core/utils/dateFormat'
 
 export default function InventarioHistorial() {
   const { t } = useI18nStore()
@@ -78,7 +79,7 @@ export default function InventarioHistorial() {
                 ) : (
                   filtered.map(s => (
                     <tr key={s.id} className="table-row">
-                      <td className="table-cell text-warm-500 text-xs">{(s.started_at || '').slice(0, 16).replace('T', ' ')}</td>
+                      <td className="table-cell text-warm-500 text-xs">{s.started_at ? fmtDateTime(s.started_at) : '—'}</td>
                       <td className="table-cell code-main">{s.outbound_order_no || '—'}</td>
                       <td className="table-cell text-warm-600">{s.operator_nombre || '—'}</td>
                       <td className="table-cell">

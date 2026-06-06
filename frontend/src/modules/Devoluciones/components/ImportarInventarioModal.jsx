@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Modal from '../../../core/components/common/Modal'
 import CopyableCell from '../../../core/components/common/CopyableCell'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { fmtDate } from '../../../core/utils/dateFormat'
 import { importarInventario } from '../services/devolucionesService'
 import * as XLSX from 'xlsx'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -246,7 +247,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
     try {
       const result = await importarInventario({
         tipo: tipoImport,
-        descripcion: descripcion || `Importación masiva - ${new Date().toLocaleDateString()}`,
+        descripcion: descripcion || `Importación masiva - ${fmtDate(new Date())}`,
         filas: validRows.map(r => ({
           row_number: r._sheetRowNumber,
           sku: r.sku,

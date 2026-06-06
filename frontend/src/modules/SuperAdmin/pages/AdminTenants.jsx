@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { Search, RefreshCw, Building2, ChevronRight, AlertCircle, CheckCircle2, Clock, XCircle, PauseCircle, Users, Calendar, Database, Zap, Plus, Eye, EyeOff, X, Save } from 'lucide-react'
 import adminApi from '../services/adminApi'
+import { fmtDate } from '../../../core/utils/dateFormat'
 
 const STATUS_CFG = {
   trial:         { label: 'Trial',          bg: 'bg-blue-500/15',    text: 'text-blue-300',   border: 'border-blue-500/25',    dot: 'bg-blue-400' },
@@ -212,7 +213,7 @@ export default function AdminTenants() {
                             {daysLeft !== null && daysLeft > 0 ? `${daysLeft}d restantes` : 'Vencido'}
                           </span>
                           <p className="text-gray-600 text-xs mt-0.5">
-                            {exp.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {fmtDate(exp)}
                             {isTrial && <span className="ml-1 text-blue-500">(trial)</span>}
                           </p>
                         </div>

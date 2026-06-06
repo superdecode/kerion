@@ -1,4 +1,4 @@
-import { normalizeCode } from '../../Shared/Wms/normalizeCode'
+import { generateCodeVariations, normalizeCode } from '../../Shared/Wms/normalizeCode'
 
 /**
  * Normalizes a raw scan and checks it against the OBC code set.
@@ -16,7 +16,7 @@ export function processScanCode(rawCode, activeOBC, bdCodes) {
   const code = normalizeCode(rawCode)
   const obc = (activeOBC || '').toLowerCase()
 
-  const variations = generateVariations(code)
+  const variations = generateCodeVariations(code)
 
   for (const variant of variations) {
     if (bdCodes.has(variant + obc)) {
@@ -25,12 +25,4 @@ export function processScanCode(rawCode, activeOBC, bdCodes) {
   }
 
   return { code, found: false }
-}
-
-function generateVariations(code) {
-  if (!code) return []
-  const variants = [code]
-  if (code.includes('-')) variants.push(code.replace(/-/g, '/'))
-  if (code.includes('/')) variants.push(code.replace(/\//g, '-'))
-  return [...new Set(variants)]
 }

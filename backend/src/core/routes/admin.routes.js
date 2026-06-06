@@ -6,6 +6,7 @@ import env from '../../config/env.js'
 import { query, getClient } from '../../config/database.js'
 import { provisionTenant } from '../../services/provisioningService.js'
 import { endOfDayInTimezone } from '../../shared/utils/timezone.js'
+import { dateInTZ } from '../../shared/utils/dateUtils.js'
 
 const router = Router()
 
@@ -1113,10 +1114,10 @@ router.get('/analytics/landing', authenticateAdmin, async (_req, res) => {
         ORDER BY created_at DESC LIMIT 50
       `),
       safeQuery(`
-        SELECT DATE(created_at) AS date, COUNT(*) AS visits
+        SELECT ${dateInTZ('created_at', 'America/Mexico_City')} AS date, COUNT(*) AS visits
         FROM landing_events
         WHERE event_type = 'page_visit' AND created_at >= now() - INTERVAL '14 days'
-        GROUP BY DATE(created_at)
+        GROUP BY ${dateInTZ('created_at', 'America/Mexico_City')}
         ORDER BY date ASC
       `),
     ])

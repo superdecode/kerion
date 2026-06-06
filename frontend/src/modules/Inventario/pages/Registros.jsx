@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx'
 import {
   Eye, Trash2, CheckCircle2, AlertTriangle, Ban, X, Package2, Loader2,
   User, Timer, Clock, ScanBarcode, Boxes, ChevronDown, ChevronUp,
-  Search, XCircle, Download, Copy, Check,
+  Search, XCircle, Download, Copy, Check, Pencil,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -15,7 +15,12 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { getInventorySessions, getInventorySession, deleteInventorySession } from '../services/inventarioService'
+import { fmtDateTime, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
+import {
+  getInventorySessions, getInventorySession, deleteInventorySession,
+  createInventoryScan, updateInventoryScan, deleteInventoryScan, checkInventoryDuplicates,
+} from '../services/inventarioService'
+import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 
 const STATUS_META_KEYS = {
   ok:      { labelKey: 'inventario.escaneo.group_disponible', icon: CheckCircle2, bg: 'bg-success-100 text-success-700' },
@@ -27,8 +32,8 @@ const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracki
 const DETAIL_TAB_CLASS = 'flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px'
 
 const dateKeyFromTimestamp = (value) => {
-  if (!value) return new Date().toISOString().slice(0, 10).replace(/-/g, '')
-  return String(value).slice(0, 10).replace(/-/g, '')
+  if (!value) return getToday().replace(/-/g, '')
+  return toDateKey(value).replace(/-/g, '')
 }
 const formatSectionCode = (code, fallbackDate) => {
   const clean = String(code || '').trim()
@@ -36,7 +41,6 @@ const formatSectionCode = (code, fallbackDate) => {
   if (/^\d{8}M\d{2,}$/.test(clean)) return `SEC-${clean}`
   return `SEC-${dateKeyFromTimestamp(fallbackDate)}M00`
 }
-const getToday = () => new Date().toISOString().slice(0, 10)
 const LEGACY_TARIMA_KEYS = new Set(['auto', 'ok', 'blocked', 'nowms'])
 const normalizeTarimaGroupKey = (value, sectionCode) => String(value || sectionCode || 'auto').trim()
 const formatTarimaCode = (rawCode, sectionCode, index) => {
@@ -48,11 +52,99 @@ const formatTarimaCode = (rawCode, sectionCode, index) => {
   return `PAL-${dayKey}-${String(index + 1).padStart(2, '0')}`
 }
 
-function DetailModal({ session, isOpen, onClose }) {
+const buildCodeVariantSet = (...codes) => {
+  const variants = new Set()
+  codes.filter(Boolean).forEach((code) => {
+    generateCodeVariations(code).forEach((variant) => variants.add(variant))
+  })
+  return variants
+}
+
+const scanMatchesDuplicateSet = (scan, variantSet) => {
+  const codes = [scan?.normalized_code, scan?.code2].filter(Boolean)
+  return codes.some((code) => generateCodeVariations(code).some((variant) => variantSet.has(variant)))
+}
+
+function DuplicateConfirmModal({ isOpen, code, conflicts = [], onConfirm, onClose, t }) {
+  const sessionConflicts = conflicts.filter((item) => item.source === 'session')
+  const dbConflicts = conflicts.filter((item) => item.source === 'database')
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('inventario.escaneo.duplicate_title')}
+      icon={AlertCircle}
+      footer={
+        <div className="flex gap-3 justify-end">
+          <button className="btn-ghost" onClick={onClose}>{t('inventario.escaneo.descartar')}</button>
+          <button className="btn-primary" onClick={onConfirm}>{t('inventario.escaneo.confirmar')}</button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-warm-700">
+          <code className="font-mono bg-warm-100 px-2 py-0.5 rounded">{code}</code>
+          <span className="mt-1 block">{t('inventario.escaneo.duplicate_body')}</span>
+        </p>
+
+        {sessionConflicts.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-warning-700">
+              {t('inventario.escaneo.duplicate_session_matches')}
+            </p>
+            {sessionConflicts.map((conflict) => (
+              <div key={conflict.id} className="rounded-xl border border-warning-200 bg-warning-50/70 px-3 py-2.5 text-sm text-warning-900">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono font-semibold">{conflict.primary_code || '—'}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-warning-700">{t('inventario.escaneo.duplicate_source_session')}</span>
+                </div>
+                <div className="mt-1 grid grid-cols-1 gap-1 text-xs text-warning-800 sm:grid-cols-2">
+                  <span>{t('inventario.escaneo.duplicate_label_code2')}: <strong className="font-mono">{conflict.code2 || '—'}</strong></span>
+                  <span>{t('inventario.escaneo.duplicate_label_time')}: <strong>{conflict.scanned_at ? fmtDateTime(conflict.scanned_at) : '—'}</strong></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {dbConflicts.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-danger-700">
+              {t('inventario.escaneo.duplicate_db_matches')}
+            </p>
+            {dbConflicts.map((conflict) => (
+              <div key={conflict.id} className="rounded-xl border border-danger-200 bg-danger-50/70 px-3 py-2.5 text-sm text-danger-900">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono font-semibold">{conflict.normalized_code || '—'}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-danger-700">{t('inventario.escaneo.duplicate_source_db')}</span>
+                </div>
+                <div className="mt-1 grid grid-cols-1 gap-1 text-xs text-danger-800 sm:grid-cols-2">
+                  <span>{t('inventario.escaneo.duplicate_label_code2')}: <strong className="font-mono">{conflict.code2 || '—'}</strong></span>
+                  <span>{t('inventario.escaneo.duplicate_label_user')}: <strong>{conflict.operator_nombre || '—'}</strong></span>
+                  <span>{t('inventario.escaneo.duplicate_label_time')}: <strong>{conflict.scanned_at ? fmtDateTime(conflict.scanned_at) : '—'}</strong></span>
+                  <span>{t('inventario.escaneo.duplicate_label_tarima')}: <strong>{conflict.tarima_code || conflict.group_assignment || '—'}</strong></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
+  const qc = useQueryClient()
+  const { hasPermission } = useAuthStore()
   const [detailTab, setDetailTab] = useState('tarimas')
   const [expandedTarimaCode, setExpandedTarimaCode] = useState(null)
+  const [editingScanId, setEditingScanId] = useState(null)
+  const [editingCode, setEditingCode] = useState('')
+  const [newScan, setNewScan] = useState({ scanned_code: '', scan_status: 'ok', group_assignment: 'auto' })
+  const [duplicatePending, setDuplicatePending] = useState(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['upapex-inventory-session', session?.id],
@@ -64,6 +156,8 @@ function DetailModal({ session, isOpen, onClose }) {
   const sessionData = data?.data?.session ?? {}
   const scans = data?.data?.scans ?? []
   const isClasificacion = (sessionData.scan_type ?? session?.scan_type) === 'clasificacion'
+  const canEditScans = hasPermission('inventario.registros', 'actualizar')
+  const canDeleteScans = hasPermission('inventario.registros', 'eliminar')
   const sectionCode = formatSectionCode(
     sessionData.tarima_code || session?.tarima_code,
     sessionData.completed_at || session?.completed_at || sessionData.created_at || session?.created_at
@@ -113,11 +207,80 @@ function DetailModal({ session, isOpen, onClose }) {
   }, { tarimas: 0, total: 0, ok: 0, blocked: 0, nowms: 0 }), [tarimas])
 
   useEffect(() => {
-    if (!isOpen) {
-      setDetailTab('tarimas')
-      setExpandedTarimaCode(null)
+    setDetailTab(initialTab)
+    setExpandedTarimaCode(null)
+    setEditingScanId(null)
+    setEditingCode('')
+    setDuplicatePending(null)
+  }, [initialTab, isOpen])
+
+  const confirmPotentialDuplicate = async ({ codes, displayCode, excludeScanId = null, onAccept }) => {
+    const variantSet = buildCodeVariantSet(...codes)
+    const sessionConflicts = scans
+      .filter((scan) => scan.id !== excludeScanId)
+      .map((scan) => {
+        if (!scanMatchesDuplicateSet(scan, variantSet)) return null
+        return {
+          id: `session-${scan.id}`,
+          source: 'session',
+          primary_code: scan.normalized_code || scan.scanned_code || '',
+          code2: scan.code2 || null,
+          scanned_at: scan.scanned_at || null,
+        }
+      })
+      .filter(Boolean)
+
+    let dbConflicts = []
+    try {
+      const response = await checkInventoryDuplicates({ codes: [...variantSet] })
+      dbConflicts = (response?.data?.matches || []).filter((scan) => scan.id !== excludeScanId)
+    } catch (err) {
+      toast.error(err.response?.data?.error || t('toast.error'))
+      return
     }
-  }, [isOpen])
+
+    const conflicts = [...sessionConflicts, ...dbConflicts]
+    if (conflicts.length === 0) {
+      onAccept()
+      return
+    }
+
+    setDuplicatePending({ code: displayCode, conflicts, onConfirm: onAccept })
+  }
+
+  const updateScanMut = useMutation({
+    mutationFn: ({ id, code }) => updateInventoryScan(id, {
+      scanned_code: code,
+      normalized_code: code,
+    }),
+    onSuccess: () => {
+      setEditingScanId(null)
+      setEditingCode('')
+      qc.invalidateQueries({ queryKey: ['upapex-inventory-session', session?.id] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  const deleteScanMut = useMutation({
+    mutationFn: deleteInventoryScan,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['upapex-inventory-session', session?.id] }),
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  const createScanMut = useMutation({
+    mutationFn: () => createInventoryScan({
+      session_id: session?.id,
+      scanned_code: newScan.scanned_code,
+      normalized_code: newScan.scanned_code,
+      scan_status: newScan.scan_status,
+      group_assignment: newScan.group_assignment,
+    }),
+    onSuccess: () => {
+      setNewScan({ scanned_code: '', scan_status: 'ok', group_assignment: 'auto' })
+      qc.invalidateQueries({ queryKey: ['upapex-inventory-session', session?.id] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
 
   const handleExportDetail = () => {
     try {
@@ -126,8 +289,8 @@ function DetailModal({ session, isOpen, onClose }) {
         ['Sección', sectionCode],
         ['Tipo', isClasificacion ? 'Clasificación' : 'Unificado'],
         ['Operador', sessionData.operator_nombre || ''],
-        ['Inicio', sessionData.started_at ? new Date(sessionData.started_at).toLocaleString('es-MX') : ''],
-        ['Final', sessionData.completed_at ? new Date(sessionData.completed_at).toLocaleString('es-MX') : ''],
+        ['Inicio', sessionData.started_at ? fmtDateTime(sessionData.started_at) : ''],
+        ['Final', sessionData.completed_at ? fmtDateTime(sessionData.completed_at) : ''],
         ['Tarimas', totals.tarimas],
         ['Disponible', totals.ok],
         ['Bloqueado', totals.blocked],
@@ -140,7 +303,7 @@ function DetailModal({ session, isOpen, onClose }) {
           sc.normalized_code || '',
           sc.code2 || '',
           sc.scan_status || '',
-          sc.scanned_at ? new Date(sc.scanned_at).toLocaleString('es-MX') : '',
+          sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
         ])
       ]
       const ws = XLSX.utils.aoa_to_sheet(info)
@@ -185,8 +348,8 @@ function DetailModal({ session, isOpen, onClose }) {
           <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
             {[
               { label: t('inventario.registros.operator'), value: sessionData.operator_nombre || '—', Icon: User },
-              { label: 'Fecha inicio', value: (sessionData.started_at || sessionData.created_at) ? new Date(sessionData.started_at || sessionData.created_at).toLocaleString('es-MX') : '—', Icon: Clock },
-              { label: 'Fecha final', value: sessionData.completed_at ? new Date(sessionData.completed_at).toLocaleString('es-MX') : '—', Icon: Clock },
+              { label: 'Fecha inicio', value: (sessionData.started_at || sessionData.created_at) ? fmtDateTime(sessionData.started_at || sessionData.created_at) : '—', Icon: Clock },
+              { label: 'Fecha final', value: sessionData.completed_at ? fmtDateTime(sessionData.completed_at) : '—', Icon: Clock },
               { label: 'Tarimas', value: totals.tarimas, Icon: Boxes },
               { label: t('inventario.registros.total'), value: totals.total, Icon: Package2 },
               { label: t('inventario.escaneo.time_label'), value: duration, Icon: Timer },
@@ -304,7 +467,7 @@ function DetailModal({ session, isOpen, onClose }) {
                                                   </span>
                                                 </td>
                                                 <td className="text-right text-warm-400 tabular-nums">
-                                                  {sc.scanned_at ? new Date(sc.scanned_at).toLocaleString('es-MX') : '—'}
+                                                  {sc.scanned_at ? fmtDateTime(sc.scanned_at) : '—'}
                                                 </td>
                                               </tr>
                                             )
@@ -335,6 +498,7 @@ function DetailModal({ session, isOpen, onClose }) {
                         <th className={TH_CLASS}><span className={TH_TEXT}>Código 2</span></th>
                         <th className={TH_CLASS}><span className={TH_TEXT}>{t('common.status')}</span></th>
                         <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Fecha escaneo</span></th>
+                        <th className={TH_CLASS}><span className={TH_TEXT}>Acciones</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warm-50">
@@ -350,7 +514,26 @@ function DetailModal({ session, isOpen, onClose }) {
                               </span>
                             </td>
                             <td className="table-cell">
-                              <span className="font-mono text-xs font-semibold text-warm-700">{sc.normalized_code}</span>
+                              {editingScanId === sc.id ? (
+                                <input
+                                  className="input-field h-8 text-xs font-mono"
+                                  value={editingCode}
+                                  onChange={(event) => setEditingCode(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key !== 'Enter') return
+                                    const nextCode = editingCode.trim()
+                                    if (!nextCode) return
+                                    confirmPotentialDuplicate({
+                                      codes: [nextCode, sc.code2 || ''],
+                                      displayCode: nextCode,
+                                      excludeScanId: sc.id,
+                                      onAccept: () => updateScanMut.mutate({ id: sc.id, code: nextCode }),
+                                    })
+                                  }}
+                                />
+                              ) : (
+                                <span className="font-mono text-xs font-semibold text-warm-700">{sc.normalized_code}</span>
+                              )}
                             </td>
                             <td className="table-cell">
                               {sc.code2 ? (
@@ -368,11 +551,78 @@ function DetailModal({ session, isOpen, onClose }) {
                               </span>
                             </td>
                             <td className="table-cell text-right text-warm-400 tabular-nums">
-                              {sc.scanned_at ? new Date(sc.scanned_at).toLocaleString('es-MX') : '—'}
+                              {sc.scanned_at ? fmtDateTime(sc.scanned_at) : '—'}
+                            </td>
+                            <td className="table-cell">
+                              <div className="flex items-center gap-1">
+                                {canEditScans && editingScanId === sc.id ? (
+                                  <button
+                                    className="rounded-lg bg-primary-600 px-2 py-1 text-[10px] font-semibold text-white"
+                                    onClick={() => {
+                                      const nextCode = editingCode.trim()
+                                      if (!nextCode) return
+                                      confirmPotentialDuplicate({
+                                        codes: [nextCode, sc.code2 || ''],
+                                        displayCode: nextCode,
+                                        excludeScanId: sc.id,
+                                        onAccept: () => updateScanMut.mutate({ id: sc.id, code: nextCode }),
+                                      })
+                                    }}
+                                  >
+                                    Guardar
+                                  </button>
+                                ) : canEditScans ? (
+                                  <button className="rounded-lg bg-warm-100 px-2 py-1 text-[10px] font-semibold text-warm-700" onClick={() => { setEditingScanId(sc.id); setEditingCode(sc.normalized_code || sc.scanned_code || '') }}>
+                                    Editar
+                                  </button>
+                                ) : null}
+                                {canDeleteScans && (
+                                  <button className="rounded-lg bg-danger-50 px-2 py-1 text-[10px] font-semibold text-danger-700" onClick={() => deleteScanMut.mutate(sc.id)}>
+                                    Eliminar
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         )
                       })}
+                      {canEditScans && (
+                      <tr className="bg-warm-50/70">
+                        <td className="table-cell text-warm-400">+</td>
+                        <td className="table-cell">
+                          <input className="input-field h-8 text-xs" value={newScan.group_assignment} onChange={(event) => setNewScan((prev) => ({ ...prev, group_assignment: event.target.value }))} />
+                        </td>
+                        <td className="table-cell">
+                          <input className="input-field h-8 text-xs font-mono" value={newScan.scanned_code} onChange={(event) => setNewScan((prev) => ({ ...prev, scanned_code: event.target.value }))} />
+                        </td>
+                        <td className="table-cell"><span className="text-warm-300">—</span></td>
+                        <td className="table-cell">
+                          <select className="input-field h-8 text-xs" value={newScan.scan_status} onChange={(event) => setNewScan((prev) => ({ ...prev, scan_status: event.target.value }))}>
+                            <option value="ok">Disponible</option>
+                            <option value="blocked">Bloqueado</option>
+                            <option value="nowms">No WMS</option>
+                          </select>
+                        </td>
+                        <td className="table-cell text-right text-warm-300">—</td>
+                        <td className="table-cell">
+                          <button
+                            className="rounded-lg bg-primary-600 px-2 py-1 text-[10px] font-semibold text-white"
+                            disabled={!newScan.scanned_code.trim() || createScanMut.isPending}
+                            onClick={() => {
+                              const nextCode = newScan.scanned_code.trim()
+                              if (!nextCode) return
+                              confirmPotentialDuplicate({
+                                codes: [nextCode],
+                                displayCode: nextCode,
+                                onAccept: () => createScanMut.mutate(),
+                              })
+                            }}
+                          >
+                            Agregar
+                          </button>
+                        </td>
+                      </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -382,12 +632,23 @@ function DetailModal({ session, isOpen, onClose }) {
 
         </div>
       )}
+      <DuplicateConfirmModal
+        isOpen={!!duplicatePending}
+        code={duplicatePending?.code}
+        conflicts={duplicatePending?.conflicts || []}
+        t={t}
+        onConfirm={() => {
+          duplicatePending?.onConfirm?.()
+          setDuplicatePending(null)
+        }}
+        onClose={() => setDuplicatePending(null)}
+      />
     </Modal>
   )
 }
 
-const today = new Date().toISOString().slice(0, 10)
-const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10)
+const today = getToday()
+const thirtyDaysAgo = subtractDays(today, 30)
 
 export default function InventarioRegistros() {
   const { t } = useI18nStore()
@@ -396,13 +657,15 @@ export default function InventarioRegistros() {
   const qc = useQueryClient()
   const canCreate = hasPermission('inventario.escaneo', 'crear')
   const canExport = hasPermission('inventario.registros', 'actualizar')
+  const canEdit = hasPermission('inventario.registros', 'actualizar')
   const canDelete = hasPermission('inventario.registros', 'eliminar')
   const searchDebounce = useRef(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [copiedCode, setCopiedCode] = useState('')
   const [detailSession, setDetailSession] = useState(null)
-  const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+  const [detailInitialTab, setDetailInitialTab] = useState('tarimas')
+  const [deleteConfirmSession, setDeleteConfirmSession] = useState(null)
   const [scanTypeFilter, setScanTypeFilter] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [exportingBulk, setExportingBulk] = useState(false)
@@ -429,13 +692,13 @@ export default function InventarioRegistros() {
   const records = data?.data?.records ?? []
   const total = data?.data?.total ?? 0
   const totalPages = Math.ceil(total / pageSize) || 1
-  const mostRecentId = records[0]?.id
 
   const deleteMut = useMutation({
     mutationFn: deleteInventorySession,
     onSuccess: () => {
       toast.success(t('common.delete') + ' OK')
-      setDeleteConfirmId(null)
+      setDeleteConfirmSession(null)
+      setDetailSession(null)
       qc.invalidateQueries({ queryKey: ['upapex-inventory-sessions'] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
@@ -467,7 +730,7 @@ export default function InventarioRegistros() {
     const end = today
     const start = days === 0
       ? end
-      : new Date(new Date(`${end}T00:00:00`).getTime() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      : subtractDays(end, days)
     setDateFrom(start)
     setDateTo(end)
     setDatePreset(String(days))
@@ -502,7 +765,7 @@ export default function InventarioRegistros() {
   const buildInvRows = (rows) => rows.map(r => [
     formatSectionCode(r.tarima_code, r.completed_at || r.created_at),
     r.scan_type === 'clasificacion' ? 'Clasificación' : 'Unificado',
-    (r.completed_at || r.created_at || '').slice(0, 16).replace('T', ' '),
+    (r.completed_at || r.created_at) ? fmtDateTime(r.completed_at || r.created_at) : '',
     r.operator_nombre || '',
     r.total_ok ?? 0,
     r.total_blocked ?? 0,
@@ -551,6 +814,11 @@ export default function InventarioRegistros() {
     } catch {
       toast.error(t('toast.error'))
     }
+  }
+
+  const openDetail = (session, initialTab = 'tarimas') => {
+    setDetailInitialTab(initialTab)
+    setDetailSession(session)
   }
 
   return (
@@ -697,7 +965,7 @@ export default function InventarioRegistros() {
                       const isSelected = selectedIds.has(r.id)
                       return (
                         <tr key={r.id}
-                          onClick={() => setDetailSession(r)}
+                          onClick={() => openDetail(r)}
                           className={`table-row group cursor-pointer ${isSelected ? 'bg-primary-50/40' : ''}`}>
                           <td className="table-cell text-center" onClick={e => { e.stopPropagation(); toggleSelect(r.id) }}>
                             <input type="checkbox" checked={isSelected}
@@ -730,7 +998,7 @@ export default function InventarioRegistros() {
                           </td>
                           <td className="table-cell">
                             <span className="text-warm-600 text-xs tabular-nums">
-                              {(r.completed_at || r.created_at || '').slice(0, 16).replace('T', ' ')}
+                              {(r.completed_at || r.created_at) ? fmtDateTime(r.completed_at || r.created_at) : '—'}
                             </span>
                           </td>
                           <td className="table-cell hidden md:table-cell text-warm-600 text-xs">
@@ -752,15 +1020,23 @@ export default function InventarioRegistros() {
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
-                                onClick={e => { e.stopPropagation(); setDetailSession(r) }}
+                                onClick={e => { e.stopPropagation(); openDetail(r) }}
                                 title={t('inventario.registros.detail')}>
                                 <Eye size={13} />
                               </button>
-                              {r.id === mostRecentId && canDelete && (
+                              {canEdit && (
+                                <button
+                                  className="p-1.5 rounded-lg hover:bg-warning-50 text-warm-400 hover:text-warning-600 transition-colors"
+                                  onClick={e => { e.stopPropagation(); openDetail(r, 'detallado') }}
+                                  title={t('common.edit')}>
+                                  <Pencil size={13} />
+                                </button>
+                              )}
+                              {canDelete && (
                                 <button
                                   className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-300 hover:text-danger-500 transition-colors"
-                                  onClick={e => { e.stopPropagation(); setDeleteConfirmId(r.id) }}
-                                  title={t('inventario.registros.delete_last')}>
+                                  onClick={e => { e.stopPropagation(); setDeleteConfirmSession(r) }}
+                                  title={t('common.delete')}>
                                   <Trash2 size={13} />
                                 </button>
                               )}
@@ -790,7 +1066,8 @@ export default function InventarioRegistros() {
       <DetailModal
         session={detailSession}
         isOpen={!!detailSession}
-        onClose={() => setDetailSession(null)}
+        onClose={() => { setDetailSession(null); setDetailInitialTab('tarimas') }}
+        initialTab={detailInitialTab}
       />
 
       <Modal
@@ -828,16 +1105,16 @@ export default function InventarioRegistros() {
       </Modal>
 
       <Modal
-        isOpen={!!deleteConfirmId}
-        onClose={() => setDeleteConfirmId(null)}
-        title={t('inventario.registros.delete_last')}
+        isOpen={!!deleteConfirmSession}
+        onClose={() => setDeleteConfirmSession(null)}
+        title={t('inventario.registros.delete_section_title')}
         icon={Trash2}
         footer={
           <div className="flex gap-3 justify-end">
-            <button className="btn-secondary" onClick={() => setDeleteConfirmId(null)}>{t('common.cancel')}</button>
+            <button className="btn-secondary" onClick={() => setDeleteConfirmSession(null)}>{t('common.cancel')}</button>
             <button
-              className="btn-primary bg-danger-600 hover:bg-danger-700"
-              onClick={() => deleteMut.mutate(deleteConfirmId)}
+              className="btn-primary inline-flex items-center gap-2 whitespace-nowrap bg-danger-600 hover:bg-danger-700"
+              onClick={() => deleteMut.mutate(deleteConfirmSession.id)}
               disabled={deleteMut.isPending}>
               {deleteMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
               {t('common.delete')}
@@ -845,7 +1122,19 @@ export default function InventarioRegistros() {
           </div>
         }
       >
-        <p className="text-sm text-warm-600">{t('inventario.registros.delete_confirm')}</p>
+        <div className="space-y-2 text-sm text-warm-600">
+          <p>{t('inventario.registros.delete_section_confirm')}</p>
+          <div className="rounded-xl border border-danger-100 bg-danger-50 px-3 py-2">
+            <p className="font-semibold text-danger-700">
+              {deleteConfirmSession ? formatSectionCode(deleteConfirmSession.tarima_code, deleteConfirmSession.completed_at || deleteConfirmSession.created_at) : '—'}
+            </p>
+            <p className="text-xs text-danger-600">
+              {(deleteConfirmSession?.total_scans ?? 0)} {t('inventario.registros.scanned_boxes')}
+              {' · '}
+              {t('inventario.registros.type')}: {deleteConfirmSession?.scan_type || '—'}
+            </p>
+          </div>
+        </div>
       </Modal>
     </div>
   )

@@ -294,7 +294,7 @@ router.get('/export',
         JOIN configuraciones e ON t.empresa_id = e.id
         JOIN configuraciones c ON t.canal_id = c.id
         JOIN usuarios u ON t.operador_id = u.id
-        LEFT JOIN sesiones_escaneo s ON s.tarima_actual_id = t.id OR (s.operador_id = t.operador_id AND s.empresa_id = t.empresa_id AND s.canal_id = t.canal_id AND DATE(s.fecha_inicio) = DATE(t.fecha_inicio))
+        LEFT JOIN sesiones_escaneo s ON s.tarima_actual_id = t.id OR (s.operador_id = t.operador_id AND s.empresa_id = t.empresa_id AND s.canal_id = t.canal_id AND ${dateInTZ('s.fecha_inicio', tz)} = ${dateInTZ('t.fecha_inicio', tz)})
         LEFT JOIN usuarios_internos ui_s ON s.usuario_interno_id = ui_s.id
         LEFT JOIN guias g ON g.tarima_id = t.id
         LEFT JOIN usuarios gu ON g.operador_id = gu.id

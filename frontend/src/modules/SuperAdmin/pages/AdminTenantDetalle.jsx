@@ -8,6 +8,7 @@ import {
   ChevronUp, ChevronDown
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
+import { fmtDate, fmtDateTime, fmtTime } from '../../../core/utils/dateFormat'
 
 const STATUS_CFG = {
   trial:         { label: 'Trial activo',   bg: 'bg-blue-500/15',    text: 'text-blue-300',    border: 'border-blue-500/25' },
@@ -173,7 +174,7 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
             : <p className={disabledCls}>{form.zona_horaria}</p>}
         </Field>
         <Field label="Creado el">
-          <p className={disabledCls}>{new Date(tenant.created_at).toLocaleString('es-MX')}</p>
+          <p className={disabledCls}>{fmtDateTime(tenant.created_at)}</p>
         </Field>
         <Field label="Trial vence">
           {(() => {
@@ -183,7 +184,7 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
             const color = days < 0 ? 'text-red-400' : days <= 7 ? 'text-amber-400' : 'text-emerald-400'
             return (
               <p className={`${disabledCls} ${color}`}>
-                {d.toLocaleDateString('es-MX')}{' '}
+                {fmtDate(d)}{' '}
                 <span className="text-xs">({days < 0 ? 'vencido' : `${days}d restantes`})</span>
               </p>
             )
@@ -1193,7 +1194,7 @@ export default function AdminTenantDetalle() {
                           </span>
                           <span className="text-gray-300 font-mono flex-1 truncate">{l.step}</span>
                           {l.error_message && <span className="text-red-400 truncate max-w-xs">{l.error_message}</span>}
-                          <span className="text-gray-600 flex-shrink-0">{new Date(l.created_at).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                          <span className="text-gray-600 flex-shrink-0">{fmtTime(l.created_at)}</span>
                         </div>
                       ))}
                     </div>

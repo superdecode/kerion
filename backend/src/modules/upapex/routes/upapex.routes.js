@@ -2,10 +2,14 @@ import { Router } from 'express'
 import crypto from 'crypto'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission, getPermissionLevel, resolvePermission } from '../../../shared/middleware/permissions.js'
-import { getToday } from '../../../shared/utils/dateUtils.js'
+import { getToday, instantDateInTZ } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
 const DEFAULT_TZ = 'America/Mexico_City'
+const PICK_SESSION_STATUSES = new Set(['open', 'complete', 'with_discrepancies'])
+const PICK_SCAN_RESULTS = new Set(['ok', 'unexpected', 'duplicate', 'not_found'])
+const INV_SCAN_STATUSES = new Set(['ok', 'blocked', 'nowms'])
+const ORDER_TRACKING_STATUSES = new Set(['pending_assignment', 'assigned', 'sorting', 'pending_validation', 'validating', 'complete'])
 
 // ── Sheet CSV cache (per tenant+url, stale-while-revalidate) ───────────────
 const _csvCache = new Map()
@@ -71,6 +75,17 @@ function requireAnyPermission(requirements) {
 
 function isValidSectionCode(code) {
   return /^SEC-\d{8}M\d{2,}$/.test(String(code || '').trim())
+}
+
+function normalizeOptionalText(value) {
+  if (value === undefined || value === null) return null
+  const trimmed = String(value).trim()
+  return trimmed || null
+}
+
+function parsePositiveInt(value, fallback = 1) {
+  const parsed = Number.parseInt(value, 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
 async function generateInventorySectionCode(client, tenantId, tz) {
@@ -341,6 +356,7 @@ router.get('/scan-sessions',
   async (req, res) => {
     try {
       const { page = 1, pageSize = 20, status, operator_id, fecha_inicio, fecha_fin, outbound_order_no } = req.query
+      const tz = getTimezone(req)
       const limit = Math.min(parseInt(pageSize) || 20, 100)
       const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit
 
@@ -350,8 +366,8 @@ router.get('/scan-sessions',
 
       if (status) { conditions.push(`s.status = $${p++}`); params.push(status) }
       if (operator_id) { conditions.push(`s.operator_id = $${p++}`); params.push(parseInt(operator_id)) }
-      if (fecha_inicio) { conditions.push(`s.started_at >= $${p++}`); params.push(fecha_inicio) }
-      if (fecha_fin) { conditions.push(`s.started_at <= $${p++}`); params.push(fecha_fin) }
+      if (fecha_inicio) { conditions.push(`${instantDateInTZ('s.started_at', tz)} >= $${p++}`); params.push(fecha_inicio) }
+      if (fecha_fin) { conditions.push(`${instantDateInTZ('s.started_at', tz)} <= $${p++}`); params.push(fecha_fin) }
       if (outbound_order_no) { conditions.push(`s.outbound_order_no = $${p++}`); params.push(outbound_order_no) }
 
       const where = conditions.join(' AND ')
@@ -429,6 +445,9 @@ router.put('/scan-session/:id',
   async (req, res) => {
     try {
       const { status, notes, total_scanned, ubicacion_id } = req.body
+      if (status !== undefined && !PICK_SESSION_STATUSES.has(String(status))) {
+        return res.status(400).json({ success: false, error: 'Estado de sesión inválido' })
+      }
       const sessionRes = await req.tQuery(
         'SELECT * FROM pick_sessions WHERE id = $1 AND tenant_id = $2',
         [req.params.id, req.tenantId]
@@ -444,8 +463,8 @@ router.put('/scan-session/:id',
       const params = []
       let p = 1
       if (status !== undefined) { fields.push(`status = $${p++}`); params.push(status) }
-      if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(notes) }
-      if (total_scanned !== undefined) { fields.push(`total_scanned = $${p++}`); params.push(total_scanned) }
+      if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
+      if (total_scanned !== undefined) { fields.push(`total_scanned = $${p++}`); params.push(parsePositiveInt(total_scanned, 0)) }
       if (ubicacion_id !== undefined) { fields.push(`ubicacion_id = $${p++}`); params.push(ubicacion_id || null) }
       if (status === 'complete' || status === 'with_discrepancies') {
         fields.push(`completed_at = $${p++}`)
@@ -525,6 +544,9 @@ router.post('/scan-event',
       if (!session_id || !scanned_code || !scan_result) {
         return res.status(400).json({ success: false, error: 'session_id, scanned_code y scan_result son requeridos' })
       }
+      if (!PICK_SCAN_RESULTS.has(String(scan_result))) {
+        return res.status(400).json({ success: false, error: 'Resultado de escaneo inválido' })
+      }
 
       const sessionCheck = await req.tQuery(
         'SELECT id, operator_id FROM pick_sessions WHERE id = $1 AND tenant_id = $2 AND status = $3',
@@ -542,16 +564,16 @@ router.post('/scan-event',
          RETURNING *`,
         [
           session_id,
-          scanned_code,
-          normalized_code || scanned_code,
-          matched_sku || null,
-          matched_box_type || null,
+          String(scanned_code).trim(),
+          normalizeOptionalText(normalized_code) || String(scanned_code).trim(),
+          normalizeOptionalText(matched_sku),
+          normalizeOptionalText(matched_box_type),
           scan_result,
-          quantity || 1,
+          parsePositiveInt(quantity, 1),
           input_method || 'scanner',
           manual_reason_id || null,
-          manual_reason_label || null,
-          manual_notes || null,
+          normalizeOptionalText(manual_reason_label),
+          normalizeOptionalText(manual_notes),
         ]
       )
 
@@ -610,14 +632,14 @@ router.post('/scan-event/manual',
          RETURNING *`,
         [
           session_id,
-          scanned_code,
-          normalized_code || scanned_code,
-          matched_sku || null,
-          matched_box_type || null,
-          quantity || 1,
+          String(scanned_code).trim(),
+          normalizeOptionalText(normalized_code) || String(scanned_code).trim(),
+          normalizeOptionalText(matched_sku),
+          normalizeOptionalText(matched_box_type),
+          parsePositiveInt(quantity, 1),
           reason.id,
-          manual_reason_label || reason.nombre,
-          manual_notes || null,
+          reason.nombre,
+          normalizeOptionalText(manual_notes),
         ]
       )
       await refreshPickSessionTotals(req, session_id)
@@ -659,6 +681,9 @@ router.put('/scan-event/:id',
         manual_reason_label,
         manual_notes,
       } = req.body
+      if (scan_result !== undefined && !PICK_SCAN_RESULTS.has(String(scan_result))) {
+        return res.status(400).json({ success: false, error: 'Resultado de escaneo inválido' })
+      }
 
       let resolvedReasonId = manual_reason_id ?? event.manual_reason_id
       let resolvedReasonLabel = manual_reason_label ?? event.manual_reason_label
@@ -670,7 +695,7 @@ router.put('/scan-event/:id',
         if (reasonRes.rows.length === 0) {
           return res.status(404).json({ success: false, error: 'Motivo de ingreso manual no encontrado' })
         }
-        resolvedReasonLabel = resolvedReasonLabel || reasonRes.rows[0].nombre
+        resolvedReasonLabel = reasonRes.rows[0].nombre
       }
 
       const result = await req.tQuery(
@@ -689,15 +714,15 @@ router.put('/scan-event/:id',
          WHERE id = $11
          RETURNING *`,
         [
-          scanned_code || null,
-          normalized_code || null,
-          matched_sku ?? event.matched_sku ?? null,
-          matched_box_type ?? event.matched_box_type ?? null,
+          normalizeOptionalText(scanned_code),
+          normalizeOptionalText(normalized_code),
+          matched_sku !== undefined ? normalizeOptionalText(matched_sku) : event.matched_sku ?? null,
+          matched_box_type !== undefined ? normalizeOptionalText(matched_box_type) : event.matched_box_type ?? null,
           scan_result || null,
-          quantity || null,
+          quantity !== undefined ? parsePositiveInt(quantity, 1) : null,
           resolvedReasonId || null,
           resolvedReasonLabel || null,
-          manual_notes ?? event.manual_notes ?? null,
+          manual_notes !== undefined ? normalizeOptionalText(manual_notes) : event.manual_notes ?? null,
           req.user.id,
           req.params.id,
         ]
@@ -834,6 +859,7 @@ router.get('/inventory-sessions',
   async (req, res) => {
     try {
       const { page = 1, pageSize = 20, scan_type, date_from, date_to, q } = req.query
+      const tz = getTimezone(req)
       const limit = Math.min(parseInt(pageSize) || 20, 100)
       const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit
 
@@ -854,8 +880,8 @@ router.get('/inventory-sessions',
           OR COALESCE(s.notes, '') ILIKE $${params.push(term)}
         )`)
       }
-      if (date_from) filters.push(`s.completed_at >= $${params.push(date_from)}`)
-      if (date_to)   filters.push(`s.completed_at <  $${params.push(date_to + 'T23:59:59')}`)
+      if (date_from) filters.push(`${instantDateInTZ('s.completed_at', tz)} >= $${params.push(date_from)}`)
+      if (date_to)   filters.push(`${instantDateInTZ('s.completed_at', tz)} <= $${params.push(date_to)}`)
       const where = filters.join(' AND ')
 
       const [rows, countRes] = await Promise.all([
@@ -912,6 +938,60 @@ router.get('/inventory-session/:id',
   }
 )
 
+router.post('/inventory-duplicates/check',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'inventario.escaneo', action: 'crear' },
+    { modulePath: 'inventario.registros', action: 'actualizar' },
+  ]),
+  async (req, res) => {
+    try {
+      const codes = Array.isArray(req.body?.codes)
+        ? [...new Set(req.body.codes.map((value) => String(value || '').trim()).filter(Boolean))]
+        : []
+
+      if (codes.length === 0) {
+        return res.json({ success: true, data: { date: getToday(getTimezone(req)), matches: [] } })
+      }
+
+      const tz = getTimezone(req)
+      const today = getToday(tz)
+      const result = await req.tQuery(
+        `SELECT sc.id,
+                sc.session_id,
+                sc.scanned_code,
+                sc.normalized_code,
+                sc.code2,
+                sc.was_swapped,
+                sc.scan_status,
+                sc.group_assignment,
+                sc.scanned_at,
+                sess.tarima_code,
+                sess.scan_type,
+                sess.operator_id,
+                u.nombre_completo AS operator_nombre
+           FROM inv_scans sc
+           JOIN inv_sessions sess ON sess.id = sc.session_id
+           LEFT JOIN usuarios u ON u.id = sess.operator_id
+          WHERE sess.tenant_id = $1
+            AND ${instantDateInTZ('sc.scanned_at', tz)} = $2
+            AND (
+              sc.normalized_code = ANY($3::text[])
+              OR COALESCE(sc.code2, '') = ANY($3::text[])
+            )
+          ORDER BY sc.scanned_at DESC
+          LIMIT 50`,
+        [req.tenantId, today, codes]
+      )
+
+      res.json({ success: true, data: { date: today, matches: result.rows } })
+    } catch (err) {
+      console.error('POST upapex/inventory-duplicates/check error:', err.message)
+      res.status(500).json({ success: false, error: 'Error validando duplicados de inventario' })
+    }
+  }
+)
+
 router.post('/inventory-scan',
   authenticateToken, loadFullUser,
   requirePermission('inventario.registros', 'actualizar'),
@@ -933,6 +1013,9 @@ router.post('/inventory-scan',
       if (!session_id || !scanned_code || !scan_status) {
         return res.status(400).json({ success: false, error: 'session_id, scanned_code y scan_status son requeridos' })
       }
+      if (!INV_SCAN_STATUSES.has(String(scan_status))) {
+        return res.status(400).json({ success: false, error: 'Estado de inventario inválido' })
+      }
 
       const sessionRes = await req.tQuery(
         'SELECT id FROM inv_sessions WHERE id = $1 AND tenant_id = $2',
@@ -948,15 +1031,15 @@ router.post('/inventory-scan',
          RETURNING *`,
         [
           session_id,
-          scanned_code,
-          normalized_code || scanned_code,
-          code2 || null,
+          String(scanned_code).trim(),
+          normalizeOptionalText(normalized_code) || String(scanned_code).trim(),
+          normalizeOptionalText(code2),
           !!was_swapped,
           scan_status,
-          sku || null,
-          product_name || null,
-          group_assignment || 'auto',
-          manual_notes || null,
+          normalizeOptionalText(sku),
+          normalizeOptionalText(product_name),
+          normalizeOptionalText(group_assignment) || 'auto',
+          normalizeOptionalText(manual_notes),
         ]
       )
       await refreshInventorySessionTotals(req, session_id)
@@ -974,7 +1057,7 @@ router.put('/inventory-scan/:id',
   async (req, res) => {
     try {
       const scanRes = await req.tQuery(
-        `SELECT s.id, s.session_id
+        `SELECT s.id, s.session_id, s.code2, s.sku, s.product_name, s.group_assignment, s.manual_notes
          FROM inv_scans s
          JOIN inv_sessions sess ON sess.id = s.session_id
          WHERE s.id = $1 AND sess.tenant_id = $2`,
@@ -993,6 +1076,9 @@ router.put('/inventory-scan/:id',
         group_assignment,
         manual_notes,
       } = req.body
+      if (scan_status !== undefined && !INV_SCAN_STATUSES.has(String(scan_status))) {
+        return res.status(400).json({ success: false, error: 'Estado de inventario inválido' })
+      }
 
       const result = await req.tQuery(
         `UPDATE inv_scans
@@ -1010,15 +1096,15 @@ router.put('/inventory-scan/:id',
          WHERE id = $11
          RETURNING *`,
         [
-          scanned_code || null,
-          normalized_code || null,
-          code2 ?? null,
+          normalizeOptionalText(scanned_code),
+          normalizeOptionalText(normalized_code),
+          code2 !== undefined ? normalizeOptionalText(code2) : current.code2 ?? null,
           typeof was_swapped === 'boolean' ? was_swapped : null,
           scan_status || null,
-          sku ?? null,
-          product_name ?? null,
-          group_assignment || null,
-          manual_notes ?? null,
+          sku !== undefined ? normalizeOptionalText(sku) : current.sku ?? null,
+          product_name !== undefined ? normalizeOptionalText(product_name) : current.product_name ?? null,
+          group_assignment !== undefined ? normalizeOptionalText(group_assignment) : current.group_assignment ?? null,
+          manual_notes !== undefined ? normalizeOptionalText(manual_notes) : current.manual_notes ?? null,
           req.user.id,
           req.params.id,
         ]
@@ -1289,6 +1375,9 @@ router.put('/order-tracking/:obc',
   async (req, res) => {
     try {
       const { surtidor_id, status, notes, third_order_no } = req.body
+      if (status !== undefined && !ORDER_TRACKING_STATUSES.has(String(status))) {
+        return res.status(400).json({ success: false, error: 'Estado de orden inválido' })
+      }
       const existing = await req.tQuery(
         'SELECT id FROM pick_order_tracking WHERE tenant_id = $1 AND outbound_order_no = $2',
         [req.tenantId, req.params.obc]
@@ -1297,6 +1386,9 @@ router.put('/order-tracking/:obc',
       let surtidorNombre = null
       if (surtidor_id) {
         const s = await req.tQuery('SELECT nombre FROM pick_surtidores WHERE id = $1 AND tenant_id = $2', [surtidor_id, req.tenantId])
+        if (s.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Surtidor no encontrado' })
+        }
         surtidorNombre = s.rows[0]?.nombre || null
       }
 
@@ -1305,8 +1397,8 @@ router.put('/order-tracking/:obc',
           `INSERT INTO pick_order_tracking
              (tenant_id, outbound_order_no, third_order_no, surtidor_id, surtidor_nombre, status, notes)
            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-          [req.tenantId, req.params.obc, third_order_no || null, surtidor_id || null,
-           surtidorNombre, status || 'pending_assignment', notes || null]
+          [req.tenantId, req.params.obc, normalizeOptionalText(third_order_no), surtidor_id || null,
+           surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes)]
         )
         return res.json({ success: true, data: result.rows[0] })
       }
@@ -1333,7 +1425,8 @@ router.put('/order-tracking/:obc',
         fields.push(`surtidor_id = $${p++}`); params.push(surtidor_id || null)
         fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
       }
-      if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(notes) }
+      if (third_order_no !== undefined) { fields.push(`third_order_no = $${p++}`); params.push(normalizeOptionalText(third_order_no)) }
+      if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
       params.push(req.tenantId, req.params.obc)
 
       const result = await req.tQuery(
@@ -1355,11 +1448,13 @@ router.delete('/scan-session/:id/events',
   requirePermission('surtido.validacion', 'eliminar'),
   async (req, res) => {
     try {
-      const sessionRes = await req.tQuery(
-        'SELECT * FROM pick_sessions WHERE id = $1 AND tenant_id = $2 AND status = $3',
-        [req.params.id, req.tenantId, 'open']
-      )
-      if (sessionRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Sesión no encontrada o cerrada' })
+      const session = await assertSessionOwnership(req, req.params.id)
+      if (session === null || session?.status !== 'open') {
+        return res.status(404).json({ success: false, error: 'Sesión no encontrada o cerrada' })
+      }
+      if (session === false) {
+        return res.status(403).json({ success: false, error: 'No autorizado para reiniciar esta sesión' })
+      }
 
       await req.tQuery('DELETE FROM pick_events WHERE session_id = $1', [req.params.id])
       await req.tQuery(

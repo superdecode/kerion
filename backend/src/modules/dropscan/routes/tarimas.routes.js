@@ -118,7 +118,7 @@ router.get('/',
          LEFT JOIN LATERAL (
            SELECT usuario_operador, usuario_interno_id FROM sesiones_escaneo
            WHERE tarima_actual_id = t.id
-              OR (operador_id = t.operador_id AND empresa_id = t.empresa_id AND canal_id = t.canal_id AND DATE(fecha_inicio) = DATE(t.fecha_inicio))
+              OR (operador_id = t.operador_id AND empresa_id = t.empresa_id AND canal_id = t.canal_id AND ${dateInTZ('fecha_inicio', tz)} = ${dateInTZ('t.fecha_inicio', tz)})
            ORDER BY (tarima_actual_id = t.id) DESC, fecha_inicio DESC
            LIMIT 1
          ) s ON true
@@ -172,7 +172,7 @@ router.get('/:id',
          LEFT JOIN LATERAL (
            SELECT usuario_operador, usuario_interno_id FROM sesiones_escaneo
            WHERE tarima_actual_id = t.id
-              OR (operador_id = t.operador_id AND empresa_id = t.empresa_id AND canal_id = t.canal_id AND DATE(fecha_inicio) = DATE(t.fecha_inicio))
+              OR (operador_id = t.operador_id AND empresa_id = t.empresa_id AND canal_id = t.canal_id AND ${dateInTZ('fecha_inicio', tz)} = ${dateInTZ('t.fecha_inicio', tz)})
            ORDER BY (tarima_actual_id = t.id) DESC, fecha_inicio DESC
            LIMIT 1
          ) s ON true

@@ -7,23 +7,28 @@ import {
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
   ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck,
   MapPin, XOctagon, Plus, Pencil, X, AlertTriangle, Copy, Check,
+  PanelRightClose, PanelRightOpen, Save,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
+import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
-import { normalizeCode } from '../../Shared/Wms/normalizeCode'
+import { generateCodeVariations, normalizeCode } from '../../Shared/Wms/normalizeCode'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import {
   getOutboundList, getOutboundDetail,
-  createScanSession, updateScanSession, addScanEvent, clearSessionEvents,
+  createScanSession, updateScanSession, addScanEvent, addManualScanEvent, clearSessionEvents,
+  getManualEntryReasons,
   upsertOrderTracking, getScanSessions, getRecords,
 } from '../services/surtidoService'
 import { getUbicaciones } from '../../WmsHub/services/wmsHubService'
+import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
+import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
 
-const SCANNER_THRESHOLD_MS = 500
+const SCANNER_THRESHOLD_MS = 100
 const TABS_KEY = 'kirion_surtido_tabs'
 const ACTIVE_TAB_KEY = 'kirion_surtido_active_tab'
 const SESSION_KEY = (tabId) => `kirion_surtido_session_${tabId}`
@@ -41,18 +46,32 @@ function buildItemMaps(detailData) {
     const expectedQty = p.quantity ?? p.totalPackageQty ?? p.qty ?? 1
     codes.forEach(c => {
       const norm = normalizeCode(c)
-      if (norm) packageMap.set(norm, { ...p, expectedQty, scannedQty: 0, type: 'box', displayCode: norm })
-      if (norm.includes('/')) packageMap.set(norm.replace(/\//g, '-'), packageMap.get(norm))
-      if (norm.includes('-')) packageMap.set(norm.replace(/-/g, '/'), packageMap.get(norm))
+      if (!norm) return
+      const entry = { ...p, expectedQty, scannedQty: 0, type: 'box', displayCode: norm }
+      for (const variant of generateCodeVariations(norm)) {
+        packageMap.set(variant, entry)
+      }
     })
   })
   const productMap = new Map()
   productList.forEach(p => {
     const norm = normalizeCode(p.sku || '')
     const expectedQty = p.quantity ?? p.qty ?? p.totalProductQty ?? 1
-    if (norm) productMap.set(norm, { ...p, expectedQty, scannedQty: 0, type: 'sku', displayCode: norm })
+    if (!norm) return
+    const entry = { ...p, expectedQty, scannedQty: 0, type: 'sku', displayCode: norm }
+    for (const variant of generateCodeVariations(norm)) {
+      productMap.set(variant, entry)
+    }
   })
   return { packageMap, productMap }
+}
+
+function findMatchedItem(code, packageMap, productMap) {
+  for (const variant of generateCodeVariations(code)) {
+    const matched = packageMap.get(variant) || productMap.get(variant)
+    if (matched) return matched
+  }
+  return null
 }
 
 function validateOrderBoxData(detailData) {
@@ -89,9 +108,7 @@ const fmtElapsed = (secs) => {
 
 const fmtDateTime = (value) => {
   if (!value) return '—'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return String(value).slice(0, 19).replace('T', ' ')
-  return d.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })
+  return formatDateTimeTz(value)
 }
 
 /* ─── Search step ─────────────────────────────────────────── */
@@ -178,7 +195,7 @@ function SearchStep({ onFound }) {
                   </div>
                   <div className="flex-1 text-left min-w-0">
                     <p className="font-mono font-semibold text-sm text-warm-800">{r.outboundOrderNo}</p>
-                    <p className="text-[11px] text-warm-400">{r.totalQty ?? '?'} {t('surtido.validacion.units')} · {(r.createTime || '').slice(0, 10)}</p>
+                    <p className="text-[11px] text-warm-400">{r.totalQty ?? '?'} {t('surtido.validacion.units')} · {r.createTime ? fmtDate(r.createTime) : '—'}</p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-warm-400 shrink-0" />
                 </button>
@@ -419,7 +436,7 @@ function RejectedTable({ items, t }) {
                     {e.result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{new Date(e.ts).toLocaleTimeString()}</td>
+                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{fmtTimeShort(e.ts)}</td>
               </tr>
             ))}
           </tbody>
@@ -460,7 +477,7 @@ function ScanFeedTable({ items, t }) {
                     {e.code}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{new Date(e.ts).toLocaleTimeString()}</td>
+                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{fmtTimeShort(e.ts)}</td>
               </tr>
             ))}
           </tbody>
@@ -708,7 +725,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                   <div className="px-4 py-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs flex-1">
                     <div>
                       <p className="text-warm-400 uppercase tracking-wide text-[10px]">{t('surtido.validacion.card_delivery')}</p>
-                      <p className="font-medium text-warm-700 mt-0.5 truncate">{r.outboundTime?.slice(0, 10) || '—'}</p>
+                      <p className="font-medium text-warm-700 mt-0.5 truncate">{r.outboundTime ? fmtDate(r.outboundTime) : '—'}</p>
                     </div>
                     <div>
                       <p className="text-warm-400 uppercase tracking-wide text-[10px]">{t('surtido.validacion.card_destination')}</p>
@@ -810,6 +827,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
+  const user = useAuthStore((state) => state.user)
   const scanRef = useRef(null)
   const copyTimeoutRef = useRef(null)
   const lastKeyTimeRef = useRef(0)
@@ -840,10 +858,21 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const [locationNotFoundCode, setLocationNotFoundCode] = useState('')
   const [locationFlash, setLocationFlash] = useState(false)
   const [obcCopied, setObcCopied] = useState(false)
+  const [sidebarVisible, setSidebarVisible] = useState(true)
+  const [showManualEntry, setShowManualEntry] = useState(false)
+  const [manualEntry, setManualEntry] = useState({ code: '', reasonId: '', notes: '' })
   const locationRef = useRef(null)
+  const sidebarStorageKey = `kirion_surtido_validation_sidebar_${user?.id || 'guest'}`
 
   const sessionElapsed = useSessionTimer(sessionStart)
   const storageKey = SESSION_KEY(tabId)
+
+  useEffect(() => {
+    try {
+      const savedVisibility = localStorage.getItem(sidebarStorageKey)
+      if (savedVisibility === 'hidden') setSidebarVisible(false)
+    } catch {}
+  }, [sidebarStorageKey])
 
   useEffect(() => {
     const saved = sessionStorage.getItem(storageKey)
@@ -874,6 +903,11 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const { data: ubicacionesData } = useQuery({
     queryKey: ['upapex-ubicaciones', 'surtido'],
     queryFn: () => getUbicaciones('surtido'),
+    staleTime: 120000,
+  })
+  const { data: reasonsData } = useQuery({
+    queryKey: ['upapex-manual-entry-reasons'],
+    queryFn: getManualEntryReasons,
     staleTime: 120000,
   })
   const { data: trackingData } = useQuery({
@@ -1054,6 +1088,30 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     onError: (_, vars) => setPendingSync(p => [...p, { key: vars._dedupeKey, payload: vars }]),
   })
 
+  const addManualEventMut = useMutation({
+    mutationFn: addManualScanEvent,
+    onSuccess: (result) => {
+      const payload = result?.data
+      const norm = normalizeCode(payload?.normalized_code || manualEntry.code)
+      const matched = findMatchedItem(norm, packageMap, productMap)
+      playSound('success')
+      setLastScan({ code: norm, result: 'ok' })
+      setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h])
+      setCounts(c => ({ ...c, ok: c.ok + 1 }))
+      if (matched) {
+        setItemCounts(m => {
+          const next = new Map(m)
+          next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1)
+          return next
+        })
+      }
+      setManualEntry({ code: '', reasonId: '', notes: '' })
+      setShowManualEntry(false)
+      toast.success('Ingreso manual registrado')
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
   const cancelMut = useMutation({
     mutationFn: () => clearSessionEvents(sessionId),
     onSuccess: () => {
@@ -1083,7 +1141,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'duplicate', quantity: 1, _dedupeKey: `DUP_${norm}_${Date.now()}` })
       return
     }
-    const matched = packageMap.get(norm) || productMap.get(norm)
+    const matched = findMatchedItem(norm, packageMap, productMap)
     if (!matched) {
       playSound('error')
       setLastScan({ code: norm, result: 'rejected' })
@@ -1109,7 +1167,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
 
   function addCodeToSession(code) {
     const norm = normalizeCode(code)
-    const matched = packageMap.get(norm) || productMap.get(norm)
+    const matched = findMatchedItem(norm, packageMap, productMap)
     playSound('success')
     setLastScan({ code: norm, result: 'ok' })
     setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h])
@@ -1131,6 +1189,11 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     if (e.key === 'Enter') {
       const val = e.target.value.trim()
       if (!val) return
+      if (delta > SCANNER_THRESHOLD_MS) {
+        toast.warning(t('surtido.validacion.manual_blocked'))
+        e.target.value = ''
+        return
+      }
       doScan(val); e.target.value = ''; return
     }
     if (delta > SCANNER_THRESHOLD_MS && e.target.value.length > 0) {
@@ -1424,6 +1487,15 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                 autoComplete="off"
               />
             </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-warm-200 bg-warm-50 px-3 py-1.5 text-xs font-semibold text-warm-600 hover:bg-warm-100"
+                onClick={() => setShowManualEntry(true)}
+              >
+                <Pencil size={12} /> Ingreso manual
+              </button>
+            </div>
 
             {/* Last scan feedback */}
             <AnimatePresence mode="wait">
@@ -1496,8 +1568,25 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
         </div>
       </div>
 
+      <div className="hidden lg:flex shrink-0 items-start pt-4 pr-2">
+        <button
+          type="button"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 hover:bg-warm-50 hover:text-primary-600"
+          onClick={() => {
+            setSidebarVisible((prev) => {
+              const next = !prev
+              localStorage.setItem(sidebarStorageKey, next ? 'visible' : 'hidden')
+              return next
+            })
+          }}
+          title={sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}
+        >
+          {sidebarVisible ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+        </button>
+      </div>
+
       {/* Right sidebar: orders with progress */}
-      <div className="hidden lg:flex w-80 border-l border-warm-100 bg-white/80 backdrop-blur-2xl flex-col shrink-0">
+      <div className={`${sidebarVisible ? 'hidden lg:flex w-80' : 'hidden'} border-l border-warm-100 bg-white/80 backdrop-blur-2xl flex-col shrink-0`}>
         <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50">
           <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
             <Zap className="w-3.5 h-3.5 text-primary-500" /> {t('surtido.validacion.sidebar_title')}
@@ -1598,6 +1687,64 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
         onAddToSession={addCodeToSession}
         t={t}
       />
+
+      <Modal
+        isOpen={showManualEntry}
+        onClose={() => setShowManualEntry(false)}
+        title="Ingreso manual"
+        icon={Pencil}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => setShowManualEntry(false)}>Cancelar</button>
+            <button
+              className="btn-primary"
+              disabled={!manualEntry.code.trim() || !manualEntry.reasonId || addManualEventMut.isPending}
+              onClick={() => {
+                const selectedReason = (getRecords(reasonsData)).find((reason) => String(reason.id) === manualEntry.reasonId)
+                addManualEventMut.mutate({
+                  session_id: sessionId,
+                  scanned_code: manualEntry.code.trim(),
+                  normalized_code: normalizeCode(manualEntry.code.trim()),
+                  matched_box_type: null,
+                  matched_sku: null,
+                  quantity: 1,
+                  manual_reason_id: Number(manualEntry.reasonId),
+                  manual_reason_label: selectedReason?.nombre || null,
+                  manual_notes: manualEntry.notes.trim() || null,
+                })
+              }}
+            >
+              {addManualEventMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              Registrar
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <input
+            className="input-field w-full text-sm font-mono"
+            placeholder="Codigo"
+            value={manualEntry.code}
+            onChange={(e) => setManualEntry((prev) => ({ ...prev, code: e.target.value }))}
+          />
+          <select
+            className="input-field w-full text-sm"
+            value={manualEntry.reasonId}
+            onChange={(e) => setManualEntry((prev) => ({ ...prev, reasonId: e.target.value }))}
+          >
+            <option value="">Selecciona un motivo</option>
+            {getRecords(reasonsData).map((reason) => (
+              <option key={reason.id} value={String(reason.id)}>{reason.nombre}</option>
+            ))}
+          </select>
+          <textarea
+            className="input-field min-h-24 w-full resize-none text-sm"
+            placeholder="Observacion opcional"
+            value={manualEntry.notes}
+            onChange={(e) => setManualEntry((prev) => ({ ...prev, notes: e.target.value }))}
+          />
+        </div>
+      </Modal>
 
       {/* Location not found modal */}
       <Modal isOpen={showLocationNotFound} onClose={() => setShowLocationNotFound(false)}
@@ -1744,6 +1891,9 @@ export default function SurtidoValidacion() {
   const canUpdateValidation = hasPermission('surtido.validacion', 'actualizar')
   const canDeleteValidation = hasPermission('surtido.validacion', 'eliminar')
   const [searchParams] = useSearchParams()
+  const qc = useQueryClient()
+  const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
+  const [refreshingSheet, setRefreshingSheet] = useState(false)
 
   const [tabs, setTabs] = useState(() => {
     try {
@@ -1822,6 +1972,13 @@ export default function SurtidoValidacion() {
   const [activeSession, setActiveSession] = useState(null)
   const [showQuickSearch, setShowQuickSearch] = useState(false)
   const [pendingTabObcs, setPendingTabObcs] = useState({})
+  const { data: outboundSummaryData } = useQuery({
+    queryKey: ['upapex-outbound-summary'],
+    queryFn: getOutboundList,
+    staleTime: 5 * 60 * 1000,
+  })
+  const outboundSummaryRecords = getRecords(outboundSummaryData).length
+  const outboundSummaryPartial = outboundSummaryData?.data?.partial ?? getCacheStatus('outbound').partial
 
   function addTabWithObc(obc) {
     const newId = genId()
@@ -1830,8 +1987,26 @@ export default function SurtidoValidacion() {
     setPendingTabObcs(prev => ({ ...prev, [newId]: obc }))
   }
 
+  async function handleSheetRefresh() {
+    setRefreshingSheet(true)
+    try {
+      await refreshSheet('outbound')
+      setSheetTs(getCacheTimestamp('outbound'))
+      qc.invalidateQueries({ queryKey: ['upapex-outbound-summary'] })
+    } finally {
+      setRefreshingSheet(false)
+    }
+  }
+
   const headerActions = (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+      <DataSyncStatus
+        records={outboundSummaryRecords}
+        updatedAt={sheetTs}
+        partial={outboundSummaryPartial}
+        onRefresh={handleSheetRefresh}
+        refreshing={refreshingSheet}
+      />
       <button
         className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-2 text-sm font-semibold"
         onClick={() => setShowQuickSearch(true)}

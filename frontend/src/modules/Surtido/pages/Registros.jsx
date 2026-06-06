@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useMemo, useEffect } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
   X, CheckCircle2, XCircle, AlertTriangle, Copy, Check,
   Clock, ScanBarcode, Package2, BadgeCheck, User, Timer,
-  Loader2, AlertCircle, Eye, Truck, Calendar, Download,
+  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Pencil, Trash2,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -13,9 +13,13 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { getScanSessions, getScanSession, getOutboundList, getRecords } from '../services/surtidoService'
+import { fmtDateTime, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
+import {
+  getScanSessions, getScanSession, getOutboundList, getRecords,
+  updateScanEvent, deleteScanEvent, addManualScanEvent, getManualEntryReasons, deleteScanSession,
+} from '../services/surtidoService'
+import { normalizeCode } from '../../Shared/Wms/normalizeCode'
 
-const getToday = () => new Date().toISOString().slice(0, 10)
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
 
@@ -24,6 +28,12 @@ const STATUS_META = {
   complete:           { labelKey: 'surtido.registros.status.complete',           cls: 'bg-success-100 text-success-700' },
   with_discrepancies: { labelKey: 'surtido.registros.status.with_discrepancies', cls: 'bg-danger-100 text-danger-700' },
   cancelled:          { labelKey: 'surtido.registros.status.cancelled',          cls: 'bg-warm-100 text-warm-600' },
+}
+
+function resolveStatusLabel(t, key, fallbackKey = 'common.status') {
+  if (!key) return '—'
+  const label = t(key)
+  return label === key ? t(fallbackKey) : label
 }
 
 function durationLabel(startedAt, endedAt) {
@@ -39,7 +49,7 @@ function durationLabel(startedAt, endedAt) {
 
 function fmtDt(v) {
   if (!v) return '—'
-  return String(v).slice(0, 16).replace('T', ' ')
+  return fmtDateTime(v)
 }
 
 function ObcHeader({ obc, status, t }) {
@@ -55,12 +65,12 @@ function ObcHeader({ obc, status, t }) {
           {copied ? <Check size={13} className="text-success-600" /> : <Copy size={13} />}
         </button>
       )}
-      <span className={`badge text-[11px] font-semibold shrink-0 ${meta.cls}`}>{t(meta.labelKey)}</span>
+      <span className={`badge text-[11px] font-semibold shrink-0 ${meta.cls}`}>{resolveStatusLabel(t, meta.labelKey)}</span>
     </div>
   )
 }
 
-function ScanTable({ events, showType = false, t }) {
+function ScanTable({ events, showType = false, t, editable = false, editingId, editingCode, onEditCodeChange, onStartEdit, onSaveEdit, onDelete }) {
   if (events.length === 0) return (
     <div className="flex flex-col items-center justify-center py-10 gap-2 text-warm-400">
       <CheckCircle2 size={32} className="opacity-30" />
@@ -76,6 +86,7 @@ function ScanTable({ events, showType = false, t }) {
             <th className={`${TH_CLASS} w-[44%]`}><span className={TH_TEXT}>{t('surtido.validacion.code_header')}</span></th>
             {showType && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Tipo</span></th>}
             <th className={`${TH_CLASS} w-[30%]`}><span className={TH_TEXT}>Fecha escaneo</span></th>
+            {editable && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Acciones</span></th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-warm-50">
@@ -85,7 +96,16 @@ function ScanTable({ events, showType = false, t }) {
             }`}>
               <td className="px-3 py-2 text-warm-400 tabular-nums font-bold">{i + 1}</td>
               <td className="px-3 py-2 font-mono font-semibold text-warm-700 truncate">
-                {e.normalized_code || e.scanned_code}
+                {editable && editingId === e.id ? (
+                  <input
+                    className="input-field h-8 w-full text-xs font-mono"
+                    value={editingCode}
+                    onChange={(event) => onEditCodeChange(event.target.value)}
+                    onKeyDown={(event) => event.key === 'Enter' && onSaveEdit(e)}
+                  />
+                ) : (
+                  e.normalized_code || e.scanned_code
+                )}
               </td>
               {showType && (
                 <td className="px-3 py-2">
@@ -99,6 +119,24 @@ function ScanTable({ events, showType = false, t }) {
               <td className="px-3 py-2 text-warm-400 tabular-nums">
                 {fmtDt(e.scanned_at || e.scan_time)}
               </td>
+              {editable && (
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-1">
+                    {editingId === e.id ? (
+                      <button className="rounded-lg bg-primary-600 px-2 py-1 text-[10px] font-semibold text-white" onClick={() => onSaveEdit(e)}>
+                        Guardar
+                      </button>
+                    ) : (
+                      <button className="rounded-lg bg-warm-100 px-2 py-1 text-[10px] font-semibold text-warm-700" onClick={() => onStartEdit(e)}>
+                        Editar
+                      </button>
+                    )}
+                    <button className="rounded-lg bg-danger-50 px-2 py-1 text-[10px] font-semibold text-danger-700" onClick={() => onDelete(e)}>
+                      Eliminar
+                    </button>
+                  </div>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -107,17 +145,22 @@ function ScanTable({ events, showType = false, t }) {
   )
 }
 
-function DetailModal({ sessionId, isOpen, onClose, canExport }) {
+function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete, initialTab = 'validados' }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
+  const qc = useQueryClient()
   const [detailTab, setDetailTab] = useState('validados')
+  const [editingId, setEditingId] = useState(null)
+  const [editingCode, setEditingCode] = useState('')
+  const [newCode, setNewCode] = useState('')
+  const [newReasonId, setNewReasonId] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['surtido-session-detail', sessionId],
     queryFn: () => getScanSession(sessionId),
     enabled: isOpen && !!sessionId,
     staleTime: 30000,
-    onSuccess: () => setDetailTab('validados'),
+    onSuccess: () => setDetailTab(initialTab),
   })
 
   // Correct data shape: { session: {...}, events: [...] }
@@ -133,6 +176,12 @@ function DetailModal({ sessionId, isOpen, onClose, canExport }) {
   })
   const wmsOrder = getRecords(wmsData)
     .find(r => r.outboundOrderNo === session.outbound_order_no)
+  const { data: reasonsData } = useQuery({
+    queryKey: ['upapex-manual-entry-reasons'],
+    queryFn: getManualEntryReasons,
+    enabled: isOpen && !!sessionId,
+    staleTime: 60000,
+  })
 
   const validados  = events.filter(e => e.scan_result === 'ok')
   const rechazados = events.filter(e => e.scan_result !== 'ok')
@@ -145,8 +194,51 @@ function DetailModal({ sessionId, isOpen, onClose, canExport }) {
     : '—'
   const referencia   = wmsOrder?.thirdOrderNo || wmsOrder?.referenceNo || '—'
   const tracking     = wmsOrder?.logisticsTrackNo || '—'
+  const editableSession = session.status === 'open'
 
-  const handleClose = () => { setDetailTab('validados'); onClose() }
+  const updateMut = useMutation({
+    mutationFn: ({ id, code }) => updateScanEvent(id, {
+      scanned_code: code,
+      normalized_code: normalizeCode(code),
+    }),
+    onSuccess: () => {
+      setEditingId(null)
+      setEditingCode('')
+      qc.invalidateQueries({ queryKey: ['surtido-session-detail', sessionId] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: deleteScanEvent,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['surtido-session-detail', sessionId] }),
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  const createMut = useMutation({
+    mutationFn: () => addManualScanEvent({
+      session_id: sessionId,
+      scanned_code: newCode,
+      normalized_code: normalizeCode(newCode),
+      quantity: 1,
+      manual_reason_id: Number(newReasonId),
+      manual_reason_label: getRecords(reasonsData).find((reason) => String(reason.id) === newReasonId)?.nombre || null,
+    }),
+    onSuccess: () => {
+      setNewCode('')
+      setNewReasonId('')
+      qc.invalidateQueries({ queryKey: ['surtido-session-detail', sessionId] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  useEffect(() => {
+    setDetailTab(initialTab)
+    setEditingId(null)
+    setEditingCode('')
+  }, [initialTab, isOpen])
+
+  const handleClose = () => { setDetailTab(initialTab); onClose() }
 
   const handleExportDetail = () => {
     try {
@@ -280,8 +372,52 @@ function DetailModal({ sessionId, isOpen, onClose, canExport }) {
           </div>
 
           {/* Tab content */}
-          {detailTab === 'validados'  && <ScanTable events={validados}  t={t} />}
-          {detailTab === 'rechazados' && <ScanTable events={rechazados} t={t} showType />}
+          {detailTab === 'validados' && (
+            <div className="space-y-3">
+              <ScanTable
+                events={validados}
+                t={t}
+                editable={editableSession && canEdit}
+                editingId={editingId}
+                editingCode={editingCode}
+                onEditCodeChange={setEditingCode}
+                onStartEdit={(event) => { setEditingId(event.id); setEditingCode(event.normalized_code || event.scanned_code || '') }}
+                onSaveEdit={(event) => updateMut.mutate({ id: event.id, code: editingCode.trim() })}
+                onDelete={(event) => canDelete && deleteMut.mutate(event.id)}
+              />
+              {editableSession && canEdit && (
+                <div className="grid grid-cols-[minmax(0,1fr)_12rem_auto] gap-2 rounded-xl border border-warm-100 bg-warm-50/70 p-3">
+                  <input
+                    className="input-field text-sm font-mono"
+                    placeholder="Codigo"
+                    value={newCode}
+                    onChange={(event) => setNewCode(event.target.value)}
+                  />
+                  <select className="input-field text-sm" value={newReasonId} onChange={(event) => setNewReasonId(event.target.value)}>
+                    <option value="">Motivo</option>
+                    {getRecords(reasonsData).map((reason) => <option key={reason.id} value={String(reason.id)}>{reason.nombre}</option>)}
+                  </select>
+                  <button className="btn-primary" disabled={!newCode.trim() || !newReasonId || createMut.isPending} onClick={() => createMut.mutate()}>
+                    Agregar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {detailTab === 'rechazados' && (
+            <ScanTable
+              events={rechazados}
+              t={t}
+              showType
+              editable={editableSession && canEdit}
+              editingId={editingId}
+              editingCode={editingCode}
+              onEditCodeChange={setEditingCode}
+              onStartEdit={(event) => { setEditingId(event.id); setEditingCode(event.normalized_code || event.scanned_code || '') }}
+              onSaveEdit={(event) => updateMut.mutate({ id: event.id, code: editingCode.trim() })}
+              onDelete={(event) => canDelete && deleteMut.mutate(event.id)}
+            />
+          )}
 
         </div>
       )}
@@ -293,18 +429,23 @@ export default function SurtidoRegistros() {
   const { t } = useI18nStore()
   const { hasPermission } = useAuthStore()
   const toast = useToastStore.getState()
+  const qc = useQueryClient()
   const canExport = hasPermission('surtido.registros', 'actualizar')
+  const canEdit = hasPermission('surtido.validacion', 'actualizar')
+  const canDelete = hasPermission('surtido.validacion', 'eliminar')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [copiedCode, setCopiedCode] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const today = new Date().toISOString().slice(0, 10)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10)
+  const today = getToday()
+  const thirtyDaysAgo = subtractDays(today, 30)
   const [dateFrom, setDateFrom] = useState(thirtyDaysAgo)
   const [dateTo, setDateTo] = useState(today)
   const [datePreset, setDatePreset] = useState('30')
   const [detailId, setDetailId] = useState(null)
+  const [detailInitialTab, setDetailInitialTab] = useState('validados')
+  const [deleteConfirmSession, setDeleteConfirmSession] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [exportingBulk, setExportingBulk] = useState(false)
 
@@ -318,6 +459,17 @@ export default function SurtidoRegistros() {
   const total = data?.data?.total ?? 0
   const totalPages = Math.ceil(total / pageSize) || 1
 
+  const deleteSessionMut = useMutation({
+    mutationFn: deleteScanSession,
+    onSuccess: () => {
+      toast.success(t('surtido.registros.delete_session_success'))
+      setDeleteConfirmSession(null)
+      setDetailId(null)
+      qc.invalidateQueries({ queryKey: ['surtido-sessions'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
   const filtered = search.trim()
     ? records.filter(r => {
         const q = search.toLowerCase()
@@ -330,7 +482,7 @@ export default function SurtidoRegistros() {
   const matchesDate = (row) => {
     const raw = row?.started_at || row?.created_at || ''
     if (!raw) return true
-    const d = String(raw).slice(0, 10)
+    const d = toDateKey(raw)
     if (dateFrom && d < dateFrom) return false
     if (dateTo && d > dateTo) return false
     return true
@@ -416,6 +568,11 @@ export default function SurtidoRegistros() {
     }
   }
 
+  const openDetail = (sessionId, initialTab = 'validados') => {
+    setDetailInitialTab(initialTab)
+    setDetailId(sessionId)
+  }
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
@@ -459,7 +616,7 @@ export default function SurtidoRegistros() {
                 const end = today
                 const start = d === 0
                   ? today
-                  : new Date(Date.now() - d * 24 * 3600 * 1000).toISOString().slice(0, 10)
+                  : subtractDays(today, d)
                 setDatePreset(String(d))
                 setDateFrom(start)
                 setDateTo(end)
@@ -580,7 +737,7 @@ export default function SurtidoRegistros() {
                     const isSelected = selectedIds.has(r.id)
                     return (
                       <tr key={r.id}
-                        onClick={() => setDetailId(r.id)}
+                        onClick={() => openDetail(r.id)}
                         className={`table-row group cursor-pointer ${isSelected ? 'bg-primary-50/40' : ''}`}>
                         <td className="table-cell text-center" onClick={e => { e.stopPropagation(); toggleSelect(r.id) }}>
                           <input type="checkbox" checked={isSelected}
@@ -607,7 +764,7 @@ export default function SurtidoRegistros() {
                         <td className="table-cell hidden lg:table-cell text-warm-600 text-xs">{r.operator_nombre || '—'}</td>
                         <td className="table-cell hidden md:table-cell">
                           <span className="text-warm-500 text-xs tabular-nums">
-                            {(r.started_at || r.created_at || '').slice(0, 16).replace('T', ' ')}
+                            {(r.started_at || r.created_at) ? fmtDateTime(r.started_at || r.created_at) : '—'}
                           </span>
                         </td>
                         <td className="table-cell hidden lg:table-cell">
@@ -636,15 +793,33 @@ export default function SurtidoRegistros() {
                           </span>
                         </td>
                         <td className="table-cell">
-                          <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
+                          <span className={`badge text-[11px] font-medium ${meta.cls}`}>{resolveStatusLabel(t, meta.labelKey)}</span>
                         </td>
                         <td className="table-cell text-right">
-                          <button
-                            className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
-                            onClick={e => { e.stopPropagation(); setDetailId(r.id) }}
-                            title={t('common.show')}>
-                            <Eye size={13} />
-                          </button>
+                          <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                            <button
+                              className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+                              onClick={e => { e.stopPropagation(); openDetail(r.id) }}
+                              title={t('common.show')}>
+                              <Eye size={13} />
+                            </button>
+                            {canEdit && (
+                              <button
+                                className="p-1.5 rounded-lg text-warm-400 hover:text-warning-600 hover:bg-warning-50 border border-transparent hover:border-warning-200 transition-all"
+                                onClick={e => { e.stopPropagation(); openDetail(r.id, 'validados') }}
+                                title={t('common.edit')}>
+                                <Pencil size={13} />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                className="p-1.5 rounded-lg text-warm-400 hover:text-danger-600 hover:bg-danger-50 border border-transparent hover:border-danger-200 transition-all"
+                                onClick={e => { e.stopPropagation(); setDeleteConfirmSession(r) }}
+                                title={t('common.delete')}>
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )
@@ -669,9 +844,43 @@ export default function SurtidoRegistros() {
       <DetailModal
         sessionId={detailId}
         isOpen={!!detailId}
-        onClose={() => setDetailId(null)}
+        onClose={() => { setDetailId(null); setDetailInitialTab('validados') }}
         canExport={canExport}
+        canEdit={canEdit}
+        canDelete={canDelete}
+        initialTab={detailInitialTab}
       />
+
+      <Modal
+        isOpen={!!deleteConfirmSession}
+        onClose={() => setDeleteConfirmSession(null)}
+        title={t('surtido.registros.delete_session_title')}
+        icon={Trash2}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-secondary" onClick={() => setDeleteConfirmSession(null)}>{t('common.cancel')}</button>
+            <button
+              className="btn-primary inline-flex items-center gap-2 whitespace-nowrap bg-danger-600 hover:bg-danger-700"
+              onClick={() => deleteSessionMut.mutate(deleteConfirmSession.id)}
+              disabled={deleteSessionMut.isPending}>
+              {deleteSessionMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              {t('common.delete')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-2 text-sm text-warm-600">
+          <p>{t('surtido.registros.delete_session_confirm')}</p>
+          <div className="rounded-xl border border-danger-100 bg-danger-50 px-3 py-2">
+            <p className="font-semibold text-danger-700">{deleteConfirmSession?.outbound_order_no || '—'}</p>
+            <p className="text-xs text-danger-600">
+              {(deleteConfirmSession?.total_scanned ?? 0)} {t('surtido.registros.delete_session_count')}
+              {' · '}
+              {resolveStatusLabel(t, `surtido.registros.status.${deleteConfirmSession?.status || ''}`)}
+            </p>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

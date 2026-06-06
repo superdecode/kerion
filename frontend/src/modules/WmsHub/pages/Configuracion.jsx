@@ -6,6 +6,7 @@ import Header from '../../../core/components/layout/Header'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useAuthStore } from '../../../core/stores/authStore'
+import { fmtTime } from '../../../core/utils/dateFormat'
 import { getConfig, saveSheetConfig } from '../services/wmsHubService'
 import { testSheetUrl, invalidateUrlCache, getCacheTimestamp } from '../services/googleSheetsService'
 
@@ -79,7 +80,7 @@ export default function Configuracion() {
 
   function fmtTs(ts) {
     if (!ts) return t('wmshub.config.sheet_never')
-    return new Date(ts).toLocaleTimeString()
+    return fmtTime(ts)
   }
 
   return (
