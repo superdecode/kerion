@@ -368,7 +368,7 @@ router.get('/scan-sessions',
       if (operator_id) { conditions.push(`s.operator_id = $${p++}`); params.push(parseInt(operator_id)) }
       if (fecha_inicio) { conditions.push(`${instantDateInTZ('s.started_at', tz)} >= $${p++}`); params.push(fecha_inicio) }
       if (fecha_fin) { conditions.push(`${instantDateInTZ('s.started_at', tz)} <= $${p++}`); params.push(fecha_fin) }
-      if (outbound_order_no) { conditions.push(`s.outbound_order_no = $${p++}`); params.push(outbound_order_no) }
+      if (outbound_order_no) { conditions.push(`s.outbound_order_no ILIKE $${p++}`); params.push(`%${outbound_order_no}%`) }
 
       const where = conditions.join(' AND ')
       const [sessionsRes, countRes] = await Promise.all([

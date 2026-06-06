@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
@@ -13,10 +13,11 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { fmtDateTime, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
+import { fmtDateTime, getToday, subtractDays } from '../../../core/utils/dateFormat'
 import {
   getScanSessions, getScanSession, getOutboundList, getRecords,
   updateScanEvent, deleteScanEvent, addManualScanEvent, getManualEntryReasons, deleteScanSession,
+  getOrderTrackingByOBC,
 } from '../services/surtidoService'
 import { normalizeCode } from '../../Shared/Wms/normalizeCode'
 
@@ -174,6 +175,15 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
     staleTime: 5 * 60 * 1000,
     enabled: isOpen && !!session.outbound_order_no,
   })
+
+  // Order tracking notes
+  const { data: trackingData } = useQuery({
+    queryKey: ['surtido-order-tracking-obc', session.outbound_order_no],
+    queryFn: () => getOrderTrackingByOBC(session.outbound_order_no),
+    enabled: isOpen && !!session.outbound_order_no,
+    staleTime: 60000,
+  })
+  const trackingNotes = trackingData?.data?.notes || null
   const wmsOrder = getRecords(wmsData)
     .find(r => r.outboundOrderNo === session.outbound_order_no)
   const { data: reasonsData } = useQuery({
@@ -333,11 +343,22 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
             ))}
           </div>
 
-          {/* Notes */}
+          {/* Session notes */}
           {session.notes && (
             <div className="bg-warm-50 rounded-xl px-3 py-2.5 border border-warm-100 flex items-start gap-2">
               <AlertCircle size={13} className="text-warm-400 shrink-0 mt-0.5" />
               <p className="text-xs text-warm-700">{session.notes}</p>
+            </div>
+          )}
+
+          {/* Order tracking notes */}
+          {trackingNotes && (
+            <div className="bg-primary-50 rounded-xl px-3 py-2.5 border border-primary-100 flex items-start gap-2">
+              <User size={13} className="text-primary-400 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-primary-400 uppercase tracking-wider font-bold mb-0.5">Nota de orden</p>
+                <p className="text-xs text-primary-700">{trackingNotes}</p>
+              </div>
             </div>
           )}
 
@@ -436,7 +457,9 @@ export default function SurtidoRegistros() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [copiedCode, setCopiedCode] = useState('')
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
+  const searchDebounceRef = useRef(null)
   const [statusFilter, setStatusFilter] = useState('')
   const today = getToday()
   const thirtyDaysAgo = subtractDays(today, 30)
@@ -449,9 +472,16 @@ export default function SurtidoRegistros() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [exportingBulk, setExportingBulk] = useState(false)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['surtido-sessions', { page, pageSize }],
-    queryFn: () => getScanSessions({ page, pageSize }),
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['surtido-sessions', { page, pageSize, search: search.trim(), statusFilter, dateFrom, dateTo }],
+    queryFn: () => getScanSessions({
+      page,
+      pageSize,
+      outbound_order_no: search.trim() || undefined,
+      status: statusFilter || undefined,
+      fecha_inicio: dateFrom || undefined,
+      fecha_fin: dateTo || undefined,
+    }),
     staleTime: 30000,
   })
 
@@ -470,29 +500,8 @@ export default function SurtidoRegistros() {
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
 
-  const filtered = search.trim()
-    ? records.filter(r => {
-        const q = search.toLowerCase()
-        return (r.outbound_order_no || '').toLowerCase().includes(q)
-            || (r.operator_nombre || '').toLowerCase().includes(q)
-            || (r.status || '').toLowerCase().includes(q)
-      })
-    : records
-
-  const matchesDate = (row) => {
-    const raw = row?.started_at || row?.created_at || ''
-    if (!raw) return true
-    const d = toDateKey(raw)
-    if (dateFrom && d < dateFrom) return false
-    if (dateTo && d > dateTo) return false
-    return true
-  }
-
-  const filteredByStatus = statusFilter
-    ? filtered.filter(r => r.status === statusFilter && matchesDate(r))
-    : filtered.filter(matchesDate)
-
   const clearFilters = () => {
+    setSearchInput('')
     setSearch('')
     setStatusFilter('')
     setDateFrom(thirtyDaysAgo)
@@ -506,8 +515,8 @@ export default function SurtidoRegistros() {
     return next
   })
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredByStatus.length) setSelectedIds(new Set())
-    else setSelectedIds(new Set(filteredByStatus.map(r => r.id)))
+    if (selectedIds.size === records.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(records.map(r => r.id)))
   }
   function buildRegistrosRows(rows) {
     return rows.map(r => {
@@ -542,7 +551,7 @@ export default function SurtidoRegistros() {
     if (selectedIds.size === 0) return
     setExportingBulk(true)
     try {
-      writeExcel(buildRegistrosRows(filteredByStatus.filter(r => selectedIds.has(r.id))), `surtido_registros_${getToday()}.xlsx`)
+      writeExcel(buildRegistrosRows(records.filter(r => selectedIds.has(r.id))), `surtido_registros_${getToday()}.xlsx`)
       setSelectedIds(new Set())
     } catch { toast.error(t('toast.error')) }
     setExportingBulk(false)
@@ -550,7 +559,7 @@ export default function SurtidoRegistros() {
 
   const handleExportAll = () => {
     try {
-      writeExcel(buildRegistrosRows(filteredByStatus), `surtido_registros_${getToday()}.xlsx`)
+      writeExcel(buildRegistrosRows(records), `surtido_registros_${getToday()}.xlsx`)
     } catch { toast.error(t('toast.error')) }
   }
 
@@ -636,7 +645,7 @@ export default function SurtidoRegistros() {
         <div className="flex items-center gap-2 flex-wrap">
           <select
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
+            onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
             className="h-10 pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
           >
             <option value="">{t('common.all')}</option>
@@ -652,12 +661,19 @@ export default function SurtidoRegistros() {
               type="text"
               className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               placeholder={t('surtido.registros.search_placeholder')}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={e => {
+                setSearchInput(e.target.value)
+                clearTimeout(searchDebounceRef.current)
+                searchDebounceRef.current = setTimeout(() => {
+                  setSearch(e.target.value)
+                  setPage(1)
+                }, 400)
+              }}
             />
           </div>
 
-          {(search || statusFilter || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
+          {(searchInput || statusFilter || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
             <button
               onClick={clearFilters}
               className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors"
@@ -666,10 +682,16 @@ export default function SurtidoRegistros() {
             </button>
           )}
 
+          {isFetching && !isLoading && (
+            <span className="inline-flex items-center gap-1 text-xs text-warm-400">
+              <Loader2 className="w-3 h-3 animate-spin" /> Buscando...
+            </span>
+          )}
+
           {canExport && (
             <button
               onClick={handleExportAll}
-              disabled={filteredByStatus.length === 0}
+              disabled={records.length === 0}
               className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 h-9 rounded-xl bg-success-50 text-success-700 border border-success-200 hover:bg-success-100 transition-all disabled:opacity-40"
               title={t('common.export') + ' ' + t('common.all')}
             >
@@ -680,7 +702,7 @@ export default function SurtidoRegistros() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {filteredByStatus.length === 0 ? (
+        {records.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-3">
             <div className="w-16 h-16 rounded-2xl bg-warm-100 flex items-center justify-center">
               <Package2 size={28} className="text-warm-300" />
@@ -712,7 +734,7 @@ export default function SurtidoRegistros() {
                   <tr className="bg-warm-50 border-b border-warm-100">
                     <th className="table-header w-10 text-center">
                       <input type="checkbox"
-                        checked={selectedIds.size === filteredByStatus.length && filteredByStatus.length > 0}
+                        checked={selectedIds.size === records.length && records.length > 0}
                         onChange={toggleSelectAll}
                         className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
                     </th>
@@ -728,7 +750,7 @@ export default function SurtidoRegistros() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
-                  {filteredByStatus.map(r => {
+                  {records.map(r => {
                     const meta = STATUS_META[r.status] ?? STATUS_META.open
                     const rejected = Math.max(0, (r.total_expected ?? 0) - (r.total_scanned ?? 0))
                     const pct = r.total_expected > 0

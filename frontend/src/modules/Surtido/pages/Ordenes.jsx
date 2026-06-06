@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -68,6 +68,112 @@ function withinTimeRange(value, from, to) {
   if (from && time < from) return false
   if (to && time > to) return false
   return true
+}
+
+function DestinationSearch({ value, onChange, options, t }) {
+  const wrapperRef = useRef(null)
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const term = value.trim().toLowerCase()
+  const filtered = term
+    ? options.filter((option) => option.toLowerCase().includes(term)).slice(0, 12)
+    : []
+
+  const showPanel = open && term.length > 0
+
+  const handleSelect = (destination) => {
+    onChange(destination)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={wrapperRef} className="relative min-w-[220px] flex-1 sm:flex-none sm:w-[260px]">
+      <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+        <MapPin size={13} className="text-warm-400 shrink-0" />
+        <input
+          type="text"
+          className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          placeholder={t('surtido.ordenes.receiver')}
+          value={value}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            onChange(e.target.value)
+            setOpen(true)
+          }}
+          onPaste={() => setOpen(true)}
+        />
+        {value && (
+          <button
+            type="button"
+            className="rounded-lg p-1 text-warm-400 hover:bg-warm-100 hover:text-primary-600"
+            onClick={() => {
+              onChange('')
+              setOpen(false)
+            }}
+            title={t('common.clear')}
+          >
+            <X size={13} />
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {showPanel && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.99 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.99 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute top-full left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-warm-100 bg-white shadow-depth"
+          >
+            <div className="flex items-center justify-between border-b border-warm-100 bg-warm-50/70 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">
+                {t('surtido.ordenes.destination_results')}
+              </p>
+              <span className="text-[10px] font-semibold text-warm-400">
+                {filtered.length} {t('surtido.ordenes.destination_matches')}
+              </span>
+            </div>
+
+            <div className="max-h-56 overflow-y-auto scrollbar-thin">
+              {filtered.length === 0 ? (
+                <div className="px-4 py-5 text-center">
+                  <p className="text-sm font-medium text-warm-700">{t('surtido.ordenes.destination_empty_state')}</p>
+                  <p className="mt-1 text-xs text-warm-400">{t('surtido.ordenes.destination_empty_hint')}</p>
+                </div>
+              ) : (
+                filtered.map((destination) => (
+                  <button
+                    key={destination}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      handleSelect(destination)
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-warm-700 transition-colors hover:bg-primary-50 hover:text-primary-700"
+                  >
+                    <Search size={12} className="shrink-0 text-warm-300" />
+                    <span className="truncate">{destination}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
 }
 
 function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
@@ -324,14 +430,16 @@ function AssignModal({ isOpen, order, onClose, onAssign }) {
   )
 }
 
-function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose, onAssign, onStatusChange, t }) {
+function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose, onAssign, onStatusChange, onSaveNotes, t }) {
   const navigate = useNavigate()
   const [localSurtidorId, setLocalSurtidorId] = useState('')
+  const [localNotes, setLocalNotes] = useState('')
 
   useEffect(() => {
     if (isOpen) {
       const current = surtidores.find(s => s.nombre === tracking?.surtidor_nombre)
       setLocalSurtidorId(current?.id ? String(current.id) : '')
+      setLocalNotes(tracking?.notes || '')
     }
   }, [isOpen, tracking, surtidores])
 
@@ -438,6 +546,24 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                     )
                   })}
                 </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wider">Nota</p>
+                <textarea
+                  rows={3}
+                  value={localNotes}
+                  onChange={e => setLocalNotes(e.target.value)}
+                  placeholder="Agregar nota sobre esta orden..."
+                  className="w-full rounded-xl border border-warm-200 bg-warm-50 px-3 py-2.5 text-xs text-warm-700 outline-none resize-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all"
+                />
+                <button
+                  onClick={() => onSaveNotes(localNotes)}
+                  className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold bg-warm-100 text-warm-700 hover:bg-warm-200 transition-colors"
+                >
+                  <Save size={13} /> Guardar nota
+                </button>
               </div>
             </div>
 
@@ -602,7 +728,6 @@ export default function Ordenes() {
   const canDeleteOrders = hasPermission('surtido.ordenes', 'eliminar')
   const canExportOrders = canUpdateOrders
 
-  const [tab, setTab] = useState('wms')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [searchInput, setSearchInput] = useState('')
@@ -786,7 +911,7 @@ export default function Ordenes() {
     return true
   })
 
-  const activeRecords = tab === 'wms' ? filteredWms : filteredValidacion
+  const activeRecords = filteredWms
   const total       = activeRecords.length
   const totalPages  = Math.ceil(total / pageSize) || 1
   const pagedRecords = activeRecords.slice((page - 1) * pageSize, page * pageSize)
@@ -796,6 +921,12 @@ export default function Ordenes() {
       surtidor_id: surtidorId,
       ...(!surtidorId ? { status: 'pending_assignment' } : {}),
     }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['wms-order-tracking'] }); toast.success(t('common.save') + ' OK') },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  const notesMut = useMutation({
+    mutationFn: ({ obc, notes }) => upsertOrderTracking(obc, { notes }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['wms-order-tracking'] }); toast.success(t('common.save') + ' OK') },
     onError: () => toast.error(t('toast.error')),
   })
@@ -903,11 +1034,6 @@ export default function Ordenes() {
     exportSheet(VAL_HEADERS, buildValidacionRows(filteredValidacion), 'Validación', `validacion_${getToday()}.xlsx`)
   }
 
-  const tabs = [
-    { key: 'wms',        icon: Database,     label: t('surtido.ordenes.tab_wms') },
-    { key: 'validacion', icon: CheckCircle2, label: t('surtido.ordenes.tab_validacion') },
-  ]
-
   if (wmsLoading) {
     return (
       <div className="flex flex-col h-full">
@@ -943,27 +1069,6 @@ export default function Ordenes() {
         }
       />
 
-      {/* Tab bar */}
-      <div className="sticky top-0 z-[5] bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6">
-        <div className="flex items-center justify-between">
-          <div className="flex gap-1">
-            {tabs.map(item => (
-              <button key={item.key}
-                onClick={() => { setTab(item.key); setPage(1) }}
-                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition-all duration-200 ${
-                  tab === item.key
-                    ? 'border-primary-600 text-primary-700 bg-primary-50/50'
-                    : 'border-transparent text-warm-500 hover:text-warm-700 hover:bg-warm-50'
-                }`}
-              >
-                <item.icon className="w-4 h-4" />
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Partial data banner */}
       {isPartial && (
         <div className="flex items-center gap-2 px-5 py-1.5 bg-warning-50 border-b border-warning-100 text-warning-700 text-[11px]">
@@ -995,10 +1100,10 @@ export default function Ordenes() {
                   : 'border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100'
               }`}
               onClick={() => setShowTimeFilters((prev) => !prev)}
-              title={t('inventario.escaneo.time_label')}
+              title={t('surtido.ordenes.time_filter')}
             >
               <CalendarClock size={14} />
-              <span>Hora</span>
+              <span>{t('surtido.ordenes.time_filter')}</span>
             </button>
 
             <AnimatePresence initial={false}>
@@ -1019,9 +1124,9 @@ export default function Ordenes() {
                   </div>
 
                   {[
-                    { label: 'Mañana', from: '06:00', to: '12:00' },
-                    { label: 'Tarde', from: '12:00', to: '18:00' },
-                    { label: 'Noche', from: '18:00', to: '23:59' },
+                    { label: t('surtido.ordenes.time_morning'), from: '06:00', to: '12:00' },
+                    { label: t('surtido.ordenes.time_afternoon'), from: '12:00', to: '18:00' },
+                    { label: t('surtido.ordenes.time_night'), from: '18:00', to: '23:59' },
                   ].map((preset) => (
                     <button
                       key={preset.label}
@@ -1076,22 +1181,21 @@ export default function Ordenes() {
               {surtidores.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
             </select>
 
-            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[220px] flex-1 sm:flex-none sm:w-[260px] transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
-              <MapPin size={13} className="text-warm-400 shrink-0" />
-              <input
-                list="surtido-destinos"
-                type="text"
-                className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                placeholder={t('surtido.ordenes.receiver')}
-                value={destinationDraft}
-                onChange={(e) => setDestinationDraft(e.target.value)}
-              />
-              <datalist id="surtido-destinos">
-                {destinationSuggestions.map((destination) => (
-                  <option key={destination} value={destination} />
-                ))}
-              </datalist>
-            </div>
+            <DestinationSearch
+              value={destinationDraft}
+              onChange={(nextValue) => {
+                setDestinationDraft(nextValue)
+                setFilterDestination(nextValue)
+                setPage(1)
+                if (nextValue.trim()) {
+                  sessionStorage.setItem(destinationFilterKey, nextValue)
+                } else {
+                  sessionStorage.removeItem(destinationFilterKey)
+                }
+              }}
+              options={destinationOptions}
+              t={t}
+            />
 
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[240px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
               <Search size={13} className="text-warm-400 shrink-0" />
@@ -1142,7 +1246,7 @@ export default function Ordenes() {
             <Package2 size={40} className="opacity-30" />
             <p className="text-sm">{t('common.noData')}</p>
           </div>
-        ) : tab === 'wms' ? (
+        ) : (
           <WmsTable
             records={pagedRecords} trackingMap={trackingMap} surtidores={surtidores}
             onAssign={r => setAssignTarget(r)}
@@ -1161,30 +1265,6 @@ export default function Ordenes() {
             canQuickEdit={canUpdateOrders}
             canValidate={canCreateValidation}
             canExport={canExportOrders}
-            t={t}
-            page={page} totalPages={totalPages} pageSize={pageSize} total={total}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-          />
-        ) : (
-          <ValidacionTable
-            records={pagedRecords} wmsMap={wmsMap} surtidores={surtidores}
-            onView={obc => navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`)}
-            onQuickEdit={obc => setQuickEditObc(obc)}
-            onValidate={obc => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}
-            onStatusChange={(obcs, status) => statusMut.mutate({ obcs, status })}
-            onBulkAssign={(obcs, surtidorId) => {
-              Promise.all(obcs.map((obc) => assignMut.mutateAsync({ obc, surtidorId }))).then(() => {
-                toast.success(`${obcs.length} ordenes actualizadas`)
-              }).catch(() => toast.error(t('toast.error')))
-            }}
-            onExportSelected={handleExportValSelected}
-            onExportAll={handleExportValAll}
-            canQuickEdit={canUpdateOrders}
-            canValidate={canCreateValidation}
-            canUpdateStatus={canUpdateOrders}
-            canExport={canExportOrders}
-            canAssign={canUpdateOrders}
             t={t}
             page={page} totalPages={totalPages} pageSize={pageSize} total={total}
             onPageChange={setPage}
@@ -1239,6 +1319,7 @@ export default function Ordenes() {
           assignMut.mutate({ obc: quickEditObc, surtidorId })
         }}
         onStatusChange={(obcs, status) => statusMut.mutate({ obcs, status })}
+        onSaveNotes={(notes) => notesMut.mutate({ obc: quickEditObc, notes })}
         t={t}
       />
     </div>

@@ -43,10 +43,18 @@ function buildItemMaps(detailData) {
   packageList.forEach(p => {
     const codes = [p.customizeCode, p.boxType, p.boxCode].filter(Boolean)
     const expectedQty = p.quantity ?? p.totalPackageQty ?? p.qty ?? 1
+    // Find the primary displayCode (first valid normalized code)
+    let primaryNorm = null
+    for (const c of codes) {
+      const n = normalizeCode(c)
+      if (n) { primaryNorm = n; break }
+    }
+    if (!primaryNorm) return
+    // All codes of the same package share one entry with the primary displayCode
+    const entry = { ...p, expectedQty, scannedQty: 0, type: 'box', displayCode: primaryNorm }
     codes.forEach(c => {
       const norm = normalizeCode(c)
       if (!norm) return
-      const entry = { ...p, expectedQty, scannedQty: 0, type: 'box', displayCode: norm }
       for (const variant of generateCodeVariations(norm)) {
         packageMap.set(variant, entry)
       }
