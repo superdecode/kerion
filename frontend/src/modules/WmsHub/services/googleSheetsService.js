@@ -229,7 +229,7 @@ let _urlsFetchedAt = 0
 async function loadSheetUrls() {
   const now = Date.now()
   if (_urlsFetchedAt > 0 && (now - _urlsFetchedAt) < URL_TTL) return _sheetUrls
-  const res = await api.get('/upapex/config').then(r => r.data)
+  const res = await api.get('/upapex/sheets-urls').then(r => r.data)
   _sheetUrls = {
     inventory: res?.data?.sheet_inventory_url || null,
     outbound:  res?.data?.sheet_outbound_url  || null,

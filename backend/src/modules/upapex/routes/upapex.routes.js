@@ -58,6 +58,32 @@ function generatedTarimaCode(sectionCode, index) {
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
+// GET /api/upapex/sheets-urls — sheet URLs only, accessible to all authenticated users
+// Used by googleSheetsService across all modules (Inventario, Surtido, etc.)
+router.get('/sheets-urls',
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `SELECT sheet_inventory_url, sheet_outbound_url
+         FROM wms_config WHERE tenant_id = $1 AND is_active = true ORDER BY id DESC LIMIT 1`,
+        [req.tenantId]
+      )
+      const row = result.rows[0] || {}
+      res.json({
+        success: true,
+        data: {
+          sheet_inventory_url: row.sheet_inventory_url || null,
+          sheet_outbound_url:  row.sheet_outbound_url  || null,
+        },
+      })
+    } catch (err) {
+      console.error('GET upapex/sheets-urls error:', err.message)
+      res.status(500).json({ success: false, error: 'Error obteniendo URLs de hojas' })
+    }
+  }
+)
+
 // GET /api/upapex/config
 router.get('/config',
   authenticateToken, loadFullUser,
