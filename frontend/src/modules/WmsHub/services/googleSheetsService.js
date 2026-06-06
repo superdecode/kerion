@@ -244,6 +244,10 @@ export function invalidateUrlCache() {
   _urlsFetchedAt = 0
 }
 
+export async function getSheetUrls() {
+  return loadSheetUrls()
+}
+
 // ── Fetch raw CSV via backend proxy (handles CORS + server-side cache) ─────
 async function fetchSheetAsCSV(url, limit = 0) {
   const params = { url }

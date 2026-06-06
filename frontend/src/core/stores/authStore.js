@@ -128,8 +128,13 @@ export const useAuthStore = create(
           const parts = token.split('.')
           if (parts.length !== 3) return
           const decoded = JSON.parse(atob(parts[1]))
+          set({
+            user: decoded,
+            token,
+            isAuthenticated: true,
+          })
           // Call me endpoint to get full user info
-          api.defaults.headers.authorization = `Bearer ${token}`
+          api.defaults.headers.common.Authorization = `Bearer ${token}`
           api.get('/auth/me').then(({ data }) => {
             if (data.zona_horaria) setTimezone(data.zona_horaria)
             set({
@@ -140,8 +145,6 @@ export const useAuthStore = create(
             // Remove token from URL
             window.history.replaceState({}, '', window.location.pathname)
           }).catch(() => {
-            // If me fails, just set the token and let the app handle it
-            set({ token, isAuthenticated: true })
             window.history.replaceState({}, '', window.location.pathname)
           })
         } catch (e) {

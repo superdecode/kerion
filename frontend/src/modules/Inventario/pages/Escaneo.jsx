@@ -22,8 +22,8 @@ import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 import { classifyItem, resolveSwap } from '../utils/classify'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import { checkInventoryDuplicates, saveInventorySession } from '../services/inventarioService'
-import { getConfig, getUbicaciones, createUbicacion } from '../../WmsHub/services/wmsHubService'
-import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
+import { getUbicaciones, createUbicacion } from '../../WmsHub/services/wmsHubService'
+import { refreshSheet, getCacheTimestamp, getCacheStatus, getSheetUrls } from '../../WmsHub/services/googleSheetsService'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
 
 const STATUS_META = {
@@ -1049,8 +1049,8 @@ export default function Escaneo() {
     setDuplicatePending({ code: displayCode, conflicts, onConfirm: onAccept })
   }, [buildSessionDuplicateConflicts, t, toast])
 
-  const { data: configData } = useQuery({
-    queryKey: ['wms-config'], queryFn: getConfig, staleTime: 60000,
+  const { data: sheetUrls } = useQuery({
+    queryKey: ['wms-sheet-urls'], queryFn: getSheetUrls, staleTime: 60000,
   })
   const { data: ubicacionesData } = useQuery({
     queryKey: ['wms-ubicaciones', 'inventario'],
@@ -1058,8 +1058,8 @@ export default function Escaneo() {
     staleTime: 120000,
   })
   useEffect(() => {
-    if (configData !== undefined) setWmsConfigured(!!configData?.data)
-  }, [configData])
+    if (sheetUrls !== undefined) setWmsConfigured(!!sheetUrls?.inventory)
+  }, [sheetUrls])
 
   useEffect(() => {
     const handler = () => initAudio()

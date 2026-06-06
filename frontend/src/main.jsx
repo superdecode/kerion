@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
-const APP_VERSION = '2026-06-05-v11'
+const APP_VERSION = '2026-06-06-v12'
 const APP_VERSION_KEY = 'kirion-app-version'
 
 async function resetStaleClientState() {

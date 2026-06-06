@@ -1,7 +1,25 @@
 import axios from 'axios'
 
+function resolveApiBaseUrl() {
+  const configured = (import.meta.env.VITE_API_URL || '').trim()
+  if (!configured) return '/api'
+
+  if (/^https?:\/\//i.test(configured)) {
+    try {
+      const url = new URL(configured)
+      const isLocalApi = ['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)
+      const isLocalPage = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname)
+      return isLocalApi && !isLocalPage ? '/api' : configured
+    } catch {
+      return '/api'
+    }
+  }
+
+  return configured.startsWith('/') ? configured : `/${configured}`
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: resolveApiBaseUrl(),
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 })

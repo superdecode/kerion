@@ -1911,15 +1911,13 @@ function PlanLimitModal({ guideUsage, user, upgradeSent, setUpgradeSent, onClose
   async function handleUpgradeRequest() {
     setSending(true)
     try {
-      await import('../../../core/services/api').then(m =>
-        m.default.post('/public/renewal-request', {
-          tenant_name: user?.tenant_name || '',
-          contact_name: user?.nombre_completo || '',
-          contact_email: user?.email || '',
-          current_plan: planName,
-          message: `Solicitud de upgrade — guias usadas: ${used}/${limit}`,
-        })
-      )
+      await api.post('/public/renewal-request', {
+        tenant_name: user?.tenant_name || '',
+        contact_name: user?.nombre_completo || '',
+        contact_email: user?.email || '',
+        current_plan: planName,
+        message: `Solicitud de upgrade — guias usadas: ${used}/${limit}`,
+      })
       const reqData = {
         date: getToday(),
         email: user?.email || '',

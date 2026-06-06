@@ -774,8 +774,9 @@ export default function Ordenes() {
       }
       const savedDestination = sessionStorage.getItem(destinationFilterKey) || ''
       if (savedDestination) {
-        setDestinationDraft(savedDestination)
-        setFilterDestination(savedDestination)
+        const normalizedDestination = savedDestination.trim()
+        setDestinationDraft(normalizedDestination)
+        setFilterDestination(normalizedDestination)
       }
     } catch {}
   }, [timeFilterKey, destinationFilterKey])
@@ -846,14 +847,6 @@ export default function Ordenes() {
     )).sort((a, b) => a.localeCompare(b, 'es'))
   ), [allWmsRecords])
 
-  const destinationSuggestions = useMemo(() => {
-    const term = destinationDraft.trim().toLowerCase()
-    const base = term
-      ? destinationOptions.filter((option) => option.toLowerCase().includes(term))
-      : destinationOptions
-    return base.slice(0, 12)
-  }, [destinationDraft, destinationOptions])
-
   const q = search.trim().toLowerCase()
 
   function matchesDateFilter(dateStr) {
@@ -869,22 +862,28 @@ export default function Ordenes() {
     setFilterStatus(statusDraft)
     setFilterClient(clientDraft)
     setFilterSurtidor(surtidorDraft)
-    setFilterDestination(destinationDraft)
+    setFilterDestination(destinationDraft.trim())
     setDateFrom(dateFromDraft)
     setDateTo(dateToDraft)
     setTimeFrom(timeFromDraft)
     setTimeTo(timeToDraft)
     setPage(1)
     localStorage.setItem(timeFilterKey, JSON.stringify({ timeFrom: timeFromDraft, timeTo: timeToDraft }))
-    sessionStorage.setItem(destinationFilterKey, destinationDraft)
+    if (destinationDraft.trim()) {
+      sessionStorage.setItem(destinationFilterKey, destinationDraft.trim())
+    } else {
+      sessionStorage.removeItem(destinationFilterKey)
+    }
   }
+
+  const destinationQuery = filterDestination.trim().toLowerCase()
 
   const filteredWms = allWmsRecords.filter(r => {
     const tracking = trackingMap[r.outboundOrderNo]
     if (filterStatus && (tracking?.status || 'pending_assignment') !== filterStatus) return false
     if (filterClient && (r.customerCode || r.customerNo || r.customerName || '') !== filterClient) return false
     if (filterSurtidor && tracking?.surtidor_nombre !== filterSurtidor) return false
-    if (filterDestination && !(r.receiverName || '').toLowerCase().includes(filterDestination.toLowerCase())) return false
+    if (destinationQuery && !(r.receiverName || '').toLowerCase().includes(destinationQuery)) return false
     if (!matchesDateFilter(r.orderCreateTime)) return false
     if (!withinTimeRange(r.outboundTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(r.outboundOrderNo)) return false
@@ -900,7 +899,7 @@ export default function Ordenes() {
     const wms = wmsMap[tr.outbound_order_no]
     if (filterClient && (wms?.customerCode || wms?.customerNo || wms?.customerName || '') !== filterClient) return false
     if (filterSurtidor && tr.surtidor_nombre !== filterSurtidor) return false
-    if (filterDestination && !(wms?.receiverName || '').toLowerCase().includes(filterDestination.toLowerCase())) return false
+    if (destinationQuery && !(wms?.receiverName || '').toLowerCase().includes(destinationQuery)) return false
     if (!matchesDateFilter(wms?.orderCreateTime || tr.updated_at)) return false
     if (!withinTimeRange(wms?.outboundTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
@@ -1187,8 +1186,9 @@ export default function Ordenes() {
                 setDestinationDraft(nextValue)
                 setFilterDestination(nextValue)
                 setPage(1)
-                if (nextValue.trim()) {
-                  sessionStorage.setItem(destinationFilterKey, nextValue)
+                const normalized = nextValue.trim()
+                if (normalized) {
+                  sessionStorage.setItem(destinationFilterKey, normalized)
                 } else {
                   sessionStorage.removeItem(destinationFilterKey)
                 }
