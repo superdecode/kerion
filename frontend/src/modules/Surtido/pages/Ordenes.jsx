@@ -8,7 +8,7 @@ import {
   Package2, Truck, ScanBarcode, Copy, Check, Eye, ClipboardList,
   User, Clock, BarChart3, RefreshCw, Database, CheckCircle2,
   MapPin, Timer, XCircle, AlertCircle, Pencil, BadgeCheck, Download,
-  ListFilter, Filter, CalendarClock, Save,
+  ListFilter, Filter, CalendarClock, Save, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -55,7 +55,10 @@ function parseBulkCodes(text) {
 function getHourPart(value) {
   if (!value) return ''
   try {
-    return fmtTimeShort(value)
+    const raw = String(value)
+    if (/T\d{2}:\d{2}/.test(raw)) return raw.slice(11, 16)
+    if (/^\d{2}:\d{2}/.test(raw)) return raw.slice(0, 5)
+    return fmtTimeShort(value).slice(0, 5)
   } catch {
     return ''
   }
@@ -70,7 +73,47 @@ function withinTimeRange(value, from, to) {
   return true
 }
 
-function DestinationSearch({ value, onChange, options, t }) {
+function getFilterDateValue(record) {
+  return record?.outboundTime || record?.expectedTime || record?.orderCreateTime || record?.updated_at || ''
+}
+
+function SortableHeader({ label, sortKey, currentKey, direction, onSort, className = '', textClassName = '' }) {
+  const active = currentKey === sortKey
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 ${textClassName} ${active ? 'text-primary-700' : ''}`}
+    >
+      <span>{label}</span>
+      {active ? (
+        direction === 'asc' ? <ArrowUp size={11} className="shrink-0" /> : <ArrowDown size={11} className="shrink-0" />
+      ) : (
+        <ArrowUpDown size={11} className="shrink-0 opacity-70" />
+      )}
+    </button>
+  )
+}
+
+function normalizeComparable(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function compareValues(a, b) {
+  const aNum = Number(a)
+  const bNum = Number(b)
+  const aIsNum = Number.isFinite(aNum) && String(a).trim() !== ''
+  const bIsNum = Number.isFinite(bNum) && String(b).trim() !== ''
+  if (aIsNum && bIsNum) return aNum - bNum
+  return normalizeComparable(a).localeCompare(normalizeComparable(b), 'es', { sensitivity: 'base', numeric: true })
+}
+
+function sortByDirection(valueA, valueB, direction) {
+  const result = compareValues(valueA, valueB)
+  return direction === 'asc' ? result : -result
+}
+
+function DestinationSearch({ value, onChange, onEnter, options, t }) {
   const wrapperRef = useRef(null)
   const [open, setOpen] = useState(false)
 
@@ -111,6 +154,9 @@ function DestinationSearch({ value, onChange, options, t }) {
             onChange(e.target.value)
             setOpen(true)
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && onEnter) onEnter()
+          }}
           onPaste={() => setOpen(true)}
         />
         {value && (
@@ -135,7 +181,7 @@ function DestinationSearch({ value, onChange, options, t }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.99 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute top-full left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-warm-100 bg-white shadow-depth"
+            className="absolute top-full left-0 right-0 z-[100] mt-1 overflow-hidden rounded-xl border border-warm-100 bg-white shadow-depth"
           >
             <div className="flex items-center justify-between border-b border-warm-100 bg-warm-50/70 px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">
@@ -741,7 +787,7 @@ export default function Ordenes() {
   const [destinationDraft, setDestinationDraft] = useState('')
   const [filterDestination, setFilterDestination] = useState('')
   const [dateFromDraft, setDateFromDraft] = useState(() => subtractDays(getToday(), 30))
-  const [dateToDraft, setDateToDraft] = useState('')
+  const [dateToDraft, setDateToDraft] = useState(() => getToday())
   const [dateFrom, setDateFrom] = useState(dateFromDraft)
   const [dateTo, setDateTo] = useState(dateToDraft)
   const [timeFromDraft, setTimeFromDraft] = useState('')
@@ -756,6 +802,7 @@ export default function Ordenes() {
   const [bulkSearchOpen, setBulkSearchOpen] = useState(false)
   const [bulkSearchText, setBulkSearchText] = useState('')
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
+  const timeFromInputRef = useRef(null)
 
   const [refreshing, setRefreshing] = useState(false)
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
@@ -831,20 +878,45 @@ export default function Ordenes() {
     m[r.outboundOrderNo] = r; return m
   }, {})
 
+  const combinedRecords = useMemo(() => {
+    const records = [...allWmsRecords]
+    const seen = new Set(records.map(r => r.outboundOrderNo))
+    
+    trackingList.forEach(tr => {
+      if (!seen.has(tr.outbound_order_no)) {
+        if (tr.status && tr.status !== 'pending_assignment') {
+          records.push({
+            outboundOrderNo: tr.outbound_order_no,
+            customerName: '—',
+            receiverName: '—',
+            outboundTime: tr.updated_at,
+            outboundBoxCount: tr.total_expected,
+            _fromTracking: true
+          })
+        }
+      }
+    })
+    return records
+  }, [allWmsRecords, trackingList])
+
   const destinationOptions = useMemo(() => (
-    Array.from(new Set(
-      allWmsRecords
-        .map((record) => record.receiverName || '')
-        .filter(Boolean)
-    )).sort((a, b) => a.localeCompare(b, 'es'))
+    allWmsRecords.length > 0
+      ? Array.from(new Set(
+          allWmsRecords
+            .map((record) => record.receiverName || '')
+            .filter(Boolean)
+        )).sort((a, b) => a.localeCompare(b, 'es'))
+      : []
   ), [allWmsRecords])
 
   const customerOptions = useMemo(() => (
-    Array.from(new Set(
-      allWmsRecords
-        .map((record) => record.customerCode || record.customerNo || record.customerName || '')
-        .filter(Boolean)
-    )).sort((a, b) => a.localeCompare(b, 'es'))
+    allWmsRecords.length > 0
+      ? Array.from(new Set(
+          allWmsRecords
+            .map((record) => record.customerCode || record.customerNo || record.customerName || '')
+            .filter(Boolean)
+        )).sort((a, b) => a.localeCompare(b, 'es'))
+      : []
   ), [allWmsRecords])
 
   const q = search.trim().toLowerCase()
@@ -863,8 +935,6 @@ export default function Ordenes() {
     setFilterClient(clientDraft)
     setFilterSurtidor(surtidorDraft)
     setFilterDestination(destinationDraft.trim())
-    setDateFrom(dateFromDraft)
-    setDateTo(dateToDraft)
     setTimeFrom(timeFromDraft)
     setTimeTo(timeToDraft)
     setPage(1)
@@ -876,16 +946,29 @@ export default function Ordenes() {
     }
   }
 
+  function applyDateFilters(nextDateFrom = dateFromDraft, nextDateTo = dateToDraft) {
+    setDateFrom(nextDateFrom)
+    setDateTo(nextDateTo)
+    setPage(1)
+  }
+
+  function applyTimeFilters(nextTimeFrom = timeFromDraft, nextTimeTo = timeToDraft) {
+    setTimeFrom(nextTimeFrom)
+    setTimeTo(nextTimeTo)
+    setPage(1)
+    localStorage.setItem(timeFilterKey, JSON.stringify({ timeFrom: nextTimeFrom, timeTo: nextTimeTo }))
+  }
+
   const destinationQuery = filterDestination.trim().toLowerCase()
 
-  const filteredWms = allWmsRecords.filter(r => {
+  const filteredWms = combinedRecords.filter(r => {
     const tracking = trackingMap[r.outboundOrderNo]
     if (filterStatus && (tracking?.status || 'pending_assignment') !== filterStatus) return false
     if (filterClient && (r.customerCode || r.customerNo || r.customerName || '') !== filterClient) return false
     if (filterSurtidor && tracking?.surtidor_nombre !== filterSurtidor) return false
     if (destinationQuery && !(r.receiverName || '').toLowerCase().includes(destinationQuery)) return false
-    if (!matchesDateFilter(r.orderCreateTime)) return false
-    if (!withinTimeRange(r.outboundTime, timeFrom, timeTo)) return false
+    if (!matchesDateFilter(getFilterDateValue(r))) return false
+    if (!withinTimeRange(r.outboundTime || r.expectedTime || r.orderCreateTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(r.outboundOrderNo)) return false
     if (q) {
       const haystack = [r.outboundOrderNo, r.customerCode, r.thirdOrderNo, r.receiverName, r.logisticsChannel].join(' ').toLowerCase()
@@ -900,8 +983,8 @@ export default function Ordenes() {
     if (filterClient && (wms?.customerCode || wms?.customerNo || wms?.customerName || '') !== filterClient) return false
     if (filterSurtidor && tr.surtidor_nombre !== filterSurtidor) return false
     if (destinationQuery && !(wms?.receiverName || '').toLowerCase().includes(destinationQuery)) return false
-    if (!matchesDateFilter(wms?.orderCreateTime || tr.updated_at)) return false
-    if (!withinTimeRange(wms?.outboundTime, timeFrom, timeTo)) return false
+    if (!matchesDateFilter(getFilterDateValue(wms) || tr.updated_at)) return false
+    if (!withinTimeRange(wms?.outboundTime || wms?.expectedTime || wms?.orderCreateTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
     if (q) {
       const haystack = [tr.outbound_order_no, tr.surtidor_nombre, wms?.customerCode, wms?.thirdOrderNo, wms?.receiverName].filter(Boolean).join(' ').toLowerCase()
@@ -942,16 +1025,15 @@ export default function Ordenes() {
   function clearFilters() {
     setSearchInput('')
     setSearch('')
-    setStatusDraft('')
-    setFilterStatus('')
     setClientDraft('')
     setFilterClient('')
     setSurtidorDraft('')
     setFilterSurtidor('')
     setDestinationDraft('')
     setFilterDestination('')
-    setDateToDraft('')
-    setDateTo('')
+    const today = getToday()
+    setDateToDraft(today)
+    setDateTo(today)
     const baseDate = subtractDays(getToday(), 30)
     setDateFromDraft(baseDate)
     setDateFrom(baseDate)
@@ -965,7 +1047,14 @@ export default function Ordenes() {
     sessionStorage.removeItem(destinationFilterKey)
   }
 
-  const hasFilters = filterStatus || filterClient || filterSurtidor || filterDestination || search || dateTo || timeFrom || timeTo || bulkSearchCodes.length > 0
+  const hasFilters =
+    filterClient ||
+    filterSurtidor ||
+    filterDestination ||
+    search ||
+    timeFrom ||
+    timeTo ||
+    bulkSearchCodes.length > 0
 
   function buildWmsRows(records) {
     return records.map(r => {
@@ -980,6 +1069,7 @@ export default function Ordenes() {
         r.outboundBoxCount ?? r.packageCount ?? '',
         r.outboundTime || '',
         tr.surtidor_nombre || '',
+        tr.total_scanned ?? 0,
         tr.status || 'pending_assignment',
         r.orderCreateTime || '',
       ]
@@ -1002,7 +1092,7 @@ export default function Ordenes() {
     })
   }
 
-  const WMS_HEADERS = ['OBC', 'Cliente', 'Destinatario', 'Canal', 'Referencia', 'Tracking', 'Cajas', 'Fecha entrega', 'Surtidor', 'Estado', 'Fecha creación']
+  const WMS_HEADERS = ['OBC', 'Cliente', 'Destinatario', 'Canal', 'Referencia', 'Tracking', 'Cajas', 'Fecha entrega', 'Surtidor', 'Cant. validada', 'Estado', 'Fecha creación']
   const VAL_HEADERS = ['OBC', 'Cliente', 'Surtidor', 'Fecha entrega', 'Escaneado', 'Esperado', 'Estado', 'Actualizado']
 
   function exportSheet(headers, rows, sheetName, filename) {
@@ -1083,22 +1173,38 @@ export default function Ordenes() {
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
               <Clock size={13} className="text-warm-400 shrink-0" />
               <input type="date" value={dateFromDraft}
-                onChange={e => setDateFromDraft(e.target.value)}
+                onChange={e => {
+                  const next = e.target.value
+                  setDateFromDraft(next)
+                  applyDateFilters(next, dateToDraft)
+                }}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
               <span className="text-warm-300 text-xs">→</span>
               <input type="date" value={dateToDraft}
-                onChange={e => setDateToDraft(e.target.value)}
+                onChange={e => {
+                  const next = e.target.value
+                  setDateToDraft(next)
+                  applyDateFilters(dateFromDraft, next)
+                }}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
             </div>
 
             <button
               type="button"
-              className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all ${
+              className={`inline-flex h-10 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all ${
                 showTimeFilters || timeFromDraft || timeToDraft
                   ? 'border-primary-300 bg-primary-50 text-primary-700'
                   : 'border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100'
               }`}
-              onClick={() => setShowTimeFilters((prev) => !prev)}
+              onClick={() => {
+                setShowTimeFilters((prev) => {
+                  const next = !prev
+                  if (next) {
+                    window.setTimeout(() => timeFromInputRef.current?.focus(), 0)
+                  }
+                  return next
+                })
+              }}
               title={t('surtido.ordenes.time_filter')}
             >
               <CalendarClock size={14} />
@@ -1115,10 +1221,18 @@ export default function Ordenes() {
                   className="flex items-center gap-2 flex-wrap"
                 >
                   <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
-                    <input type="time" value={timeFromDraft} onChange={e => setTimeFromDraft(e.target.value)}
+                    <input ref={timeFromInputRef} type="time" value={timeFromDraft} onChange={e => {
+                      const next = e.target.value
+                      setTimeFromDraft(next)
+                      applyTimeFilters(next, timeToDraft)
+                    }}
                       className="text-xs outline-none bg-transparent text-warm-700 w-[84px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
                     <span className="text-warm-300 text-xs">→</span>
-                    <input type="time" value={timeToDraft} onChange={e => setTimeToDraft(e.target.value)}
+                    <input type="time" value={timeToDraft} onChange={e => {
+                      const next = e.target.value
+                      setTimeToDraft(next)
+                      applyTimeFilters(timeFromDraft, next)
+                    }}
                       className="text-xs outline-none bg-transparent text-warm-700 w-[84px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
                   </div>
 
@@ -1130,7 +1244,11 @@ export default function Ordenes() {
                     <button
                       key={preset.label}
                       className="rounded-full border border-warm-200 bg-warm-50 px-3 py-2 text-[11px] font-semibold text-warm-600 hover:bg-warm-100"
-                      onClick={() => { setTimeFromDraft(preset.from); setTimeToDraft(preset.to) }}
+                      onClick={() => {
+                        setTimeFromDraft(preset.from)
+                        setTimeToDraft(preset.to)
+                        applyTimeFilters(preset.from, preset.to)
+                      }}
                     >
                       {preset.label}
                     </button>
@@ -1162,40 +1280,41 @@ export default function Ordenes() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <select
-              className="h-10 min-w-[180px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
-              value={clientDraft}
-              onChange={e => setClientDraft(e.target.value)}
-            >
+              <select
+                className="h-10 min-w-[180px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
+                value={clientDraft}
+                onChange={e => setClientDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') applyFilters() }}
+              >
               <option value="">{t('surtido.ordenes.cliente')} — {t('common.all')}</option>
               {customerOptions.map((customer) => <option key={customer} value={customer}>{customer}</option>)}
             </select>
 
-            <select
-              className="h-10 min-w-[180px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
-              value={surtidorDraft}
-              onChange={e => setSurtidorDraft(e.target.value)}
-            >
+              <select
+                className="h-10 min-w-[180px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
+                value={surtidorDraft}
+                onChange={e => setSurtidorDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') applyFilters() }}
+              >
               <option value="">{t('surtido.ordenes.surtidor')} — {t('common.all')}</option>
               {surtidores.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
             </select>
 
             <DestinationSearch
               value={destinationDraft}
-              onChange={(nextValue) => {
-                setDestinationDraft(nextValue)
-                setFilterDestination(nextValue)
-                setPage(1)
-                const normalized = nextValue.trim()
-                if (normalized) {
-                  sessionStorage.setItem(destinationFilterKey, normalized)
-                } else {
-                  sessionStorage.removeItem(destinationFilterKey)
-                }
-              }}
-              options={destinationOptions}
-              t={t}
-            />
+                onChange={(nextValue) => {
+                  setDestinationDraft(nextValue)
+                  const normalized = nextValue.trim()
+                  if (normalized) {
+                    sessionStorage.setItem(destinationFilterKey, normalized)
+                  } else {
+                    sessionStorage.removeItem(destinationFilterKey)
+                  }
+                }}
+                onEnter={applyFilters}
+                options={destinationOptions}
+                t={t}
+              />
 
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[240px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
               <Search size={13} className="text-warm-400 shrink-0" />
@@ -1205,6 +1324,7 @@ export default function Ordenes() {
                 placeholder={t('surtido.ordenes.search_placeholder')}
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') applyFilters() }}
               />
               <button
                 type="button"
@@ -1332,13 +1452,46 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
   const [bulkSurtidorId, setBulkSurtidorId] = useState('')
   const [bulkStatus, setBulkStatus] = useState('sorting')
+  const [sortKey, setSortKey] = useState('date')
+  const [sortDirection, setSortDirection] = useState('desc')
   useEffect(() => { setSelected(new Set()) }, [page])
-  const allChecked = records.length > 0 && records.every(r => selected.has(r.outboundOrderNo))
+
+  const sortedRecords = useMemo(() => {
+    const next = [...records]
+    const sorters = {
+      obc: (r) => r.outboundOrderNo,
+      date: (r) => r.outboundTime || r.expectedTime || r.orderCreateTime,
+      client: (r) => r.customerCode || r.customerNo || r.customerName,
+      receiver: (r) => r.receiverName,
+      channel: (r) => r.logisticsChannel,
+      reference: (r) => r.thirdOrderNo || r.referenceNo,
+      cajas: (r) => Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? 0),
+      scanned: (r) => trackingMap[r.outboundOrderNo]?.total_scanned || 0,
+      surtidor: (r) => trackingMap[r.outboundOrderNo]?.surtidor_nombre,
+      status: (r) => trackingMap[r.outboundOrderNo]?.status || 'pending_assignment',
+    }
+    const sorter = sorters[sortKey] || sorters.date
+    next.sort((a, b) => sortByDirection(sorter(a), sorter(b), sortDirection))
+    return next
+  }, [records, trackingMap, sortKey, sortDirection])
+
+  const handleSort = (key) => {
+    setSortKey((currentKey) => {
+      if (currentKey === key) {
+        setSortDirection((currentDir) => (currentDir === 'asc' ? 'desc' : 'asc'))
+        return currentKey
+      }
+      setSortDirection(key === 'date' ? 'desc' : 'asc')
+      return key
+    })
+  }
+
+  const allChecked = sortedRecords.length > 0 && sortedRecords.every(r => selected.has(r.outboundOrderNo))
   const someChecked = selected.size > 0
   const toggleAll = () => setSelected(prev => {
     const next = new Set(prev)
-    if (allChecked) records.forEach(r => next.delete(r.outboundOrderNo))
-    else records.forEach(r => next.add(r.outboundOrderNo))
+    if (allChecked) sortedRecords.forEach(r => next.delete(r.outboundOrderNo))
+    else sortedRecords.forEach(r => next.add(r.outboundOrderNo))
     return next
   })
   const toggleRow = (obc) => setSelected(prev => {
@@ -1401,20 +1554,41 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                   className="rounded border-warm-300 text-primary-600 cursor-pointer"
                   onClick={e => e.stopPropagation()} />
               </th>
-              <th className={TH_CLASS}><span className={TH_TEXT}>OBC</span></th>
-              <th className={`${TH_CLASS} hidden xl:table-cell col-date`}><span className={TH_TEXT}>{t('surtido.ordenes.fecha_entrega')}</span></th>
-              <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.cliente')}</span></th>
-              <th className={`${TH_CLASS} hidden xl:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.receiver')}</span></th>
-              <th className={`${TH_CLASS} hidden xl:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.canal')}</span></th>
-              <th className={`${TH_CLASS} hidden 2xl:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.referencia')}</span></th>
-              <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.ordenes.cajas')}</span></th>
-              <th className={`${TH_CLASS} col-name`}><span className={TH_TEXT}>{t('surtido.ordenes.surtidor')}</span></th>
-              <th className={`${TH_CLASS} col-status`}><span className={TH_TEXT}>{t('surtido.ordenes.status')}</span></th>
+              <th className={TH_CLASS}>
+                <SortableHeader label="OBC" sortKey="obc" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} hidden xl:table-cell col-date`}>
+                <SortableHeader label={t('surtido.ordenes.fecha_entrega')} sortKey="date" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} hidden lg:table-cell`}>
+                <SortableHeader label={t('surtido.ordenes.cliente')} sortKey="client" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} hidden xl:table-cell`}>
+                <SortableHeader label={t('surtido.ordenes.receiver')} sortKey="receiver" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} hidden xl:table-cell`}>
+                <SortableHeader label={t('surtido.ordenes.canal')} sortKey="channel" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} hidden 2xl:table-cell`}>
+                <SortableHeader label={t('surtido.ordenes.referencia')} sortKey="reference" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} text-right`}>
+                <SortableHeader label={t('surtido.ordenes.cajas')} sortKey="cajas" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} col-name`}>
+                <SortableHeader label={t('surtido.ordenes.surtidor')} sortKey="surtidor" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} text-right`}>
+                <SortableHeader label="Cant. validada" sortKey="scanned" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} col-status`}>
+                <SortableHeader label={t('surtido.ordenes.status')} sortKey="status" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
               <th className={`${TH_CLASS} col-actions text-right`}><span className={TH_TEXT}>Acciones</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
-            {records.map((r, i) => {
+            {sortedRecords.map((r, i) => {
               const obc = r.outboundOrderNo
               const tracking = trackingMap[obc]
               const status = tracking?.status || 'pending_assignment'
@@ -1425,7 +1599,6 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
               const canal = r.logisticsChannel || '—'
               const referencia = r.thirdOrderNo || r.referenceNo || '—'
               const cajas = r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? '—'
-
               const isChecked = selected.has(obc)
               return (
                 <tr key={obc || i}
@@ -1493,6 +1666,12 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                     ) : (
                       <span className="text-warm-600 text-xs">{tracking?.surtidor_nombre || '—'}</span>
                     )}
+                  </td>
+
+                  <td className="table-cell text-right">
+                    <span className="font-semibold text-warm-700 tabular-nums">
+                      {tracking?.total_scanned ?? 0}/{cajas}
+                    </span>
                   </td>
 
                   <td className="table-cell">
