@@ -7,6 +7,42 @@ import { getToday } from '../../../shared/utils/dateUtils.js'
 const router = Router()
 const DEFAULT_TZ = 'America/Mexico_City'
 
+// ── Sheet CSV cache (per tenant+url, stale-while-revalidate) ───────────────
+const _csvCache = new Map()
+const CSV_CACHE_TTL = 5 * 60 * 1000 // 5 min
+
+function getLastNRows(text, n) {
+  if (!n || n <= 0) return text
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const newlines = []
+  for (let i = 0; i < normalized.length; i++) {
+    if (normalized[i] === '\n') newlines.push(i)
+  }
+  if (newlines.length <= n) return normalized
+  const cutLine = newlines[newlines.length - n - 1] // keep last n data rows + header
+  return normalized.slice(0, newlines[0] + 1) + normalized.slice(cutLine + 1)
+}
+
+async function fetchAndCacheSheet(tenantId, url) {
+  const cacheKey = `${tenantId}:${url}`
+  const existing = _csvCache.get(cacheKey)
+  if (existing) existing.refreshing = true
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: 'text/csv,text/plain' },
+      signal: AbortSignal.timeout(25000),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const text = await res.text()
+    const rowCount = (text.match(/\n/g) || []).length
+    _csvCache.set(cacheKey, { text, rowCount, fetchedAt: Date.now(), refreshing: false })
+    return text
+  } catch (err) {
+    if (existing) existing.refreshing = false
+    throw err
+  }
+}
+
 function tenantLockKey(tenantId, suffix = '') {
   const buf = crypto.createHash('sha256').update(`${tenantId}:${suffix}`).digest()
   const val = buf.readBigUInt64BE(0) & BigInt('0x7FFFFFFFFFFFFFFF')
@@ -54,6 +90,74 @@ function generatedTarimaCode(sectionCode, index) {
   const dayMatch = String(sectionCode || '').match(/^SEC-(\d{8})M\d+$/)
   const dayKey = dayMatch ? dayMatch[1] : getToday().replace(/-/g, '')
   return `PAL-${dayKey}-${String(index + 1).padStart(2, '0')}`
+}
+
+async function assertSessionOwnership(req, sessionId) {
+  const sessionRes = await req.tQuery(
+    'SELECT * FROM pick_sessions WHERE id = $1 AND tenant_id = $2',
+    [sessionId, req.tenantId]
+  )
+  if (sessionRes.rows.length === 0) return null
+  const session = sessionRes.rows[0]
+  if (session.operator_id !== req.user.id && req.fullUser.rol_nombre !== 'Administrador') {
+    return false
+  }
+  return session
+}
+
+async function refreshPickSessionTotals(req, sessionId) {
+  await req.tQuery(
+    `UPDATE pick_sessions s
+     SET total_scanned = COALESCE(stats.total_scanned, 0),
+         updated_at = now()
+     FROM (
+       SELECT session_id, COALESCE(SUM(quantity), 0) AS total_scanned
+       FROM pick_events
+       WHERE session_id = $1 AND scan_result = 'ok'
+       GROUP BY session_id
+     ) stats
+     WHERE s.id = $1 AND s.tenant_id = $2`,
+    [sessionId, req.tenantId]
+  )
+  await req.tQuery(
+    `UPDATE pick_sessions
+     SET total_scanned = 0, updated_at = now()
+     WHERE id = $1
+       AND tenant_id = $2
+       AND NOT EXISTS (SELECT 1 FROM pick_events WHERE session_id = $1 AND scan_result = 'ok')`,
+    [sessionId, req.tenantId]
+  )
+}
+
+async function refreshInventorySessionTotals(req, sessionId) {
+  await req.tQuery(
+    `UPDATE inv_sessions s
+     SET total_scans = COALESCE(stats.total_scans, 0),
+         total_ok = COALESCE(stats.total_ok, 0),
+         total_blocked = COALESCE(stats.total_blocked, 0),
+         total_nowms = COALESCE(stats.total_nowms, 0),
+         updated_at = now()
+     FROM (
+       SELECT session_id,
+              COUNT(*) AS total_scans,
+              COUNT(*) FILTER (WHERE scan_status = 'ok') AS total_ok,
+              COUNT(*) FILTER (WHERE scan_status = 'blocked') AS total_blocked,
+              COUNT(*) FILTER (WHERE scan_status = 'nowms') AS total_nowms
+       FROM inv_scans
+       WHERE session_id = $1
+       GROUP BY session_id
+     ) stats
+     WHERE s.id = $1 AND s.tenant_id = $2`,
+    [sessionId, req.tenantId]
+  )
+  await req.tQuery(
+    `UPDATE inv_sessions
+     SET total_scans = 0, total_ok = 0, total_blocked = 0, total_nowms = 0, updated_at = now()
+     WHERE id = $1
+       AND tenant_id = $2
+       AND NOT EXISTS (SELECT 1 FROM inv_scans WHERE session_id = $1)`,
+    [sessionId, req.tenantId]
+  )
 }
 
 // ── Config ─────────────────────────────────────────────────────────────────
@@ -143,6 +247,9 @@ router.post('/config/sheets',
         )
       }
       res.json({ success: true })
+      // Pre-warm CSV cache in background so first real user gets a cache hit
+      if (sheet_inventory_url) fetchAndCacheSheet(req.tenantId, sheet_inventory_url).catch(() => {})
+      if (sheet_outbound_url)  fetchAndCacheSheet(req.tenantId, sheet_outbound_url).catch(() => {})
     } catch (err) {
       console.error('PUT upapex/config/sheets error:', err.message)
       res.status(500).json({ success: false, error: 'Error guardando URLs de hojas' })
@@ -150,24 +257,47 @@ router.post('/config/sheets',
   }
 )
 
-// GET /api/upapex/proxy/sheet?url= — CORS proxy for Google Sheets CSV
+// GET /api/upapex/proxy/sheet?url=&limit=N — CORS proxy with server-side cache
+// limit=0 (or omitted) returns all rows; limit=N returns header + last N data rows.
 router.get('/proxy/sheet',
-  authenticateToken, loadFullUser,
+  authenticateToken,
   async (req, res) => {
     try {
-      const { url } = req.query
+      const { url, limit } = req.query
       if (!url || !url.startsWith('https://docs.google.com/')) {
         return res.status(400).json({ success: false, error: 'URL inválida: debe ser una hoja de Google' })
       }
-      const upstream = await fetch(url, {
-        headers: { Accept: 'text/csv,text/plain' },
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!upstream.ok) {
-        return res.status(502).json({ success: false, error: `Error al acceder a la hoja: HTTP ${upstream.status}` })
+      const limitNum = parseInt(limit) || 0
+      const cacheKey = `${req.tenantId}:${url}`
+      const cached = _csvCache.get(cacheKey)
+      const now = Date.now()
+
+      const send = (text, cacheStatus, rowCount) => {
+        const payload = limitNum > 0 ? getLastNRows(text, limitNum) : text
+        res.set('Content-Type', 'text/plain; charset=utf-8')
+          .set('X-Sheet-Cache', cacheStatus)
+          .set('X-Sheet-Total-Rows', String(rowCount || 0))
+          .send(payload)
       }
-      const text = await upstream.text()
-      res.set('Content-Type', 'text/plain; charset=utf-8').send(text)
+
+      if (cached) {
+        const age = now - cached.fetchedAt
+        if (age < CSV_CACHE_TTL) {
+          // Fresh cache hit — respond immediately
+          return send(cached.text, 'hit', cached.rowCount)
+        }
+        // Stale — respond immediately with old data + refresh in background
+        send(cached.text, 'stale', cached.rowCount)
+        if (!cached.refreshing) {
+          fetchAndCacheSheet(req.tenantId, url).catch(() => {})
+        }
+        return
+      }
+
+      // Cache miss — fetch, cache, respond
+      const text = await fetchAndCacheSheet(req.tenantId, url)
+      const entry = _csvCache.get(cacheKey)
+      send(text, 'miss', entry?.rowCount || 0)
     } catch (err) {
       console.error('GET upapex/proxy/sheet error:', err.message)
       res.status(502).json({ success: false, error: 'No se pudo obtener la hoja de cálculo' })
@@ -336,13 +466,62 @@ router.put('/scan-session/:id',
   }
 )
 
+router.delete('/scan-session/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.validacion', 'eliminar'),
+  async (req, res) => {
+    const client = await req.tGetClient()
+    try {
+      await client.query('BEGIN')
+      const sessionRes = await client.query(
+        `SELECT id, outbound_order_no, status
+         FROM pick_sessions
+         WHERE id = $1 AND tenant_id = $2
+         FOR UPDATE`,
+        [req.params.id, req.tenantId]
+      )
+      if (sessionRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
+      }
+
+      const session = sessionRes.rows[0]
+      await client.query('DELETE FROM pick_events WHERE session_id = $1', [req.params.id])
+      await client.query(
+        'DELETE FROM pick_sessions WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, req.tenantId]
+      )
+      await client.query('COMMIT')
+      res.json({ success: true, data: session })
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {})
+      console.error('DELETE upapex/scan-session/:id error:', err.message)
+      res.status(500).json({ success: false, error: 'Error eliminando sesión de validación' })
+    } finally {
+      client.release()
+    }
+  }
+)
+
 // POST /api/upapex/scan-event — add scan event
 router.post('/scan-event',
   authenticateToken, loadFullUser,
   requirePermission('surtido.validacion', 'crear'),
   async (req, res) => {
     try {
-      const { session_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity } = req.body
+      const {
+        session_id,
+        scanned_code,
+        normalized_code,
+        matched_sku,
+        matched_box_type,
+        scan_result,
+        quantity,
+        input_method,
+        manual_reason_id,
+        manual_reason_label,
+        manual_notes,
+      } = req.body
       if (!session_id || !scanned_code || !scan_result) {
         return res.status(400).json({ success: false, error: 'session_id, scanned_code y scan_result son requeridos' })
       }
@@ -357,8 +536,9 @@ router.post('/scan-event',
 
       const result = await req.tQuery(
         `INSERT INTO pick_events
-           (session_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (session_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
+            input_method, manual_reason_id, manual_reason_label, manual_notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *`,
         [
           session_id,
@@ -368,21 +548,194 @@ router.post('/scan-event',
           matched_box_type || null,
           scan_result,
           quantity || 1,
+          input_method || 'scanner',
+          manual_reason_id || null,
+          manual_reason_label || null,
+          manual_notes || null,
         ]
       )
 
-      // Update session scanned count when result is 'ok'
-      if (scan_result === 'ok') {
-        await req.tQuery(
-          'UPDATE pick_sessions SET total_scanned = total_scanned + $1, updated_at = now() WHERE id = $2 AND tenant_id = $3',
-          [quantity || 1, session_id, req.tenantId]
-        )
-      }
+      await refreshPickSessionTotals(req, session_id)
 
       res.status(201).json({ success: true, data: result.rows[0] })
     } catch (err) {
       console.error('POST upapex/scan-event error:', err.message)
       res.status(500).json({ success: false, error: 'Error registrando evento de escaneo' })
+    }
+  }
+)
+
+router.post('/scan-event/manual',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.validacion', 'actualizar'),
+  async (req, res) => {
+    try {
+      const {
+        session_id,
+        scanned_code,
+        normalized_code,
+        matched_sku,
+        matched_box_type,
+        quantity,
+        manual_reason_id,
+        manual_reason_label,
+        manual_notes,
+      } = req.body
+
+      if (!session_id || !scanned_code || !manual_reason_id) {
+        return res.status(400).json({ success: false, error: 'session_id, scanned_code y manual_reason_id son requeridos' })
+      }
+
+      const session = await assertSessionOwnership(req, session_id)
+      if (session === null) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
+      if (session === false) return res.status(403).json({ success: false, error: 'No autorizado para modificar esta sesión' })
+      if (session.status !== 'open') {
+        return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
+      }
+
+      const reasonRes = await req.tQuery(
+        'SELECT id, nombre FROM pick_manual_reasons WHERE id = $1 AND tenant_id = $2 AND activo = true',
+        [manual_reason_id, req.tenantId]
+      )
+      if (reasonRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Motivo de ingreso manual no encontrado' })
+      }
+
+      const reason = reasonRes.rows[0]
+      const result = await req.tQuery(
+        `INSERT INTO pick_events
+           (session_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
+            input_method, manual_reason_id, manual_reason_label, manual_notes)
+         VALUES ($1, $2, $3, $4, $5, 'ok', $6, 'manual', $7, $8, $9)
+         RETURNING *`,
+        [
+          session_id,
+          scanned_code,
+          normalized_code || scanned_code,
+          matched_sku || null,
+          matched_box_type || null,
+          quantity || 1,
+          reason.id,
+          manual_reason_label || reason.nombre,
+          manual_notes || null,
+        ]
+      )
+      await refreshPickSessionTotals(req, session_id)
+      res.status(201).json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      console.error('POST upapex/scan-event/manual error:', err.message)
+      res.status(500).json({ success: false, error: 'Error registrando ingreso manual' })
+    }
+  }
+)
+
+router.put('/scan-event/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.validacion', 'actualizar'),
+  async (req, res) => {
+    try {
+      const eventRes = await req.tQuery(
+        `SELECT e.*, s.tenant_id, s.status, s.operator_id
+         FROM pick_events e
+         JOIN pick_sessions s ON s.id = e.session_id
+         WHERE e.id = $1 AND s.tenant_id = $2`,
+        [req.params.id, req.tenantId]
+      )
+      if (eventRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Registro no encontrado' })
+      const event = eventRes.rows[0]
+      if (event.status !== 'open') return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
+      if (event.operator_id !== req.user.id && req.fullUser.rol_nombre !== 'Administrador') {
+        return res.status(403).json({ success: false, error: 'No autorizado para modificar este registro' })
+      }
+
+      const {
+        scanned_code,
+        normalized_code,
+        matched_sku,
+        matched_box_type,
+        scan_result,
+        quantity,
+        manual_reason_id,
+        manual_reason_label,
+        manual_notes,
+      } = req.body
+
+      let resolvedReasonId = manual_reason_id ?? event.manual_reason_id
+      let resolvedReasonLabel = manual_reason_label ?? event.manual_reason_label
+      if (resolvedReasonId) {
+        const reasonRes = await req.tQuery(
+          'SELECT id, nombre FROM pick_manual_reasons WHERE id = $1 AND tenant_id = $2 AND activo = true',
+          [resolvedReasonId, req.tenantId]
+        )
+        if (reasonRes.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Motivo de ingreso manual no encontrado' })
+        }
+        resolvedReasonLabel = resolvedReasonLabel || reasonRes.rows[0].nombre
+      }
+
+      const result = await req.tQuery(
+        `UPDATE pick_events
+         SET scanned_code = COALESCE($1, scanned_code),
+             normalized_code = COALESCE($2, normalized_code),
+             matched_sku = $3,
+             matched_box_type = $4,
+             scan_result = COALESCE($5, scan_result),
+             quantity = COALESCE($6, quantity),
+             manual_reason_id = $7,
+             manual_reason_label = $8,
+             manual_notes = $9,
+             edited_at = now(),
+             edited_by = $10
+         WHERE id = $11
+         RETURNING *`,
+        [
+          scanned_code || null,
+          normalized_code || null,
+          matched_sku ?? event.matched_sku ?? null,
+          matched_box_type ?? event.matched_box_type ?? null,
+          scan_result || null,
+          quantity || null,
+          resolvedReasonId || null,
+          resolvedReasonLabel || null,
+          manual_notes ?? event.manual_notes ?? null,
+          req.user.id,
+          req.params.id,
+        ]
+      )
+      await refreshPickSessionTotals(req, event.session_id)
+      res.json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      console.error('PUT upapex/scan-event/:id error:', err.message)
+      res.status(500).json({ success: false, error: 'Error actualizando registro' })
+    }
+  }
+)
+
+router.delete('/scan-event/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.validacion', 'eliminar'),
+  async (req, res) => {
+    try {
+      const eventRes = await req.tQuery(
+        `SELECT e.id, e.session_id, s.status, s.operator_id
+         FROM pick_events e
+         JOIN pick_sessions s ON s.id = e.session_id
+         WHERE e.id = $1 AND s.tenant_id = $2`,
+        [req.params.id, req.tenantId]
+      )
+      if (eventRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Registro no encontrado' })
+      const event = eventRes.rows[0]
+      if (event.status !== 'open') return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
+      if (event.operator_id !== req.user.id && req.fullUser.rol_nombre !== 'Administrador') {
+        return res.status(403).json({ success: false, error: 'No autorizado para eliminar este registro' })
+      }
+
+      await req.tQuery('DELETE FROM pick_events WHERE id = $1', [req.params.id])
+      await refreshPickSessionTotals(req, event.session_id)
+      res.json({ success: true })
+    } catch (err) {
+      console.error('DELETE upapex/scan-event/:id error:', err.message)
+      res.status(500).json({ success: false, error: 'Error eliminando registro' })
     }
   }
 )
@@ -559,34 +912,279 @@ router.get('/inventory-session/:id',
   }
 )
 
-// DELETE /api/upapex/inventory-session/:id — only most recent allowed
-router.delete('/inventory-session/:id',
+router.post('/inventory-scan',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.registros', 'actualizar'),
+  async (req, res) => {
+    try {
+      const {
+        session_id,
+        scanned_code,
+        normalized_code,
+        code2,
+        was_swapped,
+        scan_status,
+        sku,
+        product_name,
+        group_assignment,
+        manual_notes,
+      } = req.body
+
+      if (!session_id || !scanned_code || !scan_status) {
+        return res.status(400).json({ success: false, error: 'session_id, scanned_code y scan_status son requeridos' })
+      }
+
+      const sessionRes = await req.tQuery(
+        'SELECT id FROM inv_sessions WHERE id = $1 AND tenant_id = $2',
+        [session_id, req.tenantId]
+      )
+      if (sessionRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
+
+      const result = await req.tQuery(
+        `INSERT INTO inv_scans
+           (session_id, scanned_code, normalized_code, code2, was_swapped, scan_status, sku, product_name,
+            group_assignment, input_method, manual_notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'manual',$10)
+         RETURNING *`,
+        [
+          session_id,
+          scanned_code,
+          normalized_code || scanned_code,
+          code2 || null,
+          !!was_swapped,
+          scan_status,
+          sku || null,
+          product_name || null,
+          group_assignment || 'auto',
+          manual_notes || null,
+        ]
+      )
+      await refreshInventorySessionTotals(req, session_id)
+      res.status(201).json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      console.error('POST upapex/inventory-scan error:', err.message)
+      res.status(500).json({ success: false, error: 'Error agregando registro de inventario' })
+    }
+  }
+)
+
+router.put('/inventory-scan/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.registros', 'actualizar'),
+  async (req, res) => {
+    try {
+      const scanRes = await req.tQuery(
+        `SELECT s.id, s.session_id
+         FROM inv_scans s
+         JOIN inv_sessions sess ON sess.id = s.session_id
+         WHERE s.id = $1 AND sess.tenant_id = $2`,
+        [req.params.id, req.tenantId]
+      )
+      if (scanRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Registro no encontrado' })
+      const current = scanRes.rows[0]
+      const {
+        scanned_code,
+        normalized_code,
+        code2,
+        was_swapped,
+        scan_status,
+        sku,
+        product_name,
+        group_assignment,
+        manual_notes,
+      } = req.body
+
+      const result = await req.tQuery(
+        `UPDATE inv_scans
+         SET scanned_code = COALESCE($1, scanned_code),
+             normalized_code = COALESCE($2, normalized_code),
+             code2 = $3,
+             was_swapped = COALESCE($4, was_swapped),
+             scan_status = COALESCE($5, scan_status),
+             sku = $6,
+             product_name = $7,
+             group_assignment = COALESCE($8, group_assignment),
+             manual_notes = $9,
+             edited_at = now(),
+             edited_by = $10
+         WHERE id = $11
+         RETURNING *`,
+        [
+          scanned_code || null,
+          normalized_code || null,
+          code2 ?? null,
+          typeof was_swapped === 'boolean' ? was_swapped : null,
+          scan_status || null,
+          sku ?? null,
+          product_name ?? null,
+          group_assignment || null,
+          manual_notes ?? null,
+          req.user.id,
+          req.params.id,
+        ]
+      )
+      await refreshInventorySessionTotals(req, current.session_id)
+      res.json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      console.error('PUT upapex/inventory-scan/:id error:', err.message)
+      res.status(500).json({ success: false, error: 'Error actualizando registro de inventario' })
+    }
+  }
+)
+
+router.delete('/inventory-scan/:id',
   authenticateToken, loadFullUser,
   requirePermission('inventario.registros', 'eliminar'),
   async (req, res) => {
     try {
-      const mostRecent = await req.tQuery(
-        `SELECT id FROM inv_sessions
-         WHERE tenant_id = $1 AND status = 'saved'
-         ORDER BY completed_at DESC LIMIT 1`,
-        [req.tenantId]
+      const scanRes = await req.tQuery(
+        `SELECT s.id, s.session_id
+         FROM inv_scans s
+         JOIN inv_sessions sess ON sess.id = s.session_id
+         WHERE s.id = $1 AND sess.tenant_id = $2`,
+        [req.params.id, req.tenantId]
       )
-      if (mostRecent.rows.length === 0 || mostRecent.rows[0].id !== req.params.id) {
-        return res.status(403).json({ success: false, error: 'Solo se puede eliminar el registro más reciente' })
+      if (scanRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Registro no encontrado' })
+      const current = scanRes.rows[0]
+      await req.tQuery('DELETE FROM inv_scans WHERE id = $1', [req.params.id])
+      await refreshInventorySessionTotals(req, current.session_id)
+      res.json({ success: true })
+    } catch (err) {
+      console.error('DELETE upapex/inventory-scan/:id error:', err.message)
+      res.status(500).json({ success: false, error: 'Error eliminando registro de inventario' })
+    }
+  }
+)
+
+// DELETE /api/upapex/inventory-session/:id
+router.delete('/inventory-session/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.registros', 'eliminar'),
+  async (req, res) => {
+    const client = await req.tGetClient()
+    try {
+      await client.query('BEGIN')
+      const sessionRes = await client.query(
+        `SELECT id, tarima_code, scan_type, status
+         FROM inv_sessions
+         WHERE id = $1 AND tenant_id = $2
+         FOR UPDATE`,
+        [req.params.id, req.tenantId]
+      )
+      if (sessionRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
       }
-      await req.tQuery(
+
+      await client.query('DELETE FROM inv_scans WHERE session_id = $1', [req.params.id])
+      await client.query(
         'DELETE FROM inv_sessions WHERE id = $1 AND tenant_id = $2',
         [req.params.id, req.tenantId]
       )
-      res.json({ success: true })
+      await client.query('COMMIT')
+      res.json({ success: true, data: sessionRes.rows[0] })
     } catch (err) {
+      await client.query('ROLLBACK').catch(() => {})
       console.error('DELETE upapex/inventory-session/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error eliminando sesión' })
+    } finally {
+      client.release()
     }
   }
 )
 
 // ── Surtidores ─────────────────────────────────────────────────────────────
+
+router.get('/manual-entry-reasons',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'ver'),
+  async (req, res) => {
+    try {
+      const rows = await req.tQuery(
+        `SELECT id, nombre, activo, created_at, updated_at
+         FROM pick_manual_reasons
+         WHERE tenant_id = $1 AND activo = true
+         ORDER BY nombre ASC`,
+        [req.tenantId]
+      )
+      res.json({ success: true, data: rows.rows })
+    } catch (err) {
+      console.error('GET manual-entry-reasons error:', err.message)
+      res.status(500).json({ success: false, error: 'Error obteniendo motivos de ingreso manual' })
+    }
+  }
+)
+
+router.post('/manual-entry-reasons',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'actualizar'),
+  async (req, res) => {
+    try {
+      const nombre = String(req.body?.nombre || '').trim()
+      if (!nombre) return res.status(400).json({ success: false, error: 'Nombre requerido' })
+      const result = await req.tQuery(
+        `INSERT INTO pick_manual_reasons (tenant_id, nombre)
+         VALUES ($1, $2)
+         RETURNING *`,
+        [req.tenantId, nombre]
+      )
+      res.status(201).json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      if (err.code === '23505') {
+        return res.status(409).json({ success: false, error: 'Ya existe un motivo con ese nombre' })
+      }
+      console.error('POST manual-entry-reasons error:', err.message)
+      res.status(500).json({ success: false, error: 'Error creando motivo' })
+    }
+  }
+)
+
+router.put('/manual-entry-reasons/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'actualizar'),
+  async (req, res) => {
+    try {
+      const nombre = String(req.body?.nombre || '').trim()
+      if (!nombre) return res.status(400).json({ success: false, error: 'Nombre requerido' })
+      const result = await req.tQuery(
+        `UPDATE pick_manual_reasons
+         SET nombre = $1, updated_at = now()
+         WHERE id = $2 AND tenant_id = $3
+         RETURNING *`,
+        [nombre, req.params.id, req.tenantId]
+      )
+      if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Motivo no encontrado' })
+      res.json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      if (err.code === '23505') {
+        return res.status(409).json({ success: false, error: 'Ya existe un motivo con ese nombre' })
+      }
+      console.error('PUT manual-entry-reasons error:', err.message)
+      res.status(500).json({ success: false, error: 'Error actualizando motivo' })
+    }
+  }
+)
+
+router.delete('/manual-entry-reasons/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'eliminar'),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `UPDATE pick_manual_reasons
+         SET activo = false, updated_at = now()
+         WHERE id = $1 AND tenant_id = $2
+         RETURNING id`,
+        [req.params.id, req.tenantId]
+      )
+      if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Motivo no encontrado' })
+      res.json({ success: true })
+    } catch (err) {
+      console.error('DELETE manual-entry-reasons error:', err.message)
+      res.status(500).json({ success: false, error: 'Error eliminando motivo' })
+    }
+  }
+)
 
 router.get('/surtidores',
   authenticateToken, loadFullUser,

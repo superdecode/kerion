@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Search, Loader2, RefreshCw } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -6,11 +7,21 @@ import { useBoxStock } from '../hooks/useBoxStock'
 
 export default function Stock() {
   const { t } = useI18nStore()
+  const qc = useQueryClient()
   const [search, setSearch] = useState('')
 
   const { data, isLoading, isFetching, refetch } = useBoxStock()
 
   const rows = data?.data?.records ?? data?.data ?? []
+  const isPartial = data?.data?.partial ?? false
+
+  useEffect(() => {
+    if (!isPartial) return
+    const timer = setTimeout(() => {
+      qc.invalidateQueries({ queryKey: ['upapex-box-stock'] })
+    }, 15000)
+    return () => clearTimeout(timer)
+  }, [isPartial, qc])
 
   const filtered = rows.filter(r => {
     if (!search.trim()) return true
@@ -25,6 +36,14 @@ export default function Stock() {
   return (
     <div className="flex flex-col h-full">
       <Header title={t('inventario.stock.title')} subtitle={t('nav.inventario')} />
+
+      {/* Partial data banner */}
+      {isPartial && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-warning-50 border-b border-warning-100 text-warning-700 text-[11px]">
+          <Loader2 size={11} className="animate-spin shrink-0" />
+          <span>{t('wmshub.partial_loading')}</span>
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-warm-100 px-4 py-3">

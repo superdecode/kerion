@@ -8,6 +8,7 @@ import {
   Package2, Truck, ScanBarcode, Copy, Check, Eye, ClipboardList,
   User, Clock, BarChart3, RefreshCw, Database, CheckCircle2,
   MapPin, Timer, XCircle, AlertCircle, Pencil, BadgeCheck, Download,
+  ListFilter, Filter, CalendarClock, Save,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -20,9 +21,11 @@ import {
   getOutboundList,
   getSurtidores, createSurtidor, deleteSurtidor,
   getOrderTracking, upsertOrderTracking, getScanSessions,
+  getManualEntryReasons, createManualEntryReason, updateManualEntryReason, deleteManualEntryReason,
   getRecords,
 } from '../services/surtidoService'
-import { refreshSheet, getCacheTimestamp } from '../../WmsHub/services/googleSheetsService'
+import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
+import { fmtDateTime as formatDateTimeTz, fmtDate as formatDateTz, fmtTimeShort } from '../../../core/utils/dateFormat'
 
 const STATUS_META = {
   pending_assignment: { labelKey: 'surtido.ordenes.status.pending_assignment', cls: 'bg-warm-100 text-warm-600' },
@@ -32,14 +35,41 @@ const STATUS_META = {
   partial:            { labelKey: 'surtido.ordenes.status.partial',            cls: 'bg-warning-100 text-warning-700' },
   cancelled:          { labelKey: 'surtido.ordenes.status.cancelled',          cls: 'bg-danger-100 text-danger-700' },
   // legacy — kept for existing DB records
-  assigned:           { labelKey: 'surtido.ordenes.status.pending_assignment', cls: 'bg-warm-100 text-warm-600' },
-  pending_validation: { labelKey: 'surtido.ordenes.status.sorting',            cls: 'bg-primary-100 text-primary-700' },
+  assigned:           { labelKey: 'surtido.ordenes.status.assigned',           cls: 'bg-warm-100 text-warm-600' },
+  pending_validation: { labelKey: 'surtido.ordenes.status.pending_validation', cls: 'bg-primary-100 text-primary-700' },
 }
 
 const STATUS_FILTER_KEYS = ['pending_assignment', 'sorting', 'validating', 'complete', 'partial', 'cancelled']
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
 const getToday = () => new Date().toISOString().slice(0, 10)
+
+function parseBulkCodes(text) {
+  return Array.from(new Set(
+    String(text || '')
+      .split(/[\n,;]+/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+  ))
+}
+
+function getHourPart(value) {
+  if (!value) return ''
+  try {
+    return fmtTimeShort(value)
+  } catch {
+    return ''
+  }
+}
+
+function withinTimeRange(value, from, to) {
+  if (!from && !to) return true
+  const time = getHourPart(value)
+  if (!time) return false
+  if (from && time < from) return false
+  if (to && time > to) return false
+  return true
+}
 
 function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
   const { t } = useI18nStore()
@@ -70,7 +100,7 @@ function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
             <input className="input-field flex-1 text-sm" placeholder={t('surtido.ordenes.surtidor_name')}
               value={nombre} onChange={e => setNombre(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && nombre.trim()) addMut.mutate({ nombre: nombre.trim() }) }} />
-            <button className="btn-primary shrink-0" onClick={() => addMut.mutate({ nombre: nombre.trim() })}
+            <button className="btn-primary inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap" onClick={() => addMut.mutate({ nombre: nombre.trim() })}
               disabled={!nombre.trim() || addMut.isPending}>
               {addMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
               {t('surtido.ordenes.add_surtidor')}
@@ -97,6 +127,161 @@ function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
             </div>
           ))}
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ManualReasonsModal({ isOpen, onClose, canUpdate, canDelete }) {
+  const { t } = useI18nStore()
+  const toast = useToastStore.getState()
+  const qc = useQueryClient()
+  const [draft, setDraft] = useState('')
+  const [editingId, setEditingId] = useState(null)
+  const [editingName, setEditingName] = useState('')
+  const { data } = useQuery({
+    queryKey: ['upapex-manual-entry-reasons'],
+    queryFn: getManualEntryReasons,
+    staleTime: 30000,
+    enabled: isOpen,
+  })
+  const reasons = getRecords(data)
+
+  const createMut = useMutation({
+    mutationFn: createManualEntryReason,
+    onSuccess: () => {
+      setDraft('')
+      qc.invalidateQueries({ queryKey: ['upapex-manual-entry-reasons'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, nombre }) => updateManualEntryReason(id, { nombre }),
+    onSuccess: () => {
+      setEditingId(null)
+      setEditingName('')
+      qc.invalidateQueries({ queryKey: ['upapex-manual-entry-reasons'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: deleteManualEntryReason,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['upapex-manual-entry-reasons'] }),
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('surtido.ordenes.manage_motivos')}
+      icon={ClipboardList}
+      footer={<button className="btn-secondary" onClick={onClose}>{t('common.close')}</button>}
+    >
+      <div className="space-y-3">
+        {canUpdate && (
+          <div className="flex gap-2">
+            <input
+              className="input-field flex-1 text-sm"
+              placeholder={t('surtido.ordenes.reason_placeholder')}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim()) createMut.mutate({ nombre: draft.trim() }) }}
+            />
+            <button
+              className="btn-primary inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap"
+              onClick={() => createMut.mutate({ nombre: draft.trim() })}
+              disabled={!draft.trim() || createMut.isPending}
+            >
+              {createMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              {t('surtido.ordenes.add_surtidor')}
+            </button>
+          </div>
+        )}
+        <div className="divide-y divide-warm-100 max-h-72 overflow-y-auto">
+          {reasons.length === 0 ? (
+            <p className="py-6 text-center text-sm text-warm-400">{t('common.noData')}</p>
+          ) : reasons.map((reason) => (
+            <div key={reason.id} className="flex items-center gap-2 py-2.5">
+              {editingId === reason.id ? (
+                <input
+                  className="input-field flex-1 text-sm"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && editingName.trim()) updateMut.mutate({ id: reason.id, nombre: editingName.trim() })
+                  }}
+                />
+              ) : (
+                <span className="flex-1 text-sm font-medium text-warm-800">{reason.nombre}</span>
+              )}
+              {canUpdate && (
+                editingId === reason.id ? (
+                  <button
+                    className="rounded-lg p-2 text-primary-600 hover:bg-primary-50"
+                    onClick={() => updateMut.mutate({ id: reason.id, nombre: editingName.trim() })}
+                    disabled={!editingName.trim() || updateMut.isPending}
+                  >
+                    <Save size={14} />
+                  </button>
+                ) : (
+                  <button
+                    className="rounded-lg p-2 text-warm-400 hover:bg-warm-100 hover:text-primary-600"
+                    onClick={() => { setEditingId(reason.id); setEditingName(reason.nombre) }}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                )
+              )}
+              {canDelete && (
+                <button
+                  className="rounded-lg p-2 text-warm-400 hover:bg-danger-50 hover:text-danger-600"
+                  onClick={() => deleteMut.mutate(reason.id)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function BulkSearchModal({ isOpen, onClose, onApply, initialValue }) {
+  const { t } = useI18nStore()
+  const [value, setValue] = useState(initialValue || '')
+  useEffect(() => { if (isOpen) setValue(initialValue || '') }, [isOpen, initialValue])
+  const codes = useMemo(() => parseBulkCodes(value), [value])
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('surtido.ordenes.bulk_search_title')}
+      icon={ListFilter}
+      footer={
+        <div className="flex gap-3 justify-end">
+          <button className="btn-ghost" onClick={() => setValue('')}>{t('common.clear')}</button>
+          <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="btn-primary inline-flex items-center gap-1.5 whitespace-nowrap" onClick={() => { onApply(value, codes); onClose() }} disabled={codes.length === 0}>
+            {t('surtido.ordenes.bulk_search_apply')}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <textarea
+          className="input-field min-h-48 w-full resize-none text-sm font-mono"
+          placeholder={t('surtido.ordenes.bulk_search_placeholder')}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <p className="text-xs font-semibold text-warm-500">
+          {codes.length} {t('surtido.ordenes.bulk_search_detected')}
+        </p>
       </div>
     </Modal>
   )
@@ -414,7 +599,7 @@ export default function Ordenes() {
   const toast = useToastStore.getState()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { hasPermission } = useAuthStore()
+  const { hasPermission, user } = useAuthStore()
   const canCreateValidation = hasPermission('surtido.validacion', 'crear')
   const canUpdateOrders = hasPermission('surtido.ordenes', 'actualizar')
   const canDeleteOrders = hasPermission('surtido.ordenes', 'eliminar')
@@ -423,19 +608,53 @@ export default function Ordenes() {
   const [tab, setTab] = useState('wms')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
+  const [statusDraft, setStatusDraft] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [surtidorDraft, setSurtidorDraft] = useState('')
   const [filterSurtidor, setFilterSurtidor] = useState('')
-  const [dateFrom, setDateFrom] = useState(() => {
+  const [destinationDraft, setDestinationDraft] = useState('')
+  const [filterDestination, setFilterDestination] = useState('')
+  const [dateFromDraft, setDateFromDraft] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10)
   })
-  const [dateTo, setDateTo] = useState('')
+  const [dateToDraft, setDateToDraft] = useState('')
+  const [dateFrom, setDateFrom] = useState(dateFromDraft)
+  const [dateTo, setDateTo] = useState(dateToDraft)
+  const [timeFromDraft, setTimeFromDraft] = useState('')
+  const [timeToDraft, setTimeToDraft] = useState('')
+  const [timeFrom, setTimeFrom] = useState('')
+  const [timeTo, setTimeTo] = useState('')
   const [showSurtidoresModal, setShowSurtidoresModal] = useState(false)
+  const [showReasonsModal, setShowReasonsModal] = useState(false)
   const [assignTarget, setAssignTarget] = useState(null)
   const [quickEditObc, setQuickEditObc] = useState(null)
+  const [bulkSearchOpen, setBulkSearchOpen] = useState(false)
+  const [bulkSearchText, setBulkSearchText] = useState('')
+  const [bulkSearchCodes, setBulkSearchCodes] = useState([])
 
   const [refreshing, setRefreshing] = useState(false)
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
+  const timeFilterKey = `kirion_surtido_ordenes_time_${user?.id || 'guest'}`
+  const destinationFilterKey = `kirion_surtido_destination_${user?.id || 'guest'}`
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(timeFilterKey) || 'null')
+      if (saved) {
+        setTimeFromDraft(saved.timeFrom || '')
+        setTimeToDraft(saved.timeTo || '')
+        setTimeFrom(saved.timeFrom || '')
+        setTimeTo(saved.timeTo || '')
+      }
+      const savedDestination = sessionStorage.getItem(destinationFilterKey) || ''
+      if (savedDestination) {
+        setDestinationDraft(savedDestination)
+        setFilterDestination(savedDestination)
+      }
+    } catch {}
+  }, [timeFilterKey, destinationFilterKey])
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -469,6 +688,15 @@ export default function Ordenes() {
   const allWmsRecords = getRecords(wmsData)
   const trackingList  = getRecords(trackingData)
   const surtidores    = getRecords(surtidoresData)
+  const isPartial     = wmsData?.data?.partial ?? false
+
+  useEffect(() => {
+    if (!isPartial) return
+    const timer = setTimeout(() => {
+      qc.invalidateQueries({ queryKey: ['upapex-outbound'] })
+    }, 15000)
+    return () => clearTimeout(timer)
+  }, [isPartial, qc])
 
   const trackingMap = trackingList.reduce((m, tr) => {
     m[tr.outbound_order_no] = tr; return m
@@ -477,6 +705,14 @@ export default function Ordenes() {
   const wmsMap = allWmsRecords.reduce((m, r) => {
     m[r.outboundOrderNo] = r; return m
   }, {})
+
+  const destinationOptions = useMemo(() => (
+    Array.from(new Set(
+      allWmsRecords
+        .map((record) => record.receiverName || '')
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'es'))
+  ), [allWmsRecords])
 
   const q = search.trim().toLowerCase()
 
@@ -488,11 +724,28 @@ export default function Ordenes() {
     return true
   }
 
+  function applyFilters() {
+    setSearch(searchInput.trim())
+    setFilterStatus(statusDraft)
+    setFilterSurtidor(surtidorDraft)
+    setFilterDestination(destinationDraft)
+    setDateFrom(dateFromDraft)
+    setDateTo(dateToDraft)
+    setTimeFrom(timeFromDraft)
+    setTimeTo(timeToDraft)
+    setPage(1)
+    localStorage.setItem(timeFilterKey, JSON.stringify({ timeFrom: timeFromDraft, timeTo: timeToDraft }))
+    sessionStorage.setItem(destinationFilterKey, destinationDraft)
+  }
+
   const filteredWms = allWmsRecords.filter(r => {
     const tracking = trackingMap[r.outboundOrderNo]
     if (filterStatus && (tracking?.status || 'pending_assignment') !== filterStatus) return false
     if (filterSurtidor && tracking?.surtidor_nombre !== filterSurtidor) return false
+    if (filterDestination && (r.receiverName || '') !== filterDestination) return false
     if (!matchesDateFilter(r.orderCreateTime)) return false
+    if (!withinTimeRange(r.outboundTime, timeFrom, timeTo)) return false
+    if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(r.outboundOrderNo)) return false
     if (q) {
       const haystack = [r.outboundOrderNo, r.customerCode, r.thirdOrderNo, r.receiverName, r.logisticsChannel].join(' ').toLowerCase()
       if (!haystack.includes(q)) return false
@@ -504,9 +757,12 @@ export default function Ordenes() {
     if (filterStatus && tr.status !== filterStatus) return false
     if (filterSurtidor && tr.surtidor_nombre !== filterSurtidor) return false
     const wms = wmsMap[tr.outbound_order_no]
+    if (filterDestination && (wms?.receiverName || '') !== filterDestination) return false
     if (!matchesDateFilter(wms?.orderCreateTime || tr.updated_at)) return false
+    if (!withinTimeRange(wms?.outboundTime, timeFrom, timeTo)) return false
+    if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
     if (q) {
-      const haystack = [tr.outbound_order_no, tr.surtidor_nombre, wms?.customerCode, wms?.thirdOrderNo].filter(Boolean).join(' ').toLowerCase()
+      const haystack = [tr.outbound_order_no, tr.surtidor_nombre, wms?.customerCode, wms?.thirdOrderNo, wms?.receiverName].filter(Boolean).join(' ').toLowerCase()
       if (!haystack.includes(q)) return false
     }
     return true
@@ -536,10 +792,31 @@ export default function Ordenes() {
   })
 
   function clearFilters() {
-    setFilterStatus(''); setFilterSurtidor(''); setSearch('')
+    setSearchInput('')
+    setSearch('')
+    setStatusDraft('')
+    setFilterStatus('')
+    setSurtidorDraft('')
+    setFilterSurtidor('')
+    setDestinationDraft('')
+    setFilterDestination('')
+    setDateToDraft('')
+    setDateTo('')
+    const d = new Date(); d.setDate(d.getDate() - 30)
+    const baseDate = d.toISOString().slice(0, 10)
+    setDateFromDraft(baseDate)
+    setDateFrom(baseDate)
+    setTimeFromDraft('')
+    setTimeToDraft('')
+    setTimeFrom('')
+    setTimeTo('')
+    setBulkSearchText('')
+    setBulkSearchCodes([])
+    localStorage.removeItem(timeFilterKey)
+    sessionStorage.removeItem(destinationFilterKey)
   }
 
-  const hasFilters = filterStatus || filterSurtidor || search
+  const hasFilters = filterStatus || filterSurtidor || filterDestination || search || dateTo || timeFrom || timeTo || bulkSearchCodes.length > 0
 
   function buildWmsRows(records) {
     return records.map(r => {
@@ -552,6 +829,7 @@ export default function Ordenes() {
         r.thirdOrderNo || r.referenceNo || '',
         r.logisticsTrackNo || r.trackingNo || '',
         r.outboundBoxCount ?? r.packageCount ?? '',
+        r.outboundTime || '',
         tr.surtidor_nombre || '',
         tr.status || 'pending_assignment',
         r.orderCreateTime || '',
@@ -566,6 +844,7 @@ export default function Ordenes() {
         tr.outbound_order_no || '',
         wms.customerCode || wms.customerName || '',
         tr.surtidor_nombre || '',
+        wms.outboundTime || '',
         tr.total_scanned ?? 0,
         tr.total_expected ?? '',
         tr.status || '',
@@ -574,8 +853,8 @@ export default function Ordenes() {
     })
   }
 
-  const WMS_HEADERS = ['OBC', 'Cliente', 'Destinatario', 'Canal', 'Referencia', 'Tracking', 'Cajas', 'Surtidor', 'Estado', 'Fecha creación']
-  const VAL_HEADERS = ['OBC', 'Cliente', 'Surtidor', 'Escaneado', 'Esperado', 'Estado', 'Actualizado']
+  const WMS_HEADERS = ['OBC', 'Cliente', 'Destinatario', 'Canal', 'Referencia', 'Tracking', 'Cajas', 'Fecha entrega', 'Surtidor', 'Estado', 'Fecha creación']
+  const VAL_HEADERS = ['OBC', 'Cliente', 'Surtidor', 'Fecha entrega', 'Escaneado', 'Esperado', 'Estado', 'Actualizado']
 
   function exportSheet(headers, rows, sheetName, filename) {
     try {
@@ -641,6 +920,11 @@ export default function Ordenes() {
                 <Users size={14} /> {t('surtido.ordenes.manage_surtidores')}
               </button>
             )}
+            {canUpdateOrders && (
+              <button className="btn-ghost text-xs flex items-center gap-1.5" onClick={() => setShowReasonsModal(true)}>
+                <ClipboardList size={14} /> {t('surtido.ordenes.manage_motivos')}
+              </button>
+            )}
           </div>
         }
       />
@@ -666,29 +950,71 @@ export default function Ordenes() {
         </div>
       </div>
 
+      {/* Partial data banner */}
+      {isPartial && (
+        <div className="flex items-center gap-2 px-5 py-1.5 bg-warning-50 border-b border-warning-100 text-warning-700 text-[11px]">
+          <Loader2 size={11} className="animate-spin shrink-0" />
+          <span>{t('wmshub.partial_loading')}</span>
+        </div>
+      )}
+
       {/* Filter bar */}
       <div className="sticky top-[3.5rem] z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5">
         <div className="flex items-center gap-2 flex-wrap justify-between">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
               <Clock size={13} className="text-warm-400 shrink-0" />
-              <input type="date" value={dateFrom}
-                onChange={e => { setDateFrom(e.target.value); setPage(1) }}
+              <input type="date" value={dateFromDraft}
+                onChange={e => setDateFromDraft(e.target.value)}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
               <span className="text-warm-300 text-xs">→</span>
-              <input type="date" value={dateTo}
-                onChange={e => { setDateTo(e.target.value); setPage(1) }}
+              <input type="date" value={dateToDraft}
+                onChange={e => setDateToDraft(e.target.value)}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
             </div>
+
+            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
+              <CalendarClock size={13} className="text-warm-400 shrink-0" />
+              <input type="time" value={timeFromDraft} onChange={e => setTimeFromDraft(e.target.value)}
+                className="text-xs outline-none bg-transparent text-warm-700 w-[84px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
+              <span className="text-warm-300 text-xs">→</span>
+              <input type="time" value={timeToDraft} onChange={e => setTimeToDraft(e.target.value)}
+                className="text-xs outline-none bg-transparent text-warm-700 w-[84px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
+            </div>
+
+            {[
+              { label: 'Manana', from: '06:00', to: '12:00' },
+              { label: 'Tarde', from: '12:00', to: '18:00' },
+              { label: 'Noche', from: '18:00', to: '23:59' },
+            ].map((preset) => (
+              <button
+                key={preset.label}
+                className="rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-2 text-[11px] font-semibold text-warm-600 hover:bg-warm-100"
+                onClick={() => { setTimeFromDraft(preset.from); setTimeToDraft(preset.to) }}
+              >
+                {preset.label}
+              </button>
+            ))}
 
             {surtidores.length > 0 && (
               <select
                 className="h-10 pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
-                value={filterSurtidor}
-                onChange={e => setFilterSurtidor(e.target.value)}
+                value={surtidorDraft}
+                onChange={e => setSurtidorDraft(e.target.value)}
               >
                 <option value="">{t('surtido.ordenes.surtidor')} — {t('common.all')}</option>
                 {surtidores.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+              </select>
+            )}
+
+            {destinationOptions.length > 0 && (
+              <select
+                className="h-10 min-w-[170px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
+                value={destinationDraft}
+                onChange={(e) => setDestinationDraft(e.target.value)}
+              >
+                <option value="">Destino — {t('common.all')}</option>
+                {destinationOptions.map((destination) => <option key={destination} value={destination}>{destination}</option>)}
               </select>
             )}
 
@@ -698,9 +1024,17 @@ export default function Ordenes() {
                 type="text"
                 className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 placeholder={t('surtido.ordenes.search_placeholder')}
-                value={search}
-                onChange={e => { setSearch(e.target.value); setPage(1) }}
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
               />
+              <button
+                type="button"
+                className="rounded-lg p-1 text-warm-400 hover:bg-warm-100 hover:text-primary-600"
+                onClick={() => setBulkSearchOpen(true)}
+                title={t('surtido.ordenes.bulk_search_title')}
+              >
+                <ListFilter size={14} />
+              </button>
             </div>
 
             {hasFilters && (
@@ -710,6 +1044,20 @@ export default function Ordenes() {
               >
                 <X className="w-3 h-3" /> {t('common.clear')}
               </button>
+            )}
+            <button
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 px-3 py-2 text-xs font-semibold text-white hover:bg-primary-700"
+              onClick={applyFilters}
+            >
+              <Filter size={13} /> {t('common.apply')}
+            </button>
+            {bulkSearchCodes.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-[11px] font-semibold text-primary-700">
+                <ListFilter size={12} /> {bulkSearchCodes.length} {t('surtido.ordenes.bulk_codes')}
+                <button type="button" onClick={() => { setBulkSearchText(''); setBulkSearchCodes([]) }}>
+                  <X size={12} />
+                </button>
+              </span>
             )}
           </div>
 
@@ -749,11 +1097,17 @@ export default function Ordenes() {
           </div>
         ) : tab === 'wms' ? (
           <WmsTable
-            records={pagedRecords} trackingMap={trackingMap}
+            records={pagedRecords} trackingMap={trackingMap} surtidores={surtidores}
             onAssign={r => setAssignTarget(r)}
+            onBulkAssign={(obcs, surtidorId) => {
+              Promise.all(obcs.map((obc) => assignMut.mutateAsync({ obc, surtidorId }))).then(() => {
+                toast.success(`${obcs.length} ordenes actualizadas`)
+              }).catch(() => toast.error(t('toast.error')))
+            }}
             onView={obc => navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`)}
             onQuickEdit={obc => setQuickEditObc(obc)}
             onValidate={obc => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}
+            onBulkStatus={(obcs, status) => statusMut.mutate({ obcs, status })}
             onExportSelected={handleExportWmsSelected}
             onExportAll={handleExportWmsAll}
             canAssign={canUpdateOrders}
@@ -767,17 +1121,23 @@ export default function Ordenes() {
           />
         ) : (
           <ValidacionTable
-            records={pagedRecords} wmsMap={wmsMap}
+            records={pagedRecords} wmsMap={wmsMap} surtidores={surtidores}
             onView={obc => navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`)}
             onQuickEdit={obc => setQuickEditObc(obc)}
             onValidate={obc => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}
             onStatusChange={(obcs, status) => statusMut.mutate({ obcs, status })}
+            onBulkAssign={(obcs, surtidorId) => {
+              Promise.all(obcs.map((obc) => assignMut.mutateAsync({ obc, surtidorId }))).then(() => {
+                toast.success(`${obcs.length} ordenes actualizadas`)
+              }).catch(() => toast.error(t('toast.error')))
+            }}
             onExportSelected={handleExportValSelected}
             onExportAll={handleExportValAll}
             canQuickEdit={canUpdateOrders}
             canValidate={canCreateValidation}
             canUpdateStatus={canUpdateOrders}
             canExport={canExportOrders}
+            canAssign={canUpdateOrders}
             t={t}
             page={page} totalPages={totalPages} pageSize={pageSize} total={total}
             onPageChange={setPage}
@@ -786,11 +1146,29 @@ export default function Ordenes() {
         )}
       </div>
 
-<SurtidoresModal
+      <SurtidoresModal
         isOpen={showSurtidoresModal}
         onClose={() => setShowSurtidoresModal(false)}
         canUpdate={canUpdateOrders}
         canDelete={canDeleteOrders}
+      />
+
+      <ManualReasonsModal
+        isOpen={showReasonsModal}
+        onClose={() => setShowReasonsModal(false)}
+        canUpdate={canUpdateOrders}
+        canDelete={canDeleteOrders}
+      />
+
+      <BulkSearchModal
+        isOpen={bulkSearchOpen}
+        onClose={() => setBulkSearchOpen(false)}
+        initialValue={bulkSearchText}
+        onApply={(value, codes) => {
+          setBulkSearchText(value)
+          setBulkSearchCodes(codes)
+          setPage(1)
+        }}
       />
 
       <AssignModal
@@ -820,8 +1198,12 @@ export default function Ordenes() {
   )
 }
 
-function WmsTable({ records, trackingMap, onAssign, onView, onQuickEdit, onValidate, onExportSelected, onExportAll, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
   const [selected, setSelected] = useState(new Set())
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
+  const [bulkSurtidorId, setBulkSurtidorId] = useState('')
+  const [bulkStatus, setBulkStatus] = useState('sorting')
   useEffect(() => { setSelected(new Set()) }, [page])
   const allChecked = records.length > 0 && records.every(r => selected.has(r.outboundOrderNo))
   const someChecked = selected.size > 0
@@ -842,11 +1224,25 @@ function WmsTable({ records, trackingMap, onAssign, onView, onQuickEdit, onValid
       initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
 
-      {someChecked && canExport && (
+      {someChecked && (canExport || canAssign || canQuickEdit) && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100">
           <span className="text-xs text-primary-700 font-semibold tabular-nums">
             {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
           </span>
+          {canAssign && (
+            <button
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+              onClick={() => setBulkAssignOpen(true)}>
+              <UserCheck size={12} /> Asignar
+            </button>
+          )}
+          {canQuickEdit && (
+            <button
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-primary-700 border border-primary-200 hover:bg-primary-50 transition-colors"
+              onClick={() => setBulkStatusOpen(true)}>
+              <ClipboardList size={12} /> Estado
+            </button>
+          )}
           <button
             className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors"
             onClick={() => { onExportSelected([...selected]); setSelected(new Set()) }}>
@@ -878,14 +1274,15 @@ function WmsTable({ records, trackingMap, onAssign, onView, onQuickEdit, onValid
                   onClick={e => e.stopPropagation()} />
               </th>
               <th className={TH_CLASS}><span className={TH_TEXT}>OBC</span></th>
+              <th className={`${TH_CLASS} hidden xl:table-cell col-date`}><span className={TH_TEXT}>{t('surtido.ordenes.fecha_entrega')}</span></th>
               <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.cliente')}</span></th>
               <th className={`${TH_CLASS} hidden xl:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.receiver')}</span></th>
               <th className={`${TH_CLASS} hidden xl:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.canal')}</span></th>
               <th className={`${TH_CLASS} hidden 2xl:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.referencia')}</span></th>
               <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.ordenes.cajas')}</span></th>
-              <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.ordenes.surtidor')}</span></th>
-              <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.ordenes.status')}</span></th>
-              <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
+              <th className={`${TH_CLASS} col-name`}><span className={TH_TEXT}>{t('surtido.ordenes.surtidor')}</span></th>
+              <th className={`${TH_CLASS} col-status`}><span className={TH_TEXT}>{t('surtido.ordenes.status')}</span></th>
+              <th className={`${TH_CLASS} col-actions text-right`}><span className={TH_TEXT}>Acciones</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
@@ -915,32 +1312,38 @@ function WmsTable({ records, trackingMap, onAssign, onView, onQuickEdit, onValid
                       onClick={e => e.stopPropagation()} />
                   </td>
 
-                  <td className="table-cell"><CopyableObc obc={obc} /></td>
+                  <td className="table-cell col-code"><CopyableObc obc={obc} /></td>
 
-                  <td className="table-cell hidden lg:table-cell">
-                    <span className="font-mono text-xs font-semibold text-primary-700 truncate">{cliente}</span>
-                  </td>
-
-                  <td className="table-cell hidden xl:table-cell">
-                    <span className="text-warm-600 text-xs flex items-center gap-1">
-                      <Truck size={10} className="text-warm-300" />
-                      <span className="truncate max-w-[100px] block">{destino}</span>
+                  <td className="table-cell hidden xl:table-cell col-date">
+                    <span className="text-xs text-warm-600" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
+                      {r.outboundTime ? formatDateTz(r.outboundTime) : '—'}
                     </span>
                   </td>
 
-                  <td className="table-cell hidden xl:table-cell">
-                    <span className="text-warm-600 text-xs truncate max-w-[120px] block">{canal}</span>
+                  <td className="table-cell hidden lg:table-cell col-name">
+                    <span className="block truncate font-mono text-xs font-semibold text-primary-700" title={cliente}>{cliente}</span>
                   </td>
 
-                  <td className="table-cell hidden 2xl:table-cell">
-                    <span className="font-mono text-xs text-warm-600">{referencia}</span>
+                  <td className="table-cell hidden xl:table-cell col-name">
+                    <span className="text-warm-600 text-xs flex items-center gap-1">
+                      <Truck size={10} className="text-warm-300" />
+                      <span className="block max-w-[160px] truncate" title={destino}>{destino}</span>
+                    </span>
+                  </td>
+
+                  <td className="table-cell hidden xl:table-cell col-name">
+                    <span className="block max-w-[120px] truncate text-warm-600 text-xs" title={canal}>{canal}</span>
+                  </td>
+
+                  <td className="table-cell hidden 2xl:table-cell col-name">
+                    <span className="block truncate font-mono text-xs text-warm-600" title={referencia}>{referencia}</span>
                   </td>
 
                   <td className="table-cell text-right">
                     <span className="font-semibold text-warm-700">{cajas}</span>
                   </td>
 
-                  <td className="table-cell">
+                  <td className="table-cell col-name">
                     {canAssign ? (
                       <button
                         className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all hover:shadow-sm ${
@@ -950,7 +1353,7 @@ function WmsTable({ records, trackingMap, onAssign, onView, onQuickEdit, onValid
                         }`}
                         onClick={e => { e.stopPropagation(); onAssign(r) }}>
                         <UserCheck size={11} />
-                        <span className="max-w-[90px] truncate">
+                        <span className="max-w-[110px] truncate" title={tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}>
                           {tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}
                         </span>
                         <ChevronDown size={9} />
@@ -999,13 +1402,74 @@ function WmsTable({ records, trackingMap, onAssign, onView, onQuickEdit, onValid
         onPageSizeChange={onPageSizeChange}
         itemLabel={t('surtido.ordenes.item_label')}
       />
+      <Modal
+        isOpen={bulkAssignOpen}
+        onClose={() => setBulkAssignOpen(false)}
+        title={t('surtido.ordenes.bulk_assign_title')}
+        icon={UserCheck}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => setBulkAssignOpen(false)}>{t('common.cancel')}</button>
+              <button
+                className="btn-primary inline-flex items-center gap-1.5 whitespace-nowrap"
+                onClick={() => {
+                  onBulkAssign([...selected], bulkSurtidorId ? Number(bulkSurtidorId) : null)
+                  setSelected(new Set())
+                  setBulkAssignOpen(false)
+                }}
+              >
+              {t('common.apply')}
+              </button>
+            </div>
+          }
+        >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-600">{selected.size} {t('surtido.ordenes.bulk_affected')}</p>
+          <select className="input-field w-full text-sm" value={bulkSurtidorId} onChange={(e) => setBulkSurtidorId(e.target.value)}>
+            <option value="">{t('surtido.ordenes.no_surtidor')}</option>
+            {surtidores.map((s) => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+          </select>
+        </div>
+      </Modal>
+      <Modal
+        isOpen={bulkStatusOpen}
+        onClose={() => setBulkStatusOpen(false)}
+        title={t('surtido.ordenes.bulk_status_title')}
+        icon={ClipboardList}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => setBulkStatusOpen(false)}>{t('common.cancel')}</button>
+            <button
+              className="btn-primary inline-flex items-center gap-1.5 whitespace-nowrap"
+              onClick={() => {
+                onBulkStatus([...selected], bulkStatus)
+                setSelected(new Set())
+                setBulkStatusOpen(false)
+              }}
+            >
+              {t('common.apply')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-600">{selected.size} {t('surtido.ordenes.bulk_affected')}</p>
+          <select className="input-field w-full text-sm" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
+            {STATUS_FILTER_KEYS.map((key) => <option key={key} value={key}>{t(STATUS_META[key].labelKey)}</option>)}
+          </select>
+        </div>
+      </Modal>
     </motion.div>
   )
 }
 
-function ValidacionTable({ records, wmsMap, onView, onQuickEdit, onValidate, onStatusChange, onExportSelected, onExportAll, canQuickEdit, canValidate, canUpdateStatus, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onValidate, onStatusChange, onBulkAssign, onExportSelected, onExportAll, canQuickEdit, canValidate, canUpdateStatus, canExport, canAssign, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
   const [selected, setSelected] = useState(new Set())
   const [editStatusObc, setEditStatusObc] = useState(null)
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
+  const [bulkSurtidorId, setBulkSurtidorId] = useState('')
+  const [bulkStatus, setBulkStatus] = useState('sorting')
 
   useEffect(() => { setSelected(new Set()) }, [page])
 
@@ -1034,16 +1498,23 @@ function ValidacionTable({ records, wmsMap, onView, onQuickEdit, onValidate, onS
       initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
 
-      {someChecked && (canUpdateStatus || canExport) && (
+      {someChecked && (canUpdateStatus || canExport || canAssign) && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100">
           <span className="text-xs text-primary-700 font-semibold tabular-nums">
             {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
           </span>
+          {canAssign && (
+            <button
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+              onClick={() => setBulkAssignOpen(true)}>
+              <UserCheck size={12} /> Asignar
+            </button>
+          )}
           {canUpdateStatus && (
             <button
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-              onClick={() => { onStatusChange([...selected], 'sorting'); setSelected(new Set()) }}>
-              <ScanBarcode size={12} /> Marcar Surtido
+              onClick={() => setBulkStatusOpen(true)}>
+              <ScanBarcode size={12} /> Estado
             </button>
           )}
           {canExport && (
@@ -1081,11 +1552,12 @@ function ValidacionTable({ records, wmsMap, onView, onQuickEdit, onValidate, onS
                   onClick={e => e.stopPropagation()} />
               </th>
               <th className={TH_CLASS}><span className={TH_TEXT}>OBC</span></th>
+              <th className={`${TH_CLASS} hidden lg:table-cell col-date`}><span className={TH_TEXT}>{t('surtido.ordenes.fecha_entrega')}</span></th>
               <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.cliente')}</span></th>
-              <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.ordenes.surtidor')}</span></th>
+              <th className={`${TH_CLASS} col-name`}><span className={TH_TEXT}>{t('surtido.ordenes.surtidor')}</span></th>
               <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.escaneo.scanned')}</span></th>
-              <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.ordenes.status')}</span></th>
-              <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
+              <th className={`${TH_CLASS} col-status`}><span className={TH_TEXT}>{t('surtido.ordenes.status')}</span></th>
+              <th className={`${TH_CLASS} col-actions text-right`}><span className={TH_TEXT}>Acciones</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
@@ -1115,13 +1587,18 @@ function ValidacionTable({ records, wmsMap, onView, onQuickEdit, onValidate, onS
                       onClick={e => e.stopPropagation()} />
                   </td>
 
-                  <td className="table-cell"><CopyableObc obc={obc} /></td>
-                  <td className="table-cell hidden lg:table-cell">
-                    <span className="font-mono text-xs font-semibold text-primary-700 truncate">
+                  <td className="table-cell col-code"><CopyableObc obc={obc} /></td>
+                  <td className="table-cell hidden lg:table-cell col-date">
+                    <span className="text-xs text-warm-600" title={wms?.outboundTime ? formatDateTimeTz(wms.outboundTime) : '—'}>
+                      {wms?.outboundTime ? formatDateTz(wms.outboundTime) : '—'}
+                    </span>
+                  </td>
+                  <td className="table-cell hidden lg:table-cell col-name">
+                    <span className="block truncate font-mono text-xs font-semibold text-primary-700" title={wms?.customerCode || wms?.customerName || '—'}>
                       {wms?.customerCode || wms?.customerName || '—'}
                     </span>
                   </td>
-                  <td className="table-cell">
+                  <td className="table-cell col-name">
                     <span className="text-warm-700 text-xs flex items-center gap-1">
                       <User size={10} className="text-warm-300" />
                       {tr.surtidor_nombre || '—'}
@@ -1200,6 +1677,55 @@ function ValidacionTable({ records, wmsMap, onView, onQuickEdit, onValidate, onS
         onPageSizeChange={onPageSizeChange}
         itemLabel={t('surtido.ordenes.item_label')}
       />
+      <Modal
+        isOpen={bulkAssignOpen}
+        onClose={() => setBulkAssignOpen(false)}
+        title={t('surtido.ordenes.bulk_assign_title')}
+        icon={UserCheck}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => setBulkAssignOpen(false)}>{t('common.cancel')}</button>
+            <button
+              className="btn-primary inline-flex items-center gap-1.5 whitespace-nowrap"
+              onClick={() => { onBulkAssign([...selected], bulkSurtidorId ? Number(bulkSurtidorId) : null); setSelected(new Set()); setBulkAssignOpen(false) }}
+            >
+              {t('common.apply')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-600">{selected.size} {t('surtido.ordenes.bulk_affected')}</p>
+          <select className="input-field w-full text-sm" value={bulkSurtidorId} onChange={(e) => setBulkSurtidorId(e.target.value)}>
+            <option value="">{t('surtido.ordenes.no_surtidor')}</option>
+            {surtidores.map((s) => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+          </select>
+        </div>
+      </Modal>
+      <Modal
+        isOpen={bulkStatusOpen}
+        onClose={() => setBulkStatusOpen(false)}
+        title={t('surtido.ordenes.bulk_status_title')}
+        icon={ClipboardList}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => setBulkStatusOpen(false)}>{t('common.cancel')}</button>
+            <button
+              className="btn-primary inline-flex items-center gap-1.5 whitespace-nowrap"
+              onClick={() => { onStatusChange([...selected], bulkStatus); setSelected(new Set()); setBulkStatusOpen(false) }}
+            >
+              {t('common.apply')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-600">{selected.size} {t('surtido.ordenes.bulk_affected')}</p>
+          <select className="input-field w-full text-sm" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
+            {STATUS_FILTER_KEYS.map((key) => <option key={key} value={key}>{t(STATUS_META[key].labelKey)}</option>)}
+          </select>
+        </div>
+      </Modal>
     </motion.div>
   )
 }

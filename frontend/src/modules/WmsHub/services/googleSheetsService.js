@@ -4,8 +4,8 @@ import api from '../../../core/services/api'
 const CACHE_TTL = 5 * 60 * 1000
 
 const cache = {
-  inventory: { data: null, ts: 0 },
-  outbound:  { data: null, ts: 0 },
+  inventory: { data: null, ts: 0, partial: false },
+  outbound:  { data: null, ts: 0, partial: false },
 }
 
 // ── CSV Parser (RFC 4180) ──────────────────────────────────────────────────
@@ -201,6 +201,7 @@ function mapRowToInventory(row, map) {
 }
 
 function mapRowToOutbound(row, map) {
+  const outboundTime = getField(row, map, 'outboundTime')
   return {
     outboundOrderNo:  getField(row, map, 'outboundOrderNo'),
     logisticsChannel: getField(row, map, 'logisticsChannel'),
@@ -209,7 +210,8 @@ function mapRowToOutbound(row, map) {
     customerCode:     getField(row, map, 'customerCode'),
     receiverName:     getField(row, map, 'receiverName'),
     orderCreateTime:  getField(row, map, 'orderCreateTime'),
-    outboundTime:     getField(row, map, 'outboundTime'),
+    outboundTime,
+    expectedTime:     outboundTime,
     outboundBoxCount: parseInt(getField(row, map, 'outboundBoxCount')) || null,
     whCode:           getField(row, map, 'whCode'),
     status:           getField(row, map, 'status') || 'pending',
@@ -242,29 +244,48 @@ export function invalidateUrlCache() {
   _urlsFetchedAt = 0
 }
 
-// ── Fetch raw CSV ──────────────────────────────────────────────────────────
-async function fetchSheetAsCSV(url) {
+// ── Fetch raw CSV via backend proxy (handles CORS + server-side cache) ─────
+async function fetchSheetAsCSV(url, limit = 0) {
+  const params = { url }
+  if (limit > 0) params.limit = limit
+  const res = await api.get('/upapex/proxy/sheet', { params, timeout: 25000 })
+  return typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
+}
+
+// ── Background full-sheet warmer ───────────────────────────────────────────
+async function warmFullSheet(type) {
+  const entry = cache[type]
+  if (entry._bgLoading) return
+  entry._bgLoading = true
   try {
-    const res = await fetch(url, {
-      mode: 'cors',
-      headers: { Accept: 'text/csv,text/plain,*/*' },
-      signal: AbortSignal.timeout(15000),
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return await res.text()
+    const urls = await loadSheetUrls()
+    const url = type === 'inventory' ? urls.inventory : urls.outbound
+    if (!url) return
+    const text = await fetchSheetAsCSV(url, 0)
+    const rows = parseCSV(text)
+    if (rows.length >= 2) {
+      cache[type] = { data: rows, ts: Date.now(), partial: false }
+    }
   } catch {
-    // Backend CORS proxy fallback
-    const res = await api.get('/upapex/proxy/sheet', { params: { url }, timeout: 20000 })
-    return typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
+    // Keep partial data on background failure
+    const e = cache[type]
+    if (e) e._bgLoading = false
   }
 }
 
-// ── Load and cache ─────────────────────────────────────────────────────────
+// ── Load and cache (two-phase: fast partial → background full) ─────────────
 async function loadSheet(type, forceRefresh = false) {
   const entry = cache[type]
   const now = Date.now()
 
-  if (!forceRefresh && entry.data && (now - entry.ts) < CACHE_TTL) {
+  // Fresh full cache hit
+  if (!forceRefresh && entry.data && !entry.partial && (now - entry.ts) < CACHE_TTL) {
+    return entry.data
+  }
+
+  // Fresh partial data — return immediately, ensure bg full load is running
+  if (!forceRefresh && entry.data && entry.partial && (now - entry.ts) < CACHE_TTL) {
+    warmFullSheet(type)
     return entry.data
   }
 
@@ -277,14 +298,18 @@ async function loadSheet(type, forceRefresh = false) {
   }
 
   try {
-    const text = await fetchSheetAsCSV(url)
+    // forceRefresh → load all rows at once; normal → load last 300 for speed
+    const limit = forceRefresh ? 0 : 300
+    const text = await fetchSheetAsCSV(url, limit)
     const rows = parseCSV(text)
     if (rows.length < 2) {
       const err = new Error('La hoja parece vacía (menos de 2 filas)')
       err.code = 'SHEET_EMPTY'
       throw err
     }
-    cache[type] = { data: rows, ts: now }
+    const partial = !forceRefresh
+    cache[type] = { data: rows, ts: now, partial }
+    if (partial) warmFullSheet(type)
     return rows
   } catch (err) {
     if (entry.data) return entry.data // stale fallback
@@ -295,7 +320,7 @@ async function loadSheet(type, forceRefresh = false) {
 // ── Public API ─────────────────────────────────────────────────────────────
 
 export async function refreshSheet(type) {
-  cache[type] = { data: null, ts: 0 }
+  cache[type] = { data: null, ts: 0, partial: false }
   invalidateUrlCache()
   return loadSheet(type, true)
 }
@@ -304,8 +329,17 @@ export function getCacheTimestamp(type) {
   return cache[type].ts || null
 }
 
+export function getCacheStatus(type) {
+  const e = cache[type]
+  return {
+    ts:      e.ts || null,
+    partial: !!e.partial,
+    rows:    e.data ? e.data.length - 1 : 0,
+  }
+}
+
 export async function testSheetUrl(url, type = 'outbound') {
-  const text = await fetchSheetAsCSV(url)
+  const text = await fetchSheetAsCSV(url, 0)
   const rows = parseCSV(text)
   if (rows.length < 2) throw new Error('La hoja está vacía')
   const aliases = type === 'inventory' ? INVENTORY_ALIASES : OUTBOUND_ALIASES
@@ -324,7 +358,8 @@ export async function getInventoryList() {
   const records = dataRows
     .map(row => mapRowToInventory(row, map))
     .filter(r => r.customizeBarcode)
-  return { success: true, data: { records, total: records.length } }
+  const { partial } = getCacheStatus('inventory')
+  return { success: true, data: { records, total: records.length, partial } }
 }
 
 export async function getOutboundList() {
@@ -354,7 +389,8 @@ export async function getOutboundList() {
     ...r,
     outboundBoxCount: r.outboundBoxCount || boxCountMap.get(r.outboundOrderNo) || 0,
   }))
-  return { success: true, data: { records, total: records.length } }
+  const { partial } = getCacheStatus('outbound')
+  return { success: true, data: { records, total: records.length, partial } }
 }
 
 export async function getOutboundDetail(orderNo) {
