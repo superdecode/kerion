@@ -76,17 +76,17 @@ function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
   const qc = useQueryClient()
   const [nombre, setNombre] = useState('')
 
-  const { data } = useQuery({ queryKey: ['upapex-surtidores'], queryFn: getSurtidores, staleTime: 30000, enabled: isOpen })
+  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 30000, enabled: isOpen })
   const surtidores = getRecords(data)
 
   const addMut = useMutation({
     mutationFn: createSurtidor,
-    onSuccess: () => { setNombre(''); qc.invalidateQueries({ queryKey: ['upapex-surtidores'] }) },
+    onSuccess: () => { setNombre(''); qc.invalidateQueries({ queryKey: ['wms-surtidores'] }) },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
   const delMut = useMutation({
     mutationFn: deleteSurtidor,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['upapex-surtidores'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wms-surtidores'] }),
   })
 
   return (
@@ -139,7 +139,7 @@ function ManualReasonsModal({ isOpen, onClose, canUpdate, canDelete }) {
   const [editingId, setEditingId] = useState(null)
   const [editingName, setEditingName] = useState('')
   const { data } = useQuery({
-    queryKey: ['upapex-manual-entry-reasons'],
+    queryKey: ['wms-manual-entry-reasons'],
     queryFn: getManualEntryReasons,
     staleTime: 30000,
     enabled: isOpen,
@@ -150,7 +150,7 @@ function ManualReasonsModal({ isOpen, onClose, canUpdate, canDelete }) {
     mutationFn: createManualEntryReason,
     onSuccess: () => {
       setDraft('')
-      qc.invalidateQueries({ queryKey: ['upapex-manual-entry-reasons'] })
+      qc.invalidateQueries({ queryKey: ['wms-manual-entry-reasons'] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
@@ -160,14 +160,14 @@ function ManualReasonsModal({ isOpen, onClose, canUpdate, canDelete }) {
     onSuccess: () => {
       setEditingId(null)
       setEditingName('')
-      qc.invalidateQueries({ queryKey: ['upapex-manual-entry-reasons'] })
+      qc.invalidateQueries({ queryKey: ['wms-manual-entry-reasons'] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
 
   const deleteMut = useMutation({
     mutationFn: deleteManualEntryReason,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['upapex-manual-entry-reasons'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wms-manual-entry-reasons'] }),
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
 
@@ -288,7 +288,7 @@ function BulkSearchModal({ isOpen, onClose, onApply, initialValue }) {
 
 function AssignModal({ isOpen, order, onClose, onAssign }) {
   const { t } = useI18nStore()
-  const { data } = useQuery({ queryKey: ['upapex-surtidores'], queryFn: getSurtidores, staleTime: 30000, enabled: isOpen })
+  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 30000, enabled: isOpen })
   const surtidores = getRecords(data)
   const [selected, setSelected] = useState(null)
 
@@ -656,26 +656,26 @@ export default function Ordenes() {
     try {
       await refreshSheet('outbound')
       setSheetTs(getCacheTimestamp('outbound'))
-      qc.invalidateQueries({ queryKey: ['upapex-outbound'] })
+      qc.invalidateQueries({ queryKey: ['wms-outbound'] })
     } finally {
       setRefreshing(false)
     }
   }
 
   const { data: wmsData, isLoading: wmsLoading } = useQuery({
-    queryKey: ['upapex-outbound'],
+    queryKey: ['wms-outbound'],
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: trackingData } = useQuery({
-    queryKey: ['upapex-order-tracking'],
+    queryKey: ['wms-order-tracking'],
     queryFn: getOrderTracking,
     staleTime: 30000,
   })
 
   const { data: surtidoresData } = useQuery({
-    queryKey: ['upapex-surtidores'],
+    queryKey: ['wms-surtidores'],
     queryFn: getSurtidores,
     staleTime: 60000,
   })
@@ -688,7 +688,7 @@ export default function Ordenes() {
   useEffect(() => {
     if (!isPartial) return
     const timer = setTimeout(() => {
-      qc.invalidateQueries({ queryKey: ['upapex-outbound'] })
+      qc.invalidateQueries({ queryKey: ['wms-outbound'] })
     }, 15000)
     return () => clearTimeout(timer)
   }, [isPartial, qc])
@@ -773,14 +773,14 @@ export default function Ordenes() {
       surtidor_id: surtidorId,
       ...(!surtidorId ? { status: 'pending_assignment' } : {}),
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['upapex-order-tracking'] }); toast.success(t('common.save') + ' OK') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['wms-order-tracking'] }); toast.success(t('common.save') + ' OK') },
     onError: () => toast.error(t('toast.error')),
   })
 
   const statusMut = useMutation({
     mutationFn: ({ obcs, status }) => Promise.all(obcs.map(obc => upsertOrderTracking(obc, { status }))),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['upapex-order-tracking'] })
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
       if (vars.obcs.length > 1) toast.success(`${vars.obcs.length} ${t('surtido.ordenes.item_label')} actualizadas`)
     },
     onError: () => toast.error(t('toast.error')),

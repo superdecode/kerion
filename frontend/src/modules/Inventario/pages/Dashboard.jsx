@@ -36,7 +36,7 @@ export default function InventarioDashboard() {
   const tabs = useInventarioStore(s => s.tabs)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['upapex-scan-sessions', { pageSize: 50 }],
+    queryKey: ['wms-scan-sessions', { pageSize: 50 }],
     queryFn: () => getScanSessions({ pageSize: 50 }),
     staleTime: 30000,
   })

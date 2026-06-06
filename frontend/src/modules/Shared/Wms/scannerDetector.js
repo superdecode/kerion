@@ -7,7 +7,7 @@
  *   inputElement.addEventListener('keydown', detector.onKeyDown)
  *   inputElement.addEventListener('keyup', detector.onKeyUp)
  *
- * Ported from upapex/apps/validate/app.js scanner threshold logic.
+ * Ported from legacy vanilla WMS validation flow scanner threshold logic.
  */
 
 const SCANNER_THRESHOLD_MS = 500

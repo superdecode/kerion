@@ -589,7 +589,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
   const inputRef = useRef(null)
 
   const { data: trackingData } = useQuery({
-    queryKey: ['upapex-scan-sessions-quick'],
+    queryKey: ['wms-scan-sessions-quick'],
     queryFn: () => getScanSessions({ pageSize: 500 }),
     staleTime: 60000,
     enabled: isOpen,
@@ -895,23 +895,23 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: detailData, isLoading: detailLoading } = useQuery({
-    queryKey: ['upapex-outbound-detail', obc],
+    queryKey: ['wms-outbound-detail', obc],
     queryFn: () => getOutboundDetail(obc),
     enabled: !!obc && step !== 'search',
     staleTime: 60000,
   })
   const { data: ubicacionesData } = useQuery({
-    queryKey: ['upapex-ubicaciones', 'surtido'],
+    queryKey: ['wms-ubicaciones', 'surtido'],
     queryFn: () => getUbicaciones('surtido'),
     staleTime: 120000,
   })
   const { data: reasonsData } = useQuery({
-    queryKey: ['upapex-manual-entry-reasons'],
+    queryKey: ['wms-manual-entry-reasons'],
     queryFn: getManualEntryReasons,
     staleTime: 120000,
   })
   const { data: trackingData } = useQuery({
-    queryKey: ['upapex-order-tracking'],
+    queryKey: ['wms-order-tracking'],
     queryFn: () => getScanSessions({ pageSize: 100 }),
     staleTime: 60000,
     enabled: step === 'session',
@@ -1212,7 +1212,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       const orderStatus = totalExpected > 0 && counts.ok >= totalExpected ? 'complete' : 'partial'
       upsertOrderTracking(obc, { status: orderStatus }).catch(() => {})
       toast.success(t('surtido.escaneo.session_saved'))
-      qc.invalidateQueries({ queryKey: ['upapex-scan-sessions'] })
+      qc.invalidateQueries({ queryKey: ['wms-scan-sessions'] })
       clearSession(); setShowFinalize(false)
     },
     onError: () => toast.error(t('toast.error')),
@@ -1973,7 +1973,7 @@ export default function SurtidoValidacion() {
   const [showQuickSearch, setShowQuickSearch] = useState(false)
   const [pendingTabObcs, setPendingTabObcs] = useState({})
   const { data: outboundSummaryData } = useQuery({
-    queryKey: ['upapex-outbound-summary'],
+    queryKey: ['wms-outbound-summary'],
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
   })
@@ -1992,7 +1992,7 @@ export default function SurtidoValidacion() {
     try {
       await refreshSheet('outbound')
       setSheetTs(getCacheTimestamp('outbound'))
-      qc.invalidateQueries({ queryKey: ['upapex-outbound-summary'] })
+      qc.invalidateQueries({ queryKey: ['wms-outbound-summary'] })
     } finally {
       setRefreshingSheet(false)
     }

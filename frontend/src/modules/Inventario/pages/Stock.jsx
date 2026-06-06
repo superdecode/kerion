@@ -18,7 +18,7 @@ export default function Stock() {
   useEffect(() => {
     if (!isPartial) return
     const timer = setTimeout(() => {
-      qc.invalidateQueries({ queryKey: ['upapex-box-stock'] })
+      qc.invalidateQueries({ queryKey: ['wms-box-stock'] })
     }, 15000)
     return () => clearTimeout(timer)
   }, [isPartial, qc])

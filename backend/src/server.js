@@ -40,8 +40,8 @@ import devInventarioRoutes from './modules/devoluciones/routes/inventario.routes
 import devSalidasRoutes from './modules/devoluciones/routes/salidas.routes.js'
 import devUtilsRoutes from './modules/devoluciones/routes/utils.routes.js'
 
-// Upapex module routes
-import upapexRoutes from './modules/upapex/routes/upapex.routes.js'
+// WMS Hub module routes
+import wmsHubRoutes from './modules/wms/routes/wms.routes.js'
 
 const app = express()
 
@@ -158,8 +158,8 @@ app.use('/api/devoluciones/inventario', tenantContext, tenantDB, moduleGuard('de
 app.use('/api/devoluciones/salidas', tenantContext, tenantDB, moduleGuard('devoluciones'), devSalidasRoutes)
 app.use('/api/devoluciones', tenantContext, tenantDB, moduleGuard('devoluciones'), devUtilsRoutes)
 
-// Upapex module
-app.use('/api/upapex', tenantContext, tenantDB, upapexRoutes)
+// WMS Hub module
+app.use('/api/wmshub', tenantContext, tenantDB, wmsHubRoutes)
 
 // Auto-apply pending migrations (idempotent — each step is independent)
 async function runMigrations() {

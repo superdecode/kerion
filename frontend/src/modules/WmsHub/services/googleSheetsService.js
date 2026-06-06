@@ -231,7 +231,7 @@ let _urlsFetchedAt = 0
 async function loadSheetUrls() {
   const now = Date.now()
   if (_urlsFetchedAt > 0 && (now - _urlsFetchedAt) < URL_TTL) return _sheetUrls
-  const res = await api.get('/upapex/sheets-urls').then(r => r.data)
+  const res = await api.get('/wmshub/sheets-urls').then(r => r.data)
   _sheetUrls = {
     inventory: res?.data?.sheet_inventory_url || null,
     outbound:  res?.data?.sheet_outbound_url  || null,
@@ -248,7 +248,7 @@ export function invalidateUrlCache() {
 async function fetchSheetAsCSV(url, limit = 0) {
   const params = { url }
   if (limit > 0) params.limit = limit
-  const res = await api.get('/upapex/proxy/sheet', { params, timeout: 25000 })
+  const res = await api.get('/wmshub/proxy/sheet', { params, timeout: 25000 })
   return typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
 }
 

@@ -228,7 +228,7 @@ function PackagesTable({ packages, referencia, trackingNo, t }) {
 
 function AssignSurtidorModal({ isOpen, obc, onClose, onAssigned, t }) {
   const { data } = useQuery({
-    queryKey: ['upapex-surtidores'],
+    queryKey: ['wms-surtidores'],
     queryFn: getSurtidores,
     staleTime: 30000,
     enabled: isOpen,
@@ -288,27 +288,27 @@ export default function OrdenDetalle() {
   const [showAssign, setShowAssign] = useState(false)
 
   const { data: wmsListData } = useQuery({
-    queryKey: ['upapex-outbound'],
+    queryKey: ['wms-outbound'],
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: rawDetail, isLoading: detailLoading } = useQuery({
-    queryKey: ['upapex-outbound-detail', obc],
+    queryKey: ['wms-outbound-detail', obc],
     queryFn: () => getOutboundDetail(obc),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   })
 
   const { data: trackingRaw, refetch: refetchTracking } = useQuery({
-    queryKey: ['upapex-tracking-obc', obc],
+    queryKey: ['wms-tracking-obc', obc],
     queryFn: () => getOrderTrackingByOBC(obc),
     staleTime: 30000,
     retry: 0,
   })
 
   const { data: sessionsRaw } = useQuery({
-    queryKey: ['upapex-scan-sessions-obc', obc],
+    queryKey: ['wms-scan-sessions-obc', obc],
     queryFn: () => getScanSessions({ outbound_order_no: obc, pageSize: 100 }),
     staleTime: 30000,
   })
@@ -342,8 +342,8 @@ export default function OrdenDetalle() {
       ...(!surtidorId ? { status: 'pending_assignment' } : {}),
     }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['upapex-order-tracking'] })
-      qc.invalidateQueries({ queryKey: ['upapex-tracking-obc', obc] })
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      qc.invalidateQueries({ queryKey: ['wms-tracking-obc', obc] })
       refetchTracking()
       toast.success(t('common.save') + ' OK')
     },

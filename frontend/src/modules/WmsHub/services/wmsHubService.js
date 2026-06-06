@@ -1,7 +1,7 @@
 import api from '../../../core/services/api'
 
 export const getConfig = () =>
-  api.get('/upapex/config').then(r => r.data)
+  api.get('/wmshub/config').then(r => r.data)
 
 export const getUbicaciones = (modulo) =>
   api.get('/Devoluciones/Inventario/ubicaciones').then(r => ({
@@ -10,7 +10,7 @@ export const getUbicaciones = (modulo) =>
   }))
 
 export const saveSheetConfig = ({ sheet_inventory_url, sheet_outbound_url }) =>
-  api.post('/upapex/config/sheets', { sheet_inventory_url, sheet_outbound_url }).then(r => r.data)
+  api.post('/wmshub/config/sheets', { sheet_inventory_url, sheet_outbound_url }).then(r => r.data)
 
 export const createUbicacion = ({ codigo, nombre, descripcion = '' }) =>
   api.post('/Devoluciones/Inventario/ubicaciones', { codigo, nombre, descripcion }).then(r => r.data)

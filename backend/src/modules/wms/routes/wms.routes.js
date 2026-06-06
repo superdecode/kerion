@@ -177,7 +177,7 @@ async function refreshInventorySessionTotals(req, sessionId) {
 
 // ── Config ─────────────────────────────────────────────────────────────────
 
-// GET /api/upapex/sheets-urls — sheet URLs only, accessible to all authenticated users
+// GET /api/wmshub/sheets-urls — sheet URLs only, accessible to all authenticated users
 // Used by googleSheetsService across all modules (Inventario, Surtido, etc.)
 router.get('/sheets-urls',
   authenticateToken,
@@ -197,13 +197,13 @@ router.get('/sheets-urls',
         },
       })
     } catch (err) {
-      console.error('GET upapex/sheets-urls error:', err.message)
+      console.error('GET wmshub/sheets-urls error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo URLs de hojas' })
     }
   }
 )
 
-// GET /api/upapex/config
+// GET /api/wmshub/config
 router.get('/config',
   authenticateToken, loadFullUser,
   requirePermission('sistema.wms', 'ver'),
@@ -233,13 +233,13 @@ router.get('/config',
         },
       })
     } catch (err) {
-      console.error('GET upapex/config error:', err.message)
-      res.status(500).json({ success: false, error: 'Error obteniendo configuración Upapex' })
+      console.error('GET wmshub/config error:', err.message)
+      res.status(500).json({ success: false, error: 'Error obteniendo configuración WMS' })
     }
   }
 )
 
-// POST /api/upapex/config/sheets — save Google Sheets URLs
+// POST /api/wmshub/config/sheets — save Google Sheets URLs
 router.post('/config/sheets',
   authenticateToken, loadFullUser,
   requirePermission('sistema.wms', 'actualizar'),
@@ -266,13 +266,13 @@ router.post('/config/sheets',
       if (sheet_inventory_url) fetchAndCacheSheet(req.tenantId, sheet_inventory_url).catch(() => {})
       if (sheet_outbound_url)  fetchAndCacheSheet(req.tenantId, sheet_outbound_url).catch(() => {})
     } catch (err) {
-      console.error('PUT upapex/config/sheets error:', err.message)
+      console.error('PUT wmshub/config/sheets error:', err.message)
       res.status(500).json({ success: false, error: 'Error guardando URLs de hojas' })
     }
   }
 )
 
-// GET /api/upapex/proxy/sheet?url=&limit=N — CORS proxy with server-side cache
+// GET /api/wmshub/proxy/sheet?url=&limit=N — CORS proxy with server-side cache
 // limit=0 (or omitted) returns all rows; limit=N returns header + last N data rows.
 router.get('/proxy/sheet',
   authenticateToken,
@@ -314,7 +314,7 @@ router.get('/proxy/sheet',
       const entry = _csvCache.get(cacheKey)
       send(text, 'miss', entry?.rowCount || 0)
     } catch (err) {
-      console.error('GET upapex/proxy/sheet error:', err.message)
+      console.error('GET wmshub/proxy/sheet error:', err.message)
       res.status(502).json({ success: false, error: 'No se pudo obtener la hoja de cálculo' })
     }
   }
@@ -322,7 +322,7 @@ router.get('/proxy/sheet',
 
 // ── Scan Sessions ──────────────────────────────────────────────────────────
 
-// POST /api/upapex/scan-session — create new scan session
+// POST /api/wmshub/scan-session — create new scan session
 router.post('/scan-session',
   authenticateToken, loadFullUser,
   requirePermission('surtido.validacion', 'crear'),
@@ -340,13 +340,13 @@ router.post('/scan-session',
       )
       res.status(201).json({ success: true, data: result.rows[0] })
     } catch (err) {
-      console.error('POST upapex/scan-session error:', err.message)
+      console.error('POST wmshub/scan-session error:', err.message)
       res.status(500).json({ success: false, error: 'Error creando sesión de escaneo' })
     }
   }
 )
 
-// GET /api/upapex/scan-sessions — list with pagination
+// GET /api/wmshub/scan-sessions — list with pagination
 router.get('/scan-sessions',
   authenticateToken, loadFullUser,
   requireAnyPermission([
@@ -397,13 +397,13 @@ router.get('/scan-sessions',
         },
       })
     } catch (err) {
-      console.error('GET upapex/scan-sessions error:', err.message)
+      console.error('GET wmshub/scan-sessions error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo sesiones' })
     }
   }
 )
 
-// GET /api/upapex/scan-session/:id
+// GET /api/wmshub/scan-session/:id
 router.get('/scan-session/:id',
   authenticateToken, loadFullUser,
   requireAnyPermission([
@@ -432,13 +432,13 @@ router.get('/scan-session/:id',
         data: { session: sessionRes.rows[0], events: eventsRes.rows },
       })
     } catch (err) {
-      console.error('GET upapex/scan-session/:id error:', err.message)
+      console.error('GET wmshub/scan-session/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo sesión' })
     }
   }
 )
 
-// PUT /api/upapex/scan-session/:id — update (complete, add notes, update counts)
+// PUT /api/wmshub/scan-session/:id — update (complete, add notes, update counts)
 router.put('/scan-session/:id',
   authenticateToken, loadFullUser,
   requirePermission('surtido.validacion', 'actualizar'),
@@ -479,7 +479,7 @@ router.put('/scan-session/:id',
       )
       res.json({ success: true, data: result.rows[0] })
     } catch (err) {
-      console.error('PUT upapex/scan-session/:id error:', err.message)
+      console.error('PUT wmshub/scan-session/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error actualizando sesión' })
     }
   }
@@ -514,7 +514,7 @@ router.delete('/scan-session/:id',
       res.json({ success: true, data: session })
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {})
-      console.error('DELETE upapex/scan-session/:id error:', err.message)
+      console.error('DELETE wmshub/scan-session/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error eliminando sesión de validación' })
     } finally {
       client.release()
@@ -522,7 +522,7 @@ router.delete('/scan-session/:id',
   }
 )
 
-// POST /api/upapex/scan-event — add scan event
+// POST /api/wmshub/scan-event — add scan event
 router.post('/scan-event',
   authenticateToken, loadFullUser,
   requirePermission('surtido.validacion', 'crear'),
@@ -581,7 +581,7 @@ router.post('/scan-event',
 
       res.status(201).json({ success: true, data: result.rows[0] })
     } catch (err) {
-      console.error('POST upapex/scan-event error:', err.message)
+      console.error('POST wmshub/scan-event error:', err.message)
       res.status(500).json({ success: false, error: 'Error registrando evento de escaneo' })
     }
   }
@@ -645,7 +645,7 @@ router.post('/scan-event/manual',
       await refreshPickSessionTotals(req, session_id)
       res.status(201).json({ success: true, data: result.rows[0] })
     } catch (err) {
-      console.error('POST upapex/scan-event/manual error:', err.message)
+      console.error('POST wmshub/scan-event/manual error:', err.message)
       res.status(500).json({ success: false, error: 'Error registrando ingreso manual' })
     }
   }
@@ -730,7 +730,7 @@ router.put('/scan-event/:id',
       await refreshPickSessionTotals(req, event.session_id)
       res.json({ success: true, data: result.rows[0] })
     } catch (err) {
-      console.error('PUT upapex/scan-event/:id error:', err.message)
+      console.error('PUT wmshub/scan-event/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error actualizando registro' })
     }
   }
@@ -759,7 +759,7 @@ router.delete('/scan-event/:id',
       await refreshPickSessionTotals(req, event.session_id)
       res.json({ success: true })
     } catch (err) {
-      console.error('DELETE upapex/scan-event/:id error:', err.message)
+      console.error('DELETE wmshub/scan-event/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error eliminando registro' })
     }
   }
@@ -767,7 +767,7 @@ router.delete('/scan-event/:id',
 
 // ── Inventory Sessions (Inventario WMS) ────────────────────────────────────
 
-// POST /api/upapex/inventory-session — create session with all scans (batch save)
+// POST /api/wmshub/inventory-session — create session with all scans (batch save)
 router.post('/inventory-session',
   authenticateToken, loadFullUser,
   requirePermission('inventario.escaneo', 'crear'),
@@ -844,7 +844,7 @@ router.post('/inventory-session',
       res.status(201).json({ success: true, data: session })
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {})
-      console.error('POST upapex/inventory-session error:', err.message)
+      console.error('POST wmshub/inventory-session error:', err.message)
       res.status(500).json({ success: false, error: 'Error guardando sesión de inventario' })
     } finally {
       client.release()
@@ -852,7 +852,7 @@ router.post('/inventory-session',
   }
 )
 
-// GET /api/upapex/inventory-sessions
+// GET /api/wmshub/inventory-sessions
 router.get('/inventory-sessions',
   authenticateToken, loadFullUser,
   requirePermission('inventario.registros', 'ver'),
@@ -904,13 +904,13 @@ router.get('/inventory-sessions',
         data: { records: rows.rows, total: parseInt(countRes.rows[0].total), page: parseInt(page), pageSize: limit },
       })
     } catch (err) {
-      console.error('GET upapex/inventory-sessions error:', err.message)
+      console.error('GET wmshub/inventory-sessions error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo sesiones de inventario' })
     }
   }
 )
 
-// GET /api/upapex/inventory-session/:id — with all scans
+// GET /api/wmshub/inventory-session/:id — with all scans
 router.get('/inventory-session/:id',
   authenticateToken, loadFullUser,
   requirePermission('inventario.registros', 'ver'),
@@ -932,7 +932,7 @@ router.get('/inventory-session/:id',
       if (sessionRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
       res.json({ success: true, data: { session: sessionRes.rows[0], scans: scansRes.rows } })
     } catch (err) {
-      console.error('GET upapex/inventory-session/:id error:', err.message)
+      console.error('GET wmshub/inventory-session/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo sesión' })
     }
   }
@@ -986,7 +986,7 @@ router.post('/inventory-duplicates/check',
 
       res.json({ success: true, data: { date: today, matches: result.rows } })
     } catch (err) {
-      console.error('POST upapex/inventory-duplicates/check error:', err.message)
+      console.error('POST wmshub/inventory-duplicates/check error:', err.message)
       res.status(500).json({ success: false, error: 'Error validando duplicados de inventario' })
     }
   }
@@ -1045,7 +1045,7 @@ router.post('/inventory-scan',
       await refreshInventorySessionTotals(req, session_id)
       res.status(201).json({ success: true, data: result.rows[0] })
     } catch (err) {
-      console.error('POST upapex/inventory-scan error:', err.message)
+      console.error('POST wmshub/inventory-scan error:', err.message)
       res.status(500).json({ success: false, error: 'Error agregando registro de inventario' })
     }
   }
@@ -1112,7 +1112,7 @@ router.put('/inventory-scan/:id',
       await refreshInventorySessionTotals(req, current.session_id)
       res.json({ success: true, data: result.rows[0] })
     } catch (err) {
-      console.error('PUT upapex/inventory-scan/:id error:', err.message)
+      console.error('PUT wmshub/inventory-scan/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error actualizando registro de inventario' })
     }
   }
@@ -1136,13 +1136,13 @@ router.delete('/inventory-scan/:id',
       await refreshInventorySessionTotals(req, current.session_id)
       res.json({ success: true })
     } catch (err) {
-      console.error('DELETE upapex/inventory-scan/:id error:', err.message)
+      console.error('DELETE wmshub/inventory-scan/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error eliminando registro de inventario' })
     }
   }
 )
 
-// DELETE /api/upapex/inventory-session/:id
+// DELETE /api/wmshub/inventory-session/:id
 router.delete('/inventory-session/:id',
   authenticateToken, loadFullUser,
   requirePermission('inventario.registros', 'eliminar'),
@@ -1171,7 +1171,7 @@ router.delete('/inventory-session/:id',
       res.json({ success: true, data: sessionRes.rows[0] })
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {})
-      console.error('DELETE upapex/inventory-session/:id error:', err.message)
+      console.error('DELETE wmshub/inventory-session/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error eliminando sesión' })
     } finally {
       client.release()
@@ -1468,7 +1468,7 @@ router.delete('/scan-session/:id/events',
   }
 )
 
-// GET /api/upapex/ubicaciones?modulo= — shared ubicaciones for Inventario and Surtido
+// GET /api/wmshub/ubicaciones?modulo= — shared ubicaciones for Inventario and Surtido
 router.get('/ubicaciones',
   authenticateToken, loadFullUser,
   requireAnyPermission([
@@ -1491,7 +1491,7 @@ router.get('/ubicaciones',
       )
       res.json({ success: true, data: result.rows })
     } catch (err) {
-      console.error('GET upapex/ubicaciones error:', err.message)
+      console.error('GET wmshub/ubicaciones error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo ubicaciones' })
     }
   }

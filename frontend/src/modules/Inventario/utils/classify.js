@@ -1,6 +1,6 @@
 /**
  * Classification engine for WMS inventory scan results.
- * Ported from upapex/apps/Inventory/app.js UnifiedModule.processScan classification block.
+ * Ported from legacy vanilla WMS inventory flow UnifiedModule.processScan classification block.
  *
  * Status hierarchy:
  *  ok       — item found in WMS, isAvailable

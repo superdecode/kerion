@@ -1,7 +1,7 @@
 /**
  * Validation deduplication manager.
  * Key format: CODE|OBC|LOCATION  (matches vanilla ValidationDeduplicationManager)
- * Ported from upapex/apps/validate/app.js::ValidationDeduplicationManager
+ * Ported from legacy vanilla WMS validation flow::ValidationDeduplicationManager
  */
 
 const STORAGE_KEY = 'kirion_surtido_dedup'

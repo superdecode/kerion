@@ -3,7 +3,7 @@ import { normalizeCode, generateCodeVariations } from './normalizeCode'
 /**
  * Searches a normalized-code Map with slash/dash fallback variants.
  * Returns { code, item, variant } where item is null if not found.
- * Ported from upapex/shared/js/wms-utils.js::findCodeInInventory
+ * Ported from legacy vanilla WMS shared rules::findCodeInInventory
  *
  * @param {string} rawCode
  * @param {Map<string, unknown>} inventory

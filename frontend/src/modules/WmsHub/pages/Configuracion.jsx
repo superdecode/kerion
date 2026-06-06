@@ -25,7 +25,7 @@ export default function Configuracion() {
   const [outTs] = useState(() => getCacheTimestamp('outbound'))
 
   const { data: configData } = useQuery({
-    queryKey: ['upapex-config'],
+    queryKey: ['wms-config'],
     queryFn: getConfig,
     staleTime: 30000,
   })
@@ -43,7 +43,7 @@ export default function Configuracion() {
     onSuccess: () => {
       invalidateUrlCache()
       toast.success(t('wmshub.config.sheet_saved'))
-      qc.invalidateQueries({ queryKey: ['upapex-config'] })
+      qc.invalidateQueries({ queryKey: ['wms-config'] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })

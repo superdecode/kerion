@@ -1,7 +1,7 @@
 /**
  * WebAudio feedback for scan events.
  * Call initAudio() once on first user interaction (click/keydown).
- * Ported from upapex/shared/js/wms-utils.js::playSound / initAudio
+ * Ported from legacy vanilla WMS shared rules::playSound / initAudio
  */
 
 let audioContext = null

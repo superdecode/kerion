@@ -15,7 +15,7 @@ export default function SurtidoHistorial() {
   const [search, setSearch] = useState('')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['upapex-surtido-sessions', { page, pageSize }],
+    queryKey: ['wms-surtido-sessions', { page, pageSize }],
     queryFn: () => getScanSessions({ page, pageSize }),
     staleTime: 30000,
   })

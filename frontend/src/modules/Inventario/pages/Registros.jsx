@@ -147,7 +147,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
   const [duplicatePending, setDuplicatePending] = useState(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['upapex-inventory-session', session?.id],
+    queryKey: ['wms-inventory-session', session?.id],
     queryFn: () => getInventorySession(session.id),
     enabled: isOpen && !!session?.id,
     staleTime: 30000,
@@ -256,14 +256,14 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
     onSuccess: () => {
       setEditingScanId(null)
       setEditingCode('')
-      qc.invalidateQueries({ queryKey: ['upapex-inventory-session', session?.id] })
+      qc.invalidateQueries({ queryKey: ['wms-inventory-session', session?.id] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
 
   const deleteScanMut = useMutation({
     mutationFn: deleteInventoryScan,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['upapex-inventory-session', session?.id] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wms-inventory-session', session?.id] }),
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
 
@@ -277,7 +277,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
     }),
     onSuccess: () => {
       setNewScan({ scanned_code: '', scan_status: 'ok', group_assignment: 'auto' })
-      qc.invalidateQueries({ queryKey: ['upapex-inventory-session', session?.id] })
+      qc.invalidateQueries({ queryKey: ['wms-inventory-session', session?.id] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
@@ -684,7 +684,7 @@ export default function InventarioRegistros() {
   }
 
   const { data, isLoading } = useQuery({
-    queryKey: ['upapex-inventory-sessions', { page, pageSize, ...filters }],
+    queryKey: ['wms-inventory-sessions', { page, pageSize, ...filters }],
     queryFn: () => getInventorySessions({ page, pageSize, ...filters }),
     staleTime: 30000,
   })
@@ -699,7 +699,7 @@ export default function InventarioRegistros() {
       toast.success(t('common.delete') + ' OK')
       setDeleteConfirmSession(null)
       setDetailSession(null)
-      qc.invalidateQueries({ queryKey: ['upapex-inventory-sessions'] })
+      qc.invalidateQueries({ queryKey: ['wms-inventory-sessions'] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })

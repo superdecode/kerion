@@ -1,7 +1,7 @@
 /**
  * Generates a unique pallet ID.
  * Format: {prefix}-{base36 timestamp}-{3-digit random}
- * Ported from upapex/shared/js/wms-utils.js::generatePalletId
+ * Ported from legacy vanilla WMS shared rules::generatePalletId
  *
  * @param {string} prefix
  * @returns {string}

@@ -62,11 +62,11 @@ export function invalidateConfigCache(tenantId) {
   else _configCache.clear()
 }
 
-async function upapexPost(tenantId, endpoint, data) {
+async function wmsPost(tenantId, endpoint, data) {
   const config = await getConfig(tenantId)
   if (!config) {
-    const err = new Error('Upapex WMS no configurado')
-    err.code = 'UPAPEX_NOT_CONFIGURED'
+    const err = new Error('WMS no configurado')
+    err.code = 'WMS_NOT_CONFIGURED'
     throw err
   }
 
@@ -110,7 +110,7 @@ async function upapexPost(tenantId, endpoint, data) {
       }
       return json.data
     } catch (err) {
-      if (err.code === 'UPAPEX_NOT_CONFIGURED' || err.wmsCode) throw err
+      if (err.code === 'WMS_NOT_CONFIGURED' || err.wmsCode) throw err
       lastErr = err
       if (attempt < 2) await new Promise((r) => setTimeout(r, 2000))
     }
@@ -122,12 +122,12 @@ function dedupKey(tenantId, endpoint, data) {
   return `${tenantId}:${endpoint}:${JSON.stringify(data)}`
 }
 
-async function upapexPostDedup(tenantId, endpoint, data) {
+async function wmsPostDedup(tenantId, endpoint, data) {
   const key = dedupKey(tenantId, endpoint, data)
   const existing = _inFlight.get(key)
   if (existing) return existing
 
-  const promise = upapexPost(tenantId, endpoint, data).finally(() => {
+  const promise = wmsPost(tenantId, endpoint, data).finally(() => {
     _inFlight.delete(key)
   })
   _inFlight.set(key, promise)
@@ -139,17 +139,17 @@ async function upapexPostDedup(tenantId, endpoint, data) {
 
 export async function testConnection(tenantId) {
   // Use boxStock since integratedInventory requires extra permissions
-  return upapexPost(tenantId, '/v1/boxStock/page', { page: 1, pageSize: 1 })
+  return wmsPost(tenantId, '/v1/boxStock/page', { page: 1, pageSize: 1 })
 }
 
 export async function getBoxStock(tenantId, params = {}) {
   const { page = 1, pageSize = 25, ...rest } = params
-  return upapexPostDedup(tenantId, '/v1/boxStock/page', { page, pageSize, ...rest })
+  return wmsPostDedup(tenantId, '/v1/boxStock/page', { page, pageSize, ...rest })
 }
 
 export async function getIntegratedInventory(tenantId, params = {}) {
   const { page = 1, pageSize = 25, ...rest } = params
-  return upapexPostDedup(tenantId, '/v1/integratedInventory/pageOpen', {
+  return wmsPostDedup(tenantId, '/v1/integratedInventory/pageOpen', {
     page,
     pageSize,
     timeType: 'operateTime',
@@ -159,7 +159,7 @@ export async function getIntegratedInventory(tenantId, params = {}) {
 
 export async function getBigOutboundList(tenantId, params = {}) {
   const { page = 1, pageSize = 25, ...rest } = params
-  return upapexPostDedup(tenantId, '/v1/outboundOrder/big/pageList', {
+  return wmsPostDedup(tenantId, '/v1/outboundOrder/big/pageList', {
     page,
     pageSize,
     timeType: 'orderCreateTime',
@@ -169,7 +169,7 @@ export async function getBigOutboundList(tenantId, params = {}) {
 
 export async function getBigOutboundDetail(tenantId, outboundOrderNoList) {
   const list = Array.isArray(outboundOrderNoList) ? outboundOrderNoList : [outboundOrderNoList]
-  return upapexPost(tenantId, '/v1/outboundOrder/big/detail', { outboundOrderNoList: list })
+  return wmsPost(tenantId, '/v1/outboundOrder/big/detail', { outboundOrderNoList: list })
 }
 
 export { getConfig as _getConfig }

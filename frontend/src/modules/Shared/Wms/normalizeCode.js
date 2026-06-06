@@ -1,7 +1,7 @@
 /**
  * Normalizes a raw scanner code for WMS lookup.
  * Full normalization for scan events (not bulk data loading).
- * Ported from upapex/shared/js/wms-utils.js::normalizeCode
+ * Ported from legacy vanilla WMS shared rules::normalizeCode
  */
 export function normalizeCode(rawCode) {
   if (!rawCode) return ''
@@ -85,7 +85,7 @@ export function extractBaseCode(code) {
 }
 
 /**
- * Generates lookup-safe code variations following the shared upapex rules.
+ * Generates lookup-safe code variations following the shared WMS rules.
  * Keeps the normalized code first, then slash/dash swaps, then the base code.
  */
 export function generateCodeVariations(rawCode) {

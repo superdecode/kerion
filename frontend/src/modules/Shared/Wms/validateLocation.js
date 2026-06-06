@@ -2,7 +2,7 @@
  * Location validation for the WMS warehouse grid.
  * Format: {Area}{Aisle}-{Rack}-{Level}-{Position}
  * Areas: A-D | Aisle: 1-32 | Rack: 01-20 | Level: 01-06 | Position: 01-02
- * Ported from upapex/shared/js/wms-utils.js::validateLocation
+ * Ported from legacy vanilla WMS shared rules::validateLocation
  */
 
 function normalizeLocation(location) {

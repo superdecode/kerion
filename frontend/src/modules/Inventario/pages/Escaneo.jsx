@@ -1050,10 +1050,10 @@ export default function Escaneo() {
   }, [buildSessionDuplicateConflicts, t, toast])
 
   const { data: configData } = useQuery({
-    queryKey: ['upapex-config'], queryFn: getConfig, staleTime: 60000,
+    queryKey: ['wms-config'], queryFn: getConfig, staleTime: 60000,
   })
   const { data: ubicacionesData } = useQuery({
-    queryKey: ['upapex-ubicaciones', 'inventario'],
+    queryKey: ['wms-ubicaciones', 'inventario'],
     queryFn: () => getUbicaciones('inventario'),
     staleTime: 120000,
   })
@@ -1111,7 +1111,7 @@ export default function Escaneo() {
     onSuccess: (data) => {
       const u = data.ubicacion
       const newUbicacion = { id: u.id, codigo: u.codigo, nombre: u.nombre }
-      qc.invalidateQueries({ queryKey: ['upapex-ubicaciones'] })
+      qc.invalidateQueries({ queryKey: ['wms-ubicaciones'] })
       setShowCreateConfirm(false)
       if (pendingInlineGroup) {
         setGroupUbicacion(prev => ({ ...prev, [pendingInlineGroup]: newUbicacion }))

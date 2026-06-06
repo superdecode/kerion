@@ -169,7 +169,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
 
   // WMS data for destino + fecha entrega (uses cached list)
   const { data: wmsData } = useQuery({
-    queryKey: ['upapex-outbound'],
+    queryKey: ['wms-outbound'],
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
     enabled: isOpen && !!session.outbound_order_no,
@@ -177,7 +177,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   const wmsOrder = getRecords(wmsData)
     .find(r => r.outboundOrderNo === session.outbound_order_no)
   const { data: reasonsData } = useQuery({
-    queryKey: ['upapex-manual-entry-reasons'],
+    queryKey: ['wms-manual-entry-reasons'],
     queryFn: getManualEntryReasons,
     enabled: isOpen && !!sessionId,
     staleTime: 60000,

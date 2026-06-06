@@ -15,7 +15,7 @@ export default function InventarioHistorial() {
   const [search, setSearch] = useState('')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['upapex-scan-sessions-historial', { page, pageSize }],
+    queryKey: ['wms-scan-sessions-historial', { page, pageSize }],
     queryFn: () => getScanSessions({ page, pageSize }),
     staleTime: 30000,
   })

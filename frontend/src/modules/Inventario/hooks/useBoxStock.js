@@ -8,7 +8,7 @@ export function useBoxStock() {
   const setSnapshot = useInventarioStore(s => s.setInventorySnapshot)
 
   const query = useQuery({
-    queryKey: ['upapex-box-stock'],
+    queryKey: ['wms-box-stock'],
     queryFn: getBoxStock,
     staleTime: 5 * 60 * 1000,
   })
