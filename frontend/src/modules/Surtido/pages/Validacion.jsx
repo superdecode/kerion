@@ -7,10 +7,9 @@ import {
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
   ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck,
   MapPin, XOctagon, Plus, Pencil, X, AlertTriangle, Copy, Check,
-  PanelRightClose, PanelRightOpen, Save,
+  PanelRightClose, PanelRightOpen, Save, PartyPopper,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
-import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
 import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -823,7 +822,7 @@ function MissingList({ items, itemCounts, t }) {
 
 /* ═══════════════════════════════════════════════════════════ */
 /* ─── TabSession ─────────────────────────────────────────── */
-function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionChange, onUpdateTab, canCreate, canUpdate, canDelete }) {
+function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionChange, onUpdateTab, onNewOrder, canCreate, canUpdate, canDelete }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
@@ -846,6 +845,8 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const [showRecount, setShowRecount] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
   const [showFinalize, setShowFinalize] = useState(false)
+  const [showCompletionModal, setShowCompletionModal] = useState(false)
+  const [completionSnapshot, setCompletionSnapshot] = useState(null)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [autoStartPending, setAutoStartPending] = useState(initialAutoStart ?? false)
   const [finalNotes, setFinalNotes] = useState('')
@@ -862,7 +863,9 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [manualEntry, setManualEntry] = useState({ code: '', reasonId: '', notes: '' })
   const locationRef = useRef(null)
+  const autoFinalizeLockRef = useRef(false)
   const sidebarStorageKey = `kirion_surtido_validation_sidebar_${user?.id || 'guest'}`
+  const sessionCompleteLocked = showCompletionModal || !!completionSnapshot
 
   const sessionElapsed = useSessionTimer(sessionStart)
   const storageKey = SESSION_KEY(tabId)
@@ -891,7 +894,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
         }
       } catch {}
     }
-    if (initialObc) { setObc(initialObc); setStep('preview'); onUpdateTab({ obc: initialObc, step: 'preview' }) }
+    if (initialObc) { setObc(initialObc); setStep('session'); setAutoStartPending(true); onUpdateTab({ obc: initialObc, step: 'session' }) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: detailData, isLoading: detailLoading } = useQuery({
@@ -959,12 +962,29 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   }, [step, ubicacionConfirmed, isActive])
 
   useEffect(() => {
-    if (!autoStartPending || step !== 'preview' || detailLoading || !detailData) return
+    if (!autoStartPending || step !== 'session' || detailLoading || !detailData || sessionId || createSessionMut.isPending) return
     const validation = validateOrderBoxData(detailData)
-    if (!validation.ok) return
+    if (!validation.ok) {
+      setAutoStartPending(false)
+      toast.error(
+        validation.reason === 'no_boxes'
+          ? t('surtido.validacion.error_no_boxes')
+          : validation.reason === 'no_codes'
+          ? t('surtido.validacion.error_no_codes')
+          : t('surtido.validacion.error_no_data')
+      )
+      clearSession()
+      return
+    }
+    if (!canCreate) {
+      setAutoStartPending(false)
+      toast.error(t('toast.error'))
+      clearSession()
+      return
+    }
     setAutoStartPending(false)
-    if (canCreate) createSessionMut.mutate()
-  }, [autoStartPending, step, detailLoading, detailData]) // eslint-disable-line react-hooks/exhaustive-deps
+    createSessionMut.mutate()
+  }, [autoStartPending, step, detailLoading, detailData, sessionId, createSessionMut.isPending, canCreate, t]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!onSessionChange) return
@@ -972,12 +992,12 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     onSessionChange({
       pendingCount: pendingSync.length,
       isSyncing,
-      onRecount:  canDelete ? () => setShowRecount(true) : null,
+      onRecount:  canDelete && !sessionCompleteLocked ? () => setShowRecount(true) : null,
       onMissing:  () => setShowMissing(true),
-      onCancel:   canDelete ? handleCancel : null,
-      onFinalize: canUpdate ? () => setShowFinalize(true) : null,
+      onCancel:   canDelete && !sessionCompleteLocked ? handleCancel : null,
+      onFinalize: canUpdate && !sessionCompleteLocked && totalExpected > 0 && counts.ok < totalExpected ? () => setShowFinalize(true) : null,
     })
-  }, [step, isActive, pendingSync.length, isSyncing]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, isActive, pendingSync.length, isSyncing, sessionCompleteLocked, totalExpected, counts.ok, canDelete, canUpdate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -1005,6 +1025,11 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     setLastScan(null); setHistory([]); setCounts({ ok: 0, rejected: 0 })
     setItemCounts(new Map()); setPendingSync([]); setSelectedUbicacion(null)
     setUbicacionConfirmed(false); setLocationInputValue('')
+    setShowFinalize(false)
+    setShowCompletionModal(false)
+    setCompletionSnapshot(null)
+    setAutoStartPending(false)
+    autoFinalizeLockRef.current = false
     onUpdateTab({ obc: null, step: 'search' })
   }
 
@@ -1033,11 +1058,15 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       const sid = data.data.id; const now = new Date()
       setSessionId(sid); setSessionStart(now); setStep('session')
       setSelectedUbicacion(null); setUbicacionConfirmed(false)
+      autoFinalizeLockRef.current = false
       persistSession(obc, sid, now, null)
       upsertOrderTracking(obc, { status: 'validating' }).catch(() => {})
       onUpdateTab({ obc, step: 'session' })
     },
-    onError: () => toast.error(t('toast.error')),
+    onError: () => {
+      autoFinalizeLockRef.current = false
+      toast.error(t('toast.error'))
+    },
   })
 
   const updateUbicacionMut = useMutation({
@@ -1183,6 +1212,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   }
 
   function handleKeyDown(e) {
+    if (sessionCompleteLocked) return
     const now = Date.now()
     const delta = now - lastKeyTimeRef.current
     lastKeyTimeRef.current = now
@@ -1204,19 +1234,41 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   }
 
   const finalizeMut = useMutation({
-    mutationFn: () => {
+    mutationFn: ({ source = 'manual' } = {}) => {
       const sessionStatus = counts.ok < totalExpected ? 'with_discrepancies' : 'complete'
       return updateScanSession(sessionId, { status: sessionStatus, notes: finalNotes, total_scanned: counts.ok, ubicacion_id: selectedUbicacion?.id || null })
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       const orderStatus = totalExpected > 0 && counts.ok >= totalExpected ? 'complete' : 'partial'
       upsertOrderTracking(obc, { status: orderStatus }).catch(() => {})
       toast.success(t('surtido.escaneo.session_saved'))
       qc.invalidateQueries({ queryKey: ['wms-scan-sessions'] })
-      clearSession(); setShowFinalize(false)
+      autoFinalizeLockRef.current = true
+      setCompletionSnapshot({
+        source: vars?.source || 'manual',
+        obc,
+        scanned: counts.ok,
+        expected: totalExpected,
+        rejected: counts.rejected,
+        missing: Math.max(0, totalExpected - counts.ok),
+        progress,
+        sessionStart,
+        elapsed: sessionElapsed,
+        completedAt: new Date().toISOString(),
+      })
+      setShowFinalize(false)
+      setShowCompletionModal(true)
     },
     onError: () => toast.error(t('toast.error')),
   })
+
+  useEffect(() => {
+    if (step !== 'session' || !sessionId || totalExpected <= 0) return
+    if (counts.ok < totalExpected) return
+    if (showCompletionModal || finalizeMut.isPending || autoFinalizeLockRef.current) return
+    autoFinalizeLockRef.current = true
+    finalizeMut.mutate({ source: 'auto' })
+  }, [step, sessionId, totalExpected, counts.ok, showCompletionModal, finalizeMut.isPending]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const missingItems = allItems.filter(item => {
     const normBoxType = normalizeCode(item.boxType || '')
@@ -1241,25 +1293,9 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       })
   }, [sessionList, obc, sessionSearch, sessionStatusFilter])
 
-  if (detailLoading && step !== 'search') {
-    return <div className="flex-1 flex items-center justify-center"><LoadingSpinner text={t('common.loading')} /></div>
-  }
-
   /* ─── SEARCH / PREVIEW STEPS ────────────────────────────── */
   if (step === 'search') {
-    return <SearchStep onFound={foundObc => { setObc(foundObc); setStep('preview'); onUpdateTab({ obc: foundObc, step: 'preview' }) }} />
-  }
-
-  if (step === 'preview') {
-    return (
-      <PreviewStep
-        obc={obc} detailData={detailData} isLoadingDetail={detailLoading}
-        onBack={() => { setObc(null); setStep('search'); onUpdateTab({ obc: null, step: 'search' }) }}
-        onStart={() => createSessionMut.mutate()}
-        isStarting={createSessionMut.isPending}
-        canCreate={canCreate}
-      />
-    )
+    return <SearchStep onFound={foundObc => { setObc(foundObc); setStep('session'); setAutoStartPending(true); onUpdateTab({ obc: foundObc, step: 'session' }) }} />
   }
 
   /* ─── ACTIVE SESSION ─────────────────────────────────── */
@@ -1481,16 +1517,17 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                 type="text"
                 className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warm-200 rounded-2xl
                   focus:border-primary-500 focus:shadow-glow
-                  transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
+                  transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide disabled:opacity-60 disabled:cursor-not-allowed"
                 placeholder={t('surtido.validacion.scan_placeholder')}
                 onKeyDown={handleKeyDown}
+                disabled={sessionCompleteLocked || !sessionId}
                 autoComplete="off"
               />
             </div>
             <div className="flex justify-end">
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-warm-200 bg-warm-50 px-3 py-1.5 text-xs font-semibold text-warm-600 hover:bg-warm-100"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-warm-200 bg-warm-50 px-3 py-1.5 text-xs font-semibold text-warm-600 hover:bg-warm-100 whitespace-nowrap"
                 onClick={() => setShowManualEntry(true)}
               >
                 <Pencil size={12} /> Ingreso manual
@@ -1840,6 +1877,87 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
           />
         </div>
       </Modal>
+
+      {/* Completion success modal */}
+      <Modal
+        isOpen={showCompletionModal}
+        onClose={() => {
+          setShowCompletionModal(false)
+          clearSession()
+        }}
+        title={t('surtido.validacion.complete_title')}
+        icon={PartyPopper}
+        size="lg"
+        footer={
+          <div className="flex flex-col sm:flex-row gap-3 justify-end w-full">
+            <button
+              className="btn-ghost"
+              onClick={() => {
+                setShowCompletionModal(false)
+                clearSession()
+              }}
+            >
+              {t('surtido.validacion.complete_save_close')}
+            </button>
+            <button
+              className="btn-primary inline-flex items-center gap-2"
+              onClick={() => {
+                setShowCompletionModal(false)
+                clearSession()
+                onNewOrder?.()
+              }}
+            >
+              <ScanBarcode size={14} />
+              {t('surtido.validacion.complete_new_order')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-success-200 bg-success-50/80 p-5 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm ring-8 ring-success-100">
+              <CheckCircle2 className="h-8 w-8 text-success-600" />
+            </div>
+            <p className="text-lg font-bold text-success-700">{t('surtido.validacion.complete_message')}</p>
+            <p className="mt-1 text-sm text-success-600">{t('surtido.validacion.complete_hint')}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-warm-200 bg-warm-50 p-3">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-warm-400 font-semibold">{t('surtido.validacion.complete_summary')}</p>
+              <div className="mt-2 space-y-1 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-warm-500">{t('surtido.escaneo.scanned')}</span>
+                  <span className="font-bold text-warm-800 tabular-nums">{completionSnapshot?.scanned ?? counts.ok}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-warm-500">{t('surtido.escaneo.expected')}</span>
+                  <span className="font-bold text-warm-800 tabular-nums">{completionSnapshot?.expected ?? totalExpected}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-warm-500">{t('surtido.validacion.rejected_abbr')}</span>
+                  <span className="font-bold text-warm-800 tabular-nums">{completionSnapshot?.rejected ?? counts.rejected}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-warm-500">{t('surtido.validacion.time_label')}</span>
+                  <span className="font-bold text-warm-800 tabular-nums">{fmtElapsed(completionSnapshot?.elapsed ?? sessionElapsed)}</span>
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-primary-200 bg-primary-50 p-3">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-primary-500 font-semibold">{t('surtido.validacion.order_label')}</p>
+              <p className="mt-1 font-mono text-sm font-bold text-primary-700 break-all">{completionSnapshot?.obc ?? obc}</p>
+              {selectedUbicacion && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-xs">
+                  <MapPin size={12} className="text-accent-600 shrink-0" />
+                  <span className="font-mono font-semibold text-accent-700">{selectedUbicacion.codigo}</span>
+                  <span className="text-accent-600 truncate">{selectedUbicacion.nombre}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -2080,6 +2198,7 @@ export default function SurtidoValidacion() {
               }
               onSessionChange={tab.id === activeTabId ? setActiveSession : undefined}
               onUpdateTab={(data) => handleUpdateTab(tab.id, data)}
+              onNewOrder={() => setShowQuickSearch(true)}
               canCreate={canCreateValidation}
               canUpdate={canUpdateValidation}
               canDelete={canDeleteValidation}
