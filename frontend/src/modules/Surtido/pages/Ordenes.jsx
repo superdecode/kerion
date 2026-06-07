@@ -1207,7 +1207,7 @@ export default function Ordenes() {
               }}
               title={t('surtido.ordenes.time_filter')}
             >
-              <CalendarClock size={14} />
+              <Clock size={14} />
               <span>{t('surtido.ordenes.time_filter')}</span>
             </button>
 
@@ -1240,19 +1240,26 @@ export default function Ordenes() {
                     { label: t('surtido.ordenes.time_morning'), from: '06:00', to: '12:00' },
                     { label: t('surtido.ordenes.time_afternoon'), from: '12:00', to: '18:00' },
                     { label: t('surtido.ordenes.time_night'), from: '18:00', to: '23:59' },
-                  ].map((preset) => (
-                    <button
-                      key={preset.label}
-                      className="rounded-full border border-warm-200 bg-warm-50 px-3 py-2 text-[11px] font-semibold text-warm-600 hover:bg-warm-100"
-                      onClick={() => {
-                        setTimeFromDraft(preset.from)
-                        setTimeToDraft(preset.to)
-                        applyTimeFilters(preset.from, preset.to)
-                      }}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
+                  ].map((preset) => {
+                    const isActive = timeFromDraft === preset.from && timeToDraft === preset.to
+                    return (
+                      <button
+                        key={preset.label}
+                        className={`rounded-full border px-3 py-2 text-[11px] font-semibold transition-all ${
+                          isActive
+                            ? 'border-primary-300 bg-primary-50 text-primary-700'
+                            : 'border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100'
+                        }`}
+                        onClick={() => {
+                          setTimeFromDraft(preset.from)
+                          setTimeToDraft(preset.to)
+                          applyTimeFilters(preset.from, preset.to)
+                        }}
+                      >
+                        {preset.label}
+                      </button>
+                    )
+                  })}
                 </motion.div>
               )}
             </AnimatePresence>
