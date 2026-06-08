@@ -1117,6 +1117,8 @@ const translations = {
     'surtido.validacion.not_in_bd': '条码不在订单中',
     'surtido.validacion.duplicate': '条码已复核',
     'surtido.validacion.manual_blocked': '已阻止手动输入，请使用扫描枪',
+    'surtido.validacion.manual_entry': '手动输入',
+    'surtido.validacion.manual_entry_saved': '手动输入已记录',
     'surtido.historial.title': '拣货历史',
     'surtido.historial.search_placeholder': '按订单号搜索...',
     'surtido.historial.order_no': 'Wms 单号',
@@ -1398,7 +1400,7 @@ const translations = {
     'surtido.ordenes.surtidores_title': '管理配货员',
     'surtido.ordenes.fecha_creacion':   '创建日期',
     'surtido.ordenes.fecha_entrega':    '交货日期',
-    'surtido.ordenes.validated_qty':    '复核数量',
+    'surtido.ordenes.validated_qty':    '复核数',
     'surtido.ordenes.destino':          '目的地',
 
     // ── Common pagination ──────────────────────────────────────────────────
@@ -3258,6 +3260,8 @@ const translations = {
     'surtido.validacion.not_in_bd': 'Código no encontrado en la orden',
     'surtido.validacion.duplicate': 'Código Ya Validado',
     'surtido.validacion.manual_blocked': 'Entrada manual bloqueada. usa el escáner.',
+    'surtido.validacion.manual_entry': 'Ingreso manual',
+    'surtido.validacion.manual_entry_saved': 'Ingreso manual registrado',
     'surtido.historial.title': 'Historial de Surtido',
     'surtido.historial.search_placeholder': 'Buscar por orden...',
     'surtido.historial.order_no': 'Orden WMS',

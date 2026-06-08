@@ -1137,8 +1137,30 @@ export default function Ordenes() {
     })
   }
 
-  const WMS_HEADERS = ['OBC', 'Cliente', 'Destinatario', 'Canal', 'Referencia', 'Tracking', 'Cajas', 'Cant. validada', 'Fecha entrega', 'Surtidor', 'Estado', 'Fecha creación']
-  const VAL_HEADERS = ['OBC', 'Cliente', 'Surtidor', 'Fecha entrega', 'Escaneado', 'Esperado', 'Estado', 'Actualizado']
+  const WMS_HEADERS = [
+    'OBC',
+    t('surtido.ordenes.cliente'),
+    t('surtido.ordenes.detail.destination'),
+    t('surtido.ordenes.canal'),
+    t('surtido.ordenes.referencia'),
+    t('surtido.ordenes.detail.tracking'),
+    t('surtido.ordenes.cajas'),
+    t('surtido.ordenes.validated_qty'),
+    t('surtido.ordenes.fecha_entrega'),
+    t('surtido.ordenes.surtidor'),
+    t('surtido.ordenes.status'),
+    t('surtido.ordenes.fecha_creacion'),
+  ]
+  const VAL_HEADERS = [
+    'OBC',
+    t('surtido.ordenes.cliente'),
+    t('surtido.ordenes.surtidor'),
+    t('surtido.ordenes.fecha_entrega'),
+    t('surtido.escaneo.scanned'),
+    t('surtido.escaneo.expected'),
+    t('surtido.ordenes.status'),
+    t('config.updated'),
+  ]
 
   function exportSheet(headers, rows, sheetName, filename) {
     try {
@@ -1629,7 +1651,7 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
               </th>
               {showScannedColumn && (
                 <th className={`${TH_CLASS} text-right`}>
-                  <SortableHeader label="Cant. validada" sortKey="scanned" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+                  <SortableHeader label={t('surtido.ordenes.validated_qty')} sortKey="scanned" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
                 </th>
               )}
               <th className={`${TH_CLASS} col-name`}>
@@ -1703,10 +1725,33 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                   </td>
 
                   {showScannedColumn && (
-                    <td className="table-cell text-right">
-                      <span className="font-semibold text-success-700 tabular-nums">
-                        {tracking?.total_scanned ?? 0}
-                      </span>
+                    <td className="table-cell">
+                      {(() => {
+                        const scanned = Number(tracking?.total_scanned ?? 0)
+                        const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? 0)
+                        const pct = expected > 0
+                          ? Math.min(100, Math.round((scanned / expected) * 100))
+                          : (scanned > 0 ? 100 : 0)
+
+                        return (
+                          <div className="flex items-center justify-end gap-2 min-w-[88px]">
+                            <span className="font-semibold text-success-700 tabular-nums leading-none min-w-[1.25rem] text-right">
+                              {scanned}
+                            </span>
+                            {scanned > 0 && (
+                              <div
+                                className="h-2 w-20 overflow-hidden rounded-full bg-success-100/80 shadow-inner"
+                                title={`${scanned}/${expected || '—'}`}
+                              >
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-success-400 to-success-500 transition-all duration-300"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </td>
                   )}
 

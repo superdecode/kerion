@@ -1144,7 +1144,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       }
       setManualEntry({ code: '', reasonId: '', notes: '' })
       setShowManualEntry(false)
-      toast.success('Ingreso manual registrado')
+      toast.success(t('surtido.validacion.manual_entry_saved'))
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
@@ -1346,13 +1346,13 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                           <div className="flex items-center gap-3">
                             {delivery && (
                               <div>
-                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">Entrega</p>
+                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">{t('surtido.ordenes.fecha_entrega')}</p>
                                 <p className="text-xs font-semibold text-warm-700">{delivery}</p>
                               </div>
                             )}
                             {destination && (
                               <div className="border-l border-warm-200 pl-3">
-                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">Destino</p>
+                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">{t('surtido.ordenes.detail.destination')}</p>
                                 <p className="text-xs font-semibold text-warm-700 max-w-[14rem] truncate">{destination}</p>
                               </div>
                             )}
@@ -1362,13 +1362,13 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                           <div className="flex items-center gap-3">
                             {ref && (
                               <div>
-                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">Referencia</p>
+                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">{t('surtido.ordenes.referencia')}</p>
                                 <p className="text-xs font-mono text-warm-600 truncate max-w-[10rem]">{ref}</p>
                               </div>
                             )}
                             {track && (
                               <div className="border-l border-warm-200 pl-3">
-                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">Tracking</p>
+                                <p className="text-[9px] uppercase tracking-[0.12em] text-warm-400 font-semibold">{t('surtido.ordenes.detail.tracking')}</p>
                                 <p className="text-xs font-mono text-warm-600 truncate max-w-[12rem]">{track}</p>
                               </div>
                             )}
@@ -1523,7 +1523,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                 className="absolute right-4 top-0 z-10 inline-flex items-center gap-1.5 rounded-t-xl rounded-b-none border border-warm-200 border-b-0 bg-white px-3 py-1.5 text-[11px] font-semibold text-warm-600 shadow-sm transition-all hover:-translate-y-[1px] hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 whitespace-nowrap"
                 onClick={() => setShowManualEntry(true)}
               >
-                <Pencil size={12} /> Ingreso manual
+                <Pencil size={12} /> {t('surtido.validacion.manual_entry')}
               </button>
 
               {/* Scan input */}
@@ -1739,7 +1739,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       <Modal
         isOpen={showManualEntry}
         onClose={() => setShowManualEntry(false)}
-        title="Ingreso manual"
+        title={t('surtido.validacion.manual_entry')}
         icon={Pencil}
         footer={
           <div className="flex gap-3 justify-end">
