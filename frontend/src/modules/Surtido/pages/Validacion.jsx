@@ -1759,13 +1759,17 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
               className="btn-primary"
               disabled={!manualEntry.code.trim() || !manualEntry.reasonId || addManualEventMut.isPending}
               onClick={() => {
+                if (!sessionId) { toast.error('Sesión no encontrada'); return }
+                const norm = normalizeCode(manualEntry.code.trim())
+                const matched = findMatchedItem(norm, packageMap, productMap)
                 const selectedReason = (getRecords(reasonsData)).find((reason) => String(reason.id) === manualEntry.reasonId)
                 addManualEventMut.mutate({
                   session_id: sessionId,
                   scanned_code: manualEntry.code.trim(),
-                  normalized_code: normalizeCode(manualEntry.code.trim()),
-                  matched_box_type: null,
-                  matched_sku: null,
+                  normalized_code: norm,
+                  matched_sku: matched?.type === 'sku' ? matched.sku : null,
+                  matched_box_type: matched?.type === 'box' ? (matched.boxType || matched.boxCode) : null,
+                  scan_result: 'ok',
                   quantity: 1,
                   manual_reason_id: Number(manualEntry.reasonId),
                   manual_reason_label: selectedReason?.nombre || null,
@@ -1798,7 +1802,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
           </select>
           <textarea
             className="input-field min-h-24 w-full resize-none text-sm"
-            placeholder="Observacion opcional"
+            placeholder="Ej: Registro manual por código ilegible..."
             value={manualEntry.notes}
             onChange={(e) => setManualEntry((prev) => ({ ...prev, notes: e.target.value }))}
           />
