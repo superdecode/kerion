@@ -4,9 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as XLSX from 'xlsx'
 import {
-  Eye, Trash2, CheckCircle2, AlertTriangle, Ban, X, Package2, Loader2,
+  Eye, Trash2, CheckCircle2, AlertTriangle, Ban, X, Package2, Loader2, AlertCircle,
   User, Timer, Clock, ScanBarcode, Boxes, ChevronDown, ChevronUp,
-  Search, XCircle, Download, Copy, Check, Pencil,
+  Search, XCircle, Download, Copy, Check, Pencil, LayoutGrid,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -16,16 +16,38 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { fmtDateTime, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
+import { getTimeBounds } from '../utils/timeBounds'
 import {
   getInventorySessions, getInventorySession, deleteInventorySession,
   createInventoryScan, updateInventoryScan, deleteInventoryScan, checkInventoryDuplicates,
 } from '../services/inventarioService'
 import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
+import QuickCodeSearchModal from '../components/QuickCodeSearchModal'
+import InventarioUbicacionesModal from '../../Devoluciones/components/InventarioUbicacionesModal'
+import { getUbicacionesAdmin, createUbicacion, updateUbicacion, deleteUbicacion } from '../../WmsHub/services/wmsHubService'
 
 const STATUS_META_KEYS = {
-  ok:      { labelKey: 'inventario.escaneo.group_disponible', icon: CheckCircle2, bg: 'bg-success-100 text-success-700' },
-  blocked: { labelKey: 'inventario.escaneo.group_bloqueado',  icon: AlertTriangle, bg: 'bg-warning-100 text-warning-700' },
-  nowms:   { labelKey: 'inventario.escaneo.group_nowms',      icon: Ban, bg: 'bg-danger-100 text-danger-700' },
+  ok: {
+    labelKey: 'inventario.escaneo.group_disponible',
+    icon: CheckCircle2,
+    bg: 'bg-success-100 text-success-700',
+    card: 'border-success-200/80 bg-gradient-to-br from-success-50 via-white to-success-100/70 text-success-700 shadow-[0_16px_32px_-24px_rgba(34,197,94,0.55)]',
+    pill: 'border-success-200/90 bg-gradient-to-r from-success-50 via-white to-success-100/75 text-success-700 shadow-[0_10px_22px_-18px_rgba(34,197,94,0.5)]',
+  },
+  blocked: {
+    labelKey: 'inventario.escaneo.group_bloqueado',
+    icon: AlertTriangle,
+    bg: 'bg-warning-100 text-warning-700',
+    card: 'border-warning-200/80 bg-gradient-to-br from-warning-50 via-white to-warning-100/75 text-warning-700 shadow-[0_16px_32px_-24px_rgba(245,158,11,0.5)]',
+    pill: 'border-warning-200/90 bg-gradient-to-r from-warning-50 via-white to-warning-100/75 text-warning-700 shadow-[0_10px_22px_-18px_rgba(245,158,11,0.5)]',
+  },
+  nowms: {
+    labelKey: 'inventario.escaneo.group_nowms',
+    icon: Ban,
+    bg: 'bg-danger-100 text-danger-700',
+    card: 'border-danger-200/80 bg-gradient-to-br from-danger-50 via-white to-danger-100/75 text-danger-700 shadow-[0_16px_32px_-24px_rgba(239,68,68,0.5)]',
+    pill: 'border-danger-200/90 bg-gradient-to-r from-danger-50 via-white to-danger-100/75 text-danger-700 shadow-[0_10px_22px_-18px_rgba(239,68,68,0.5)]',
+  },
 }
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
@@ -158,14 +180,19 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
   const isClasificacion = (sessionData.scan_type ?? session?.scan_type) === 'clasificacion'
   const canEditScans = hasPermission('inventario.registros', 'actualizar')
   const canDeleteScans = hasPermission('inventario.registros', 'eliminar')
+  const scanBounds = getTimeBounds(scans, {
+    timestampKey: 'scanned_at',
+    fallbackStart: sessionData.started_at || sessionData.created_at || session?.started_at || session?.created_at,
+    fallbackEnd: sessionData.completed_at || sessionData.created_at || session?.completed_at || session?.created_at,
+  })
   const sectionCode = formatSectionCode(
     sessionData.tarima_code || session?.tarima_code,
-    sessionData.completed_at || session?.completed_at || sessionData.created_at || session?.created_at
+    scanBounds.start || sessionData.started_at || session?.started_at || sessionData.created_at || session?.created_at
   )
 
   const duration = (() => {
-    if (!sessionData.started_at || !sessionData.completed_at) return '—'
-    const ms = new Date(sessionData.completed_at) - new Date(sessionData.started_at)
+    if (!scanBounds.start || !scanBounds.end) return '—'
+    const ms = new Date(scanBounds.end) - new Date(scanBounds.start)
     const min = Math.floor(ms / 60000)
     const sec = Math.floor((ms % 60000) / 1000)
     return `${min}m ${sec}s`
@@ -273,6 +300,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
       scanned_code: newScan.scanned_code,
       normalized_code: newScan.scanned_code,
       scan_status: newScan.scan_status,
+      cell_no: null,
       group_assignment: newScan.group_assignment,
     }),
     onSuccess: () => {
@@ -289,25 +317,26 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
         ['Sección', sectionCode],
         ['Tipo', isClasificacion ? 'Clasificación' : 'Unificado'],
         ['Operador', sessionData.operator_nombre || ''],
-        ['Inicio', sessionData.started_at ? fmtDateTime(sessionData.started_at) : ''],
-        ['Final', sessionData.completed_at ? fmtDateTime(sessionData.completed_at) : ''],
+        ['Inicio', scanBounds.start ? fmtDateTime(scanBounds.start) : ''],
+        ['Final', scanBounds.end ? fmtDateTime(scanBounds.end) : ''],
         ['Tarimas', totals.tarimas],
         ['Disponible', totals.ok],
         ['Bloqueado', totals.blocked],
         ['No WMS', totals.nowms],
         ['Total', totals.total],
         [],
-        ['Tarima', 'Código 1', 'Código 2', 'Estado', 'Fecha escaneo'],
+        ['Tarima', 'Código 1', 'Código 2', 'Ubicación', 'Estado', 'Fecha escaneo'],
         ...scans.map(sc => [
           tarimaCodeByRaw[normalizeTarimaGroupKey(sc.group_assignment, sectionCode)] || formatTarimaCode(sc.group_assignment, sectionCode, 0),
           sc.normalized_code || '',
           sc.code2 || '',
+          sc.cell_no || '',
           sc.scan_status || '',
           sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
         ])
       ]
       const ws = XLSX.utils.aoa_to_sheet(info)
-      ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 14 }, { wch: 22 }]
+      ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 22 }]
       XLSX.utils.book_append_sheet(wb, ws, 'Inventario')
       XLSX.writeFile(wb, `inventario_${sectionCode}_${getToday()}.xlsx`)
       toast.success('Exportación completada')
@@ -348,17 +377,17 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
           <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
             {[
               { label: t('inventario.registros.operator'), value: sessionData.operator_nombre || '—', Icon: User },
-              { label: 'Fecha inicio', value: (sessionData.started_at || sessionData.created_at) ? fmtDateTime(sessionData.started_at || sessionData.created_at) : '—', Icon: Clock },
-              { label: 'Fecha final', value: sessionData.completed_at ? fmtDateTime(sessionData.completed_at) : '—', Icon: Clock },
+              { label: 'Fecha inicio', value: scanBounds.start ? fmtDateTime(scanBounds.start) : '—', Icon: Clock },
+              { label: 'Fecha final', value: scanBounds.end ? fmtDateTime(scanBounds.end) : '—', Icon: Clock },
               { label: 'Tarimas', value: totals.tarimas, Icon: Boxes },
               { label: t('inventario.registros.total'), value: totals.total, Icon: Package2 },
               { label: t('inventario.escaneo.time_label'), value: duration, Icon: Timer },
             ].map(card => (
-              <div key={card.label} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
+              <div key={card.label} className="rounded-2xl border border-warm-100/70 bg-gradient-to-br from-white via-warm-50/70 to-warm-100/60 p-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.5)]">
                 <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1.5">
                   <card.Icon className="w-3 h-3" /> {card.label}
                 </p>
-                <p className="text-sm font-semibold text-warm-700 truncate">{card.value}</p>
+                <p className={`${card.label.includes('Fecha') ? 'font-mono text-xs font-medium text-warm-600' : 'text-sm font-semibold text-warm-700'} truncate`}>{card.value}</p>
               </div>
             ))}
           </div>
@@ -383,13 +412,13 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                   </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 pb-2 shrink-0">
-                  <span className="inline-flex items-center rounded-full border border-success-200 bg-success-50 px-2.5 py-1 text-[10px] font-semibold text-success-700">
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_META_KEYS.ok.pill}`}>
                     Disponible {totals.ok}
                   </span>
-                  <span className="inline-flex items-center rounded-full border border-warning-200 bg-warning-50 px-2.5 py-1 text-[10px] font-semibold text-warning-700">
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_META_KEYS.blocked.pill}`}>
                     Bloqueado {totals.blocked}
                   </span>
-                  <span className="inline-flex items-center rounded-full border border-danger-200 bg-danger-50 px-2.5 py-1 text-[10px] font-semibold text-danger-700">
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_META_KEYS.nowms.pill}`}>
                     No WMS {totals.nowms}
                   </span>
                 </div>
@@ -437,6 +466,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                                             <th className="text-left py-1.5 pr-3 font-semibold">#</th>
                                             <th className="text-left pr-3 font-semibold">Código 1</th>
                                             <th className="text-left pr-3 font-semibold">Código 2</th>
+                                            <th className="text-left pr-3 font-semibold">Ubicación</th>
                                             <th className="text-left pr-3 font-semibold">{t('common.status')}</th>
                                             <th className="text-right font-semibold">Fecha escaneo</th>
                                           </tr>
@@ -460,6 +490,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                                                   ) : (
                                                     <span className="text-warm-300">—</span>
                                                   )}
+                                                </td>
+                                                <td className="pr-3">
+                                                  <span className="text-xs text-warm-500">{sc.cell_no || '—'}</span>
                                                 </td>
                                                 <td className="pr-3">
                                                   <span className={`badge inline-flex items-center gap-1 ${meta.bg}`}>
@@ -496,6 +529,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                         <th className={TH_CLASS}><span className={TH_TEXT}>Tarima</span></th>
                         <th className={TH_CLASS}><span className={TH_TEXT}>Código 1</span></th>
                         <th className={TH_CLASS}><span className={TH_TEXT}>Código 2</span></th>
+                        <th className={TH_CLASS}><span className={TH_TEXT}>Ubicación</span></th>
                         <th className={TH_CLASS}><span className={TH_TEXT}>{t('common.status')}</span></th>
                         <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Fecha escaneo</span></th>
                         <th className={TH_CLASS}><span className={TH_TEXT}>Acciones</span></th>
@@ -544,6 +578,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                               ) : (
                                 <span className="text-warm-300">—</span>
                               )}
+                            </td>
+                            <td className="table-cell">
+                              <span className="text-xs text-warm-500">{sc.cell_no || '—'}</span>
                             </td>
                             <td className="table-cell">
                               <span className={`badge inline-flex items-center gap-1 ${meta.bg}`}>
@@ -675,6 +712,8 @@ export default function InventarioRegistros() {
   const [datePreset, setDatePreset] = useState('30')
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
+  const [showQuickSearch, setShowQuickSearch] = useState(false)
+  const [showManageUbicaciones, setShowManageUbicaciones] = useState(false)
 
   const filters = {
     scan_type: scanTypeFilter || undefined,
@@ -692,6 +731,12 @@ export default function InventarioRegistros() {
   const records = data?.data?.records ?? []
   const total = data?.data?.total ?? 0
   const totalPages = Math.ceil(total / pageSize) || 1
+  const { data: ubicacionesAdminData } = useQuery({
+    queryKey: ['wms-ubicaciones-admin', 'inventario'],
+    queryFn: () => getUbicacionesAdmin('inventario'),
+    staleTime: 120000,
+    enabled: showManageUbicaciones,
+  })
 
   const deleteMut = useMutation({
     mutationFn: deleteInventorySession,
@@ -706,10 +751,35 @@ export default function InventarioRegistros() {
 
   useEffect(() => () => clearTimeout(searchDebounce.current), [])
 
+  const headerActions = (
+    <div className="flex items-center gap-2 flex-wrap justify-end">
+      <button
+        type="button"
+        onClick={() => setShowManageUbicaciones(true)}
+        className="btn-ghost text-xs flex items-center gap-1.5"
+      >
+        <LayoutGrid className="w-3.5 h-3.5" /> Gestionar ubicaciones
+      </button>
+      <button
+        type="button"
+        onClick={() => setShowQuickSearch(true)}
+        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-warm-100 text-warm-400 transition-all duration-200 hover:bg-primary-50 hover:text-primary-600"
+        title="Búsqueda rápida"
+        aria-label="Búsqueda rápida"
+      >
+        <Search className="w-4 h-4" />
+      </button>
+    </div>
+  )
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.registros.title')} subtitle={t('nav.inventario')} />
+        <Header
+          title={t('inventario.registros.title')}
+          subtitle={t('nav.inventario')}
+          actions={headerActions}
+        />
         <LoadingSpinner text={t('common.loading')} />
       </div>
     )
@@ -763,9 +833,9 @@ export default function InventarioRegistros() {
   const INV_HEADERS = ['Sección', 'Tipo', 'Fecha', 'Operador', 'Disponible', 'Bloqueado', 'No WMS', 'Total']
   const INV_COLS = [{ wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }]
   const buildInvRows = (rows) => rows.map(r => [
-    formatSectionCode(r.tarima_code, r.completed_at || r.created_at),
+    formatSectionCode(r.tarima_code, r.started_at || r.created_at),
     r.scan_type === 'clasificacion' ? 'Clasificación' : 'Unificado',
-    (r.completed_at || r.created_at) ? fmtDateTime(r.completed_at || r.created_at) : '',
+    (r.started_at || r.created_at) ? fmtDateTime(r.started_at || r.created_at) : '',
     r.operator_nombre || '',
     r.total_ok ?? 0,
     r.total_blocked ?? 0,
@@ -823,7 +893,11 @@ export default function InventarioRegistros() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('inventario.registros.title')} subtitle={t('nav.inventario')} />
+      <Header
+        title={t('inventario.registros.title')}
+        subtitle={t('nav.inventario')}
+        actions={headerActions}
+      />
 
       <div className="flex-1 overflow-y-auto">
         {/* Filter bar */}
@@ -974,14 +1048,14 @@ export default function InventarioRegistros() {
                           </td>
                           <td className="table-cell">
                             <div className="flex min-w-0 items-center gap-1.5">
-                              <span className="code-main truncate">{formatSectionCode(r.tarima_code, r.completed_at || r.created_at)}</span>
+                              <span className="code-main truncate">{formatSectionCode(r.tarima_code, r.started_at || r.created_at)}</span>
                               <button
                                 type="button"
-                                onClick={(event) => handleCopyCode(event, formatSectionCode(r.tarima_code, r.completed_at || r.created_at))}
+                                onClick={(event) => handleCopyCode(event, formatSectionCode(r.tarima_code, r.started_at || r.created_at))}
                                 className="shrink-0 rounded-md p-0.5 text-warm-400 opacity-0 transition-all hover:bg-primary-100/70 hover:text-primary-600 group-hover:opacity-100 focus:opacity-100 focus:outline-none"
                                 title={t('common.copy')}
                               >
-                                {copiedCode === formatSectionCode(r.tarima_code, r.completed_at || r.created_at)
+                                {copiedCode === formatSectionCode(r.tarima_code, r.started_at || r.created_at)
                                   ? <Check size={13} className="text-success-600" />
                                   : <Copy size={13} />}
                               </button>
@@ -998,7 +1072,7 @@ export default function InventarioRegistros() {
                           </td>
                           <td className="table-cell">
                             <span className="text-warm-600 text-xs tabular-nums">
-                              {(r.completed_at || r.created_at) ? fmtDateTime(r.completed_at || r.created_at) : '—'}
+                              {(r.started_at || r.created_at) ? fmtDateTime(r.started_at || r.created_at) : '—'}
                             </span>
                           </td>
                           <td className="table-cell hidden md:table-cell text-warm-600 text-xs">
@@ -1126,7 +1200,7 @@ export default function InventarioRegistros() {
           <p>{t('inventario.registros.delete_section_confirm')}</p>
           <div className="rounded-xl border border-danger-100 bg-danger-50 px-3 py-2">
             <p className="font-semibold text-danger-700">
-              {deleteConfirmSession ? formatSectionCode(deleteConfirmSession.tarima_code, deleteConfirmSession.completed_at || deleteConfirmSession.created_at) : '—'}
+              {deleteConfirmSession ? formatSectionCode(deleteConfirmSession.tarima_code, deleteConfirmSession.started_at || deleteConfirmSession.created_at) : '—'}
             </p>
             <p className="text-xs text-danger-600">
               {(deleteConfirmSession?.total_scans ?? 0)} {t('inventario.registros.scanned_boxes')}
@@ -1136,6 +1210,24 @@ export default function InventarioRegistros() {
           </div>
         </div>
       </Modal>
+      <QuickCodeSearchModal
+        isOpen={showQuickSearch}
+        onClose={() => setShowQuickSearch(false)}
+        onOpenSession={(sessionId) => {
+          setShowQuickSearch(false)
+          setDetailInitialTab('detallado')
+          setDetailSession({ id: sessionId })
+        }}
+      />
+      <InventarioUbicacionesModal
+        isOpen={showManageUbicaciones}
+        onClose={() => setShowManageUbicaciones(false)}
+        ubicaciones={ubicacionesAdminData?.data ?? []}
+        onSaved={() => {
+          qc.invalidateQueries({ queryKey: ['wms-ubicaciones-admin'] })
+        }}
+        serviceOverrides={{ createUbicacion, updateUbicacion, deleteUbicacion }}
+      />
     </div>
   )
 }

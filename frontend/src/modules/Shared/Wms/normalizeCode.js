@@ -86,7 +86,8 @@ export function extractBaseCode(code) {
 
 /**
  * Generates lookup-safe code variations following the shared WMS rules.
- * Keeps the normalized code first, then slash/dash swaps, then the base code.
+ * Only slash/dash swaps are allowed. We intentionally do not collapse to
+ * a "base code" because caja numbering is part of the unique identifier.
  */
 export function generateCodeVariations(rawCode) {
   const code = normalizeCode(rawCode)
@@ -96,9 +97,6 @@ export function generateCodeVariations(rawCode) {
 
   if (code.includes('-')) variations.push(code.replace(/-/g, '/'))
   if (code.includes('/')) variations.push(code.replace(/\//g, '-'))
-
-  const baseCode = extractBaseCode(code)
-  if (baseCode && baseCode !== code) variations.push(baseCode)
 
   return [...new Set(variations)]
 }

@@ -1,10 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 
 export default function Modal({ isOpen, onClose, title, icon: Icon, children, size = 'md', footer, preventBackdropClose = false, headerAction }) {
-  const overlayRef = useRef(null)
-
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -36,9 +34,8 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          ref={overlayRef}
           className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-          onClick={(e) => { if (e.target === overlayRef.current && !preventBackdropClose) onClose() }}
+          onClick={(e) => { if (e.target === e.currentTarget && !preventBackdropClose) onClose() }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

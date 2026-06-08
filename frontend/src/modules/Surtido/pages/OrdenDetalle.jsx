@@ -49,27 +49,23 @@ function calcTraceDuration(from, to) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-function SummaryCard({ icon: Icon, label, value, color = 'warm', mono = false }) {
-  const ring = {
-    warm:    'border-warm-100 bg-warm-50',
-    primary: 'border-primary-100 bg-primary-50',
-    success: 'border-success-100 bg-success-50',
-    accent:  'border-accent-100 bg-accent-50',
-  }
-  const iconCls = {
-    warm:    'text-warm-500',
-    primary: 'text-primary-600',
-    success: 'text-success-700',
-    accent:  'text-accent-600',
+function GeneralInfoBlock({ icon: Icon, label, value, tone = 'warm', mono = false, compact = false }) {
+  const toneCls = {
+    warm: 'border-warm-100/80 bg-white/85 text-warm-500',
+    primary: 'border-primary-100/80 bg-primary-50/55 text-primary-600',
+    accent: 'border-accent-100/80 bg-accent-50/55 text-accent-600',
+    success: 'border-success-100/80 bg-success-50/55 text-success-600',
   }
   return (
-    <div className={`rounded-2xl border p-3 flex items-center gap-3 ${ring[color]} shadow-soft hover:shadow-card hover:-translate-y-0.5 transition-all duration-200`}>
-      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-white shadow-sm ${iconCls[color]}`}>
-        <Icon className="w-4 h-4" />
-      </div>
-      <div className="min-w-0">
-        <p className={`text-[10px] font-semibold uppercase tracking-wider ${iconCls[color]} opacity-70`}>{label}</p>
-        <p className={`text-sm font-bold text-warm-800 truncate mt-0.5 ${mono ? 'font-mono' : ''}`}>{value ?? '—'}</p>
+    <div className={`rounded-2xl border px-3 py-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.4)] ${toneCls[tone] || toneCls.warm}`}>
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">{label}</p>
+          <p className={`${compact ? 'text-xs' : 'text-sm'} mt-1 truncate font-bold text-warm-800 ${mono ? 'font-mono' : ''}`}>{value ?? '—'}</p>
+        </div>
       </div>
     </div>
   )
@@ -405,24 +401,45 @@ export default function OrdenDetalle() {
         }
       />
 
-      {/* Summary cards */}
+      {/* General info */}
       <div className="shrink-0 px-5 py-3 border-b border-warm-100">
-        <div className={`grid gap-3 ${hasValidation ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-7' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'}`}>
-          <SummaryCard icon={User}     label={t('surtido.ordenes.cliente')}       value={d?.customerCode || d?.customerName || '—'} mono color="warm" />
-          <SummaryCard icon={Truck}    label={t('surtido.ordenes.receiver')}      value={d?.receiverName || '—'}                    color="warm" />
-          <SummaryCard icon={Clock}    label={t('surtido.ordenes.fecha_entrega')} value={safeDate(d?.outboundTime || d?.expectedTime)} color="warm" />
-          <SummaryCard icon={Package2} label={t('surtido.ordenes.cajas')}         value={d?.outboundBoxCount ?? d?.packageCount ?? d?.totalQty ?? '—'} color="primary" />
-          <SummaryCard icon={Truck}    label={t('surtido.ordenes.canal')}         value={d?.logisticsChannel || '—'}                color="warm" />
-          <SummaryCard icon={Hash}     label={t('surtido.ordenes.referencia')}    value={referencia}                                mono color="accent" />
-          {hasValidation && (
-            <ValidationProgressCard
-              scanned={totalScanned}
-              expected={totalExpected}
-              pct={pct}
-              t={t}
-            />
-          )}
-        </div>
+        <motion.div
+          className="overflow-hidden rounded-[28px] border border-warm-100/80 bg-gradient-to-br from-white via-warm-50/55 to-primary-50/35 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.28)]"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <div className="border-b border-warm-100/80 bg-gradient-to-r from-white via-white to-primary-50/50 px-5 py-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary-500">Informacion general</p>
+              </div>
+              {hasValidation && (
+                <div className="w-full lg:w-[320px]">
+                  <ValidationProgressCard
+                    scanned={totalScanned}
+                    expected={totalExpected}
+                    pct={pct}
+                    t={t}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="px-5 py-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <GeneralInfoBlock icon={User} label={t('surtido.ordenes.cliente')} value={d?.customerCode || d?.customerName || '—'} mono />
+              <GeneralInfoBlock icon={Truck} label={t('surtido.ordenes.receiver')} value={d?.receiverName || '—'} compact />
+              <GeneralInfoBlock icon={Clock} label={t('surtido.ordenes.fecha_entrega')} value={safeDate(d?.outboundTime || d?.expectedTime)} tone="primary" compact />
+              <GeneralInfoBlock icon={Package2} label={t('surtido.ordenes.cajas')} value={d?.outboundBoxCount ?? d?.packageCount ?? d?.totalQty ?? '—'} tone="primary" />
+              <GeneralInfoBlock icon={Truck} label={t('surtido.ordenes.canal')} value={d?.logisticsChannel || '—'} compact />
+              <GeneralInfoBlock icon={Hash} label={t('surtido.ordenes.referencia')} value={referencia} tone="accent" mono compact />
+              <GeneralInfoBlock icon={BarChart3} label={t('surtido.ordenes.detail.tracking')} value={trackingNo} tone="accent" mono compact />
+              <GeneralInfoBlock icon={UserCheck} label={t('surtido.ordenes.surtidor')} value={tracking?.surtidor_nombre || '—'} tone="success" compact />
+            </div>
+          </div>
+        </motion.div>
       </div>
 
       {/* Main scrollable — single column */}

@@ -705,8 +705,64 @@ async function runMigrations() {
     `ALTER TABLE dev_ubicaciones ADD COLUMN IF NOT EXISTS modulo_uso TEXT[] DEFAULT ARRAY['todos']`,
 
     // ── 044: ubicacion_id on inventory and pick sessions ──────────────────
-    `ALTER TABLE inv_sessions  ADD COLUMN IF NOT EXISTS ubicacion_id UUID REFERENCES dev_ubicaciones(id)`,
-    `ALTER TABLE pick_sessions ADD COLUMN IF NOT EXISTS ubicacion_id UUID REFERENCES dev_ubicaciones(id)`,
+    `DO $$
+     DECLARE
+       col_type text;
+     BEGIN
+       SELECT data_type
+         INTO col_type
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'inv_sessions'
+          AND column_name = 'ubicacion_id';
+
+       IF col_type IS NULL THEN
+         EXECUTE 'ALTER TABLE inv_sessions ADD COLUMN ubicacion_id INTEGER';
+       ELSIF col_type <> 'integer' THEN
+         BEGIN
+           EXECUTE 'ALTER TABLE inv_sessions DROP CONSTRAINT IF EXISTS inv_sessions_ubicacion_id_fkey';
+           EXECUTE 'ALTER TABLE inv_sessions DROP COLUMN ubicacion_id';
+           EXECUTE 'ALTER TABLE inv_sessions ADD COLUMN ubicacion_id INTEGER';
+         EXCEPTION WHEN undefined_column THEN
+           NULL;
+         END;
+       END IF;
+
+       BEGIN
+         EXECUTE 'ALTER TABLE inv_sessions ADD CONSTRAINT inv_sessions_ubicacion_id_fkey FOREIGN KEY (ubicacion_id) REFERENCES dev_ubicaciones(id)';
+       EXCEPTION
+         WHEN duplicate_object THEN NULL;
+       END;
+     END $$`,
+    `DO $$
+     DECLARE
+       col_type text;
+     BEGIN
+       SELECT data_type
+         INTO col_type
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'pick_sessions'
+          AND column_name = 'ubicacion_id';
+
+       IF col_type IS NULL THEN
+         EXECUTE 'ALTER TABLE pick_sessions ADD COLUMN ubicacion_id INTEGER';
+       ELSIF col_type <> 'integer' THEN
+         BEGIN
+           EXECUTE 'ALTER TABLE pick_sessions DROP CONSTRAINT IF EXISTS pick_sessions_ubicacion_id_fkey';
+           EXECUTE 'ALTER TABLE pick_sessions DROP COLUMN ubicacion_id';
+           EXECUTE 'ALTER TABLE pick_sessions ADD COLUMN ubicacion_id INTEGER';
+         EXCEPTION WHEN undefined_column THEN
+           NULL;
+         END;
+       END IF;
+
+       BEGIN
+         EXECUTE 'ALTER TABLE pick_sessions ADD CONSTRAINT pick_sessions_ubicacion_id_fkey FOREIGN KEY (ubicacion_id) REFERENCES dev_ubicaciones(id)';
+       EXCEPTION
+         WHEN duplicate_object THEN NULL;
+       END;
+     END $$`,
 
     // ── 046: Google Sheets URLs on wms_config ────────────────────────────
     `ALTER TABLE wms_config ADD COLUMN IF NOT EXISTS sheet_inventory_url TEXT`,

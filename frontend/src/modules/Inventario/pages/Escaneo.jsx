@@ -7,7 +7,7 @@ import {
   Loader2, Wifi, WifiOff, Trash2, ArrowRight, MoveRight,
   Square, AlertCircle, ScanBarcode, Clock, Timer,
   RefreshCw, PanelRightClose, PanelRightOpen, Search, Maximize2,
-  MapPin, Pencil,
+  MapPin, Pencil, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -24,12 +24,41 @@ import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import { checkInventoryDuplicates, saveInventorySession } from '../services/inventarioService'
 import { getUbicaciones, createUbicacion } from '../../WmsHub/services/wmsHubService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus, getSheetUrls } from '../../WmsHub/services/googleSheetsService'
-import { fmtDateTime } from '../../../core/utils/dateFormat'
+import { fmtDateTime, toDateKey } from '../../../core/utils/dateFormat'
+import QuickCodeSearchModal from '../components/QuickCodeSearchModal'
+import { getTimeBounds } from '../utils/timeBounds'
 
 const STATUS_META = {
-  ok:      { labelKey: 'inventario.escaneo.group_disponible', bg: 'bg-success-100 text-success-700',  icon: CheckCircle2, border: 'border-l-success-400', dot: 'bg-success-400', flash: 'bg-success-50/80 border-success-200' },
-  blocked: { labelKey: 'inventario.escaneo.group_bloqueado',  bg: 'bg-warning-100 text-warning-700',  icon: AlertTriangle, border: 'border-l-warning-400', dot: 'bg-warning-400', flash: 'bg-warning-50/80 border-warning-200' },
-  nowms:   { labelKey: 'inventario.escaneo.group_nowms',      bg: 'bg-danger-100 text-danger-700',    icon: Ban, border: 'border-l-danger-400', dot: 'bg-danger-400', flash: 'bg-danger-50/80 border-danger-200' },
+  ok: {
+    labelKey: 'inventario.escaneo.group_disponible',
+    bg: 'bg-success-100 text-success-700',
+    icon: CheckCircle2,
+    flash: 'bg-success-50/80 border-success-200',
+    card: 'border-success-200/80 bg-gradient-to-br from-success-50 via-white to-success-100/70 text-success-700 shadow-[0_16px_32px_-24px_rgba(34,197,94,0.55)]',
+    pill: 'border-success-200/90 bg-gradient-to-r from-success-50 via-white to-success-100/75 text-success-700 shadow-[0_10px_22px_-18px_rgba(34,197,94,0.5)]',
+    soft: 'bg-gradient-to-br from-success-50 via-white to-success-100/75 border-success-200/80 text-success-700',
+    tint: 'from-success-50/95 via-white to-success-100/65',
+  },
+  blocked: {
+    labelKey: 'inventario.escaneo.group_bloqueado',
+    bg: 'bg-warning-100 text-warning-700',
+    icon: AlertTriangle,
+    flash: 'bg-warning-50/80 border-warning-200',
+    card: 'border-warning-200/80 bg-gradient-to-br from-warning-50 via-white to-warning-100/75 text-warning-700 shadow-[0_16px_32px_-24px_rgba(245,158,11,0.5)]',
+    pill: 'border-warning-200/90 bg-gradient-to-r from-warning-50 via-white to-warning-100/75 text-warning-700 shadow-[0_10px_22px_-18px_rgba(245,158,11,0.5)]',
+    soft: 'bg-gradient-to-br from-warning-50 via-white to-warning-100/75 border-warning-200/80 text-warning-700',
+    tint: 'from-warning-50/95 via-white to-warning-100/70',
+  },
+  nowms: {
+    labelKey: 'inventario.escaneo.group_nowms',
+    bg: 'bg-danger-100 text-danger-700',
+    icon: Ban,
+    flash: 'bg-danger-50/80 border-danger-200',
+    card: 'border-danger-200/80 bg-gradient-to-br from-danger-50 via-white to-danger-100/75 text-danger-700 shadow-[0_16px_32px_-24px_rgba(239,68,68,0.5)]',
+    pill: 'border-danger-200/90 bg-gradient-to-r from-danger-50 via-white to-danger-100/75 text-danger-700 shadow-[0_10px_22px_-18px_rgba(239,68,68,0.5)]',
+    soft: 'bg-gradient-to-br from-danger-50 via-white to-danger-100/75 border-danger-200/80 text-danger-700',
+    tint: 'from-danger-50/95 via-white to-danger-100/70',
+  },
 }
 
 const GROUPS = ['ok', 'blocked', 'nowms']
@@ -45,22 +74,39 @@ const getItemGroup = (item) => (
     : item.status
 )
 
-function useSessionTimer(createdAt) {
+function useSessionTimer(startAt, endAt = null) {
   const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
-    if (!createdAt) { setElapsed(0); return }
-    const start = new Date(createdAt).getTime()
-    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - start) / 1000)))
+    if (!startAt) { setElapsed(0); return }
+    const start = new Date(startAt).getTime()
+    const tick = () => {
+      const end = endAt ? new Date(endAt).getTime() : Date.now()
+      setElapsed(Math.max(0, Math.floor((end - start) / 1000)))
+    }
     tick()
+    if (endAt) return undefined
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [createdAt])
+  }, [startAt, endAt])
   return elapsed
 }
 
 const fmtElapsed = (secs) => {
   const m = Math.floor(secs / 60); const s = secs % 60
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+}
+
+const formatPreviewSectionCode = (tab, tabIndex = 0) => {
+  const { start } = getTimeBounds(tab?.items ?? [], { fallbackStart: tab?.createdAt || Date.now() })
+  const date = new Date(start || tab?.createdAt || Date.now())
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date
+  const dayKey = toDateKey(safeDate).replace(/-/g, '')
+  return `SEC-${dayKey}M${String(tabIndex + 1).padStart(2, '0')}`
+}
+
+const formatPreviewTarimaCode = (sectionCode, index = 0) => {
+  const dayKey = String(sectionCode).replace(/^SEC-/, '').split('M')[0] || '00000000'
+  return `PAL-${dayKey}-${String(index + 1).padStart(2, '0')}`
 }
 
 const buildCodeVariantSet = (...codes) => {
@@ -197,7 +243,7 @@ function MoveItemModal({ isOpen, onClose, onMove }) {
           const meta = STATUS_META[g]
           return (
             <button key={g} onClick={() => onMove(g)}
-              className={`w-full flex items-center gap-2 px-4 py-2.5 rounded-xl border ${meta.bg} border-current/20 hover:opacity-80 text-sm font-medium`}>
+              className={`w-full flex items-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-medium transition-all hover:-translate-y-[1px] ${meta.card}`}>
               <meta.icon size={14} /> {t(meta.labelKey)}
             </button>
           )
@@ -231,9 +277,11 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
   const { t } = useI18nStore()
   if (!tab) return null
   const counts = tab.items.reduce((a, i) => { a[i.status] = (a[i.status] || 0) + 1; return a }, {})
-  const started = new Date(tab.createdAt)
-  const durSec = Math.floor((new Date() - started) / 1000)
-  const dur = durSec < 60 ? `${durSec}s` : `${Math.floor(durSec/60)}m ${durSec%60}s`
+  const bounds = getTimeBounds(tab.items, { fallbackStart: tab.createdAt })
+  const started = bounds.start ? new Date(bounds.start) : null
+  const ended = bounds.end ? new Date(bounds.end) : null
+  const durSec = started && ended ? Math.floor((ended - started) / 1000) : 0
+  const dur = durSec < 60 ? `${durSec}s` : `${Math.floor(durSec / 60)}m ${durSec % 60}s`
   return (
     <Modal isOpen={isOpen} onClose={onContinue} title={t('inventario.escaneo.session_summary')} icon={Package}
       footer={
@@ -247,28 +295,36 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
       }
     >
       <div className="space-y-3 text-sm">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-warm-50 rounded-xl p-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-br from-white via-warm-50/70 to-warm-100/60 p-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.5)]">
             <p className="text-xs text-warm-500 uppercase tracking-wide">{t('inventario.escaneo.tipo_sesion')}</p>
             <p className="font-semibold text-warm-900 mt-0.5 capitalize">{tab.scanType}</p>
           </div>
-          <div className="bg-warm-50 rounded-xl p-3">
-            <p className="text-xs text-warm-500 uppercase tracking-wide">{t('inventario.escaneo.duration')}</p>
-            <p className="font-semibold text-warm-900 mt-0.5">{dur}</p>
+          <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-br from-white via-warm-50/70 to-warm-100/60 p-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.5)]">
+            <p className="text-xs text-warm-500 uppercase tracking-wide">Fecha inicio</p>
+            <p className="mt-1 font-mono text-xs font-medium text-warm-600">{bounds.start ? fmtDateTime(bounds.start) : '—'}</p>
           </div>
+          <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-br from-white via-warm-50/70 to-warm-100/60 p-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.5)]">
+            <p className="text-xs text-warm-500 uppercase tracking-wide">Fecha final</p>
+            <p className="mt-1 font-mono text-xs font-medium text-warm-600">{bounds.end ? fmtDateTime(bounds.end) : '—'}</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between rounded-2xl border border-primary-100/80 bg-gradient-to-r from-primary-50 via-white to-accent-50/55 px-4 py-2.5 text-xs text-primary-700 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.45)]">
+          <span className="font-semibold uppercase tracking-wide">{t('inventario.escaneo.duration')}</span>
+          <span className="font-bold">{dur}</span>
         </div>
         <div className="grid grid-cols-3 gap-2">
           {GROUPS.map(g => {
             const meta = STATUS_META[g]
             return (
-              <div key={g} className={`rounded-xl p-3 text-center ${meta.bg}`}>
-                <p className="text-2xl font-bold leading-none">{counts[g] || 0}</p>
-                <p className="text-xs mt-1">{t(meta.labelKey)}</p>
+              <div key={g} className={`rounded-2xl border p-3 text-center ${meta.card}`}>
+                <p className="text-2xl font-black leading-none">{counts[g] || 0}</p>
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em]">{t(meta.labelKey)}</p>
               </div>
             )
           })}
         </div>
-        <div className="bg-primary-50 rounded-xl px-4 py-2 flex justify-between items-center">
+        <div className="flex items-center justify-between rounded-2xl border border-primary-100/80 bg-gradient-to-r from-primary-50 via-white to-accent-50/55 px-4 py-2.5 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.42)]">
           <span className="text-warm-700">{t('inventario.escaneo.total')}</span>
           <span className="font-bold text-primary-700 text-lg">{tab.items.length}</span>
         </div>
@@ -303,6 +359,8 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
   const [notFound, setNotFound] = useState(false)
   const [notFoundCode, setNotFoundCode] = useState('')
   const locationRef = useRef(null)
+  const inputShellRef = useRef(null)
+  const [openUpward, setOpenUpward] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
@@ -312,6 +370,16 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
       setTimeout(() => locationRef.current?.focus(), 80)
     }
   }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen || !inputValue.trim() || notFound) return
+    const rect = inputShellRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const estimatedMenuHeight = 176
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    setOpenUpward(spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow)
+  }, [isOpen, inputValue, notFound, ubicaciones])
 
   function handleConfirm() {
     const val = inputValue.trim()
@@ -349,7 +417,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
       <div className="space-y-3">
         <p className="text-xs text-warm-500">{t('inventario.escaneo.ubicacion_scan_label')}</p>
         <div className="flex gap-2">
-          <div className="relative flex-1">
+          <div ref={inputShellRef} className="relative flex-1">
             <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-300" />
             <input
               ref={locationRef}
@@ -363,27 +431,30 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
               onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
               autoComplete="off"
             />
+            {suggestions.length > 0 && (
+              <div className={`absolute left-0 right-0 z-[120] max-h-44 overflow-y-auto rounded-2xl border border-accent-200 bg-white p-1.5 shadow-depth ${
+                openUpward ? 'bottom-[calc(100%+0.5rem)]' : 'top-[calc(100%+0.5rem)]'
+              }`}>
+                {suggestions.map(u => (
+                  <button
+                    key={u.id}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-accent-100 transition-colors text-xs flex items-center gap-2"
+                    onClick={() => onUbicacionConfirmed({ id: u.id, codigo: u.codigo, nombre: u.nombre })}
+                  >
+                    <MapPin size={10} className="text-accent-500 shrink-0" />
+                    <span className="font-mono font-semibold text-accent-700">{u.codigo}</span>
+                    {u.nombre && u.nombre !== u.codigo && (
+                      <span className="text-warm-500 truncate">{u.nombre}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <button className="btn-primary px-4 py-3 rounded-2xl" onClick={handleConfirm} disabled={!inputValue.trim()}>
             <CheckCircle2 size={16} />
           </button>
         </div>
-
-        {suggestions.length > 0 && (
-          <div className="space-y-1 max-h-36 overflow-y-auto">
-            {suggestions.map(u => (
-              <button key={u.id}
-                className="w-full text-left px-3 py-1.5 rounded-xl hover:bg-accent-100 transition-colors text-xs flex items-center gap-2"
-                onClick={() => onUbicacionConfirmed({ id: u.id, codigo: u.codigo, nombre: u.nombre })}>
-                <MapPin size={10} className="text-accent-500 shrink-0" />
-                <span className="font-mono font-semibold text-accent-700">{u.codigo}</span>
-                {u.nombre && u.nombre !== u.codigo && (
-                  <span className="text-warm-500 truncate">{u.nombre}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
 
         {notFound && (
           <motion.div className="rounded-2xl border border-warning-200 bg-warning-50 p-4 space-y-3"
@@ -647,6 +718,8 @@ function UnificadoPanel({ items, onRemove, onMove }) {
 }
 
 function ClasificacionPanel({
+  tab,
+  tabIndex,
   items,
   onRemove,
   onMove,
@@ -662,10 +735,22 @@ function ClasificacionPanel({
   const [inputValue, setInputValue] = useState('')
   const [notFound, setNotFound] = useState(false)
   const [notFoundCode, setNotFoundCode] = useState('')
+  const [openUpward, setOpenUpward] = useState(true)
   const inputRef = useRef(null)
+  const footerRef = useRef(null)
 
   useEffect(() => {
-    if (activeInputGroup) setTimeout(() => inputRef.current?.focus(), 50)
+    if (activeInputGroup) {
+      setTimeout(() => {
+        inputRef.current?.focus()
+        const footerRect = footerRef.current?.getBoundingClientRect()
+        if (footerRect) {
+          const spaceAbove = footerRect.top
+          const spaceBelow = window.innerHeight - footerRect.bottom
+          setOpenUpward(spaceAbove >= 220 || spaceAbove > spaceBelow)
+        }
+      }, 50)
+    }
   }, [activeInputGroup])
 
   const grouped = { ok: [], blocked: [], nowms: [] }
@@ -712,9 +797,15 @@ function ClasificacionPanel({
       ).slice(0, 4)
     : []
 
+  const sectionCode = formatPreviewSectionCode(tab, tabIndex)
+  const tarimaCards = GROUPS.map((group, index) => ({
+    group,
+    code: formatPreviewTarimaCode(sectionCode, index),
+  }))
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 xl:gap-5">
-      {GROUPS.map(g => {
+      {tarimaCards.map(({ group: g, code: tarimaCode }) => {
         const meta = STATUS_META[g]
         const groupItems = grouped[g]
         const hasItems = groupItems.length > 0
@@ -723,24 +814,29 @@ function ClasificacionPanel({
         return (
           <div
             key={g}
-            className={`card overflow-hidden border-t-4 flex flex-col min-h-[22rem] sm:min-h-[24rem] lg:min-h-[26rem] xl:min-h-0 xl:h-[clamp(24rem,52vh,32rem)] ${meta.border.replace('border-l-', 'border-t-')}`}
+            className="relative flex flex-col overflow-hidden rounded-2xl border border-warm-100/80 bg-white shadow-soft min-h-[22rem] sm:min-h-[24rem] lg:min-h-[26rem] xl:min-h-0 xl:h-[clamp(24rem,52vh,32rem)]"
           >
-            <div className={`flex items-center gap-2 px-4 py-2.5 ${meta.bg} border-b border-current/10 shrink-0`}>
-              <meta.icon size={14} />
-              <span className="font-semibold text-sm">{t(meta.labelKey)}</span>
-              <span className="inline-flex items-center justify-center min-w-[2.2rem] px-2.5 py-1 rounded-full bg-current/10 border border-current/10 text-xs font-bold">
+            <div className={`flex items-center gap-2 rounded-t-[calc(1rem-2px)] border-b px-4 py-2.5 shrink-0 bg-gradient-to-r ${meta.tint} border-current/10`}>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <meta.icon size={14} />
+                  <span className="font-semibold text-sm">{t(meta.labelKey)}</span>
+                </div>
+                <div className="mt-0.5 text-[10px] font-mono opacity-70">{tarimaCode}</div>
+              </div>
+              <span className="inline-flex items-center justify-center min-w-[2.2rem] rounded-full border border-current/10 bg-white/55 px-2.5 py-1 text-xs font-bold shadow-sm backdrop-blur-sm">
                 {groupItems.length}
               </span>
               <button
                 type="button"
                 onClick={() => onOpenDetail(g)}
-                className="ml-auto p-1.5 rounded-lg bg-current/10 text-current hover:bg-current/15 transition-colors"
+                className="ml-auto rounded-lg border border-current/10 bg-white/55 p-1.5 text-current shadow-sm backdrop-blur-sm transition-colors hover:bg-white/75"
                 title={t('inventario.escaneo.expand_group')}
               >
                 <Maximize2 size={14} />
               </button>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-warm-50">
+            <div className="flex-1 min-h-0 max-h-[42vh] overflow-y-auto overscroll-contain divide-y divide-warm-50 pr-1">
               {groupItems.length === 0 ? (
                 <p className="text-xs text-warm-400 text-center py-4">{t('common.noData')}</p>
               ) : (
@@ -770,7 +866,7 @@ function ClasificacionPanel({
               )}
             </div>
             {/* Footer: inline ubicación input or action button — no marked count */}
-            <div className="shrink-0 border-t border-warm-100 bg-warm-50/40">
+            <div ref={footerRef} className="relative shrink-0 border-t border-warm-100 bg-warm-50/40">
               {isInputActive ? (
                 <div className="px-2 py-2 space-y-1">
                   <div className="flex items-center gap-1">
@@ -804,10 +900,13 @@ function ClasificacionPanel({
                     </button>
                   </div>
                   {suggestions.length > 0 && (
-                    <div className="space-y-0.5 max-h-[4.5rem] overflow-y-auto">
+                    <div className={`absolute left-2 right-2 z-[100] overflow-hidden rounded-xl border border-accent-200 bg-white shadow-depth ${
+                      openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
+                    }`}>
+                      <div className="max-h-40 overflow-y-auto py-1">
                       {suggestions.map(u => (
                         <button key={u.id}
-                          className="w-full text-left px-2 py-0.5 rounded hover:bg-accent-50 transition-colors text-[10px] flex items-center gap-1"
+                          className="w-full text-left px-2.5 py-1.5 hover:bg-accent-50 transition-colors text-[10px] flex items-center gap-1.5"
                           onClick={() => {
                             onGroupUbicacionChange(g, { id: u.id, codigo: u.codigo, nombre: u.nombre })
                             closeInput()
@@ -819,6 +918,7 @@ function ClasificacionPanel({
                           )}
                         </button>
                       ))}
+                      </div>
                     </div>
                   )}
                   {notFound && (
@@ -878,9 +978,10 @@ function ClasificacionPanel({
 
 /* ─── Right side panel ────────────────────────────────────── */
 
-function SidePanel({ items }) {
+function SidePanel({ tab, items }) {
   const { t } = useI18nStore()
   const [search, setSearch] = useState('')
+  const [expandedKey, setExpandedKey] = useState(null)
 
   const filtered = search.trim()
     ? items.filter(item => item.code.toLowerCase().includes(search.toLowerCase()) || (item.code2 || '').toLowerCase().includes(search.toLowerCase()))
@@ -892,15 +993,33 @@ function SidePanel({ items }) {
     return a
   }, {})
 
+  const sectionCode = formatPreviewSectionCode(tab, 0)
+  const tarimas = filtered.reduce((acc, item) => {
+    const group = tab?.scanType === 'unificado' ? 'unificado' : getItemGroup(item)
+    const key = group || 'nowms'
+    if (!acc[key]) {
+      acc[key] = {
+        key,
+        label: key === 'unificado' ? 'Unificado' : GROUP_SHORT_LABEL[group] || group,
+        status: key === 'unificado' ? 'ok' : group,
+        items: [],
+      }
+    }
+    acc[key].items.push(item)
+    return acc
+  }, {})
+
+  const tarimaCards = Object.values(tarimas)
+
   return (
-    <div className="hidden lg:flex w-72 border-l border-warm-100 bg-white flex-col shrink-0">
+    <div className="hidden lg:flex w-80 border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shrink-0 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]">
       <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50">
         <h4 className="text-xs font-bold text-warm-700 mb-2 uppercase tracking-wider">{t('inventario.escaneo.panel_title')}</h4>
-        <div className="flex gap-2 mb-2.5">
+        <div className="flex gap-2 mb-2.5 rounded-2xl border border-primary-100/70 bg-gradient-to-br from-primary-50/85 via-white to-white p-1.5 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.55)]">
           {GROUPS.map(g => {
             const meta = STATUS_META[g]
             return (
-              <div key={g} className={`flex-1 rounded-lg px-2 py-1.5 text-center ${meta.bg}`}>
+              <div key={g} className={`flex-1 rounded-xl border px-2 py-1.5 text-center ring-1 ring-white/70 ${meta.card}`}>
                 <p className="text-base font-bold leading-none">{counts[g] || 0}</p>
                 <p className="text-[9px] mt-0.5 font-semibold uppercase tracking-wide">
                   {GROUP_SHORT_LABEL[g]}
@@ -909,38 +1028,65 @@ function SidePanel({ items }) {
             )
           })}
         </div>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-warm-400" />
+        <div className="flex items-center gap-1.5 rounded-2xl border border-primary-100/80 bg-gradient-to-r from-white via-primary-50/55 to-white px-3 h-11 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.6)] transition-all focus-within:border-primary-300 focus-within:ring-2 focus-within:ring-primary-100">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100/80 shadow-inner">
+            <Search className="w-3.5 h-3.5 text-primary-500 shrink-0" />
+          </div>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={t('inventario.escaneo.panel_search')}
-            className="input-field pl-7 pr-2 text-xs"
+            className="flex-1 min-w-0 bg-transparent pr-1 text-xs text-warm-700 outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {filtered.length === 0 ? (
+      <div className="flex-1 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
+        {tarimaCards.length === 0 ? (
           <div className="py-8 text-center text-xs text-warm-400">{t('inventario.escaneo.panel_empty')}</div>
         ) : (
-          [...filtered].reverse().map((item, i) => {
-            const meta = STATUS_META[getItemGroup(item)] ?? STATUS_META.nowms
+          tarimaCards.map((tarima, index) => {
+            const meta = STATUS_META[tarima.status] ?? STATUS_META.nowms
+            const isExpanded = expandedKey === tarima.key
+            const tarimaCode = formatPreviewTarimaCode(sectionCode, index)
             return (
-              <div key={i} className={`px-3 py-2 rounded-xl border ${meta.flash || 'bg-warm-50 border-warm-100'} transition-all ${item.marked ? 'ring-1 ring-primary-200' : ''}`}>
-                <div className="flex items-center justify-between gap-1">
-                  <span className="font-mono text-xs font-semibold text-warm-900 truncate">{item.code}</span>
-                  <span className={`badge text-[9px] shrink-0 ${meta.bg}`}>{GROUP_SHORT_LABEL[getItemGroup(item)] || t(meta.labelKey)}</span>
-                </div>
-                {item.code2 && (
-                  <p className="font-mono text-[10px] text-warm-400 truncate mt-0.5">
-                    {item.wasSwapped && <span className="text-accent-500 mr-1">SWAP</span>}{item.code2}
-                  </p>
-                )}
-                <p className="text-[10px] text-warm-400 truncate mt-0.5">
-                  {item.ts ? fmtDateTime(item.ts) : '—'}
-                  {' / '}
-                  {item.location || '—'}
-                </p>
+              <div key={tarima.key} className={`rounded-2xl border bg-white shadow-[0_14px_30px_-24px_rgba(15,23,42,0.32)] transition-all hover:shadow-[0_20px_38px_-26px_rgba(37,99,235,0.32)] ${meta.flash || 'border-warm-200/90'}`}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedKey(isExpanded ? null : tarima.key)}
+                  className="flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left"
+                >
+                  <div className="min-w-0">
+                    <p className="font-mono font-bold text-xs text-warm-900 truncate">{tarimaCode}</p>
+                    <p className="mt-0.5 font-mono text-[10px] text-warm-500">{sectionCode}</p>
+                    <p className="mt-1 text-[10px] text-warm-500">{tarima.items.length} cajas · {tarima.label}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-wide ${meta.pill}`}>{GROUP_SHORT_LABEL[tarima.status] || t(meta.labelKey)}</span>
+                    {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-warm-400" /> : <ChevronDown className="h-3.5 w-3.5 text-warm-400" />}
+                  </div>
+                </button>
+                <AnimatePresence initial={false}>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden border-t border-warm-100/70"
+                    >
+                      <div className="max-h-56 overflow-y-auto px-3 py-2 space-y-1.5">
+                        {tarima.items.map((item, itemIndex) => (
+                          <div key={`${tarima.key}-${item.code}-${itemIndex}`} className={`rounded-xl border border-warm-100/90 bg-white px-2.5 py-2 shadow-[0_8px_18px_-18px_rgba(15,23,42,0.35)] ${item.marked ? 'ring-1 ring-primary-200' : ''}`}>
+                            <p className="font-mono text-[11px] font-semibold text-warm-900 truncate">{item.code}</p>
+                            <p className="font-mono text-[10px] text-warm-400 truncate mt-0.5">{item.code2 || '—'}</p>
+                            <p className="text-[10px] text-warm-400 truncate mt-0.5">
+                              {item.ts ? fmtDateTime(item.ts) : '—'} / {item.location || '—'}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )
           })
@@ -970,9 +1116,12 @@ export default function Escaneo() {
   const boxStockQuery = useBoxStock()
   const { isPending: isSyncing, pendingCount } = useAutoSync()
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('inventory'))
+  const [refreshState, setRefreshState] = useState('idle')
+  const [refreshMessage, setRefreshMessage] = useState('')
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? null
-  const sessionElapsed = useSessionTimer(activeTab?.createdAt)
+  const sessionBounds = getTimeBounds(activeTab?.items ?? [], { fallbackStart: activeTab?.createdAt })
+  const sessionElapsed = useSessionTimer(sessionBounds.start || activeTab?.createdAt)
   const summary = activeTab?.items.reduce((acc, item) => {
     const group = getItemGroup(item)
     acc[group] = (acc[group] || 0) + 1
@@ -989,6 +1138,8 @@ export default function Escaneo() {
       partial={inventoryPartial}
       onRefresh={handleSheetRefresh}
       refreshing={boxStockQuery.isFetching}
+      refreshState={refreshState}
+      refreshMessage={refreshMessage}
     />
   )
 
@@ -1008,6 +1159,7 @@ export default function Escaneo() {
   const [showPanel, setShowPanel] = useState(false)
   const [closeTabPending, setCloseTabPending] = useState(null) // { tabId, count }
   const [groupDetail, setGroupDetail] = useState(null)
+  const [showQuickSearch, setShowQuickSearch] = useState(false)
 
   const buildSessionDuplicateConflicts = useCallback((codes) => {
     if (!activeTab) return []
@@ -1090,20 +1242,28 @@ export default function Escaneo() {
         ubicacion_id: ubicacionId || null,
         tarima_code: null,
         scans: tab.items.map(item => ({
-          scanned_code: item.raw, normalized_code: item.code, code2: item.code2 || null,
+          scanned_code: item.raw || item.scanned_code || item.code || item.normalized_code || item.code2 || '',
+          normalized_code: item.code || item.normalized_code || item.raw || item.scanned_code || item.code2 || '',
+          code2: item.code2 || null,
           was_swapped: item.wasSwapped || false, scan_status: item.status,
           sku: item.sku !== '-' ? item.sku : null, product_name: item.product !== '-' ? item.product : null,
           cell_no: item.location !== '-' ? item.location : null,
+          scanned_at: item.ts ? new Date(item.ts).toISOString() : null,
           group_assignment: isClasificacion ? getItemGroup(item) : 'unificado',
         })),
       })
     },
     onSuccess: () => {
-      closeTab(activeTabId); setShowSummaryModal(false); setUbicacionId(null)
+      setShowSummaryModal(false)
+      setUbicacionId(null)
+      closeTab(activeTabId)
       toast.success(t('inventario.escaneo.session_started'))
-      navigate('/Inventario/registros')
+      setTimeout(() => scanRef.current?.focus(), 80)
     },
-    onError: () => toast.error(t('toast.error')),
+    onError: (error) => {
+      const message = error?.response?.data?.error || error?.message || t('toast.error')
+      toast.error(message)
+    },
   })
 
   const createUbicacionMut = useMutation({
@@ -1122,10 +1282,23 @@ export default function Escaneo() {
         setShowSummaryModal(true)
       }
     },
-    onError: () => toast.error(t('toast.error')),
+    onError: (error) => {
+      const message = error?.response?.data?.error
+        || (error?.message === 'Network Error' ? 'No se pudo conectar con el backend en :3002 para crear la ubicación' : null)
+        || t('toast.error')
+      toast.error(message)
+    },
   })
 
   function handleFinalize() {
+    if (!activeTab || activeTab.items.length === 0) {
+      if (activeTabId) closeTab(activeTabId)
+      setShowUbicacionModal(false)
+      setShowSummaryModal(false)
+      setUbicacionValidated(null)
+      setUbicacionId(null)
+      return
+    }
     setUbicacionValidated(null)
     setUbicacionId(null)
     setShowUbicacionModal(true)
@@ -1191,9 +1364,25 @@ export default function Escaneo() {
   }
 
   async function handleSheetRefresh() {
-    await refreshSheet('inventory')
-    setSheetTs(getCacheTimestamp('inventory'))
-    await boxStockQuery.refetch()
+    setRefreshState('loading')
+    setRefreshMessage('Actualizando inventario...')
+    try {
+      await refreshSheet('inventory')
+      setSheetTs(getCacheTimestamp('inventory'))
+      await boxStockQuery.refetch()
+      setRefreshState('success')
+      setRefreshMessage('Inventario actualizado')
+      toast.success('Inventario actualizado')
+    } catch (error) {
+      setRefreshState('error')
+      setRefreshMessage(error?.message || 'Error al actualizar')
+      toast.error(error?.message || t('toast.error'))
+    } finally {
+      window.setTimeout(() => {
+        setRefreshState('idle')
+        setRefreshMessage('')
+      }, 2200)
+    }
   }
 
   function confirmCloseTab() {
@@ -1205,7 +1394,7 @@ export default function Escaneo() {
 
   const doAddItem = useCallback((newItem) => {
     addScanItem(newItem)
-    playSound(newItem.status === 'ok' ? 'success' : newItem.status === 'blocked' ? 'warning' : 'error')
+    playSound('success')
     setLastScan({ status: newItem.status, code: newItem.code })
   }, [addScanItem])
 
@@ -1326,24 +1515,14 @@ export default function Escaneo() {
     <div className="flex flex-col h-full">
       <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')}
         actions={
-          <div className="flex items-center gap-1.5 flex-wrap justify-end">
-            {inventoryHeaderSummary}
-            {pendingCount > 0 && (
-              <span className="px-3 py-2 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
-                {isSyncing ? <Loader2 size={13} className="animate-spin" /> : <WifiOff size={13} />}
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              {inventoryHeaderSummary}
+              {pendingCount > 0 && (
+                <span className="px-3 py-2 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
+                  {isSyncing ? <Loader2 size={13} className="animate-spin" /> : <WifiOff size={13} />}
                 {pendingCount}
               </span>
             )}
-            {/* Panel toggle */}
-            <button
-              onClick={() => setShowPanel(v => !v)}
-              className={`px-3 py-2 rounded-xl transition-all hidden lg:inline-flex items-center gap-2 text-sm font-semibold ${
-                showPanel ? 'text-primary-600 bg-primary-50' : 'text-warm-500 bg-warm-100 hover:bg-warm-200'
-              }`}
-            >
-              {showPanel ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-              <span>{t('inventario.escaneo.panel_btn')}</span>
-            </button>
             {/* Cancel session */}
             {activeTab && (
               <button
@@ -1356,19 +1535,30 @@ export default function Escaneo() {
             )}
             {/* Finalizar session */}
             {activeTab && (
-              <button
-                className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
-                onClick={handleFinalize}
-                disabled={activeTab.items.length === 0}>
-                <Square className="w-4 h-4" /> {t('common.finalize')}
-              </button>
+              activeTab.scanType === 'unificado' ? (
+                <button
+                  className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+                  onClick={handleFinalize}
+                  disabled={saveSessionMut.isPending}>
+                  <Square className="w-4 h-4" /> {t('common.finalize')}
+                </button>
+              ) : null
             )}
+            <button
+              type="button"
+              onClick={() => setShowQuickSearch(true)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-warm-100 text-warm-400 transition-all duration-200 hover:bg-primary-50 hover:text-primary-600"
+              title="Búsqueda rápida"
+              aria-label="Búsqueda rápida"
+            >
+              <Search size={16} />
+            </button>
           </div>
         }
       />
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1.5 px-4 pt-3 pb-0 border-b border-warm-100 bg-white overflow-x-auto">
+      <div className="flex items-center gap-1.5 px-4 pt-3 pb-0 border-b border-warm-100 bg-white overflow-x-auto overflow-y-hidden">
         {tabs.map(tab => {
           const isActive = tab.id === activeTabId
           const dotColor = tab.scanType === 'clasificacion' ? 'bg-accent-400' : 'bg-primary-400'
@@ -1436,21 +1626,21 @@ export default function Escaneo() {
                   </div>
                 </div>
               <div className="grid grid-cols-4 gap-2 pt-2 border-t border-warm-100">
-                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-success-50 border border-success-100">
+                  <div className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 ${STATUS_META.ok.soft}`}>
                     <CheckCircle2 className="w-3.5 h-3.5 text-success-500 shrink-0" />
                     <div>
                       <p className="text-lg font-extrabold text-success-600 leading-none">{summary.ok}</p>
                       <p className="text-[8px] text-success-600 uppercase tracking-wider font-bold">{t('inventario.escaneo.ok_abbr')}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-warning-50 border border-warning-100">
+                  <div className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 ${STATUS_META.blocked.soft}`}>
                     <AlertTriangle className="w-3.5 h-3.5 text-warning-500 shrink-0" />
                     <div>
                       <p className="text-lg font-extrabold text-warning-600 leading-none">{summary.blocked}</p>
                       <p className="text-[8px] text-warning-600 uppercase tracking-wider font-bold">{t('inventario.escaneo.blocked_abbr')}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-danger-50 border border-danger-100">
+                  <div className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 ${STATUS_META.nowms.soft}`}>
                     <Ban className="w-3.5 h-3.5 text-danger-500 shrink-0" />
                     <div>
                       <p className="text-lg font-extrabold text-danger-600 leading-none">{summary.nowms}</p>
@@ -1553,6 +1743,8 @@ export default function Escaneo() {
               {/* Items panel */}
               {activeTab.scanType === 'clasificacion' ? (
                 <ClasificacionPanel
+                  tab={activeTab}
+                  tabIndex={tabs.findIndex((tab) => tab.id === activeTab.id)}
                   items={activeTab.items}
                   onRemove={idx => removeItem(activeTabId, idx)}
                   onMove={idx => setMoveTarget(idx)}
@@ -1573,9 +1765,20 @@ export default function Escaneo() {
             </div>
           </div>
 
+          <div className="hidden lg:flex shrink-0 items-start pt-4 pr-2">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+              onClick={() => setShowPanel(v => !v)}
+              title={showPanel ? 'Ocultar panel' : 'Mostrar panel'}
+            >
+              {showPanel ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+            </button>
+          </div>
+
           {/* Right side panel */}
           {showPanel && (
-            <SidePanel items={activeTab.items} />
+            <SidePanel tab={activeTab} items={activeTab.items} />
           )}
         </div>
       )}
@@ -1636,6 +1839,10 @@ export default function Escaneo() {
         onToggleMarked={idx => activeTabId && toggleItemMarked(activeTabId, idx)}
         onMarkVisible={indices => activeTabId && groupDetail && setItemsMarkedByGroup(activeTabId, groupDetail, true, indices)}
         onClearVisible={indices => activeTabId && groupDetail && setItemsMarkedByGroup(activeTabId, groupDetail, false, indices)}
+      />
+      <QuickCodeSearchModal
+        isOpen={showQuickSearch}
+        onClose={() => setShowQuickSearch(false)}
       />
     </div>
   )

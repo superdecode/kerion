@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
   X, CheckCircle2, XCircle, AlertTriangle, Copy, Check,
   Clock, ScanBarcode, Package2, BadgeCheck, User, Timer,
-  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Pencil, Trash2,
+  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Pencil, Trash2, Search, ChevronRight,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -13,7 +14,7 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { fmtDateTime, getToday, subtractDays } from '../../../core/utils/dateFormat'
+import { fmtDateTime, getToday, subtractDays, fmtDate } from '../../../core/utils/dateFormat'
 import {
   getScanSessions, getScanSession, getOutboundList, getRecords,
   updateScanEvent, deleteScanEvent, addManualScanEvent, getManualEntryReasons, deleteScanSession,
@@ -446,11 +447,205 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   )
 }
 
+function QuickSearchModal({ isOpen, onClose, onValidate }) {
+  const { t } = useI18nStore()
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState(null)
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchError, setSearchError] = useState(null)
+  const inputRef = useRef(null)
+
+  const { data: trackingData } = useQuery({
+    queryKey: ['wms-scan-sessions-quick'],
+    queryFn: () => getScanSessions({ pageSize: 500 }),
+    staleTime: 60000,
+    enabled: isOpen,
+  })
+
+  useEffect(() => {
+    if (isOpen) {
+      setQuery('')
+      setResults(null)
+      setSearchError(null)
+      setTimeout(() => inputRef.current?.focus(), 80)
+    }
+  }, [isOpen])
+
+  const trackingMap = useMemo(() => {
+    const raw = getRecords(trackingData)
+    const map = new Map()
+    raw.forEach(s => { if (s.outbound_order_no) map.set(s.outbound_order_no, s) })
+    return map
+  }, [trackingData])
+
+  async function doSearch(q) {
+    if (!q.trim()) return
+    setIsSearching(true)
+    setSearchError(null)
+    try {
+      const data = await getOutboundList()
+      const all = getRecords(data)
+      if (all.length === 0) {
+        setSearchError('La hoja de salidas no contiene registros. Verifica la configuracion en WmsHub.')
+        setResults([])
+        return
+      }
+      const norm = q.trim().toLowerCase()
+      const filtered = all.filter(r =>
+        (r.outboundOrderNo || '').toLowerCase().includes(norm) ||
+        (r.thirdOrderNo || '').toLowerCase().includes(norm) ||
+        (r.logisticsTrackNo || '').toLowerCase().includes(norm) ||
+        (r.receiverName || '').toLowerCase().includes(norm) ||
+        (r.customizeCode || '').toLowerCase().includes(norm) ||
+        (r.boxType || '').toLowerCase().includes(norm)
+      )
+      setResults(filtered.slice(0, 20))
+    } catch (err) {
+      const code = err?.code
+      if (code === 'SHEET_NOT_CONFIGURED') {
+        setSearchError('La hoja de salidas no esta configurada. Ve a WmsHub -> Configuracion y guarda la URL de salidas.')
+      } else if (code === 'SHEET_EMPTY') {
+        setSearchError('La hoja de Google Sheets esta vacia o tiene menos de 2 filas. Verifica el contenido.')
+      } else if (err?.message?.includes('HTTP')) {
+        setSearchError(`Error al obtener la hoja: ${err.message}. Verifica la URL y los permisos de acceso.`)
+      } else {
+        setSearchError(`Error de conexion: ${err?.message ?? 'desconocido'}. Verifica tu red y la URL configurada en WmsHub.`)
+      }
+      setResults(null)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.validacion.quick_search_title')} icon={Search} size="lg">
+      <div className="space-y-4">
+        <div className="flex gap-2">
+          <div className="flex-1 flex items-center gap-2 h-12 bg-warm-50 border-2 border-warm-200 rounded-2xl px-4 transition-all focus-within:border-primary-400 focus-within:shadow-sm overflow-hidden">
+            <ScanBarcode className="w-4 h-4 text-warm-300 shrink-0" />
+            <input
+              ref={inputRef}
+              type="text"
+              className="flex-1 min-w-0 h-full text-base bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-warm-300 font-mono tracking-wide"
+              placeholder={t('surtido.validacion.quick_search_placeholder')}
+              value={query}
+              onChange={e => { setQuery(e.target.value); setSearchError(null) }}
+              onKeyDown={e => { if (e.key === 'Enter' && query.trim()) doSearch(query.trim()) }}
+            />
+          </div>
+          <button
+            className="btn-primary px-5 h-12 shadow-glow"
+            onClick={() => doSearch(query.trim())}
+            disabled={!query.trim() || isSearching}
+          >
+            {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+          </button>
+        </div>
+
+        {searchError && (
+          <div className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 flex items-start gap-3 text-sm">
+            <AlertTriangle className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
+            <p className="text-danger-700 leading-snug">{searchError}</p>
+          </div>
+        )}
+
+        {!searchError && results === null && (
+          <div className="text-center py-10 text-sm text-warm-400">
+            {t('surtido.validacion.quick_search_hint')}
+          </div>
+        )}
+
+        {!searchError && results && results.length === 0 && (
+          <div className="text-center py-10 text-sm text-warm-400">
+            {t('surtido.validacion.quick_search_empty')}
+          </div>
+        )}
+
+        {results && results.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[58vh] overflow-y-auto scrollbar-thin pr-1">
+            {results.map(r => {
+              const tracking = trackingMap.get(r.outboundOrderNo)
+              const pct = tracking && (tracking.total_expected ?? 0) > 0
+                ? Math.min(100, Math.round(((tracking.total_scanned ?? 0) / tracking.total_expected) * 100))
+                : null
+              const isComplete = tracking?.status === 'complete'
+              const isValidating = tracking?.status === 'validating'
+
+              let statusBadge = null
+              if (tracking) {
+                statusBadge = isComplete
+                  ? <span className="badge text-[10px] bg-success-100 text-success-700 shrink-0">Completa</span>
+                  : isValidating
+                  ? <span className="badge text-[10px] bg-primary-100 text-primary-700 shrink-0">Validando</span>
+                  : <span className="badge text-[10px] bg-warm-100 text-warm-600 shrink-0">{tracking.status}</span>
+              } else {
+                statusBadge = <span className="badge text-[10px] bg-warm-100 text-warm-500 shrink-0">{t('surtido.validacion.card_not_validated')}</span>
+              }
+
+              return (
+                <div key={r.outboundOrderNo} className="rounded-2xl border border-warm-200 bg-white shadow-sm hover:shadow-md hover:border-primary-200 transition-all overflow-hidden flex flex-col">
+                  <div className="px-4 py-2.5 bg-gradient-to-r from-primary-50 to-accent-50/40 border-b border-warm-100 flex items-center justify-between gap-2">
+                    <span className="font-mono font-bold text-sm text-warm-900 truncate">{r.outboundOrderNo}</span>
+                    {statusBadge}
+                  </div>
+
+                  <div className="px-4 py-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs flex-1">
+                    <div>
+                      <p className="text-warm-400 uppercase tracking-wide text-[10px]">{t('surtido.validacion.card_delivery')}</p>
+                      <p className="font-medium text-warm-700 mt-0.5 truncate">{r.outboundTime ? fmtDate(r.outboundTime) : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-warm-400 uppercase tracking-wide text-[10px]">{t('surtido.validacion.card_destination')}</p>
+                      <p className="font-medium text-warm-700 mt-0.5 truncate">{r.receiverName || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-warm-400 uppercase tracking-wide text-[10px]">{t('surtido.validacion.card_channel')}</p>
+                      <p className="font-medium text-warm-700 mt-0.5 truncate">{r.logisticsChannel || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-warm-400 uppercase tracking-wide text-[10px]">{t('surtido.validacion.card_boxes')}</p>
+                      <p className="font-bold text-warm-800 mt-0.5">{r.outboundBoxCount || '—'}</p>
+                    </div>
+                  </div>
+
+                  {pct !== null && (
+                    <div className="px-4 pb-2 space-y-1">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-warm-400 uppercase tracking-wide">{t('surtido.validacion.card_progress')}</span>
+                        <span className={`font-bold ${isComplete ? 'text-success-600' : 'text-primary-600'}`}>
+                          {tracking.total_scanned ?? 0}/{tracking.total_expected ?? '?'} · {pct}%
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${isComplete ? 'bg-success-400' : 'bg-primary-400'}`}
+                          style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="px-4 pb-3 pt-1">
+                    <button
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 active:bg-primary-800 transition-colors shadow-sm"
+                      onClick={() => { onValidate(r.outboundOrderNo); onClose() }}>
+                      <ScanBarcode size={11} /> {t('surtido.validacion.card_validate')}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
 export default function SurtidoRegistros() {
   const { t } = useI18nStore()
   const { hasPermission } = useAuthStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const canExport = hasPermission('surtido.registros', 'actualizar')
   const canEdit = hasPermission('surtido.validacion', 'actualizar')
   const canDelete = hasPermission('surtido.validacion', 'eliminar')
@@ -471,6 +666,7 @@ export default function SurtidoRegistros() {
   const [deleteConfirmSession, setDeleteConfirmSession] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [exportingBulk, setExportingBulk] = useState(false)
+  const [showQuickSearch, setShowQuickSearch] = useState(false)
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['surtido-sessions', { page, pageSize, search: search.trim(), statusFilter, dateFrom, dateTo }],
@@ -672,6 +868,14 @@ export default function SurtidoRegistros() {
               }}
             />
           </div>
+
+          <button
+            className="h-10 px-4 rounded-xl bg-warm-100 text-warm-600 text-xs font-semibold hover:bg-warm-200 transition-all flex items-center gap-2"
+            onClick={() => setShowQuickSearch(true)}
+            title={t('surtido.validacion.quick_search_title')}>
+            <Search size={14} />
+            <span className="hidden sm:inline">{t('surtido.validacion.quick_search_title')}</span>
+          </button>
 
           {(searchInput || statusFilter || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
             <button
@@ -903,6 +1107,12 @@ export default function SurtidoRegistros() {
           </div>
         </div>
       </Modal>
+
+      <QuickSearchModal
+        isOpen={showQuickSearch}
+        onClose={() => setShowQuickSearch(false)}
+        onValidate={(obc) => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}
+      />
     </div>
   )
 }

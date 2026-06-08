@@ -15,7 +15,15 @@ function formatSyncDate(ts, locale) {
   }
 }
 
-export default function DataSyncStatus({ records = 0, updatedAt = null, partial = false, onRefresh, refreshing = false }) {
+export default function DataSyncStatus({
+  records = 0,
+  updatedAt = null,
+  partial = false,
+  onRefresh,
+  refreshing = false,
+  refreshState = 'idle',
+  refreshMessage = '',
+}) {
   const { t, locale } = useI18nStore()
   const tone = partial
     ? 'border-warning-200/60 bg-warning-50/45 text-warning-800'
@@ -44,11 +52,28 @@ export default function DataSyncStatus({ records = 0, updatedAt = null, partial 
           type="button"
           onClick={onRefresh}
           disabled={refreshing}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 bg-white/70 text-warm-700 transition-all hover:bg-white disabled:opacity-50"
+          className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 transition-all hover:bg-white disabled:opacity-50 ${
+            refreshState === 'success'
+              ? 'bg-success-100 text-success-700'
+              : refreshState === 'error'
+              ? 'bg-danger-100 text-danger-700'
+              : 'bg-white/70 text-warm-700'
+          }`}
           title={t('wmshub.config.sheet_refresh')}
         >
           <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
         </button>
+      )}
+      {refreshMessage && (
+        <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none ${
+          refreshState === 'success'
+            ? 'bg-success-100/90 text-success-700'
+            : refreshState === 'error'
+            ? 'bg-danger-100/90 text-danger-700'
+            : 'bg-primary-100/90 text-primary-700'
+        }`}>
+          {refreshMessage}
+        </span>
       )}
     </div>
   )

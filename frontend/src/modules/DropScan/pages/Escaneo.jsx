@@ -1038,11 +1038,6 @@ export default function Escaneo() {
               {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
               <span className="hidden sm:inline">{soundEnabled ? t('scan.sound') : t('scan.mute')}</span>
             </button>
-            <button onClick={() => setShowPanel(!showPanel)}
-              className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all hidden lg:inline-flex items-center gap-2 text-sm font-semibold">
-              {showPanel ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
-              <span>{t('scan.panel')}</span>
-            </button>
             {tab && tab.tarima && (tab.tarima.cantidad_guias || 0) > 0 && (
               <button onClick={() => setShowRecount(true)}
                 className="px-3 py-2 rounded-xl text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-2 text-sm font-semibold">
@@ -1419,26 +1414,39 @@ export default function Escaneo() {
             </div>
           </div>
 
+          <div className="hidden lg:flex shrink-0 items-start pt-4 pr-2">
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+              onClick={() => setShowPanel(!showPanel)}
+              title={showPanel ? 'Ocultar panel' : 'Mostrar panel'}
+            >
+              {showPanel ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+            </button>
+          </div>
+
           {/* Right panel */}
           {showPanel && (
-            <div className="hidden lg:flex w-80 border-l border-warm-100 bg-white flex-col shrink-0 animate-fade-in">
+            <div className="hidden lg:flex w-80 border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shrink-0 animate-fade-in shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]">
               <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50">
                 <h4 className="text-sm font-bold text-warm-700 mb-2">{t('scan.sessionPallets')}</h4>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-400" />
+                <div className="flex items-center gap-1.5 rounded-2xl border border-primary-100/80 bg-gradient-to-r from-white via-primary-50/55 to-white px-3 h-11 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.6)] transition-all focus-within:border-primary-300 focus-within:ring-2 focus-within:ring-primary-100">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100/80 shadow-inner">
+                    <Search className="w-3.5 h-3.5 text-primary-500 shrink-0" />
+                  </div>
                   <input value={tab.panelSearch} onChange={e => updateTab(activeTabId, { panelSearch: e.target.value })}
-                    placeholder={t('scan.searchPallet')} className="input-field pl-9 pr-3 text-xs" />
+                    placeholder={t('scan.searchPallet')} className="flex-1 min-w-0 bg-transparent pr-1 text-xs text-warm-700 outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2">
+              <div className="flex-1 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
                 {filteredPanel.filter(Boolean).length === 0
                   ? <div className="py-8 text-center text-xs text-warm-400">{t('scan.noPalletsYet')}</div>
                   : filteredPanel.filter(Boolean).map(pallet => (
                       <div key={pallet.id} onClick={() => updateTab(activeTabId, { panelDetailId: pallet.id })}
-                        className={`p-3 rounded-xl border transition-all cursor-pointer ${
-                          pallet.isCurrent ? 'border-primary-200 bg-primary-50/50 shadow-sm'
-                          : pallet.estado === 'CANCELADA' ? 'border-danger-100 bg-danger-50/30 hover:border-danger-200'
-                          : 'border-warm-100 hover:border-warm-200 hover:bg-warm-50'}`}>
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer shadow-[0_14px_30px_-24px_rgba(15,23,42,0.32)] ${
+                          pallet.isCurrent ? 'border-primary-200 bg-gradient-to-br from-primary-50 via-white to-accent-50/50 shadow-[0_18px_34px_-24px_rgba(37,99,235,0.4)]'
+                          : pallet.estado === 'CANCELADA' ? 'border-danger-100 bg-white hover:border-danger-200 hover:bg-danger-50/25'
+                          : 'border-warm-200/90 bg-white hover:border-primary-100 hover:bg-gradient-to-br hover:from-white hover:to-primary-50/30 hover:shadow-[0_20px_38px_-26px_rgba(37,99,235,0.35)]'}`}>
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="text-xs font-bold text-warm-700 font-mono">{pallet.codigo}</span>
                           {pallet.isCurrent

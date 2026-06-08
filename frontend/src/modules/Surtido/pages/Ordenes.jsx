@@ -476,21 +476,22 @@ function AssignModal({ isOpen, order, onClose, onAssign }) {
   )
 }
 
-function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose, onAssign, onStatusChange, onSaveNotes, t }) {
+function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose, onSave, isSaving, t }) {
   const navigate = useNavigate()
   const [localSurtidorId, setLocalSurtidorId] = useState('')
   const [localNotes, setLocalNotes] = useState('')
+  const [localStatus, setLocalStatus] = useState('pending_assignment')
 
   useEffect(() => {
     if (isOpen) {
       const current = surtidores.find(s => s.nombre === tracking?.surtidor_nombre)
       setLocalSurtidorId(current?.id ? String(current.id) : '')
       setLocalNotes(tracking?.notes || '')
+      setLocalStatus(tracking?.status || 'pending_assignment')
     }
   }, [isOpen, tracking, surtidores])
 
-  const status = tracking?.status || 'pending_assignment'
-  const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
+  const meta = STATUS_META[localStatus] ?? STATUS_META.pending_assignment
   const cliente = wmsRecord?.customerCode || wmsRecord?.customerName || '—'
   const destino = wmsRecord?.receiverName || '—'
   const cajas = wmsRecord?.outboundBoxCount ?? wmsRecord?.packageCount ?? '—'
@@ -552,22 +553,14 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
               {/* Assign surtidor */}
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wider">{t('surtido.ordenes.surtidor')}</p>
-                <div className="flex gap-2">
-                  <select
-                    value={localSurtidorId}
-                    onChange={e => setLocalSurtidorId(e.target.value)}
-                    className="flex-1 h-10 pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all cursor-pointer"
-                  >
-                    <option value="">{t('surtido.ordenes.no_surtidor')}</option>
-                    {surtidores.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
-                  </select>
-                  <button
-                    onClick={() => onAssign(localSurtidorId ? Number(localSurtidorId) : null)}
-                    className="px-4 h-10 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 transition-colors shrink-0"
-                  >
-                    {t('common.save')}
-                  </button>
-                </div>
+                <select
+                  value={localSurtidorId}
+                  onChange={e => setLocalSurtidorId(e.target.value)}
+                  className="w-full h-10 pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all cursor-pointer"
+                >
+                  <option value="">{t('surtido.ordenes.no_surtidor')}</option>
+                  {surtidores.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
+                </select>
               </div>
 
               {/* Change status */}
@@ -576,13 +569,12 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                 <div className="grid grid-cols-2 gap-2">
                   {STATUS_FILTER_KEYS.map(k => {
                     const m = STATUS_META[k]
-                    const isActive = status === k
                     return (
                       <button
                         key={k}
-                        onClick={() => { onStatusChange([obc], k) }}
+                        onClick={() => setLocalStatus(k)}
                         className={`px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all ${
-                          isActive
+                          localStatus === k
                             ? `${m.cls} border-current ring-1 ring-current/30`
                             : 'bg-warm-50 text-warm-500 border-warm-200 hover:border-warm-300 hover:text-warm-700'
                         }`}
@@ -604,31 +596,39 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                   placeholder="Agregar nota sobre esta orden..."
                   className="w-full rounded-xl border border-warm-200 bg-warm-50 px-3 py-2.5 text-xs text-warm-700 outline-none resize-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all"
                 />
-                <button
-                  onClick={() => onSaveNotes(localNotes)}
-                  className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold bg-warm-100 text-warm-700 hover:bg-warm-200 transition-colors"
-                >
-                  <Save size={13} /> Guardar nota
-                </button>
               </div>
             </div>
 
             {/* Footer actions */}
-            <div className="px-5 py-4 border-t border-warm-100 bg-warm-50/40 flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => { onClose(); navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`) }}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-xl text-sm font-semibold bg-warm-100 text-warm-700 hover:bg-warm-200 transition-colors"
-              >
-                <Eye size={14} /> {t('admin.view')}
-              </button>
-              {status !== 'complete' && (
+            <div className="px-5 py-4 border-t border-warm-100 bg-warm-50/40 shrink-0 space-y-2">
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { onClose(); navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`) }}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+                  onClick={() => { onClose(); navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`) }}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-xl border border-warm-200 bg-white text-sm font-semibold text-violet-700 hover:bg-violet-50 hover:border-violet-200 transition-colors"
                 >
-                  <ScanBarcode size={14} /> {t('surtido.ordenes.validate_btn')}
+                  <Eye size={14} className="text-violet-600" /> {t('admin.view')}
                 </button>
-              )}
+                {localStatus !== 'complete' && (
+                  <button
+                    onClick={() => { onClose(); navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`) }}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-xl border border-primary-200 bg-white text-sm font-semibold text-primary-700 hover:bg-primary-50 hover:border-primary-300 transition-colors"
+                  >
+                    <ScanBarcode size={14} className="text-primary-600" /> {t('surtido.ordenes.validate_btn')}
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => onSave({
+                  surtidorId: localSurtidorId ? Number(localSurtidorId) : null,
+                  status: localStatus,
+                  notes: localNotes,
+                })}
+                disabled={isSaving}
+                className="w-full inline-flex items-center justify-center gap-1.5 h-10 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm"
+              >
+                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {t('common.save')}
+              </button>
             </div>
           </motion.div>
         </>
@@ -790,6 +790,7 @@ export default function Ordenes() {
   const [dateToDraft, setDateToDraft] = useState(() => getToday())
   const [dateFrom, setDateFrom] = useState(dateFromDraft)
   const [dateTo, setDateTo] = useState(dateToDraft)
+  const [autoDateAnchor, setAutoDateAnchor] = useState(() => getToday())
   const [timeFromDraft, setTimeFromDraft] = useState('')
   const [timeToDraft, setTimeToDraft] = useState('')
   const [timeFrom, setTimeFrom] = useState('')
@@ -827,6 +828,37 @@ export default function Ordenes() {
       }
     } catch {}
   }, [timeFilterKey, destinationFilterKey])
+
+  useEffect(() => {
+    const syncAutoDateWindow = () => {
+      const today = getToday()
+      if (today === autoDateAnchor) return
+
+      const previousAutoTo = autoDateAnchor
+      const previousAutoFrom = subtractDays(previousAutoTo, 30)
+      const nextAutoTo = today
+      const nextAutoFrom = subtractDays(nextAutoTo, 30)
+
+      const draftMatchesPreviousAuto = dateFromDraft === previousAutoFrom && dateToDraft === previousAutoTo
+      const appliedMatchesPreviousAuto = dateFrom === previousAutoFrom && dateTo === previousAutoTo
+
+      if (draftMatchesPreviousAuto) {
+        setDateFromDraft(nextAutoFrom)
+        setDateToDraft(nextAutoTo)
+      }
+
+      if (appliedMatchesPreviousAuto) {
+        setDateFrom(nextAutoFrom)
+        setDateTo(nextAutoTo)
+      }
+
+      setAutoDateAnchor(today)
+    }
+
+    syncAutoDateWindow()
+    const intervalId = window.setInterval(syncAutoDateWindow, 60 * 1000)
+    return () => window.clearInterval(intervalId)
+  }, [autoDateAnchor, dateFrom, dateTo, dateFromDraft, dateToDraft])
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -1003,13 +1035,25 @@ export default function Ordenes() {
       surtidor_id: surtidorId,
       ...(!surtidorId ? { status: 'pending_assignment' } : {}),
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['wms-order-tracking'] }); toast.success(t('common.save') + ' OK') },
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      qc.invalidateQueries({ queryKey: ['surtido-order-tracking-obc', vars.obc] })
+      toast.success(t('common.save') + ' OK')
+    },
     onError: () => toast.error(t('toast.error')),
   })
 
-  const notesMut = useMutation({
-    mutationFn: ({ obc, notes }) => upsertOrderTracking(obc, { notes }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['wms-order-tracking'] }); toast.success(t('common.save') + ' OK') },
+  const quickEditMut = useMutation({
+    mutationFn: ({ obc, surtidorId, status, notes }) => upsertOrderTracking(obc, {
+      surtidor_id: surtidorId,
+      status,
+      notes,
+    }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      qc.invalidateQueries({ queryKey: ['surtido-order-tracking-obc', vars.obc] })
+      toast.success(t('common.save') + ' OK')
+    },
     onError: () => toast.error(t('toast.error')),
   })
 
@@ -1032,9 +1076,10 @@ export default function Ordenes() {
     setDestinationDraft('')
     setFilterDestination('')
     const today = getToday()
+    setAutoDateAnchor(today)
     setDateToDraft(today)
     setDateTo(today)
-    const baseDate = subtractDays(getToday(), 30)
+    const baseDate = subtractDays(today, 30)
     setDateFromDraft(baseDate)
     setDateFrom(baseDate)
     setTimeFromDraft('')
@@ -1067,9 +1112,9 @@ export default function Ordenes() {
         r.thirdOrderNo || r.referenceNo || '',
         r.logisticsTrackNo || r.trackingNo || '',
         r.outboundBoxCount ?? r.packageCount ?? '',
+        tr.total_scanned ?? 0,
         r.outboundTime || '',
         tr.surtidor_nombre || '',
-        tr.total_scanned ?? 0,
         tr.status || 'pending_assignment',
         r.orderCreateTime || '',
       ]
@@ -1092,7 +1137,7 @@ export default function Ordenes() {
     })
   }
 
-  const WMS_HEADERS = ['OBC', 'Cliente', 'Destinatario', 'Canal', 'Referencia', 'Tracking', 'Cajas', 'Fecha entrega', 'Surtidor', 'Cant. validada', 'Estado', 'Fecha creación']
+  const WMS_HEADERS = ['OBC', 'Cliente', 'Destinatario', 'Canal', 'Referencia', 'Tracking', 'Cajas', 'Cant. validada', 'Fecha entrega', 'Surtidor', 'Estado', 'Fecha creación']
   const VAL_HEADERS = ['OBC', 'Cliente', 'Surtidor', 'Fecha entrega', 'Escaneado', 'Esperado', 'Estado', 'Actualizado']
 
   function exportSheet(headers, rows, sheetName, filename) {
@@ -1396,6 +1441,7 @@ export default function Ordenes() {
             page={page} totalPages={totalPages} pageSize={pageSize} total={total}
             onPageChange={setPage}
             onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+            showScannedColumn={filterStatus !== '' && filterStatus !== 'pending_assignment'}
           />
         )}
       </div>
@@ -1441,19 +1487,18 @@ export default function Ordenes() {
         surtidores={surtidores}
         isOpen={!!quickEditObc}
         onClose={() => setQuickEditObc(null)}
-        onAssign={(surtidorId) => {
+        onSave={({ surtidorId, status, notes }) => {
           if (!quickEditObc) return
-          assignMut.mutate({ obc: quickEditObc, surtidorId })
+          quickEditMut.mutate({ obc: quickEditObc, surtidorId, status, notes })
         }}
-        onStatusChange={(obcs, status) => statusMut.mutate({ obcs, status })}
-        onSaveNotes={(notes) => notesMut.mutate({ obc: quickEditObc, notes })}
+        isSaving={quickEditMut.isPending}
         t={t}
       />
     </div>
   )
 }
 
-function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange, showScannedColumn = true }) {
   const [selected, setSelected] = useState(new Set())
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
@@ -1582,11 +1627,13 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
               <th className={`${TH_CLASS} text-right`}>
                 <SortableHeader label={t('surtido.ordenes.cajas')} sortKey="cajas" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
               </th>
+              {showScannedColumn && (
+                <th className={`${TH_CLASS} text-right`}>
+                  <SortableHeader label="Cant. validada" sortKey="scanned" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+                </th>
+              )}
               <th className={`${TH_CLASS} col-name`}>
                 <SortableHeader label={t('surtido.ordenes.surtidor')} sortKey="surtidor" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
-              </th>
-              <th className={`${TH_CLASS} text-right`}>
-                <SortableHeader label="Cant. validada" sortKey="scanned" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
               </th>
               <th className={`${TH_CLASS} col-status`}>
                 <SortableHeader label={t('surtido.ordenes.status')} sortKey="status" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
@@ -1655,6 +1702,14 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                     <span className="font-semibold text-warm-700">{cajas}</span>
                   </td>
 
+                  {showScannedColumn && (
+                    <td className="table-cell text-right">
+                      <span className="font-semibold text-success-700 tabular-nums">
+                        {tracking?.total_scanned ?? 0}
+                      </span>
+                    </td>
+                  )}
+
                   <td className="table-cell col-name">
                     {canAssign ? (
                       <button
@@ -1673,12 +1728,6 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                     ) : (
                       <span className="text-warm-600 text-xs">{tracking?.surtidor_nombre || '—'}</span>
                     )}
-                  </td>
-
-                  <td className="table-cell text-right">
-                    <span className="font-semibold text-warm-700 tabular-nums">
-                      {tracking?.total_scanned ?? 0}/{cajas}
-                    </span>
                   </td>
 
                   <td className="table-cell">

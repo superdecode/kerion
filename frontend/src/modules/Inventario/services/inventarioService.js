@@ -16,6 +16,9 @@ export const getInventorySessions = (params) =>
 export const getInventorySession = (id) =>
   api.get(`/wmshub/inventory-session/${id}`).then(r => r.data)
 
+export const getInventoryCodeSearch = (q) =>
+  api.get('/wmshub/inventory-code-search', { params: { q } }).then(r => r.data)
+
 export const deleteInventorySession = (id) =>
   api.delete(`/wmshub/inventory-session/${id}`).then(r => r.data)
 

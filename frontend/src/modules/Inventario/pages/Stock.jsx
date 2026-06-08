@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Search, Loader2, RefreshCw } from 'lucide-react'
+import { Search, Loader2, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { useToastStore } from '../../../core/stores/toastStore'
 import { useBoxStock } from '../hooks/useBoxStock'
 
 export default function Stock() {
   const { t } = useI18nStore()
+  const toast = useToastStore.getState()
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
+  const [refreshState, setRefreshState] = useState('idle')
+  const [refreshMessage, setRefreshMessage] = useState('')
 
   const { data, isLoading, isFetching, refetch } = useBoxStock()
 
@@ -27,11 +31,33 @@ export default function Stock() {
     if (!search.trim()) return true
     const q = search.toLowerCase()
     return (
-      (r.boxCode || '').toLowerCase().includes(q) ||
-      (r.sku || '').toLowerCase().includes(q) ||
+      (r.customizeBarcode || '').toLowerCase().includes(q) ||
+      (r.customizeCode || '').toLowerCase().includes(q) ||
+      (r.productName || '').toLowerCase().includes(q) ||
+      (r.boxType || '').toLowerCase().includes(q) ||
       (r.cellNo || '').toLowerCase().includes(q)
     )
   })
+
+  const handleRefresh = async () => {
+    setRefreshState('loading')
+    setRefreshMessage('Actualizando...')
+    try {
+      await refetch()
+      setRefreshState('success')
+      setRefreshMessage('Actualizado')
+      toast.success('Stock actualizado')
+    } catch (error) {
+      setRefreshState('error')
+      setRefreshMessage('Error')
+      toast.error(error?.message || t('toast.error'))
+    } finally {
+      window.setTimeout(() => {
+        setRefreshState('idle')
+        setRefreshMessage('')
+      }, 1800)
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -59,13 +85,31 @@ export default function Stock() {
             />
           </div>
           <button
-            className="btn-ghost flex items-center gap-2 text-sm"
-            onClick={() => refetch()}
+            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+              refreshState === 'success'
+                ? 'bg-success-50 text-success-700 border border-success-200'
+                : refreshState === 'error'
+                ? 'bg-danger-50 text-danger-700 border border-danger-200'
+                : 'btn-ghost'
+            }`}
+            onClick={handleRefresh}
             disabled={isFetching}
           >
             <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
             {t('common.refresh')}
           </button>
+          {refreshMessage && (
+            <div className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold ${
+              refreshState === 'success'
+                ? 'bg-success-50 text-success-700 border border-success-200'
+                : refreshState === 'error'
+                ? 'bg-danger-50 text-danger-700 border border-danger-200'
+                : 'bg-primary-50 text-primary-700 border border-primary-200'
+            }`}>
+              {refreshState === 'success' ? <CheckCircle2 size={13} /> : refreshState === 'error' ? <AlertTriangle size={13} /> : <Loader2 size={13} className="animate-spin" />}
+              {refreshMessage}
+            </div>
+          )}
         </div>
       </div>
 
@@ -83,28 +127,36 @@ export default function Stock() {
                   <tr>
                     <th className="table-header">{t('inventario.stock.box_code')}</th>
                     <th className="table-header">{t('inventario.stock.sku')}</th>
+                    <th className="table-header">Producto</th>
                     <th className="table-header">{t('inventario.stock.location')}</th>
                     <th className="table-header text-right">{t('inventario.stock.qty')}</th>
+                    <th className="table-header text-right">Bloqueado</th>
                     <th className="table-header">{t('inventario.stock.status')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="table-cell text-center text-warm-400 py-8">
+                      <td colSpan={7} className="table-cell text-center text-warm-400 py-8">
                         {t('common.noData')}
                       </td>
                     </tr>
                   ) : (
                     filtered.map((r, i) => (
-                      <tr key={r.boxCode || i} className="table-row">
-                        <td className="table-cell font-mono text-xs">{r.boxCode || '—'}</td>
-                        <td className="table-cell text-warm-600">{r.sku || '—'}</td>
+                      <tr key={r.customizeBarcode || r.boxType || i} className="table-row">
+                        <td className="table-cell font-mono text-xs">{r.customizeBarcode || '—'}</td>
+                        <td className="table-cell text-warm-600">{r.customizeCode || '—'}</td>
+                        <td className="table-cell text-warm-600">{r.productName || '—'}</td>
                         <td className="table-cell text-warm-600 font-mono text-xs">{r.cellNo || '—'}</td>
-                        <td className="table-cell text-right font-semibold">{r.qty ?? r.quantity ?? '—'}</td>
+                        <td className="table-cell text-right font-semibold">{r.availableAmount ?? 0}</td>
+                        <td className="table-cell text-right font-semibold text-warning-700">{r.lockAmount ?? 0}</td>
                         <td className="table-cell">
-                          <span className={`badge ${r.isBlocked ? 'bg-warning-100 text-warning-700' : 'bg-success-100 text-success-700'}`}>
-                            {r.isBlocked ? t('inventario.stock.blocked') : t('inventario.stock.available')}
+                          <span className={`badge ${
+                            r.isAvailable ? 'bg-success-100 text-success-700' :
+                            r.isBlocked ? 'bg-warning-100 text-warning-700' :
+                            'bg-danger-100 text-danger-700'
+                          }`}>
+                            {r.isAvailable ? t('inventario.stock.available') : r.isBlocked ? t('inventario.stock.blocked') : 'No disponible'}
                           </span>
                         </td>
                       </tr>

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LayoutGrid, Upload, Trash2, Search, X, Plus, AlertTriangle, Check } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
-import { createUbicacion, deleteUbicacion, updateUbicacion, importUbicaciones } from '../services/devolucionesService'
+import { createUbicacion, deleteUbicacion, updateUbicacion } from '../services/devolucionesService'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 
@@ -33,6 +33,7 @@ export default function InventarioUbicacionesModal({
   onImportClick = null,
   allowManagement = true,
   selectActionLabel = 'Seleccionar',
+  serviceOverrides = null,
 }) {
   const toast = useToastStore()
   const { t } = useI18nStore()
@@ -42,6 +43,12 @@ export default function InventarioUbicacionesModal({
   const [deletingId, setDeletingId] = useState(null)
   const [deleteRow, setDeleteRow] = useState(null)
   const [search, setSearch] = useState('')
+  const locationServices = {
+    createUbicacion,
+    updateUbicacion,
+    deleteUbicacion,
+    ...serviceOverrides,
+  }
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -55,7 +62,7 @@ export default function InventarioUbicacionesModal({
     if (!codigo.trim()) return
     setSaving(true)
     try {
-      await createUbicacion({ codigo: codigo.trim(), nombre: codigo.trim() })
+      await locationServices.createUbicacion({ codigo: codigo.trim(), nombre: codigo.trim() })
       setCodigo('')
       setShowForm(false)
       toast.success(t('dev.inv_ubicaciones.toast.creada'))
@@ -69,7 +76,7 @@ export default function InventarioUbicacionesModal({
 
   const handleToggleActivo = async (row) => {
     try {
-      await updateUbicacion(row.id, {
+      await locationServices.updateUbicacion(row.id, {
         codigo: row.codigo,
         nombre: row.nombre || row.codigo,
         descripcion: row.descripcion || '',
@@ -85,7 +92,7 @@ export default function InventarioUbicacionesModal({
     if (!deleteRow) return
     setDeletingId(deleteRow.id)
     try {
-      await deleteUbicacion(deleteRow.id)
+      await locationServices.deleteUbicacion(deleteRow.id)
       toast.success(t('dev.inv_ubicaciones.toast.eliminada'))
       onSaved?.()
       setDeleteRow(null)
@@ -94,22 +101,6 @@ export default function InventarioUbicacionesModal({
     } finally {
       setDeletingId(null)
     }
-  }
-
-  const handleImport = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const fd = new FormData()
-    fd.append('file', file)
-    try {
-      const res = await importUbicaciones(fd)
-      const summary = res.data || res
-      toast.success(`Importación completada: ${summary.created || 0} creadas, ${summary.skipped || 0} omitidas`)
-      onSaved?.()
-    } catch {
-      toast.error('Error al importar')
-    }
-    e.target.value = ''
   }
 
   const inputCls = 'w-full px-3 py-2 rounded-xl border border-warm-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-200 bg-white'
@@ -145,15 +136,17 @@ export default function InventarioUbicacionesModal({
           </div>
           {allowManagement && (
             <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={() => {
-                  onClose?.()
-                  onImportClick?.()
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-warm-200 bg-white text-warm-600 hover:bg-warm-100 cursor-pointer transition-all"
-              >
-                <Upload className="w-3.5 h-3.5" /> {t('dev.inv_ubicaciones.importar')}
-              </button>
+              {onImportClick && (
+                <button
+                  onClick={() => {
+                    onClose?.()
+                    onImportClick()
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-warm-200 bg-white text-warm-600 hover:bg-warm-100 cursor-pointer transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" /> {t('dev.inv_ubicaciones.importar')}
+                </button>
+              )}
               <button
                 onClick={() => setShowForm(v => !v)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${

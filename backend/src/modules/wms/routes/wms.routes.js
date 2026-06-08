@@ -57,6 +57,12 @@ function getTimezone(req) {
   return req.fullUser?.zona_horaria || DEFAULT_TZ
 }
 
+function dateKeyInTZ(value, tz = DEFAULT_TZ) {
+  const date = new Date(value || Date.now())
+  if (Number.isNaN(date.getTime())) return getToday(tz).replace(/-/g, '')
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(date).replace(/-/g, '')
+}
+
 function requireAnyPermission(requirements) {
   return (req, res, next) => {
     const user = req.fullUser
@@ -88,8 +94,8 @@ function parsePositiveInt(value, fallback = 1) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
-async function generateInventorySectionCode(client, tenantId, tz) {
-  const dayKey = getToday(tz).replace(/-/g, '')
+async function generateInventorySectionCode(client, tenantId, tz, referenceDate = null) {
+  const dayKey = dateKeyInTZ(referenceDate || Date.now(), tz)
   const seqRes = await client.query(
     `SELECT COALESCE(MAX(CAST(SUBSTRING(tarima_code FROM 14) AS INTEGER)), 0) + 1 AS n
      FROM inv_sessions
@@ -780,25 +786,38 @@ router.post('/inventory-session',
       }
       const tz = getTimezone(req)
 
+      const normalizedScans = scans.map((scan) => {
+        const scannedAt = scan?.scanned_at ? new Date(scan.scanned_at) : new Date()
+        return {
+          ...scan,
+          scanned_at: Number.isNaN(scannedAt.getTime()) ? new Date().toISOString() : scannedAt.toISOString(),
+        }
+      })
+      const scanTimes = normalizedScans
+        .map((scan) => new Date(scan.scanned_at).getTime())
+        .filter((value) => Number.isFinite(value))
+      const startedAt = new Date(scanTimes.length > 0 ? Math.min(...scanTimes) : Date.now()).toISOString()
+      const completedAt = new Date(scanTimes.length > 0 ? Math.max(...scanTimes) : Date.now()).toISOString()
+
       await client.query('BEGIN')
       await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [tenantLockKey(req.tenantId, 'inventory-section')])
       const sectionCode = isValidSectionCode(tarima_code)
         ? String(tarima_code).trim()
-        : await generateInventorySectionCode(client, req.tenantId, tz)
+        : await generateInventorySectionCode(client, req.tenantId, tz, startedAt)
 
       const groupCodeMap = new Map()
-      scans.forEach(s => {
+      normalizedScans.forEach(s => {
         const key = String(s.group_assignment || 'auto').trim()
         if (!groupCodeMap.has(key)) {
           groupCodeMap.set(key, generatedTarimaCode(sectionCode, groupCodeMap.size))
         }
       })
-      const normalizedScans = scans.map(s => ({
+      const scansWithGroups = normalizedScans.map(s => ({
         ...s,
         group_assignment: groupCodeMap.get(String(s.group_assignment || 'auto').trim()) || sectionCode,
       }))
 
-      const totals = normalizedScans.reduce((acc, s) => {
+      const totals = scansWithGroups.reduce((acc, s) => {
         acc.total++
         if (s.scan_status === 'ok') acc.ok++
         else if (s.scan_status === 'blocked') acc.blocked++
@@ -812,29 +831,58 @@ router.post('/inventory-session',
 
       const sessionRes = await client.query(
         `INSERT INTO inv_sessions
-           (tenant_id, operator_id, scan_type, status, completed_at, notes, ubicacion_id,
+           (tenant_id, operator_id, scan_type, status, started_at, completed_at, notes, ubicacion_id,
             tarima_code, total_scans, total_ok, total_blocked, total_nowms)
-         VALUES ($1,$2,$3,'saved',now(),$4,$5,$6,$7,$8,$9,$10)
+         VALUES ($1,$2,$3,'saved',$4,$5,$6,$7,$8,$9,$10,$11,$12)
          RETURNING *`,
-        [req.tenantId, req.user.id, scan_type, normalizedNotes, ubicacion_id || null,
+        [req.tenantId, req.user.id, scan_type, startedAt, completedAt, normalizedNotes, ubicacion_id || null,
          sectionCode, totals.total, totals.ok, totals.blocked, totals.nowms]
       )
       const session = sessionRes.rows[0]
 
-      if (normalizedScans.length > 0) {
-        const values = normalizedScans.map((_, i) => {
-          const b = i * 9
-          return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9})`
+      if (scansWithGroups.length > 0) {
+        const preparedScans = scansWithGroups.map((scan, index) => {
+          const scannedCode = normalizeOptionalText(
+            scan.scanned_code || scan.raw || scan.code || scan.normalized_code || scan.code2
+          )
+          const normalizedCode = normalizeOptionalText(
+            scan.normalized_code || scan.code || scan.scanned_code || scan.raw || scan.code2
+          )
+          const scanStatus = String(scan.scan_status || '').trim()
+
+          if (!scannedCode || !normalizedCode || !INV_SCAN_STATUSES.has(scanStatus)) {
+            throw new Error(`Datos de escaneo inválidos en posición ${index + 1}`)
+          }
+
+          return {
+            ...scan,
+            scanned_code: scannedCode,
+            normalized_code: normalizedCode,
+            scan_status: scanStatus,
+            code2: normalizeOptionalText(scan.code2),
+            sku: normalizeOptionalText(scan.sku),
+            product_name: normalizeOptionalText(scan.product_name),
+            cell_no: normalizeOptionalText(scan.cell_no),
+            group_assignment: normalizeOptionalText(scan.group_assignment) || 'auto',
+            scanned_at: scan.scanned_at || startedAt,
+            was_swapped: Boolean(scan.was_swapped),
+          }
+        })
+
+        const values = preparedScans.map((_, i) => {
+          const b = i * 11
+          return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11})`
         }).join(',')
-        const params = normalizedScans.flatMap(s => [
+        const params = preparedScans.flatMap(s => [
           session.id, s.scanned_code, s.normalized_code, s.code2 || null,
           s.was_swapped || false, s.scan_status, s.sku || null,
-          s.product_name || null, s.group_assignment || 'auto',
+          s.product_name || null, s.cell_no || null, s.group_assignment || 'auto',
+          s.scanned_at || startedAt,
         ])
         await client.query(
           `INSERT INTO inv_scans
              (session_id, scanned_code, normalized_code, code2, was_swapped,
-              scan_status, sku, product_name, group_assignment)
+              scan_status, sku, product_name, cell_no, group_assignment, scanned_at)
            VALUES ${values}`,
           params
         )
@@ -844,8 +892,13 @@ router.post('/inventory-session',
       res.status(201).json({ success: true, data: session })
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {})
-      console.error('POST wmshub/inventory-session error:', err.message)
-      res.status(500).json({ success: false, error: 'Error guardando sesión de inventario' })
+      console.error('POST wmshub/inventory-session error:', err)
+      const message = err?.message || 'Error guardando sesión de inventario'
+      const status = /Datos de escaneo inválidos/i.test(message) ? 400 : 500
+      res.status(status).json({
+        success: false,
+        error: status === 400 ? message : 'Error guardando sesión de inventario',
+      })
     } finally {
       client.release()
     }
@@ -1006,6 +1059,7 @@ router.post('/inventory-scan',
         scan_status,
         sku,
         product_name,
+        cell_no,
         group_assignment,
         manual_notes,
       } = req.body
@@ -1026,8 +1080,8 @@ router.post('/inventory-scan',
       const result = await req.tQuery(
         `INSERT INTO inv_scans
            (session_id, scanned_code, normalized_code, code2, was_swapped, scan_status, sku, product_name,
-            group_assignment, input_method, manual_notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'manual',$10)
+            cell_no, group_assignment, input_method, manual_notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'manual',$11)
          RETURNING *`,
         [
           session_id,
@@ -1038,6 +1092,7 @@ router.post('/inventory-scan',
           scan_status,
           normalizeOptionalText(sku),
           normalizeOptionalText(product_name),
+          normalizeOptionalText(cell_no),
           normalizeOptionalText(group_assignment) || 'auto',
           normalizeOptionalText(manual_notes),
         ]
@@ -1057,7 +1112,7 @@ router.put('/inventory-scan/:id',
   async (req, res) => {
     try {
       const scanRes = await req.tQuery(
-        `SELECT s.id, s.session_id, s.code2, s.sku, s.product_name, s.group_assignment, s.manual_notes
+        `SELECT s.id, s.session_id, s.code2, s.sku, s.product_name, s.cell_no, s.group_assignment, s.manual_notes
          FROM inv_scans s
          JOIN inv_sessions sess ON sess.id = s.session_id
          WHERE s.id = $1 AND sess.tenant_id = $2`,
@@ -1073,6 +1128,7 @@ router.put('/inventory-scan/:id',
         scan_status,
         sku,
         product_name,
+        cell_no,
         group_assignment,
         manual_notes,
       } = req.body
@@ -1089,11 +1145,12 @@ router.put('/inventory-scan/:id',
              scan_status = COALESCE($5, scan_status),
              sku = $6,
              product_name = $7,
-             group_assignment = COALESCE($8, group_assignment),
-             manual_notes = $9,
+             cell_no = $8,
+             group_assignment = COALESCE($9, group_assignment),
+             manual_notes = $10,
              edited_at = now(),
-             edited_by = $10
-         WHERE id = $11
+             edited_by = $11
+         WHERE id = $12
          RETURNING *`,
         [
           normalizeOptionalText(scanned_code),
@@ -1103,6 +1160,7 @@ router.put('/inventory-scan/:id',
           scan_status || null,
           sku !== undefined ? normalizeOptionalText(sku) : current.sku ?? null,
           product_name !== undefined ? normalizeOptionalText(product_name) : current.product_name ?? null,
+          cell_no !== undefined ? normalizeOptionalText(cell_no) : current.cell_no ?? null,
           group_assignment !== undefined ? normalizeOptionalText(group_assignment) : current.group_assignment ?? null,
           manual_notes !== undefined ? normalizeOptionalText(manual_notes) : current.manual_notes ?? null,
           req.user.id,
@@ -1114,6 +1172,78 @@ router.put('/inventory-scan/:id',
     } catch (err) {
       console.error('PUT wmshub/inventory-scan/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error actualizando registro de inventario' })
+    }
+  }
+)
+
+router.get('/inventory-code-search',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'inventario.escaneo', action: 'crear' },
+    { modulePath: 'inventario.registros', action: 'ver' },
+  ]),
+  async (req, res) => {
+    try {
+      const q = normalizeOptionalText(req.query?.q)
+      if (!q) {
+        return res.json({ success: true, data: { matches: [], sessions: [] } })
+      }
+
+      const term = `%${q}%`
+      const matchesRes = await req.tQuery(
+        `SELECT sc.id,
+                sc.session_id,
+                sc.scanned_code,
+                sc.normalized_code,
+                sc.code2,
+                sc.scan_status,
+                sc.sku,
+                sc.product_name,
+                sc.cell_no,
+                sc.group_assignment,
+                sc.scanned_at,
+                sess.tarima_code,
+                sess.scan_type,
+                sess.completed_at,
+                u.nombre_completo AS operator_nombre
+           FROM inv_scans sc
+           JOIN inv_sessions sess ON sess.id = sc.session_id
+           LEFT JOIN usuarios u ON u.id = sess.operator_id
+          WHERE sess.tenant_id = $1
+            AND (
+              sc.scanned_code ILIKE $2
+              OR sc.normalized_code ILIKE $2
+              OR COALESCE(sc.code2, '') ILIKE $2
+              OR COALESCE(sc.sku, '') ILIKE $2
+              OR COALESCE(sc.product_name, '') ILIKE $2
+            )
+          ORDER BY sc.scanned_at DESC
+          LIMIT 100`,
+        [req.tenantId, term]
+      )
+
+      const sessionsMap = new Map()
+      for (const row of matchesRes.rows) {
+        if (sessionsMap.has(row.session_id)) continue
+        sessionsMap.set(row.session_id, {
+          session_id: row.session_id,
+          tarima_code: row.tarima_code,
+          scan_type: row.scan_type,
+          completed_at: row.completed_at,
+          operator_nombre: row.operator_nombre,
+        })
+      }
+
+      res.json({
+        success: true,
+        data: {
+          matches: matchesRes.rows,
+          sessions: [...sessionsMap.values()],
+        },
+      })
+    } catch (err) {
+      console.error('GET wmshub/inventory-code-search error:', err.message)
+      res.status(500).json({ success: false, error: 'Error buscando código en inventario' })
     }
   }
 )
@@ -1478,21 +1608,147 @@ router.get('/ubicaciones',
   ]),
   async (req, res) => {
     try {
-      const { modulo } = req.query
+      const { modulo, full } = req.query
       const params = [req.tenantId]
       let filter = ''
       if (modulo && modulo !== 'todos') {
         filter = ` AND (modulo_uso @> ARRAY['todos'] OR modulo_uso @> ARRAY[$2])`
         params.push(modulo)
       }
-      const result = await req.tQuery(
-        `SELECT id, codigo, nombre FROM dev_ubicaciones WHERE tenant_id = $1 AND activo = true${filter} ORDER BY codigo ASC`,
-        params
-      )
+      const sql = full
+        ? `SELECT u.*,
+                  COALESCE(SUM(i.cantidad_disponible), 0) AS pcs_stock
+             FROM dev_ubicaciones u
+             LEFT JOIN dev_inventario i
+               ON i.ubicacion_id = u.id
+              AND i.tenant_id = u.tenant_id
+              AND i.cantidad_disponible > 0
+            WHERE u.tenant_id = $1${filter}
+            GROUP BY u.id
+            ORDER BY u.activo DESC, u.codigo ASC`
+        : `SELECT id, codigo, nombre
+             FROM dev_ubicaciones
+            WHERE tenant_id = $1 AND activo = true${filter}
+            ORDER BY codigo ASC`
+      const result = await req.tQuery(sql, params)
       res.json({ success: true, data: result.rows })
     } catch (err) {
       console.error('GET wmshub/ubicaciones error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo ubicaciones' })
+    }
+  }
+)
+
+router.post('/ubicaciones',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'inventario.escaneo', action: 'crear' },
+    { modulePath: 'inventario.registros', action: 'actualizar' },
+    { modulePath: 'sistema.wms', action: 'actualizar' },
+  ]),
+  async (req, res) => {
+    try {
+      const codigo = normalizeOptionalText(req.body?.codigo)
+      const nombre = normalizeOptionalText(req.body?.nombre) || codigo
+      const descripcion = normalizeOptionalText(req.body?.descripcion)
+      const activo = req.body?.activo !== false
+
+      if (!codigo || !nombre) {
+        return res.status(400).json({ success: false, error: 'codigo y nombre son requeridos' })
+      }
+
+      const result = await req.tQuery(
+        `INSERT INTO dev_ubicaciones (codigo, nombre, descripcion, activo, tenant_id)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (tenant_id, codigo)
+         DO UPDATE
+           SET nombre = EXCLUDED.nombre,
+               descripcion = COALESCE(EXCLUDED.descripcion, dev_ubicaciones.descripcion),
+               activo = EXCLUDED.activo,
+               updated_at = now()
+         RETURNING *`,
+        [codigo, nombre, descripcion, Boolean(activo), req.tenantId]
+      )
+
+      res.status(201).json({ success: true, ubicacion: result.rows[0] })
+    } catch (err) {
+      console.error('POST wmshub/ubicaciones error:', err.message)
+      res.status(500).json({ success: false, error: 'Error creando ubicacion' })
+    }
+  }
+)
+
+router.put('/ubicaciones/:id',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'inventario.registros', action: 'actualizar' },
+    { modulePath: 'sistema.wms', action: 'actualizar' },
+  ]),
+  async (req, res) => {
+    try {
+      const codigo = normalizeOptionalText(req.body?.codigo)
+      const nombre = normalizeOptionalText(req.body?.nombre) || codigo
+      const descripcion = normalizeOptionalText(req.body?.descripcion)
+      const activo = req.body?.activo !== false
+
+      if (!codigo || !nombre) {
+        return res.status(400).json({ success: false, error: 'codigo y nombre son requeridos' })
+      }
+
+      const result = await req.tQuery(
+        `UPDATE dev_ubicaciones
+            SET codigo = $1,
+                nombre = $2,
+                descripcion = $3,
+                activo = $4,
+                updated_at = now()
+          WHERE id = $5 AND tenant_id = $6
+          RETURNING *`,
+        [codigo, nombre, descripcion, Boolean(activo), req.params.id, req.tenantId]
+      )
+
+      if (!result.rows.length) {
+        return res.status(404).json({ success: false, error: 'Ubicacion no encontrada' })
+      }
+
+      res.json({ success: true, ubicacion: result.rows[0] })
+    } catch (err) {
+      console.error('PUT wmshub/ubicaciones/:id error:', err.message)
+      res.status(500).json({ success: false, error: 'Error actualizando ubicacion' })
+    }
+  }
+)
+
+router.delete('/ubicaciones/:id',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'inventario.registros', action: 'eliminar' },
+    { modulePath: 'sistema.wms', action: 'actualizar' },
+  ]),
+  async (req, res) => {
+    try {
+      const stockRes = await req.tQuery(
+        `SELECT COUNT(*) AS count
+           FROM dev_inventario
+          WHERE ubicacion_id = $1 AND tenant_id = $2 AND cantidad_disponible > 0`,
+        [req.params.id, req.tenantId]
+      )
+
+      if (Number.parseInt(stockRes.rows[0].count, 10) > 0) {
+        return res.status(409).json({ success: false, error: 'La ubicacion tiene inventario activo; solo se puede desactivar' })
+      }
+
+      await req.tQuery(
+        'DELETE FROM dev_ubicaciones WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, req.tenantId]
+      )
+      res.json({ success: true })
+    } catch (err) {
+      if (err.code === '23503') {
+        return res.status(409).json({ success: false, error: 'No se puede eliminar: la ubicación tiene registros históricos asociados. Desactívala en su lugar.' })
+      }
+      console.error('DELETE wmshub/ubicaciones/:id error:', err.message)
+      res.status(500).json({ success: false, error: 'Error eliminando ubicacion' })
     }
   }
 )

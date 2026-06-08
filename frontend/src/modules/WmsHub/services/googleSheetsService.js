@@ -73,17 +73,22 @@ const INVENTORY_ALIASES = {
   // "Customize Barcode/自定义箱条码"
   customizeBarcode: [
     'customize_barcode_自定义箱条码',
-    'customize_barcode', 'barcode', 'codigo_barras', 'caja', 'box_code', 'box_barcode',
+    'custom_box_barcode_自定义箱条码',
+    'customize_barcode', 'custom_box_barcode', 'custom_barcode',
+    'barcode', 'codigo_barras', 'caja', 'box_code', 'box_barcode',
   ],
   // "Available stock/可用库存"
   availableAmount: [
     'available_stock_可用库存',
-    'available_amount', 'available_stock', 'available', 'disponible', 'qty_available',
+    'available_inventory_可用库存',
+    'available_amount', 'available_stock', 'available_inventory',
+    'available', 'disponible', 'qty_available',
   ],
   // "Locked Inventory/锁定库存"
   lockAmount: [
     'locked_inventory_锁定库存',
-    'lock_amount', 'locked_inventory', 'locked', 'bloqueado',
+    'locked_stock_锁定库存',
+    'lock_amount', 'locked_inventory', 'locked_stock', 'locked', 'bloqueado',
   ],
   // "sku"
   customizeCode: [
@@ -99,6 +104,17 @@ const INVENTORY_ALIASES = {
   productName: [
     'product_name_产品名称',
     'product_name', 'nombre', 'name', 'descripcion',
+  ],
+  cellNo: [
+    'cell_no_库位',
+    'cell_no',
+    'location_code',
+    'location',
+    'ubicacion',
+    'ubicacion_codigo',
+    'bin_code',
+    'bin',
+    'rack',
   ],
 }
 
@@ -186,6 +202,7 @@ function mapRowToInventory(row, map) {
   const locked    = parseInt(getField(row, map, 'lockAmount'))      || 0
   const sku       = getField(row, map, 'customizeCode')
   const name      = getField(row, map, 'productName')
+  const cellNo    = getField(row, map, 'cellNo')
   return {
     customizeBarcode: getField(row, map, 'customizeBarcode'),
     availableAmount:  available,
@@ -193,6 +210,7 @@ function mapRowToInventory(row, map) {
     customizeCode:    sku,
     boxType:          getField(row, map, 'boxType'),
     productName:      name,
+    cellNo,
     isAvailable:      available > 0,
     isBlocked:        locked > 0 && available === 0,
     // Mimic xlwms skuList shape
@@ -281,6 +299,7 @@ async function warmFullSheet(type) {
 async function loadSheet(type, forceRefresh = false) {
   const entry = cache[type]
   const now = Date.now()
+  const requiresFullDataset = type === 'inventory'
 
   // Fresh full cache hit
   if (!forceRefresh && entry.data && !entry.partial && (now - entry.ts) < CACHE_TTL) {
@@ -288,7 +307,7 @@ async function loadSheet(type, forceRefresh = false) {
   }
 
   // Fresh partial data — return immediately, ensure bg full load is running
-  if (!forceRefresh && entry.data && entry.partial && (now - entry.ts) < CACHE_TTL) {
+  if (!requiresFullDataset && !forceRefresh && entry.data && entry.partial && (now - entry.ts) < CACHE_TTL) {
     warmFullSheet(type)
     return entry.data
   }
@@ -302,8 +321,8 @@ async function loadSheet(type, forceRefresh = false) {
   }
 
   try {
-    // forceRefresh → load all rows at once; normal → load last 300 for speed
-    const limit = forceRefresh ? 0 : 300
+    // Inventory lookups must always be exhaustive; partial data causes false NoWMS.
+    const limit = (forceRefresh || requiresFullDataset) ? 0 : 300
     const text = await fetchSheetAsCSV(url, limit)
     const rows = parseCSV(text)
     if (rows.length < 2) {
@@ -311,7 +330,7 @@ async function loadSheet(type, forceRefresh = false) {
       err.code = 'SHEET_EMPTY'
       throw err
     }
-    const partial = !forceRefresh
+    const partial = !forceRefresh && !requiresFullDataset
     cache[type] = { data: rows, ts: now, partial }
     if (partial) warmFullSheet(type)
     return rows

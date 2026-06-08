@@ -1517,29 +1517,30 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
               </motion.div>
             )}
 
-            {/* Scan input */}
-            <div className="relative">
-              <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
-              <input
-                ref={scanRef}
-                type="text"
-                className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warm-200 rounded-2xl
-                  focus:border-primary-500 focus:shadow-glow
-                  transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide disabled:opacity-60 disabled:cursor-not-allowed"
-                placeholder={t('surtido.validacion.scan_placeholder')}
-                onKeyDown={handleKeyDown}
-                disabled={sessionCompleteLocked || !sessionId}
-                autoComplete="off"
-              />
-            </div>
-            <div className="flex justify-end">
+            <div className="relative pt-8">
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-warm-200 bg-warm-50 px-3 py-1.5 text-xs font-semibold text-warm-600 hover:bg-warm-100 whitespace-nowrap"
+                className="absolute right-4 top-0 z-10 inline-flex items-center gap-1.5 rounded-t-xl rounded-b-none border border-warm-200 border-b-0 bg-white px-3 py-1.5 text-[11px] font-semibold text-warm-600 shadow-sm transition-all hover:-translate-y-[1px] hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 whitespace-nowrap"
                 onClick={() => setShowManualEntry(true)}
               >
                 <Pencil size={12} /> Ingreso manual
               </button>
+
+              {/* Scan input */}
+              <div className="relative -mt-px">
+                <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
+                <input
+                  ref={scanRef}
+                  type="text"
+                  className="w-full pl-14 pr-5 py-4 text-xl bg-white border-2 border-warm-200 rounded-2xl
+                    focus:border-primary-500 focus:shadow-glow
+                    transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide disabled:opacity-60 disabled:cursor-not-allowed"
+                  placeholder={t('surtido.validacion.scan_placeholder')}
+                  onKeyDown={handleKeyDown}
+                  disabled={sessionCompleteLocked || !sessionId}
+                  autoComplete="off"
+                />
+              </div>
             </div>
 
             {/* Last scan feedback */}
@@ -1631,15 +1632,15 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       </div>
 
       {/* Right sidebar: orders with progress */}
-      <div className={`${sidebarVisible ? 'hidden lg:flex w-80' : 'hidden'} border-l border-warm-100 bg-white/80 backdrop-blur-2xl flex-col shrink-0`}>
+      <div className={`${sidebarVisible ? 'hidden lg:flex w-80' : 'hidden'} border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shrink-0 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]`}>
         <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50">
           <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
             <Zap className="w-3.5 h-3.5 text-primary-500" /> {t('surtido.validacion.sidebar_title')}
           </h3>
         </div>
-        <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
           {obc && (
-            <div className="p-3 rounded-xl border border-primary-200 bg-primary-50/50 shadow-sm">
+            <div className="p-3 rounded-2xl border border-primary-200/80 bg-gradient-to-br from-primary-50 via-white to-accent-50/60 shadow-[0_14px_30px_-22px_rgba(37,99,235,0.45)] ring-1 ring-primary-100/80">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-bold text-warm-700 font-mono truncate mr-2">{obc}</span>
                 <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">ACTIVA</span>
@@ -1655,23 +1656,25 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
             </div>
           )}
           <div className="space-y-2 pb-1">
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-primary-100/70 bg-gradient-to-br from-primary-50/85 via-white to-white p-1.5 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.55)]">
               {['', 'complete', 'with_discrepancies', 'cancelled'].map(key => (
                 <button
                   key={key || 'all'}
                   onClick={() => setSessionStatusFilter(key)}
-                  className={`w-full min-w-0 px-2 py-1.5 h-9 rounded-full text-[10px] font-semibold border transition-colors truncate ${
+                  className={`w-full min-w-0 px-2 py-1.5 h-9 rounded-full text-[10px] font-semibold border transition-all truncate ${
                     sessionStatusFilter === key
-                      ? 'bg-primary-50 text-primary-700 border-primary-200'
-                      : 'bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100'
+                      ? 'bg-white text-primary-700 border-primary-200 shadow-sm ring-1 ring-primary-100'
+                      : 'bg-white/75 text-warm-600 border-transparent hover:border-warm-200 hover:bg-warm-50'
                   }`}
                 >
                   {key ? (key === 'with_discrepancies' ? 'Diferencias' : t(`surtido.registros.status.${key}`)) : t('common.all')}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 transition-all focus-within:border-primary-400 focus-within:shadow-sm">
-              <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+            <div className="flex items-center gap-1.5 rounded-2xl border border-primary-100/80 bg-gradient-to-r from-white via-primary-50/55 to-white px-3 h-11 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.6)] transition-all focus-within:border-primary-300 focus-within:ring-2 focus-within:ring-primary-100">
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100/80 shadow-inner">
+                <Search className="w-3.5 h-3.5 text-primary-500 shrink-0" />
+              </div>
               <input
                 type="text"
                 value={sessionSearch}
@@ -1698,7 +1701,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
               const pct = s.total_expected > 0 ? Math.min(100, Math.round(((s.total_scanned ?? 0) / s.total_expected) * 100)) : 0
               const isComplete = s.status === 'complete'
               return (
-                <div key={s.id || i} className="p-3 rounded-xl border border-warm-100 hover:border-warm-200 hover:bg-warm-50 transition-all">
+                <div key={s.id || i} className="p-3 rounded-2xl border border-warm-200/90 bg-white shadow-[0_14px_30px_-24px_rgba(15,23,42,0.32)] hover:border-primary-100 hover:bg-gradient-to-br hover:from-white hover:to-primary-50/30 hover:shadow-[0_20px_38px_-26px_rgba(37,99,235,0.45)] transition-all">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold text-warm-700 font-mono truncate mr-2">{s.outbound_order_no}</span>
                     <span className={`badge text-[9px] ${isComplete ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-600'}`}>
@@ -1971,7 +1974,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
 }
 
 /* ─── Tab bar ─────────────────────────────────────────────── */
-function TabBar({ tabs, activeTabId, onSelect, onAdd, onClose, canAdd }) {
+function TabBar({ tabs, activeTabId, onSelect, onAdd, onClose, canAdd, t }) {
   return (
     <div className="flex items-center px-4 pt-3 pb-0 border-b border-warm-100 bg-white shrink-0 min-w-0">
       <div className="flex items-center gap-1.5 flex-1 min-w-0 max-w-full overflow-x-auto overflow-y-hidden">
@@ -1996,15 +1999,16 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onClose, canAdd }) {
             )}
           </button>
         ))}
+        {canAdd && tabs.length < 5 && (
+          <button
+            onClick={onAdd}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-xs font-semibold border-2 border-transparent text-success-600 bg-success-50 hover:bg-success-100 transition-all shrink-0"
+            title={t('surtido.validacion.new_tab')}>
+            <Plus size={14} />
+            <span className="hidden sm:inline">{t('surtido.validacion.new_tab')}</span>
+          </button>
+        )}
       </div>
-      {canAdd && (
-        <button
-          onClick={onAdd}
-          className="flex items-center justify-center w-8 h-8 ml-1 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 transition-colors shrink-0"
-          title="Nueva sesión">
-          <Plus size={14} />
-        </button>
-      )}
     </div>
   )
 }
@@ -2133,13 +2137,6 @@ export default function SurtidoValidacion() {
         onRefresh={handleSheetRefresh}
         refreshing={refreshingSheet}
       />
-      <button
-        className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-        onClick={() => setShowQuickSearch(true)}
-        title={t('surtido.validacion.quick_search_title')}>
-        <Search className="w-4 h-4" />
-        <span className="hidden sm:inline">{t('surtido.validacion.quick_search_title')}</span>
-      </button>
       {activeSession && (
         <>
           {activeSession.pendingCount > 0 && (
@@ -2175,6 +2172,13 @@ export default function SurtidoValidacion() {
           )}
         </>
       )}
+      <button
+        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-warm-100 text-warm-400 transition-all duration-200 hover:bg-primary-50 hover:text-primary-600"
+        onClick={() => setShowQuickSearch(true)}
+        title={t('surtido.validacion.quick_search_title')}
+        aria-label={t('surtido.validacion.quick_search_title')}>
+        <Search className="w-4 h-4" />
+      </button>
     </div>
   )
 
@@ -2188,6 +2192,7 @@ export default function SurtidoValidacion() {
         onAdd={addTab}
         onClose={closeTab}
         canAdd={canCreateValidation}
+        t={t}
       />
       <div className="flex-1 flex overflow-hidden relative">
         {tabs.map(tab => (
