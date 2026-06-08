@@ -969,17 +969,21 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     }
   }, [step, ubicacionConfirmed, isActive])
 
+  const [conflictDetails, setConflictDetails] = useState(null)
+  
   const createSessionMut = useMutation({
-    mutationFn: () => {
+    mutationFn: (force = false) => {
       const packageList = (detailData?.data ?? detailData)?.packageList ?? (detailData?.data ?? detailData)?.details ?? (detailData?.data ?? detailData)?.items ?? []
       return createScanSession({
         outbound_order_no: obc,
         third_order_no: (detailData?.data ?? detailData)?.thirdOrderNo || null,
         total_expected: packageList.reduce((s, p) => s + (p.quantity ?? p.totalPackageQty ?? p.qty ?? 1), 0),
         ubicacion_id: null,
+        force,
       })
     },
     onSuccess: (data) => {
+      setConflictDetails(null)
       const sid = data.data.id; const now = new Date()
       setSessionId(sid); setSessionStart(now); setStep('session')
       setSelectedUbicacion(null); setUbicacionConfirmed(false)
@@ -991,14 +995,15 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     onError: (err) => {
       autoFinalizeLockRef.current = false
       if (err.response?.status === 409) {
-        const details = err.response.data?.details
-        const dateStr = details?.started_at ? formatDateTimeTz(details.started_at) : ''
-        toast.error(`Esta orden ya está siendo validada por ${details?.operator || 'otro usuario'} desde ${dateStr}.`)
+        setConflictDetails(err.response.data?.details)
       } else {
         toast.error(t('toast.error'))
       }
     },
   })
+
+  // Add render logic for the conflict modal
+  // (Note: This component would need to be added to the JSX return as well)
 
   useEffect(() => {
     if (!autoStartPending || step !== 'session' || detailLoading || !detailData || sessionId || createSessionMut.isPending) return
@@ -1892,6 +1897,32 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
             value={finalNotes}
             onChange={e => setFinalNotes(e.target.value)}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!conflictDetails}
+        onClose={() => setConflictDetails(null)}
+        title="Conflicto de validación"
+        icon={AlertCircle}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => setConflictDetails(null)}>Cancelar</button>
+            <button
+              className="btn-danger inline-flex items-center gap-1.5"
+              onClick={() => {
+                createSessionMut.mutate(true)
+              }}
+            >
+              Forzar y continuar
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-sm text-warm-700">
+          <p>Esta orden ya está siendo validada por <strong>{conflictDetails?.operator}</strong>.</p>
+          <p>Inició el proceso el <strong>{conflictDetails?.started_at ? formatDateTimeTz(conflictDetails.started_at) : '—'}</strong>.</p>
+          <p className="font-semibold text-danger-600">¿Deseas tomar el control y continuar validando esta orden?</p>
         </div>
       </Modal>
 

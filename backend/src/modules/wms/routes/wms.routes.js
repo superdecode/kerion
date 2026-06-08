@@ -335,10 +335,10 @@ router.post('/scan-session',
   requirePermission('surtido.validacion', 'crear'),
   async (req, res) => {
     try {
-      const { outbound_order_no, third_order_no, total_expected } = req.body
+      const { outbound_order_no, third_order_no, total_expected, force } = req.body
       if (!outbound_order_no) return res.status(400).json({ success: false, error: 'outbound_order_no es requerido' })
 
-      // Integrity Check: Prevent concurrent validation of the same order
+      // Integrity Check: Prevent concurrent validation
       const existing = await req.tQuery(
         `SELECT s.*, u.nombre_completo as operator_nombre
          FROM pick_sessions s
@@ -350,15 +350,24 @@ router.post('/scan-session',
 
       if (existing.rows.length > 0) {
         const s = existing.rows[0]
-        return res.status(409).json({
-          success: false,
-          error: 'Esta orden ya está siendo validada',
-          details: {
-            operator: s.operator_nombre || 'Desconocido',
-            started_at: s.started_at,
-            status: s.status
-          }
-        })
+        if (!force) {
+          return res.status(409).json({
+            success: false,
+            error: 'Esta orden ya está siendo validada',
+            details: {
+              session_id: s.id,
+              operator: s.operator_nombre || 'Desconocido',
+              started_at: s.started_at,
+              status: s.status
+            }
+          })
+        }
+        // Force takeover: Close old session
+        await req.tQuery(
+          `UPDATE pick_sessions SET status = 'complete', completed_at = now(), notes = 'Cerrada por takeover de otro operador' 
+           WHERE id = $1 AND tenant_id = $2`,
+          [s.id, req.tenantId]
+        )
       }
 
       const result = await req.tQuery(
