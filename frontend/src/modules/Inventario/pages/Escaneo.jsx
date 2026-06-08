@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
+import { ErrorAlertModal } from '../../../core/components/common/ErrorAlertModal'
 import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -1160,6 +1161,7 @@ export default function Escaneo() {
   const [closeTabPending, setCloseTabPending] = useState(null) // { tabId, count }
   const [groupDetail, setGroupDetail] = useState(null)
   const [showQuickSearch, setShowQuickSearch] = useState(false)
+  const [criticalError, setCriticalError] = useState(null)
 
   const buildSessionDuplicateConflicts = useCallback((codes) => {
     if (!activeTab) return []
@@ -1843,6 +1845,12 @@ export default function Escaneo() {
       <QuickCodeSearchModal
         isOpen={showQuickSearch}
         onClose={() => setShowQuickSearch(false)}
+      />
+      <ErrorAlertModal
+        isOpen={!!criticalError}
+        onClose={() => setCriticalError(null)}
+        title={criticalError?.title}
+        message={criticalError?.message}
       />
     </div>
   )
