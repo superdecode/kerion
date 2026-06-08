@@ -329,6 +329,9 @@ export default function OrdenDetalle() {
   const statusMeta = STATUS_META[displayStatus] ?? STATUS_META.pending_assignment
   const isClosedOrder = status === 'complete' || status === 'partial' || is100Percent
 
+  const referencia = d?.thirdOrderNo || d?.referenceNo || '—'
+  const trackingNo = d?.logisticsTrackNo || d?.trackingNo || '—'
+
   const pct = totalExpected > 0 ? Math.min(100, Math.round((totalScanned / totalExpected) * 100)) : null
   const hasValidation = pct !== null || totalScanned > 0
 
