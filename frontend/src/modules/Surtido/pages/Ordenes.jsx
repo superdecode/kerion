@@ -816,7 +816,15 @@ export default function Ordenes() {
   const [bulkSearchOpen, setBulkSearchOpen] = useState(false)
   const [bulkSearchText, setBulkSearchText] = useState('')
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
+  const [isTransitioning, setIsTransitioning] = useState(false)
   const timeFromInputRef = useRef(null)
+
+  const handleStatusChange = (newStatus) => {
+    setIsTransitioning(true)
+    setFilterStatus(newStatus)
+    setPage(1)
+    setTimeout(() => setIsTransitioning(false), 300)
+  }
 
   const [refreshing, setRefreshing] = useState(false)
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
@@ -1496,18 +1504,6 @@ export default function Ordenes() {
         </div>
       </div>
 
-  const [isTransitioning, setIsTransitioning] = useState(false)
-
-  // ... (inside component)
-
-  const handleStatusChange = (newStatus) => {
-    setIsTransitioning(true)
-    setFilterStatus(newStatus)
-    setPage(1)
-    setTimeout(() => setIsTransitioning(false), 300)
-  }
-
-  // ... (inside return)
       <div className="sticky top-[8.7rem] z-[4] bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-6">
         <StatusTabs selected={filterStatus} onChange={handleStatusChange} t={t} />
       </div>
