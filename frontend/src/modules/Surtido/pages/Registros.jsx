@@ -162,6 +162,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
     queryFn: () => getScanSession(sessionId),
     enabled: isOpen && !!sessionId,
     staleTime: 30000,
+    retry: 0,
     onSuccess: () => setDetailTab(initialTab),
   })
 
@@ -175,6 +176,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
     enabled: isOpen && !!session.outbound_order_no,
+    retry: 0,
   })
 
   // Order tracking notes
@@ -183,6 +185,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
     queryFn: () => getOrderTrackingByOBC(session.outbound_order_no),
     enabled: isOpen && !!session.outbound_order_no,
     staleTime: 60000,
+    retry: 0,
   })
   const trackingNotes = trackingData?.data?.notes || null
   const wmsOrder = getRecords(wmsData)
@@ -192,6 +195,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
     queryFn: getManualEntryReasons,
     enabled: isOpen && !!sessionId,
     staleTime: 60000,
+    retry: 0,
   })
 
   const validados  = events.filter(e => e.scan_result === 'ok')
@@ -681,6 +685,7 @@ export default function SurtidoRegistros() {
       fecha_fin: dateTo || undefined,
     }),
     staleTime: 30000,
+    retry: 0,
   })
 
   const records = getRecords(data)

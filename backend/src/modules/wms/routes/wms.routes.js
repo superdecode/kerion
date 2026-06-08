@@ -10,6 +10,7 @@ const PICK_SESSION_STATUSES = new Set(['open', 'complete', 'with_discrepancies']
 const PICK_SCAN_RESULTS = new Set(['ok', 'unexpected', 'duplicate', 'not_found'])
 const INV_SCAN_STATUSES = new Set(['ok', 'blocked', 'nowms'])
 const ORDER_TRACKING_STATUSES = new Set(['pending_assignment', 'assigned', 'sorting', 'pending_validation', 'validating', 'complete', 'partial', 'cancelled'])
+const CLOSED_ORDER_TRACKING_STATUSES = new Set(['complete', 'partial'])
 
 // ── Sheet CSV cache (per tenant+url, stale-while-revalidate) ───────────────
 const _csvCache = new Map()
@@ -483,7 +484,29 @@ router.put('/scan-session/:id',
         `UPDATE pick_sessions SET ${fields.join(', ')} WHERE id = $${p++} AND tenant_id = $${p} RETURNING *`,
         params
       )
-      res.json({ success: true, data: result.rows[0] })
+      const updatedSession = result.rows[0]
+
+      if (status === 'complete' || status === 'with_discrepancies') {
+        const scanned = total_scanned !== undefined
+          ? parsePositiveInt(total_scanned, 0)
+          : parsePositiveInt(updatedSession.total_scanned, 0)
+        const expected = parsePositiveInt(updatedSession.total_expected, 0)
+        const orderStatus = expected > 0 && scanned >= expected ? 'complete' : 'partial'
+        const userNombre = req.fullUser?.nombre_completo || null
+        await req.tQuery(
+          `INSERT INTO pick_order_tracking
+             (tenant_id, outbound_order_no, third_order_no, status, validation_completed_at, validated_by)
+           VALUES ($1, $2, $3, $4, now(), $5)
+           ON CONFLICT (tenant_id, outbound_order_no)
+           DO UPDATE SET
+             status = EXCLUDED.status,
+             validation_completed_at = now(),
+             validated_by = EXCLUDED.validated_by,
+             updated_at = now()`,
+          [req.tenantId, updatedSession.outbound_order_no, updatedSession.third_order_no || null, orderStatus, userNombre]
+        )
+      }
+      res.json({ success: true, data: updatedSession })
     } catch (err) {
       console.error('PUT wmshub/scan-session/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error actualizando sesión' })
@@ -1534,7 +1557,7 @@ router.post('/order-tracking/bulk',
 
         for (const obc of obcs) {
           const existing = await client.query(
-            'SELECT id FROM pick_order_tracking WHERE tenant_id = $1 AND outbound_order_no = $2',
+            'SELECT id, status FROM pick_order_tracking WHERE tenant_id = $1 AND outbound_order_no = $2',
             [req.tenantId, obc]
           )
 
@@ -1547,6 +1570,15 @@ router.post('/order-tracking/bulk',
             )
             updated.push(resInsert.rows[0])
           } else {
+            const existingStatus = existing.rows[0].status
+            if (CLOSED_ORDER_TRACKING_STATUSES.has(existingStatus) && (
+              surtidor_id !== undefined ||
+              (status !== undefined && String(status) !== existingStatus)
+            )) {
+              const err = new Error('No se puede modificar surtidor o estatus en órdenes completadas o parciales')
+              err.statusCode = 409
+              throw err
+            }
             const fields = ['updated_at = now()']
             const params = []
             let p = 1
@@ -1585,7 +1617,7 @@ router.post('/order-tracking/bulk',
       res.json({ success: true, data: results })
     } catch (err) {
       console.error('POST order-tracking/bulk error:', err.message)
-      res.status(500).json({ success: false, error: 'Error en actualización masiva' })
+      res.status(err.statusCode || 500).json({ success: false, error: err.statusCode ? err.message : 'Error en actualización masiva' })
     }
   }
 )
@@ -1600,7 +1632,7 @@ router.put('/order-tracking/:obc',
         return res.status(400).json({ success: false, error: 'Estado de orden inválido' })
       }
       const existing = await req.tQuery(
-        'SELECT id FROM pick_order_tracking WHERE tenant_id = $1 AND outbound_order_no = $2',
+        'SELECT id, status FROM pick_order_tracking WHERE tenant_id = $1 AND outbound_order_no = $2',
         [req.tenantId, req.params.obc]
       )
 
@@ -1622,6 +1654,14 @@ router.put('/order-tracking/:obc',
            surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes)]
         )
         return res.json({ success: true, data: result.rows[0] })
+      }
+
+      const existingStatus = existing.rows[0].status
+      if (CLOSED_ORDER_TRACKING_STATUSES.has(existingStatus) && (
+        surtidor_id !== undefined ||
+        (status !== undefined && String(status) !== existingStatus)
+      )) {
+        return res.status(409).json({ success: false, error: 'No se puede modificar surtidor o estatus en órdenes completadas o parciales' })
       }
 
       const fields = ['updated_at = now()']

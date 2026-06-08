@@ -320,6 +320,7 @@ export default function OrdenDetalle() {
 
   const status = tracking?.status || 'pending_assignment'
   const statusMeta = STATUS_META[status] ?? STATUS_META.pending_assignment
+  const isClosedOrder = status === 'complete' || status === 'partial'
 
   const referencia = d?.thirdOrderNo || d?.referenceNo || '—'
   const trackingNo = d?.logisticsTrackNo || d?.trackingNo || '—'
@@ -383,13 +384,15 @@ export default function OrdenDetalle() {
         subtitle={t('nav.surtido_wms')}
         actions={
           <div className="flex items-center gap-2">
-            <button
-              className="btn-ghost text-sm flex items-center gap-1.5"
-              onClick={() => setShowAssign(true)}>
-              <UserCheck size={14} />
-              {t('surtido.ordenes.assign_surtidor')}
-            </button>
-            {status !== 'complete' && (
+            {!isClosedOrder && (
+              <button
+                className="btn-ghost text-sm flex items-center gap-1.5"
+                onClick={() => setShowAssign(true)}>
+                <UserCheck size={14} />
+                {t('surtido.ordenes.assign_surtidor')}
+              </button>
+            )}
+            {!isClosedOrder && (
               <button
                 className="btn-primary text-sm flex items-center gap-1.5"
                 onClick={() => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}>

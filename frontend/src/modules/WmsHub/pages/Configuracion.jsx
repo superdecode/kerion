@@ -28,6 +28,7 @@ export default function Configuracion() {
     queryKey: ['wms-config'],
     queryFn: getConfig,
     staleTime: 30000,
+    retry: 0,
   })
 
   useEffect(() => {

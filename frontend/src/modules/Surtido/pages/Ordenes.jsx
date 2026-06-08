@@ -41,6 +41,7 @@ const STATUS_META = {
 }
 
 const STATUS_FILTER_KEYS = ['pending_assignment', 'sorting', 'validating', 'complete', 'partial', 'cancelled']
+const CLOSED_ORDER_STATUSES = new Set(['complete', 'partial'])
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
 function parseBulkCodes(text) {
@@ -498,7 +499,8 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
   const canal = wmsRecord?.logisticsChannel || '—'
   const referencia = wmsRecord?.thirdOrderNo || wmsRecord?.referenceNo || '—'
   const trackingNo = wmsRecord?.logisticsTrackNo || '—'
-  const hasValidationRecord = tracking?.status === 'complete' || Number(tracking?.session_count ?? 0) > 0
+  const isClosedOrder = CLOSED_ORDER_STATUSES.has(tracking?.status)
+  const hasValidationRecord = isClosedOrder || Number(tracking?.session_count ?? 0) > 0
 
   return (
     <AnimatePresence>
@@ -557,6 +559,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                 <select
                   value={localSurtidorId}
                   onChange={e => setLocalSurtidorId(e.target.value)}
+                  disabled={isClosedOrder}
                   className="w-full h-10 pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all cursor-pointer"
                 >
                   <option value="">{t('surtido.ordenes.no_surtidor')}</option>
@@ -574,6 +577,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                       <button
                         key={k}
                         onClick={() => setLocalStatus(k)}
+                        disabled={isClosedOrder && k !== localStatus}
                         className={`px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all ${
                           localStatus === k
                             ? `${m.cls} border-current ring-1 ring-current/30`
@@ -628,6 +632,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
               <button
                 onClick={() => onSave({
                   surtidorId: localSurtidorId ? Number(localSurtidorId) : null,
+                  canChangeSurtidor: !isClosedOrder,
                   status: localStatus,
                   notes: localNotes,
                 })}
@@ -883,18 +888,21 @@ export default function Ordenes() {
     queryKey: ['wms-outbound'],
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
+    retry: 0,
   })
 
   const { data: trackingData } = useQuery({
     queryKey: ['wms-order-tracking'],
     queryFn: getOrderTracking,
     staleTime: 30000,
+    retry: 0,
   })
 
   const { data: surtidoresData } = useQuery({
     queryKey: ['wms-surtidores'],
     queryFn: getSurtidores,
     staleTime: 60000,
+    retry: 0,
   })
 
   const allWmsRecords = getRecords(wmsData)
@@ -1537,9 +1545,9 @@ export default function Ordenes() {
         surtidores={surtidores}
         isOpen={!!quickEditObc}
         onClose={() => setQuickEditObc(null)}
-        onSave={({ surtidorId, status, notes }) => {
+        onSave={({ surtidorId, canChangeSurtidor, status, notes }) => {
           if (!quickEditObc) return
-          quickEditMut.mutate({ obc: quickEditObc, surtidorId, status, notes })
+          quickEditMut.mutate({ obc: quickEditObc, surtidorId: canChangeSurtidor ? surtidorId : undefined, status, notes })
         }}
         isSaving={quickEditMut.isPending}
         t={t}
@@ -1590,6 +1598,10 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
 
   const allChecked = sortedRecords.length > 0 && sortedRecords.every(r => selected.has(r.outboundOrderNo))
   const someChecked = selected.size > 0
+  const selectedRecords = sortedRecords.filter(r => selected.has(r.outboundOrderNo))
+  const assignableSelected = selectedRecords.filter(r => !CLOSED_ORDER_STATUSES.has(trackingMap[r.outboundOrderNo]?.status || 'pending_assignment'))
+  const assignableSelectedObcs = assignableSelected.map(r => r.outboundOrderNo)
+  const statusEditableSelectedObcs = assignableSelectedObcs
   const toggleAll = () => setSelected(prev => {
     const next = new Set(prev)
     if (allChecked) sortedRecords.forEach(r => next.delete(r.outboundOrderNo))
@@ -1614,15 +1626,17 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
           </span>
           {canAssign && (
             <button
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-              onClick={() => setBulkAssignOpen(true)}>
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={() => setBulkAssignOpen(true)}
+              disabled={assignableSelectedObcs.length === 0}>
               <UserCheck size={12} /> Asignar
             </button>
           )}
           {canQuickEdit && (
             <button
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-primary-700 border border-primary-200 hover:bg-primary-50 transition-colors"
-              onClick={() => setBulkStatusOpen(true)}>
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-primary-700 border border-primary-200 hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={() => setBulkStatusOpen(true)}
+              disabled={statusEditableSelectedObcs.length === 0}>
               <ClipboardList size={12} /> Estado
             </button>
           )}
@@ -1698,6 +1712,7 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
               const status = tracking?.status || 'pending_assignment'
               const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
               const noSurtidor = !tracking?.surtidor_nombre
+              const isClosedOrder = CLOSED_ORDER_STATUSES.has(status)
               const cliente = r.customerCode || r.customerNo || r.customerName || '—'
               const destino = r.receiverName || '—'
               const canal = r.logisticsChannel || '—'
@@ -1784,7 +1799,7 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                   )}
 
                   <td className="table-cell col-name">
-                    {canAssign ? (
+                    {canAssign && !isClosedOrder ? (
                       <button
                         className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all hover:shadow-sm ${
                           noSurtidor
@@ -1821,7 +1836,7 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                           <ClipboardList size={13} />
                         </button>
                       )}
-                      {canValidate && tracking?.status !== 'complete' && (
+                      {canValidate && !isClosedOrder && (
                         <button title={t('surtido.ordenes.validate_btn')}
                           className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-primary-600 hover:text-primary-800 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
                           onClick={e => { e.stopPropagation(); onValidate(obc) }}>
@@ -1853,10 +1868,11 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
               <button
                 className="btn-primary inline-flex items-center gap-1.5 whitespace-nowrap"
                 onClick={() => {
-                  onBulkAssign([...selected], bulkSurtidorId ? Number(bulkSurtidorId) : null)
+                  onBulkAssign(assignableSelectedObcs, bulkSurtidorId ? Number(bulkSurtidorId) : null)
                   setSelected(new Set())
                   setBulkAssignOpen(false)
                 }}
+                disabled={assignableSelectedObcs.length === 0}
               >
               {t('common.apply')}
               </button>
@@ -1864,7 +1880,10 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
           }
         >
         <div className="space-y-3">
-          <p className="text-sm text-warm-600">{selected.size} {t('surtido.ordenes.bulk_affected')}</p>
+          <p className="text-sm text-warm-600">{assignableSelectedObcs.length} {t('surtido.ordenes.bulk_affected')}</p>
+          {assignableSelectedObcs.length < selected.size && (
+            <p className="text-xs text-warning-600">Las órdenes completadas o parciales no permiten cambio de surtidor.</p>
+          )}
           <select className="input-field w-full text-sm" value={bulkSurtidorId} onChange={(e) => setBulkSurtidorId(e.target.value)}>
             <option value="">{t('surtido.ordenes.no_surtidor')}</option>
             {surtidores.map((s) => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
@@ -1882,10 +1901,11 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
             <button
               className="btn-primary inline-flex items-center gap-1.5 whitespace-nowrap"
               onClick={() => {
-                onBulkStatus([...selected], bulkStatus)
+                onBulkStatus(statusEditableSelectedObcs, bulkStatus)
                 setSelected(new Set())
                 setBulkStatusOpen(false)
               }}
+              disabled={statusEditableSelectedObcs.length === 0}
             >
               {t('common.apply')}
             </button>
@@ -1893,7 +1913,10 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
         }
       >
         <div className="space-y-3">
-          <p className="text-sm text-warm-600">{selected.size} {t('surtido.ordenes.bulk_affected')}</p>
+          <p className="text-sm text-warm-600">{statusEditableSelectedObcs.length} {t('surtido.ordenes.bulk_affected')}</p>
+          {statusEditableSelectedObcs.length < selected.size && (
+            <p className="text-xs text-warning-600">Las órdenes completadas o parciales no permiten cambio de estatus.</p>
+          )}
           <select className="input-field w-full text-sm" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
             {STATUS_FILTER_KEYS.map((key) => <option key={key} value={key}>{t(STATUS_META[key].labelKey)}</option>)}
           </select>

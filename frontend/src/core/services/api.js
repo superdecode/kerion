@@ -36,9 +36,29 @@ const api = axios.create({
 
 // Track whether we're already handling a 401 redirect to prevent loops
 let isHandling401 = false
+let backendUnavailableUntil = 0
+const BACKEND_COOLDOWN_MS = 15000
+
+function isProtectedAuthRequest(config) {
+  const url = String(config?.url || '')
+  return url.includes('/auth/login') || url.includes('/auth/logout')
+}
+
+function shouldSkipBackendCooldown(config) {
+  const method = String(config?.method || 'get').toLowerCase()
+  if (method !== 'get') return true
+  return isProtectedAuthRequest(config)
+}
 
 // Request interceptor - attach token
 api.interceptors.request.use((config) => {
+  if (!shouldSkipBackendCooldown(config) && Date.now() < backendUnavailableUntil) {
+    const error = new Error('Backend temporarily unavailable')
+    error.code = 'ERR_BACKEND_UNAVAILABLE'
+    error.config = config
+    return Promise.reject(error)
+  }
+
   // If url is absolute, don't touch it. 
   // If it's relative, ensure it DOES NOT start with / to avoid Axios overriding baseURL path
   if (typeof config.url === 'string' && config.url && !/^https?:\/\//i.test(config.url)) {
@@ -60,6 +80,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const isNetworkFailure = !error.response && (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || /Network Error/i.test(error.message || ''))
+    if (isNetworkFailure && !shouldSkipBackendCooldown(error.config)) {
+      backendUnavailableUntil = Date.now() + BACKEND_COOLDOWN_MS
+    }
+
     if (error.response?.status === 401) {
       const isLoginRequest = error.config?.url?.includes('/auth/login')
       const isAuthMeRequest = error.config?.url?.includes('/auth/me')
