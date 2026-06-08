@@ -319,17 +319,16 @@ export default function OrdenDetalle() {
   const packageList = d?.packageList ?? d?.outboundBoxList ?? d?.boxList ?? []
 
   const status = tracking?.status || 'pending_assignment'
-  const statusMeta = STATUS_META[status] ?? STATUS_META.pending_assignment
-  const isClosedOrder = status === 'complete' || status === 'partial'
-
-  const referencia = d?.thirdOrderNo || d?.referenceNo || '—'
-  const trackingNo = d?.logisticsTrackNo || d?.trackingNo || '—'
-
   const totalExpected = Number(
     wmsRecord?.outboundBoxCount ?? wmsRecord?.packageCount ?? wmsRecord?.totalQty ??
-    d?.outboundBoxCount ?? d?.packageCount ?? d?.totalQty ?? 0
+    d?.outboundBoxCount ?? d?.packageCount ?? d?.totalQty ?? tracking?.total_expected ?? 0
   )
   const totalScanned = sessions.reduce((sum, s) => sum + (s.total_scanned || 0), 0)
+  const is100Percent = totalExpected > 0 && totalScanned >= totalExpected
+  const displayStatus = (is100Percent && status !== 'complete' && status !== 'partial' && status !== 'cancelled') ? 'complete' : status
+  const statusMeta = STATUS_META[displayStatus] ?? STATUS_META.pending_assignment
+  const isClosedOrder = status === 'complete' || status === 'partial' || is100Percent
+
   const pct = totalExpected > 0 ? Math.min(100, Math.round((totalScanned / totalExpected) * 100)) : null
   const hasValidation = pct !== null || totalScanned > 0
 

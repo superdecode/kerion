@@ -1490,13 +1490,15 @@ router.get('/order-tracking',
       const rows = await req.tQuery(
         `SELECT ot.*, s.nombre as surtidor_nombre_actual,
                 COALESCE(stats.session_count, 0) as session_count,
-                COALESCE(stats.total_scanned, 0) as total_scanned
+                COALESCE(stats.total_scanned, 0) as total_scanned,
+                COALESCE(stats.total_expected, 0) as total_expected
          FROM pick_order_tracking ot
          LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id
          LEFT JOIN (
            SELECT outbound_order_no, tenant_id,
                   COUNT(*) as session_count,
-                  SUM(total_scanned) as total_scanned
+                  SUM(total_scanned) as total_scanned,
+                  MAX(total_expected) as total_expected
            FROM pick_sessions
            WHERE tenant_id = $1
            GROUP BY outbound_order_no, tenant_id
@@ -1519,9 +1521,19 @@ router.get('/order-tracking/:obc',
   async (req, res) => {
     try {
       const row = await req.tQuery(
-        `SELECT ot.*, s.nombre as surtidor_nombre_actual
+        `SELECT ot.*, s.nombre as surtidor_nombre_actual,
+                COALESCE(stats.total_scanned, 0) as total_scanned,
+                COALESCE(stats.total_expected, 0) as total_expected
          FROM pick_order_tracking ot
          LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id
+         LEFT JOIN (
+           SELECT outbound_order_no, tenant_id,
+                  SUM(total_scanned) as total_scanned,
+                  MAX(total_expected) as total_expected
+           FROM pick_sessions
+           WHERE tenant_id = $1 AND outbound_order_no = $2
+           GROUP BY outbound_order_no, tenant_id
+         ) stats ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
          WHERE ot.tenant_id = $1 AND ot.outbound_order_no = $2`,
         [req.tenantId, req.params.obc]
       )

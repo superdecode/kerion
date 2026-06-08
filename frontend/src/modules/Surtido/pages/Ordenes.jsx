@@ -1014,7 +1014,27 @@ export default function Ordenes() {
 
   const filteredWms = combinedRecords.filter(r => {
     const tracking = trackingMap[r.outboundOrderNo]
-    if (filterStatus && (tracking?.status || 'pending_assignment') !== filterStatus) return false
+    const currentStatus = tracking?.status || 'pending_assignment'
+
+    // Calculate effective completion
+    const scanned = Number(tracking?.total_scanned ?? 0)
+    const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
+    const is100Percent = expected > 0 && scanned >= expected
+
+    if (filterStatus) {
+      if (filterStatus === 'complete') {
+        // Show if status is complete OR it is 100% scanned
+        if (currentStatus !== 'complete' && !is100Percent) return false
+      } else if (filterStatus === 'sorting' || filterStatus === 'validating' || filterStatus === 'pending_assignment') {
+        // Show if status matches AND it is NOT 100% scanned (as those move to complete tab)
+        if (currentStatus !== filterStatus) return false
+        if (is100Percent) return false
+      } else {
+        // For 'partial' or 'cancelled', we show them even if 100% (though partial shouldn't be 100%)
+        if (currentStatus !== filterStatus) return false
+      }
+    }
+
     if (filterClient && (r.customerCode || r.customerNo || r.customerName || '') !== filterClient) return false
     if (filterSurtidor && tracking?.surtidor_nombre !== filterSurtidor) return false
     if (destinationQuery && !(r.receiverName || '').toLowerCase().includes(destinationQuery)) return false
@@ -1709,10 +1729,18 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
             {sortedRecords.map((r, i) => {
               const obc = r.outboundOrderNo
               const tracking = trackingMap[obc]
-              const status = tracking?.status || 'pending_assignment'
-              const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
+              
+              const scanned = Number(tracking?.total_scanned ?? 0)
+              const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
+              const is100Percent = expected > 0 && scanned >= expected
+              
+              const rawStatus = tracking?.status || 'pending_assignment'
+              const displayStatus = (is100Percent && rawStatus !== 'complete' && rawStatus !== 'partial' && rawStatus !== 'cancelled') ? 'complete' : rawStatus
+              const meta = STATUS_META[displayStatus] ?? STATUS_META.pending_assignment
+              
+              const status = rawStatus
               const noSurtidor = !tracking?.surtidor_nombre
-              const isClosedOrder = CLOSED_ORDER_STATUSES.has(status)
+              const isClosedOrder = CLOSED_ORDER_STATUSES.has(displayStatus)
               const cliente = r.customerCode || r.customerNo || r.customerName || '—'
               const destino = r.receiverName || '—'
               const canal = r.logisticsChannel || '—'
@@ -1770,8 +1798,6 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                   {showScannedColumn && (
                     <td className="table-cell">
                       {(() => {
-                        const scanned = Number(tracking?.total_scanned ?? 0)
-                        const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? 0)
                         const pct = expected > 0
                           ? Math.min(100, Math.round((scanned / expected) * 100))
                           : (scanned > 0 ? 100 : 0)
