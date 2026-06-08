@@ -7,20 +7,25 @@ function buildSameOriginApiUrl(pathname = '/api') {
 
 function resolveApiBaseUrl() {
   const configured = (import.meta.env.VITE_API_URL || '').trim()
-  if (!configured) return buildSameOriginApiUrl('/api')
+  let baseUrl = ''
 
-  if (/^https?:\/\//i.test(configured)) {
+  if (!configured) {
+    baseUrl = buildSameOriginApiUrl('/api')
+  } else if (/^https?:\/\//i.test(configured)) {
     try {
       const url = new URL(configured)
       const isLocalApi = ['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)
       const isLocalPage = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname)
-      return isLocalApi && !isLocalPage ? buildSameOriginApiUrl('/api') : configured.replace(/\/+$/, '')
+      baseUrl = isLocalApi && !isLocalPage ? buildSameOriginApiUrl('/api') : configured
     } catch {
-      return buildSameOriginApiUrl('/api')
+      baseUrl = buildSameOriginApiUrl('/api')
     }
+  } else {
+    baseUrl = buildSameOriginApiUrl(configured)
   }
 
-  return buildSameOriginApiUrl(configured)
+  // Ensure trailing slash for Axios baseURL consistency
+  return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
 }
 
 const api = axios.create({
@@ -34,8 +39,10 @@ let isHandling401 = false
 
 // Request interceptor - attach token
 api.interceptors.request.use((config) => {
+  // If url is absolute, don't touch it. 
+  // If it's relative, ensure it DOES NOT start with / to avoid Axios overriding baseURL path
   if (typeof config.url === 'string' && config.url && !/^https?:\/\//i.test(config.url)) {
-    config.url = config.url.startsWith('/') ? config.url : `/${config.url}`
+    config.url = config.url.startsWith('/') ? config.url.slice(1) : config.url
   }
   const stored = localStorage.getItem('wms-auth')
   if (stored) {

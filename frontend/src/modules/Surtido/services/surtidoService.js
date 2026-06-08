@@ -77,3 +77,6 @@ export const getOrderTrackingByOBC = (obc) =>
 
 export const upsertOrderTracking = (obc, body) =>
   api.put(`/wmshub/order-tracking/${encodeURIComponent(obc)}`, body).then(r => r.data)
+
+export const bulkUpsertOrderTracking = (body) =>
+  api.post('/wmshub/order-tracking/bulk', body).then(r => r.data)

@@ -9,7 +9,7 @@ const DEFAULT_TZ = 'America/Mexico_City'
 const PICK_SESSION_STATUSES = new Set(['open', 'complete', 'with_discrepancies'])
 const PICK_SCAN_RESULTS = new Set(['ok', 'unexpected', 'duplicate', 'not_found'])
 const INV_SCAN_STATUSES = new Set(['ok', 'blocked', 'nowms'])
-const ORDER_TRACKING_STATUSES = new Set(['pending_assignment', 'assigned', 'sorting', 'pending_validation', 'validating', 'complete'])
+const ORDER_TRACKING_STATUSES = new Set(['pending_assignment', 'assigned', 'sorting', 'pending_validation', 'validating', 'complete', 'partial', 'cancelled'])
 
 // ── Sheet CSV cache (per tenant+url, stale-while-revalidate) ───────────────
 const _csvCache = new Map()
@@ -1466,12 +1466,18 @@ router.get('/order-tracking',
     try {
       const rows = await req.tQuery(
         `SELECT ot.*, s.nombre as surtidor_nombre_actual,
-                (SELECT COUNT(*) FROM pick_sessions ss
-                 WHERE ss.outbound_order_no = ot.outbound_order_no AND ss.tenant_id = ot.tenant_id) as session_count,
-                (SELECT COALESCE(SUM(total_scanned),0) FROM pick_sessions ss
-                 WHERE ss.outbound_order_no = ot.outbound_order_no AND ss.tenant_id = ot.tenant_id) as total_scanned
+                COALESCE(stats.session_count, 0) as session_count,
+                COALESCE(stats.total_scanned, 0) as total_scanned
          FROM pick_order_tracking ot
          LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id
+         LEFT JOIN (
+           SELECT outbound_order_no, tenant_id,
+                  COUNT(*) as session_count,
+                  SUM(total_scanned) as total_scanned
+           FROM pick_sessions
+           WHERE tenant_id = $1
+           GROUP BY outbound_order_no, tenant_id
+         ) stats ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
          WHERE ot.tenant_id = $1
          ORDER BY ot.updated_at DESC`,
         [req.tenantId]
@@ -1499,6 +1505,87 @@ router.get('/order-tracking/:obc',
       res.json({ success: true, data: row.rows[0] || null })
     } catch (err) {
       res.status(500).json({ success: false, error: 'Error obteniendo seguimiento' })
+    }
+  }
+)
+
+router.post('/order-tracking/bulk',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'actualizar'),
+  async (req, res) => {
+    try {
+      const { obcs, surtidor_id, status, notes } = req.body
+      if (!Array.isArray(obcs) || obcs.length === 0) {
+        return res.status(400).json({ success: false, error: 'Lista de órdenes (obcs) es requerida' })
+      }
+      if (status !== undefined && !ORDER_TRACKING_STATUSES.has(String(status))) {
+        return res.status(400).json({ success: false, error: 'Estado de orden inválido' })
+      }
+
+      let surtidorNombre = null
+      if (surtidor_id) {
+        const s = await req.tQuery('SELECT nombre FROM pick_surtidores WHERE id = $1 AND tenant_id = $2', [surtidor_id, req.tenantId])
+        if (s.rows.length > 0) surtidorNombre = s.rows[0].nombre
+      }
+
+      const results = await req.tTransaction(async (client) => {
+        const updated = []
+        const userNombre = req.fullUser?.nombre_completo || null
+
+        for (const obc of obcs) {
+          const existing = await client.query(
+            'SELECT id FROM pick_order_tracking WHERE tenant_id = $1 AND outbound_order_no = $2',
+            [req.tenantId, obc]
+          )
+
+          if (existing.rows.length === 0) {
+            const resInsert = await client.query(
+              `INSERT INTO pick_order_tracking
+                 (tenant_id, outbound_order_no, surtidor_id, surtidor_nombre, status, notes)
+               VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+              [req.tenantId, obc, surtidor_id || null, surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes)]
+            )
+            updated.push(resInsert.rows[0])
+          } else {
+            const fields = ['updated_at = now()']
+            const params = []
+            let p = 1
+            if (status !== undefined) {
+              fields.push(`status = $${p++}`); params.push(status)
+              if (status === 'assigned') {
+                fields.push(`assigned_at = now()`)
+                fields.push(`assigned_by = $${p++}`); params.push(userNombre)
+              }
+              if (status === 'sorting')            fields.push(`sorting_started_at = now()`)
+              if (status === 'pending_validation') fields.push(`sorting_completed_at = now()`)
+              if (status === 'validating')         fields.push(`validation_started_at = now()`)
+              if (status === 'complete') {
+                fields.push(`validation_completed_at = now()`)
+                fields.push(`validated_by = $${p++}`); params.push(userNombre)
+              }
+            }
+            if (surtidor_id !== undefined) {
+              fields.push(`surtidor_id = $${p++}`); params.push(surtidor_id || null)
+              fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
+            }
+            if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
+            
+            params.push(req.tenantId, obc)
+            const resUpdate = await client.query(
+              `UPDATE pick_order_tracking SET ${fields.join(', ')}
+               WHERE tenant_id = $${p++} AND outbound_order_no = $${p} RETURNING *`,
+              params
+            )
+            updated.push(resUpdate.rows[0])
+          }
+        }
+        return updated
+      })
+
+      res.json({ success: true, data: results })
+    } catch (err) {
+      console.error('POST order-tracking/bulk error:', err.message)
+      res.status(500).json({ success: false, error: 'Error en actualización masiva' })
     }
   }
 )

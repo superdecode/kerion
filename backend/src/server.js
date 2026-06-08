@@ -555,6 +555,7 @@ async function runMigrations() {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_pick_order_tracking_unique ON pick_order_tracking(tenant_id, outbound_order_no)`,
     `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_tenant ON pick_order_tracking(tenant_id)`,
     `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_status ON pick_order_tracking(tenant_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_pick_order_tracking_updated ON pick_order_tracking(updated_at DESC)`,
     `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ`,
     `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS assigned_by TEXT`,
     `ALTER TABLE pick_order_tracking ADD COLUMN IF NOT EXISTS sorting_started_at TIMESTAMPTZ`,

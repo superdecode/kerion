@@ -152,6 +152,7 @@ router.get('/:id',
   async (req, res) => {
     try {
       const { id } = req.params
+      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
 
       const tarimaRes = await req.tQuery(
         `SELECT t.*, e.nombre as empresa_nombre, e.codigo as empresa_codigo,

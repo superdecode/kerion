@@ -2,10 +2,21 @@ import api from '../../../core/services/api'
 
 // ── Cache ──────────────────────────────────────────────────────────────────
 const CACHE_TTL = 5 * 60 * 1000
+const OUTBOUND_RECORD_CACHE_KEY = 'kirion_wmshub_outbound_recent_v1'
+const OUTBOUND_RECORD_CACHE_TTL = 30 * 60 * 1000
+const OUTBOUND_RECORD_CACHE_LIMIT = 1000
 
 const cache = {
   inventory: { data: null, ts: 0, partial: false },
   outbound:  { data: null, ts: 0, partial: false },
+}
+
+const sheetListeners = new Set()
+
+function notifySheetCache(type) {
+  sheetListeners.forEach((listener) => {
+    try { listener(type, getCacheStatus(type)) } catch {}
+  })
 }
 
 // ── CSV Parser (RFC 4180) ──────────────────────────────────────────────────
@@ -196,6 +207,27 @@ function getField(row, map, field) {
   return idx !== undefined ? (row[idx] ?? '') : ''
 }
 
+function readOutboundRecordCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(OUTBOUND_RECORD_CACHE_KEY) || 'null')
+    if (!cached?.records || Date.now() - cached.ts > OUTBOUND_RECORD_CACHE_TTL) return null
+    return cached
+  } catch {
+    return null
+  }
+}
+
+function writeOutboundRecordCache(records) {
+  try {
+    localStorage.setItem(OUTBOUND_RECORD_CACHE_KEY, JSON.stringify({
+      ts: Date.now(),
+      records: records.slice(0, OUTBOUND_RECORD_CACHE_LIMIT),
+    }))
+  } catch {
+    // Storage quota should never block live WMS data.
+  }
+}
+
 // ── Row mappers ────────────────────────────────────────────────────────────
 function mapRowToInventory(row, map) {
   const available = parseInt(getField(row, map, 'availableAmount')) || 0
@@ -287,6 +319,7 @@ async function warmFullSheet(type) {
     const rows = parseCSV(text)
     if (rows.length >= 2) {
       cache[type] = { data: rows, ts: Date.now(), partial: false }
+      notifySheetCache(type)
     }
   } catch {
     // Keep partial data on background failure
@@ -322,7 +355,7 @@ async function loadSheet(type, forceRefresh = false) {
 
   try {
     // Inventory lookups must always be exhaustive; partial data causes false NoWMS.
-    const limit = (forceRefresh || requiresFullDataset) ? 0 : 300
+    const limit = (forceRefresh || requiresFullDataset) ? 0 : 3000
     const text = await fetchSheetAsCSV(url, limit)
     const rows = parseCSV(text)
     if (rows.length < 2) {
@@ -333,6 +366,7 @@ async function loadSheet(type, forceRefresh = false) {
     const partial = !forceRefresh && !requiresFullDataset
     cache[type] = { data: rows, ts: now, partial }
     if (partial) warmFullSheet(type)
+    notifySheetCache(type)
     return rows
   } catch (err) {
     if (entry.data) return entry.data // stale fallback
@@ -344,6 +378,9 @@ async function loadSheet(type, forceRefresh = false) {
 
 export async function refreshSheet(type) {
   cache[type] = { data: null, ts: 0, partial: false }
+  if (type === 'outbound') {
+    try { localStorage.removeItem(OUTBOUND_RECORD_CACHE_KEY) } catch {}
+  }
   invalidateUrlCache()
   return loadSheet(type, true)
 }
@@ -357,8 +394,14 @@ export function getCacheStatus(type) {
   return {
     ts:      e.ts || null,
     partial: !!e.partial,
+    loading: !!e._bgLoading,
     rows:    e.data ? e.data.length - 1 : 0,
   }
+}
+
+export function subscribeSheetCache(listener) {
+  sheetListeners.add(listener)
+  return () => sheetListeners.delete(listener)
 }
 
 export async function testSheetUrl(url, type = 'outbound') {
@@ -386,6 +429,22 @@ export async function getInventoryList() {
 }
 
 export async function getOutboundList() {
+  if (!cache.outbound.data) {
+    const cached = readOutboundRecordCache()
+    if (cached?.records?.length) {
+      loadSheet('outbound').catch(() => {})
+      return {
+        success: true,
+        data: {
+          records: cached.records,
+          total: cached.records.length,
+          partial: true,
+          fromPersistentCache: true,
+        },
+      }
+    }
+  }
+
   const rows = await loadSheet('outbound')
   const [headerRow, ...dataRows] = rows
   const map = buildHeaderMap(headerRow, OUTBOUND_ALIASES)
@@ -413,6 +472,7 @@ export async function getOutboundList() {
     outboundBoxCount: r.outboundBoxCount || boxCountMap.get(r.outboundOrderNo) || 0,
   }))
   const { partial } = getCacheStatus('outbound')
+  writeOutboundRecordCache(records)
   return { success: true, data: { records, total: records.length, partial } }
 }
 

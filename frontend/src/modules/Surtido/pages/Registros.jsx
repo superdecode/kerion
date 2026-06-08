@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
@@ -646,6 +646,7 @@ export default function SurtidoRegistros() {
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const canExport = hasPermission('surtido.registros', 'actualizar')
   const canEdit = hasPermission('surtido.validacion', 'actualizar')
   const canDelete = hasPermission('surtido.validacion', 'eliminar')
@@ -667,6 +668,7 @@ export default function SurtidoRegistros() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [exportingBulk, setExportingBulk] = useState(false)
   const [showQuickSearch, setShowQuickSearch] = useState(false)
+  const handledDeepLinkRef = useRef('')
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['surtido-sessions', { page, pageSize, search: search.trim(), statusFilter, dateFrom, dateTo }],
@@ -777,6 +779,38 @@ export default function SurtidoRegistros() {
     setDetailInitialTab(initialTab)
     setDetailId(sessionId)
   }
+
+  useEffect(() => {
+    const sessionId = searchParams.get('sessionId')
+    const obc = searchParams.get('obc')
+    const tab = searchParams.get('tab') || 'validados'
+    const key = `${sessionId || ''}:${obc || ''}:${tab}`
+    if ((!sessionId && !obc) || handledDeepLinkRef.current === key) return
+    handledDeepLinkRef.current = key
+
+    if (sessionId) {
+      openDetail(sessionId, tab)
+      return
+    }
+
+    let cancelled = false
+    setSearchInput(obc)
+    setSearch(obc)
+    setPage(1)
+
+    getScanSessions({ page: 1, pageSize: 1, outbound_order_no: obc })
+      .then((payload) => {
+        if (cancelled) return
+        const session = getRecords(payload)[0]
+        if (session?.id) openDetail(session.id, tab)
+        else toast.error('No se encontró validación para esta orden')
+      })
+      .catch((err) => {
+        if (!cancelled) toast.error(err.response?.data?.error || t('toast.error'))
+      })
+
+    return () => { cancelled = true }
+  }, [searchParams, t, toast])
 
   if (isLoading) {
     return (
@@ -1070,7 +1104,14 @@ export default function SurtidoRegistros() {
       <DetailModal
         sessionId={detailId}
         isOpen={!!detailId}
-        onClose={() => { setDetailId(null); setDetailInitialTab('validados') }}
+        onClose={() => {
+          setDetailId(null)
+          setDetailInitialTab('validados')
+          if (searchParams.get('sessionId') || searchParams.get('obc')) {
+            handledDeepLinkRef.current = ''
+            setSearchParams({}, { replace: true })
+          }
+        }}
         canExport={canExport}
         canEdit={canEdit}
         canDelete={canDelete}

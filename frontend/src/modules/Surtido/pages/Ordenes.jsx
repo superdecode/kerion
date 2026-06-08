@@ -21,11 +21,11 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import {
   getOutboundList,
   getSurtidores, createSurtidor, deleteSurtidor,
-  getOrderTracking, upsertOrderTracking, getScanSessions,
+  getOrderTracking, upsertOrderTracking, bulkUpsertOrderTracking, getScanSessions,
   getManualEntryReasons, createManualEntryReason, updateManualEntryReason, deleteManualEntryReason,
   getRecords,
 } from '../services/surtidoService'
-import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
+import { refreshSheet, getCacheTimestamp, subscribeSheetCache } from '../../WmsHub/services/googleSheetsService'
 import { fmtDateTime as formatDateTimeTz, fmtDate as formatDateTz, fmtTimeShort, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
 
 const STATUS_META = {
@@ -498,6 +498,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
   const canal = wmsRecord?.logisticsChannel || '—'
   const referencia = wmsRecord?.thirdOrderNo || wmsRecord?.referenceNo || '—'
   const trackingNo = wmsRecord?.logisticsTrackNo || '—'
+  const hasValidationRecord = tracking?.status === 'complete' || Number(tracking?.session_count ?? 0) > 0
 
   return (
     <AnimatePresence>
@@ -608,7 +609,14 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                 >
                   <Eye size={14} className="text-violet-600" /> {t('admin.view')}
                 </button>
-                {localStatus !== 'complete' && (
+                {hasValidationRecord ? (
+                  <button
+                    onClick={() => { onClose(); navigate(`/Surtido/registros?obc=${encodeURIComponent(obc)}`) }}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-xl border border-success-200 bg-white text-sm font-semibold text-success-700 hover:bg-success-50 hover:border-success-300 transition-colors"
+                  >
+                    <BadgeCheck size={14} className="text-success-600" /> Ver Validación
+                  </button>
+                ) : (
                   <button
                     onClick={() => { onClose(); navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`) }}
                     className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-xl border border-primary-200 bg-white text-sm font-semibold text-primary-700 hover:bg-primary-50 hover:border-primary-300 transition-colors"
@@ -893,14 +901,17 @@ export default function Ordenes() {
   const trackingList  = getRecords(trackingData)
   const surtidores    = getRecords(surtidoresData)
   const isPartial     = wmsData?.data?.partial ?? false
+  const fromPersistentCache = wmsData?.data?.fromPersistentCache ?? false
 
   useEffect(() => {
-    if (!isPartial) return
-    const timer = setTimeout(() => {
+    if (!isPartial) return undefined
+    return subscribeSheetCache((type, status) => {
+      if (type !== 'outbound') return
+      if (status.partial && !fromPersistentCache) return
+      setSheetTs(status.ts)
       qc.invalidateQueries({ queryKey: ['wms-outbound'] })
-    }, 15000)
-    return () => clearTimeout(timer)
-  }, [isPartial, qc])
+    })
+  }, [fromPersistentCache, isPartial, qc])
 
   const trackingMap = trackingList.reduce((m, tr) => {
     m[tr.outbound_order_no] = tr; return m
@@ -999,7 +1010,11 @@ export default function Ordenes() {
     if (filterClient && (r.customerCode || r.customerNo || r.customerName || '') !== filterClient) return false
     if (filterSurtidor && tracking?.surtidor_nombre !== filterSurtidor) return false
     if (destinationQuery && !(r.receiverName || '').toLowerCase().includes(destinationQuery)) return false
-    if (!matchesDateFilter(getFilterDateValue(r))) return false
+    
+    // Ignore date filter if searching by OBC/Code or using bulk filter
+    const skipDateFilter = q || bulkSearchCodes.length > 0
+    if (!skipDateFilter && !matchesDateFilter(getFilterDateValue(r))) return false
+    
     if (!withinTimeRange(r.outboundTime || r.expectedTime || r.orderCreateTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(r.outboundOrderNo)) return false
     if (q) {
@@ -1015,7 +1030,11 @@ export default function Ordenes() {
     if (filterClient && (wms?.customerCode || wms?.customerNo || wms?.customerName || '') !== filterClient) return false
     if (filterSurtidor && tr.surtidor_nombre !== filterSurtidor) return false
     if (destinationQuery && !(wms?.receiverName || '').toLowerCase().includes(destinationQuery)) return false
-    if (!matchesDateFilter(getFilterDateValue(wms) || tr.updated_at)) return false
+    
+    // Ignore date filter if searching by OBC/Code or using bulk filter
+    const skipDateFilter = q || bulkSearchCodes.length > 0
+    if (!skipDateFilter && !matchesDateFilter(getFilterDateValue(wms) || tr.updated_at)) return false
+    
     if (!withinTimeRange(wms?.outboundTime || wms?.expectedTime || wms?.orderCreateTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
     if (q) {
@@ -1057,8 +1076,21 @@ export default function Ordenes() {
     onError: () => toast.error(t('toast.error')),
   })
 
+  const bulkAssignMut = useMutation({
+    mutationFn: ({ obcs, surtidorId }) => bulkUpsertOrderTracking({
+      obcs,
+      surtidor_id: surtidorId,
+      ...(!surtidorId ? { status: 'pending_assignment' } : {}),
+    }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      toast.success(`${vars.obcs.length} ordenes actualizadas`)
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
   const statusMut = useMutation({
-    mutationFn: ({ obcs, status }) => Promise.all(obcs.map(obc => upsertOrderTracking(obc, { status }))),
+    mutationFn: ({ obcs, status }) => bulkUpsertOrderTracking({ obcs, status }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
       if (vars.obcs.length > 1) toast.success(`${vars.obcs.length} ${t('surtido.ordenes.item_label')} actualizadas`)
@@ -1444,11 +1476,7 @@ export default function Ordenes() {
           <WmsTable
             records={pagedRecords} trackingMap={trackingMap} surtidores={surtidores}
             onAssign={r => setAssignTarget(r)}
-            onBulkAssign={(obcs, surtidorId) => {
-              Promise.all(obcs.map((obc) => assignMut.mutateAsync({ obc, surtidorId }))).then(() => {
-                toast.success(`${obcs.length} ordenes actualizadas`)
-              }).catch(() => toast.error(t('toast.error')))
-            }}
+            onBulkAssign={(obcs, surtidorId) => bulkAssignMut.mutate({ obcs, surtidorId })}
             onView={obc => navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`)}
             onQuickEdit={obc => setQuickEditObc(obc)}
             onValidate={obc => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}
