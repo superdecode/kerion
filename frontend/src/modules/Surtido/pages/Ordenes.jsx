@@ -1020,20 +1020,22 @@ export default function Ordenes() {
     const scanned = Number(tracking?.total_scanned ?? 0)
     const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
     const is100Percent = expected > 0 && scanned >= expected
+    const isExplicitlyComplete = currentStatus === 'complete'
+    const isCompleted = is100Percent || isExplicitlyComplete
 
     if (filterStatus) {
       if (filterStatus === 'complete') {
-        // Show if status is complete OR it is 100% scanned
-        if (currentStatus !== 'complete' && !is100Percent) return false
+        // Show only if it is completed (100% or explicit complete)
+        if (!isCompleted) return false
       } else if (filterStatus === 'validating') {
-        // Validando tab: show if (status is validating OR has scans) AND is NOT 100% scanned
+        // Validando tab: show if (status is validating OR has scans) AND is NOT completed
         const hasScans = scanned > 0
+        if (isCompleted) return false
         if (currentStatus !== 'validating' && !hasScans) return false
-        if (is100Percent) return false
       } else if (filterStatus === 'sorting' || filterStatus === 'pending_assignment') {
-        // Sorting/Pending: show if status matches AND it has NO scans AND is NOT 100% scanned
+        // Sorting/Pending: show if status matches AND it has NO scans AND is NOT completed
+        if (isCompleted || scanned > 0) return false
         if (currentStatus !== filterStatus) return false
-        if (is100Percent || scanned > 0) return false
       } else {
         // For 'partial' or 'cancelled', we show them even if 100% (though partial shouldn't be 100%)
         if (currentStatus !== filterStatus) return false
