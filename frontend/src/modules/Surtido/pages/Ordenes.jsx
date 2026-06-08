@@ -1496,39 +1496,77 @@ export default function Ordenes() {
         </div>
       </div>
 
+  const [isTransitioning, setIsTransitioning] = useState(false)
+
+  // ... (inside component)
+
+  const handleStatusChange = (newStatus) => {
+    setIsTransitioning(true)
+    setFilterStatus(newStatus)
+    setPage(1)
+    setTimeout(() => setIsTransitioning(false), 300)
+  }
+
+  // ... (inside return)
       <div className="sticky top-[8.7rem] z-[4] bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-6">
-        <StatusTabs selected={filterStatus} onChange={(v) => { setFilterStatus(v); setPage(1) }} t={t} />
+        <StatusTabs selected={filterStatus} onChange={handleStatusChange} t={t} />
       </div>
 
       {/* Table */}
       <div className="flex-1 min-h-0 overflow-hidden p-4">
-        {pagedRecords.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400">
-            <Package2 size={40} className="opacity-30" />
-            <p className="text-sm">{t('common.noData')}</p>
-          </div>
-        ) : (
-          <WmsTable
-            records={pagedRecords} trackingMap={trackingMap} surtidores={surtidores}
-            onAssign={r => setAssignTarget(r)}
-            onBulkAssign={(obcs, surtidorId) => bulkAssignMut.mutate({ obcs, surtidorId })}
-            onView={obc => navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`)}
-            onQuickEdit={obc => setQuickEditObc(obc)}
-            onValidate={obc => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}
-            onBulkStatus={(obcs, status) => statusMut.mutate({ obcs, status })}
-            onExportSelected={handleExportWmsSelected}
-            onExportAll={handleExportWmsAll}
-            canAssign={canUpdateOrders}
-            canQuickEdit={canUpdateOrders}
-            canValidate={canCreateValidation}
-            canExport={canExportOrders}
-            t={t}
-            page={page} totalPages={totalPages} pageSize={pageSize} total={total}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
-            showScannedColumn={filterStatus !== '' && filterStatus !== 'pending_assignment'}
-          />
-        )}
+        <AnimatePresence mode='wait'>
+          {isTransitioning || wmsLoading ? (
+             <motion.div
+               key="loader"
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               exit={{ opacity: 0 }}
+               className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400"
+             >
+               <Loader2 size={40} className="animate-spin opacity-50" />
+               <p className="text-sm">{t('common.loading')}</p>
+             </motion.div>
+          ) : pagedRecords.length === 0 ? (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400">
+              <Package2 size={40} className="opacity-30" />
+              <p className="text-sm">{t('common.noData')}</p>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="table"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="h-full"
+            >
+              <WmsTable
+                records={pagedRecords} trackingMap={trackingMap} surtidores={surtidores}
+                onAssign={r => setAssignTarget(r)}
+                onBulkAssign={(obcs, surtidorId) => bulkAssignMut.mutate({ obcs, surtidorId })}
+                onView={obc => navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`)}
+                onQuickEdit={obc => setQuickEditObc(obc)}
+                onValidate={obc => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}
+                onBulkStatus={(obcs, status) => statusMut.mutate({ obcs, status })}
+                onExportSelected={handleExportWmsSelected}
+                onExportAll={handleExportWmsAll}
+                canAssign={canUpdateOrders}
+                canQuickEdit={canUpdateOrders}
+                canValidate={canCreateValidation}
+                canExport={canExportOrders}
+                t={t}
+                page={page} totalPages={totalPages} pageSize={pageSize} total={total}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+                showScannedColumn={filterStatus !== '' && filterStatus !== 'pending_assignment'}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <SurtidoresModal
