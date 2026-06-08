@@ -988,9 +988,15 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       upsertOrderTracking(obc, { status: 'validating' }).catch(() => {})
       onUpdateTab({ obc, step: 'session' })
     },
-    onError: () => {
+    onError: (err) => {
       autoFinalizeLockRef.current = false
-      toast.error(t('toast.error'))
+      if (err.response?.status === 409) {
+        const details = err.response.data?.details
+        const dateStr = details?.started_at ? formatDateTimeTz(details.started_at) : ''
+        toast.error(`Esta orden ya está siendo validada por ${details?.operator || 'otro usuario'} desde ${dateStr}.`)
+      } else {
+        toast.error(t('toast.error'))
+      }
     },
   })
 

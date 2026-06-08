@@ -1025,10 +1025,15 @@ export default function Ordenes() {
       if (filterStatus === 'complete') {
         // Show if status is complete OR it is 100% scanned
         if (currentStatus !== 'complete' && !is100Percent) return false
-      } else if (filterStatus === 'sorting' || filterStatus === 'validating' || filterStatus === 'pending_assignment') {
-        // Show if status matches AND it is NOT 100% scanned (as those move to complete tab)
-        if (currentStatus !== filterStatus) return false
+      } else if (filterStatus === 'validating') {
+        // Validando tab: show if (status is validating OR has scans) AND is NOT 100% scanned
+        const hasScans = scanned > 0
+        if (currentStatus !== 'validating' && !hasScans) return false
         if (is100Percent) return false
+      } else if (filterStatus === 'sorting' || filterStatus === 'pending_assignment') {
+        // Sorting/Pending: show if status matches AND it has NO scans AND is NOT 100% scanned
+        if (currentStatus !== filterStatus) return false
+        if (is100Percent || scanned > 0) return false
       } else {
         // For 'partial' or 'cancelled', we show them even if 100% (though partial shouldn't be 100%)
         if (currentStatus !== filterStatus) return false

@@ -338,6 +338,29 @@ router.post('/scan-session',
       const { outbound_order_no, third_order_no, total_expected } = req.body
       if (!outbound_order_no) return res.status(400).json({ success: false, error: 'outbound_order_no es requerido' })
 
+      // Integrity Check: Prevent concurrent validation of the same order
+      const existing = await req.tQuery(
+        `SELECT s.*, u.nombre_completo as operator_nombre
+         FROM pick_sessions s
+         LEFT JOIN usuarios u ON u.id = s.operator_id
+         WHERE s.tenant_id = $1 AND s.outbound_order_no = $2 AND s.status = 'open'
+         LIMIT 1`,
+        [req.tenantId, outbound_order_no]
+      )
+
+      if (existing.rows.length > 0) {
+        const s = existing.rows[0]
+        return res.status(409).json({
+          success: false,
+          error: 'Esta orden ya está siendo validada',
+          details: {
+            operator: s.operator_nombre || 'Desconocido',
+            started_at: s.started_at,
+            status: s.status
+          }
+        })
+      }
+
       const result = await req.tQuery(
         `INSERT INTO pick_sessions
            (tenant_id, outbound_order_no, third_order_no, operator_id, status, total_expected, total_scanned)
