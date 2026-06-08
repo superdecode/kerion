@@ -764,11 +764,19 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                   )}
 
                   <div className="px-4 pb-3 pt-1">
-                    <button
-                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 active:bg-primary-800 transition-colors shadow-sm"
-                      onClick={() => { onValidate(r.outboundOrderNo); onClose() }}>
-                      <ScanBarcode size={11} /> {t('surtido.validacion.card_validate')}
-                    </button>
+                    {isComplete ? (
+                      <button
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-warm-100 text-warm-700 text-xs font-semibold hover:bg-warm-200 transition-colors shadow-sm"
+                        onClick={() => { onClose(); window.location.href = `/Surtido/ordenes/${encodeURIComponent(r.outboundOrderNo)}` }}>
+                        <Database size={11} /> Ver Registros
+                      </button>
+                    ) : (
+                      <button
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 active:bg-primary-800 transition-colors shadow-sm"
+                        onClick={() => { onValidate(r.outboundOrderNo); onClose() }}>
+                        <ScanBarcode size={11} /> {t('surtido.validacion.card_validate')}
+                      </button>
+                    )}
                   </div>
                 </div>
               )
