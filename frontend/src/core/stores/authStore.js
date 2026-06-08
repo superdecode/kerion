@@ -15,6 +15,8 @@ const LEGACY_MAP = { total: 'eliminar', gestion: 'actualizar', escritura: 'crear
 const MODULE_ALIASES = {
   'dropscan.historial': 'dropscan.tarimas',
   'inventory.historial': 'inventory.tarimas',
+  'dropscan.folios': 'fep.folios',
+  'fep.historial': 'fep.folios',
 }
 
 function normalizeLevel(level) {

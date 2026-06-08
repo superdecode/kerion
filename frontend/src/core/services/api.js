@@ -1,21 +1,26 @@
 import axios from 'axios'
 
+function buildSameOriginApiUrl(pathname = '/api') {
+  const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`
+  return new URL(normalizedPath, window.location.origin).toString()
+}
+
 function resolveApiBaseUrl() {
   const configured = (import.meta.env.VITE_API_URL || '').trim()
-  if (!configured) return '/api'
+  if (!configured) return buildSameOriginApiUrl('/api')
 
   if (/^https?:\/\//i.test(configured)) {
     try {
       const url = new URL(configured)
       const isLocalApi = ['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)
       const isLocalPage = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname)
-      return isLocalApi && !isLocalPage ? '/api' : configured
+      return isLocalApi && !isLocalPage ? buildSameOriginApiUrl('/api') : configured.replace(/\/+$/, '')
     } catch {
-      return '/api'
+      return buildSameOriginApiUrl('/api')
     }
   }
 
-  return configured.startsWith('/') ? configured : `/${configured}`
+  return buildSameOriginApiUrl(configured)
 }
 
 const api = axios.create({
@@ -29,6 +34,9 @@ let isHandling401 = false
 
 // Request interceptor - attach token
 api.interceptors.request.use((config) => {
+  if (typeof config.url === 'string' && config.url && !/^https?:\/\//i.test(config.url)) {
+    config.url = config.url.startsWith('/') ? config.url : `/${config.url}`
+  }
   const stored = localStorage.getItem('wms-auth')
   if (stored) {
     try {

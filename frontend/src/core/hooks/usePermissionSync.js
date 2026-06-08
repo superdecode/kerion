@@ -9,11 +9,10 @@ const MODULE_ROUTES = [
   { module: 'dropscan.tarimas', path: '/DropScan/tarimas' },
   { module: 'dropscan.reportes', path: '/DropScan/reportes' },
   { module: 'dropscan.configuracion', path: '/DropScan/configuracion' },
-  { module: 'dropscan.folios', path: '/DropScan/folios' },
-  { module: 'inventory.escaneo', path: '/Inventory/escaneo' },
-  { module: 'inventory.tarimas', path: '/Inventory/tarimas' },
-  { module: 'inventory.reportes', path: '/Inventory/reportes' },
-  { module: 'global.wms', path: '/wms' },
+  { module: 'fep.folios', path: '/DropScan/folios' },
+  { module: 'inventario.escaneo', path: '/Inventory/escaneo' },
+  { module: 'inventario.registros', path: '/Inventory/registros' },
+  { module: 'sistema.wms', path: '/wms' },
   { module: 'global.administracion', path: '/admin' },
 ]
 

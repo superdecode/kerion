@@ -1313,7 +1313,11 @@ router.delete('/inventory-session/:id',
 
 router.get('/manual-entry-reasons',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.ordenes', 'ver'),
+  requireAnyPermission([
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'ver' },
+  ]),
   async (req, res) => {
     try {
       const rows = await req.tQuery(

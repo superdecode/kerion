@@ -103,4 +103,28 @@ export function requirePermission(modulePath, action) {
   }
 }
 
+export function requireAnyPermission(candidates) {
+  return (req, res, next) => {
+    const user = req.fullUser
+    if (!user) {
+      return res.status(401).json({ error: 'No autenticado' })
+    }
+
+    if (user.rol_nombre === 'Administrador') {
+      return next()
+    }
+
+    const hasAnyPermission = Array.isArray(candidates) && candidates.some(({ modulePath, action }) => {
+      const level = getPermissionLevel(user.permisos, modulePath)
+      return resolvePermission(level, action)
+    })
+
+    if (!hasAnyPermission) {
+      return res.status(403).json({ error: 'No tienes permisos para esta acción' })
+    }
+
+    next()
+  }
+}
+
 export { resolvePermission, getPermissionLevel, normalizeLevel, LEVEL_HIERARCHY, ACTION_MIN_LEVEL }
