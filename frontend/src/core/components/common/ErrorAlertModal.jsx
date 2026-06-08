@@ -1,4 +1,4 @@
-import { Modal } from './Modal'
+import Modal from './Modal'
 import { AlertCircle } from 'lucide-react'
 
 export function ErrorAlertModal({ isOpen, onClose, title, message }) {
