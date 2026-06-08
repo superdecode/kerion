@@ -1907,12 +1907,20 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
                           <ClipboardList size={13} />
                         </button>
                       )}
-                      {canValidate && !isClosedOrder && (
-                        <button title={t('surtido.ordenes.validate_btn')}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-primary-600 hover:text-primary-800 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
-                          onClick={e => { e.stopPropagation(); onValidate(obc) }}>
-                          <ScanBarcode size={13} />
-                        </button>
+                      {canValidate && (
+                         isClosedOrder ? (
+                          <button title="Ver Registros"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-warm-500 hover:text-warm-700 hover:bg-warm-100 border border-transparent transition-all"
+                            onClick={e => { e.stopPropagation(); onView(obc) }}>
+                            <Database size={13} />
+                          </button>
+                         ) : (
+                          <button title={t('surtido.ordenes.validate_btn')}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-primary-600 hover:text-primary-800 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+                            onClick={e => { e.stopPropagation(); onValidate(obc) }}>
+                            <ScanBarcode size={13} />
+                          </button>
+                         )
                       )}
                     </div>
                   </td>
