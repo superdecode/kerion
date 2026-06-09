@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx'
 import {
   Eye, Trash2, CheckCircle2, AlertTriangle, Ban, X, Package2, Loader2, AlertCircle,
   User, Timer, Clock, ScanBarcode, Boxes, ChevronDown, ChevronUp,
-  Search, XCircle, Download, Copy, Check, Pencil, LayoutGrid,
+  Search, XCircle, Download, Copy, Check, Pencil, LayoutGrid, MapPin,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -382,6 +382,8 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
               { label: 'Tarimas', value: totals.tarimas, Icon: Boxes },
               { label: t('inventario.registros.total'), value: totals.total, Icon: Package2 },
               { label: t('inventario.escaneo.time_label'), value: duration, Icon: Timer },
+              { label: 'Ubic. trabajo', value: sessionData.origin_location || '—', Icon: MapPin },
+              { label: 'Ubic. destino', value: sessionData.ubicacion_codigo || sessionData.ubicacion_code || '—', Icon: MapPin },
             ].map(card => (
               <div key={card.label} className="rounded-2xl border border-warm-100/70 bg-gradient-to-br from-white via-warm-50/70 to-warm-100/60 p-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.5)]">
                 <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1.5">

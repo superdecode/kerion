@@ -21,7 +21,7 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import {
   getOutboundList,
   getSurtidores, createSurtidor, deleteSurtidor,
-  getOrderTracking, upsertOrderTracking, bulkUpsertOrderTracking, getScanSessions,
+  getOrderTracking, upsertOrderTracking, bulkUpsertOrderTracking, getScanSessions, getScanSession,
   getManualEntryReasons, createManualEntryReason, updateManualEntryReason, deleteManualEntryReason,
   forceValidateOrder,
   getRecords,
@@ -41,6 +41,7 @@ const STATUS_META = {
   pending_validation: { labelKey: 'surtido.ordenes.status.pending_validation', cls: 'bg-primary-100 text-primary-700' },
 }
 
+const STATUS_ORDER = { pending_assignment: 0, sorting: 1, validating: 2, complete: 3, partial: 4, cancelled: 5 }
 const STATUS_FILTER_KEYS = ['pending_assignment', 'sorting', 'validating', 'complete', 'partial', 'cancelled']
 const CLOSED_ORDER_STATUSES = new Set(['complete', 'partial'])
 const TH_CLASS = 'table-header whitespace-nowrap'
@@ -113,6 +114,77 @@ function compareValues(a, b) {
 function sortByDirection(valueA, valueB, direction) {
   const result = compareValues(valueA, valueB)
   return direction === 'asc' ? result : -result
+}
+
+function MultiSelect({ value, onChange, options, placeholder, t }) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const selectedCount = value.length
+  const label = selectedCount === 0
+    ? `${placeholder} — ${t('common.all')}`
+    : selectedCount === 1
+    ? (options.find(o => o.value === value[0])?.label || value[0])
+    : `${placeholder} (${selectedCount})`
+
+  const toggle = (val) => onChange(
+    value.includes(val) ? value.filter(v => v !== val) : [...value, val]
+  )
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <button
+        type="button"
+        className={`relative h-10 min-w-[180px] pl-3 pr-8 rounded-xl border text-sm text-left outline-none transition-all ${
+          open ? 'border-primary-400 ring-2 ring-primary-100' : 'border-warm-200 hover:border-warm-300'
+        } ${selectedCount > 0 ? 'bg-primary-50 text-primary-700 border-primary-200' : 'bg-warm-50 text-warm-700'}`}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span className="block truncate pr-2 text-sm">{label}</span>
+        <ChevronDown size={12} className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-warm-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1 left-0 z-[60] min-w-full bg-white rounded-xl border border-warm-200 shadow-lg overflow-hidden">
+          <div className="max-h-52 overflow-y-auto scrollbar-thin">
+            {options.map(opt => (
+              <label
+                key={opt.value}
+                className="flex items-center gap-2.5 px-3 py-2 text-sm text-warm-700 hover:bg-warm-50 cursor-pointer"
+                onMouseDown={e => { e.preventDefault(); toggle(opt.value) }}
+              >
+                <input
+                  type="checkbox"
+                  checked={value.includes(opt.value)}
+                  readOnly
+                  className="rounded border-warm-300 text-primary-600 pointer-events-none"
+                />
+                <span className="truncate">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+          {value.length > 0 && (
+            <div className="border-t border-warm-100 px-3 py-2">
+              <button
+                type="button"
+                className="text-xs text-primary-600 hover:text-primary-700 font-semibold"
+                onMouseDown={e => { e.preventDefault(); onChange([]); setOpen(false) }}
+              >
+                {t('common.clear')}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function DestinationSearch({ value, onChange, onEnter, options, t }) {
@@ -802,10 +874,10 @@ export default function Ordenes() {
   const [search, setSearch] = useState('')
   const [statusDraft, setStatusDraft] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
-  const [clientDraft, setClientDraft] = useState('')
-  const [filterClient, setFilterClient] = useState('')
-  const [surtidorDraft, setSurtidorDraft] = useState('')
-  const [filterSurtidor, setFilterSurtidor] = useState('')
+  const [clientDraft, setClientDraft] = useState([])
+  const [filterClient, setFilterClient] = useState([])
+  const [surtidorDraft, setSurtidorDraft] = useState([])
+  const [filterSurtidor, setFilterSurtidor] = useState([])
   const [destinationDraft, setDestinationDraft] = useState('')
   const [filterDestination, setFilterDestination] = useState('')
   const [dateFromDraft, setDateFromDraft] = useState(() => subtractDays(getToday(), 30))
@@ -838,6 +910,7 @@ export default function Ordenes() {
   }
 
   const [refreshing, setRefreshing] = useState(false)
+  const [exportingDetailed, setExportingDetailed] = useState(false)
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
   const timeFilterKey = `kirion_surtido_ordenes_time_${user?.id || 'guest'}`
   const destinationFilterKey = `kirion_surtido_destination_${user?.id || 'guest'}`
@@ -849,8 +922,14 @@ export default function Ordenes() {
       if (saved) {
         if (saved.search !== undefined) { setSearchInput(saved.search); setSearch(saved.search) }
         if (saved.filterStatus !== undefined) setFilterStatus(saved.filterStatus)
-        if (saved.filterClient !== undefined) { setClientDraft(saved.filterClient); setFilterClient(saved.filterClient) }
-        if (saved.filterSurtidor !== undefined) { setSurtidorDraft(saved.filterSurtidor); setFilterSurtidor(saved.filterSurtidor) }
+        if (saved.filterClient !== undefined) {
+          const v = Array.isArray(saved.filterClient) ? saved.filterClient : (saved.filterClient ? [saved.filterClient] : [])
+          setClientDraft(v); setFilterClient(v)
+        }
+        if (saved.filterSurtidor !== undefined) {
+          const v = Array.isArray(saved.filterSurtidor) ? saved.filterSurtidor : (saved.filterSurtidor ? [saved.filterSurtidor] : [])
+          setSurtidorDraft(v); setFilterSurtidor(v)
+        }
         if (saved.filterDestination !== undefined) { setDestinationDraft(saved.filterDestination); setFilterDestination(saved.filterDestination) }
         if (saved.dateFrom) { setDateFromDraft(saved.dateFrom); setDateFrom(saved.dateFrom) }
         if (saved.dateTo) { setDateToDraft(saved.dateTo); setDateTo(saved.dateTo) }
@@ -1085,8 +1164,12 @@ export default function Ordenes() {
       }
     }
 
-    if (filterClient && (r.customerCode || r.customerNo || r.customerName || '') !== filterClient) return false
-    if (filterSurtidor && tracking?.surtidor_nombre !== filterSurtidor) return false
+    if (filterClient.length > 0 && !filterClient.includes(r.customerCode || r.customerNo || r.customerName || '')) return false
+    if (filterSurtidor.length > 0) {
+      const matchesUnassigned = filterSurtidor.includes('__unassigned__') && !tracking?.surtidor_nombre
+      const matchesNamed = filterSurtidor.some(v => v !== '__unassigned__' && v === tracking?.surtidor_nombre)
+      if (!matchesUnassigned && !matchesNamed) return false
+    }
     if (destinationQuery && !(r.receiverName || '').toLowerCase().includes(destinationQuery)) return false
     
     // Ignore date filter if searching by OBC/Code or using bulk filter
@@ -1105,8 +1188,12 @@ export default function Ordenes() {
   const filteredValidacion = trackingList.filter(tr => {
     if (filterStatus && tr.status !== filterStatus) return false
     const wms = wmsMap[tr.outbound_order_no]
-    if (filterClient && (wms?.customerCode || wms?.customerNo || wms?.customerName || '') !== filterClient) return false
-    if (filterSurtidor && tr.surtidor_nombre !== filterSurtidor) return false
+    if (filterClient.length > 0 && !filterClient.includes(wms?.customerCode || wms?.customerNo || wms?.customerName || '')) return false
+    if (filterSurtidor.length > 0) {
+      const matchesUnassigned = filterSurtidor.includes('__unassigned__') && !tr.surtidor_nombre
+      const matchesNamed = filterSurtidor.some(v => v !== '__unassigned__' && v === tr.surtidor_nombre)
+      if (!matchesUnassigned && !matchesNamed) return false
+    }
     if (destinationQuery && !(wms?.receiverName || '').toLowerCase().includes(destinationQuery)) return false
     
     // Ignore date filter if searching by OBC/Code or using bulk filter
@@ -1144,12 +1231,26 @@ export default function Ordenes() {
       surtidor_id: surtidorId,
       ...(!surtidorId ? { status: 'pending_assignment' } : {}),
     }),
+    onMutate: ({ obc, surtidorId }) => {
+      const prev = qc.getQueryData(['wms-order-tracking'])
+      const s = surtidores.find(x => x.id === surtidorId || x.id === Number(surtidorId))
+      patchTrackingCache({
+        outbound_order_no: obc,
+        surtidor_id: surtidorId || null,
+        surtidor_nombre: s?.nombre || null,
+        ...(surtidorId ? {} : { status: 'pending_assignment' }),
+      })
+      return { prev }
+    },
     onSuccess: (data, vars) => {
       patchTrackingCache(data?.data)
       qc.invalidateQueries({ queryKey: ['surtido-order-tracking-obc', vars.obc] })
       toast.success(t('common.save') + ' OK')
     },
-    onError: () => toast.error(t('toast.error')),
+    onError: (err, vars, context) => {
+      if (context?.prev) qc.setQueryData(['wms-order-tracking'], context.prev)
+      toast.error(t('toast.error'))
+    },
   })
 
   const quickEditMut = useMutation({
@@ -1203,10 +1304,10 @@ export default function Ordenes() {
   function clearFilters() {
     setSearchInput('')
     setSearch('')
-    setClientDraft('')
-    setFilterClient('')
-    setSurtidorDraft('')
-    setFilterSurtidor('')
+    setClientDraft([])
+    setFilterClient([])
+    setSurtidorDraft([])
+    setFilterSurtidor([])
     setDestinationDraft('')
     setFilterDestination('')
     const today = getToday()
@@ -1228,16 +1329,27 @@ export default function Ordenes() {
   }
 
   const hasFilters =
-    filterClient ||
-    filterSurtidor ||
+    filterClient.length > 0 ||
+    filterSurtidor.length > 0 ||
     filterDestination ||
     search ||
     timeFrom ||
     timeTo ||
     bulkSearchCodes.length > 0
 
+  function deduplicateByKey(arr, key) {
+    const seen = new Map()
+    for (const item of arr) {
+      const k = item[key]
+      if (!k) continue
+      if (!seen.has(k) || (item.updated_at || '') > (seen.get(k).updated_at || '')) seen.set(k, item)
+    }
+    return Array.from(seen.values())
+  }
+
   function buildWmsRows(records) {
-    return records.map(r => {
+    const deduped = deduplicateByKey(records, 'outboundOrderNo')
+    return deduped.map(r => {
       const tr = trackingMap[r.outboundOrderNo] ?? {}
       return [
         r.outboundOrderNo || '',
@@ -1257,7 +1369,8 @@ export default function Ordenes() {
   }
 
   function buildValidacionRows(records) {
-    return records.map(tr => {
+    const deduped = deduplicateByKey(records, 'outbound_order_no')
+    return deduped.map(tr => {
       const wms = wmsMap[tr.outbound_order_no] ?? {}
       return [
         tr.outbound_order_no || '',
@@ -1323,6 +1436,36 @@ export default function Ordenes() {
 
   function handleExportValAll() {
     exportSheet(VAL_HEADERS, buildValidacionRows(filteredValidacion), 'Validación', `validacion_${getToday()}.xlsx`)
+  }
+
+  async function handleExportDetailed() {
+    if (filteredValidacion.length === 0) return
+    setExportingDetailed(true)
+    try {
+      const obcSet = new Set(filteredValidacion.map(tr => tr.outbound_order_no).filter(Boolean))
+      const sessionsData = await getScanSessions({ pageSize: 5000 })
+      const sessions = getRecords(sessionsData).filter(s => obcSet.has(s.outbound_order_no))
+      const details = await Promise.all(sessions.map(s => getScanSession(s.id)))
+      const HEADERS = ['OBC', 'Operador', 'Tiempo escaneo', 'Código caja', 'Ubicación', 'Resultado', 'Notas sesión']
+      const rows = []
+      for (const detail of details) {
+        const sess = detail?.data?.session ?? {}
+        const events = detail?.data?.events ?? []
+        for (const e of events) {
+          rows.push([
+            sess.outbound_order_no || '',
+            sess.operator_nombre || '',
+            e.scanned_at ? formatDateTimeTz(e.scanned_at) : '',
+            e.scanned_code || '',
+            e.cell_no || '',
+            e.scan_result || '',
+            sess.notes || '',
+          ])
+        }
+      }
+      exportSheet(HEADERS, rows, 'Detalle Validación', `val_detalle_${getToday()}.xlsx`)
+    } catch { toast.error(t('toast.error')) }
+    setExportingDetailed(false)
   }
 
 
@@ -1481,25 +1624,24 @@ export default function Ordenes() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-              <select
-                className="h-10 min-w-[180px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
-                value={clientDraft}
-                onChange={e => setClientDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') applyFilters() }}
-              >
-              <option value="">{t('surtido.ordenes.cliente')} — {t('common.all')}</option>
-              {customerOptions.map((customer) => <option key={customer} value={customer}>{customer}</option>)}
-            </select>
+            <MultiSelect
+              value={clientDraft}
+              onChange={setClientDraft}
+              options={customerOptions.map(c => ({ value: c, label: c }))}
+              placeholder={t('surtido.ordenes.cliente')}
+              t={t}
+            />
 
-              <select
-                className="h-10 min-w-[180px] pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
-                value={surtidorDraft}
-                onChange={e => setSurtidorDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') applyFilters() }}
-              >
-              <option value="">{t('surtido.ordenes.surtidor')} — {t('common.all')}</option>
-              {surtidores.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
-            </select>
+            <MultiSelect
+              value={surtidorDraft}
+              onChange={setSurtidorDraft}
+              options={[
+                { value: '__unassigned__', label: 'Sin asignar' },
+                ...surtidores.map(s => ({ value: s.nombre, label: s.nombre }))
+              ]}
+              placeholder={t('surtido.ordenes.surtidor')}
+              t={t}
+            />
 
             <DestinationSearch
               value={destinationDraft}
@@ -1552,6 +1694,18 @@ export default function Ordenes() {
             >
               <Filter size={13} /> {t('common.apply')}
             </button>
+
+            {canExportOrders && filteredValidacion.length > 0 && (
+              <button
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-success-200 bg-success-50 px-4 text-xs font-semibold text-success-700 hover:bg-success-100 disabled:opacity-50 transition-colors"
+                onClick={handleExportDetailed}
+                disabled={exportingDetailed}
+                title="Exportar detalle de cajas escaneadas (una fila por caja)"
+              >
+                {exportingDetailed ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                Detalle
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1743,7 +1897,7 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
       cajas: (r) => Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? 0),
       scanned: (r) => trackingMap[r.outboundOrderNo]?.total_scanned || 0,
       surtidor: (r) => trackingMap[r.outboundOrderNo]?.surtidor_nombre,
-      status: (r) => trackingMap[r.outboundOrderNo]?.status || 'pending_assignment',
+      status: (r) => STATUS_ORDER[trackingMap[r.outboundOrderNo]?.status || 'pending_assignment'] ?? 99,
     }
     const sorter = sorters[sortKey] || sorters.date
     next.sort((a, b) => sortByDirection(sorter(a), sorter(b), sortDirection))
@@ -1895,7 +2049,7 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
               return (
                 <tr key={obc || i}
                   onClick={() => onView(obc)}
-                  className={`transition-colors cursor-pointer hover:bg-primary-50/30 ${isChecked ? 'bg-primary-50/20' : noSurtidor ? 'bg-warning-50/20' : ''}`}>
+                  className={`transition-colors cursor-pointer hover:bg-primary-50/50 ${isChecked ? 'bg-primary-50/20' : noSurtidor ? 'bg-warning-50/20' : ''}`}>
 
                   <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
                     <input type="checkbox"
@@ -2219,7 +2373,7 @@ function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onV
               return (
                 <tr key={obc || i}
                   onClick={() => onView(obc)}
-                  className={`transition-colors cursor-pointer hover:bg-primary-50/30 ${isChecked ? 'bg-primary-50/20' : ''}`}>
+                  className={`transition-colors cursor-pointer hover:bg-primary-50/50 ${isChecked ? 'bg-primary-50/20' : ''}`}>
 
                   <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
                     <input type="checkbox"

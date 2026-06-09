@@ -211,8 +211,15 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
                         <p className="mt-0.5 font-medium text-warm-700 truncate">{row.operator_nombre || '—'}</p>
                       </div>
                       <div>
-                        <p className="text-warm-400 uppercase tracking-wide">Ubicación</p>
-                        <p className="mt-0.5 font-medium text-warm-700 truncate">{row.cell_no || '—'}</p>
+                        <p className="text-warm-400 uppercase tracking-wide">Ubic. trabajo</p>
+                        <p className="mt-0.5 font-medium text-warm-700 truncate">{row.origin_location || '—'}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-warm-400 uppercase tracking-wide">Ubic. destino</p>
+                        <p className="mt-0.5 inline-flex items-center gap-1 font-medium text-warm-700">
+                          <MapPin className="h-3.5 w-3.5 text-accent-500" />
+                          {row.cell_no || '—'}
+                        </p>
                       </div>
                       <div className="col-span-2">
                         <p className="text-warm-400 uppercase tracking-wide">Último movimiento / escaneo</p>

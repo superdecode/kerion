@@ -115,7 +115,7 @@
   }
 
   .table-row {
-    @apply hover:bg-primary-50/30 transition-colors;
+    @apply hover:bg-primary-50/50 transition-colors;
   }
 
   .code-main {

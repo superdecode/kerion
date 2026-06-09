@@ -19,7 +19,7 @@ import {
   updateScanEvent, deleteScanEvent, addManualScanEvent, getManualEntryReasons, deleteScanSession,
   getOrderTrackingByOBC,
 } from '../services/surtidoService'
-import { normalizeCode } from '../../Shared/Wms/normalizeCode'
+import { normalizeCode, generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
@@ -495,13 +495,18 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
         return
       }
       const norm = q.trim().toLowerCase()
+      const variations = generateCodeVariations(q.trim()).map(v => v.toLowerCase())
+      const matchesVariation = (field) => {
+        const f = (field || '').toLowerCase()
+        return variations.some(v => f.includes(v))
+      }
       const filtered = all.filter(r =>
-        (r.outboundOrderNo || '').toLowerCase().includes(norm) ||
-        (r.thirdOrderNo || '').toLowerCase().includes(norm) ||
-        (r.logisticsTrackNo || '').toLowerCase().includes(norm) ||
+        matchesVariation(r.outboundOrderNo) ||
+        matchesVariation(r.thirdOrderNo) ||
+        matchesVariation(r.logisticsTrackNo) ||
         (r.receiverName || '').toLowerCase().includes(norm) ||
-        (r.customizeCode || '').toLowerCase().includes(norm) ||
-        (r.boxType || '').toLowerCase().includes(norm)
+        matchesVariation(r.customizeCode) ||
+        matchesVariation(r.boxType)
       )
       setResults(filtered.slice(0, 20))
     } catch (err) {
@@ -827,7 +832,21 @@ export default function SurtidoRegistros() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('surtido.registros.title')} subtitle={t('nav.surtido_wms')} />
+      <Header
+        title={t('surtido.registros.title')}
+        subtitle={t('nav.surtido_wms')}
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowQuickSearch(true)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-warm-100 text-warm-400 transition-all hover:bg-primary-50 hover:text-primary-600"
+            title={t('surtido.validacion.quick_search_title')}
+            aria-label={t('surtido.validacion.quick_search_title')}
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        }
+      />
 
       <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2 space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -906,14 +925,6 @@ export default function SurtidoRegistros() {
               }}
             />
           </div>
-
-          <button
-            className="h-10 px-4 rounded-xl bg-warm-100 text-warm-600 text-xs font-semibold hover:bg-warm-200 transition-all flex items-center gap-2"
-            onClick={() => setShowQuickSearch(true)}
-            title={t('surtido.validacion.quick_search_title')}>
-            <Search size={14} />
-            <span className="hidden sm:inline">{t('surtido.validacion.quick_search_title')}</span>
-          </button>
 
           {(searchInput || statusFilter || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
             <button

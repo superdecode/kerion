@@ -1406,7 +1406,7 @@ export default function Escaneo() {
   const {
     tabs, activeTabId, pendingCode1,
     openTab, closeTab, setActiveTab,
-    addScanItem, removeItem, moveItemGroup, toggleItemMarked, setItemsMarkedByGroup,
+    addScanItem, removeItem, removeItems, moveItemGroup, toggleItemMarked, setItemsMarkedByGroup,
     setPendingCode1, clearPendingCode1,
     inventorySnapshot,
   } = useInventarioStore()
@@ -1535,17 +1535,20 @@ export default function Escaneo() {
   }, [activeTabId])
 
   const saveSessionMut = useMutation({
-    mutationFn: () => {
+    mutationFn: (clasifGroup) => {
       const tab = useInventarioStore.getState().tabs.find(t => t.id === activeTabId)
       if (!tab) throw new Error('No active tab')
       const isClasificacion = tab.scanType === 'clasificacion'
+      const itemsToSave = isClasificacion && clasifGroup
+        ? tab.items.filter(item => getItemGroup(item) === clasifGroup)
+        : tab.items
 
       return saveInventorySession({
         scan_type: tab.scanType,
         ubicacion_id: ubicacionId || null,
         tarima_code: null,
         origin_location: originLocation || null,
-        scans: tab.items.map(item => ({
+        scans: itemsToSave.map(item => ({
           scanned_code: item.raw || item.scanned_code || item.code || item.normalized_code || item.code2 || '',
           normalized_code: item.code || item.normalized_code || item.raw || item.scanned_code || item.code2 || '',
           code2: item.code2 || null,
@@ -1557,12 +1560,22 @@ export default function Escaneo() {
         })),
       })
     },
-    onSuccess: () => {
+    onSuccess: (_, clasifGroup) => {
       setShowSummaryModal(false)
       setShowClasifSummaryModal(false)
       setPendingClasifGroup(null)
       setUbicacionId(null)
-      closeTab(activeTabId)
+      if (clasifGroup) {
+        const tab = useInventarioStore.getState().tabs.find(t => t.id === activeTabId)
+        if (tab) {
+          const indices = tab.items
+            .map((item, i) => (getItemGroup(item) === clasifGroup ? i : -1))
+            .filter(i => i !== -1)
+          removeItems(activeTabId, indices)
+        }
+      } else {
+        closeTab(activeTabId)
+      }
       toast.success(t('inventario.escaneo.session_started'))
       setTimeout(() => scanRef.current?.focus(), 80)
     },
@@ -2137,7 +2150,7 @@ export default function Escaneo() {
         group={pendingClasifGroup}
         tab={activeTab}
         tabIndex={activeTab ? tabs.findIndex(t => t.id === activeTab.id) : 0}
-        onSave={() => saveSessionMut.mutate()}
+        onSave={() => saveSessionMut.mutate(pendingClasifGroup)}
         onClose={() => { setShowClasifSummaryModal(false); setPendingClasifGroup(null) }}
         isSaving={saveSessionMut.isPending}
         ubicacionValidated={ubicacionValidated}
