@@ -8,7 +8,7 @@ import {
   Package2, Truck, ScanBarcode, Copy, Check, Eye, ClipboardList,
   User, Clock, BarChart3, RefreshCw, Database, CheckCircle2,
   MapPin, Timer, XCircle, AlertCircle, Pencil, BadgeCheck, Download,
-  ListFilter, Filter, CalendarClock, Save, ArrowUpDown, ArrowUp, ArrowDown,
+  ListFilter, Filter, CalendarClock, Save, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -23,6 +23,7 @@ import {
   getSurtidores, createSurtidor, deleteSurtidor,
   getOrderTracking, upsertOrderTracking, bulkUpsertOrderTracking, getScanSessions,
   getManualEntryReasons, createManualEntryReason, updateManualEntryReason, deleteManualEntryReason,
+  forceValidateOrder,
   getRecords,
 } from '../services/surtidoService'
 import { refreshSheet, getCacheTimestamp, subscribeSheetCache } from '../../WmsHub/services/googleSheetsService'
@@ -477,7 +478,7 @@ function AssignModal({ isOpen, order, onClose, onAssign }) {
   )
 }
 
-function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose, onSave, isSaving, t }) {
+function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose, onSave, isSaving, onForceValidate, t }) {
   const navigate = useNavigate()
   const [localSurtidorId, setLocalSurtidorId] = useState('')
   const [localNotes, setLocalNotes] = useState('')
@@ -642,6 +643,14 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                 {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                 {t('common.save')}
               </button>
+              {onForceValidate && (
+                <button
+                  onClick={() => onForceValidate(obc)}
+                  className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold border border-danger-200 text-danger-600 hover:bg-danger-50 hover:border-danger-300 transition-colors"
+                >
+                  <ShieldAlert size={13} /> Cerrar orden / Forzar validación
+                </button>
+              )}
             </div>
           </motion.div>
         </>
@@ -813,6 +822,8 @@ export default function Ordenes() {
   const [showReasonsModal, setShowReasonsModal] = useState(false)
   const [assignTarget, setAssignTarget] = useState(null)
   const [quickEditObc, setQuickEditObc] = useState(null)
+  const [forceValidateTarget, setForceValidateTarget] = useState(null)
+  const [forceReason, setForceReason] = useState('')
   const [bulkSearchOpen, setBulkSearchOpen] = useState(false)
   const [bulkSearchText, setBulkSearchText] = useState('')
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
@@ -830,25 +841,49 @@ export default function Ordenes() {
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
   const timeFilterKey = `kirion_surtido_ordenes_time_${user?.id || 'guest'}`
   const destinationFilterKey = `kirion_surtido_destination_${user?.id || 'guest'}`
+  const filtersKey = `kirion_surtido_ordenes_filters_${user?.id || 'guest'}`
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(timeFilterKey) || 'null')
+      const saved = JSON.parse(sessionStorage.getItem(filtersKey) || 'null')
       if (saved) {
-        setTimeFromDraft(saved.timeFrom || '')
-        setTimeToDraft(saved.timeTo || '')
-        setTimeFrom(saved.timeFrom || '')
-        setTimeTo(saved.timeTo || '')
-        if (saved.timeFrom || saved.timeTo) setShowTimeFilters(true)
+        if (saved.search !== undefined) { setSearchInput(saved.search); setSearch(saved.search) }
+        if (saved.filterStatus !== undefined) setFilterStatus(saved.filterStatus)
+        if (saved.filterClient !== undefined) { setClientDraft(saved.filterClient); setFilterClient(saved.filterClient) }
+        if (saved.filterSurtidor !== undefined) { setSurtidorDraft(saved.filterSurtidor); setFilterSurtidor(saved.filterSurtidor) }
+        if (saved.filterDestination !== undefined) { setDestinationDraft(saved.filterDestination); setFilterDestination(saved.filterDestination) }
+        if (saved.dateFrom) { setDateFromDraft(saved.dateFrom); setDateFrom(saved.dateFrom) }
+        if (saved.dateTo) { setDateToDraft(saved.dateTo); setDateTo(saved.dateTo) }
+        if (saved.timeFrom || saved.timeTo) {
+          setTimeFromDraft(saved.timeFrom || ''); setTimeFrom(saved.timeFrom || '')
+          setTimeToDraft(saved.timeTo || ''); setTimeTo(saved.timeTo || '')
+          setShowTimeFilters(true)
+        }
+        return
       }
-      const savedDestination = sessionStorage.getItem(destinationFilterKey) || ''
-      if (savedDestination) {
-        const normalizedDestination = savedDestination.trim()
-        setDestinationDraft(normalizedDestination)
-        setFilterDestination(normalizedDestination)
+      // legacy fallback
+      const legacyTime = JSON.parse(localStorage.getItem(timeFilterKey) || 'null')
+      if (legacyTime) {
+        setTimeFromDraft(legacyTime.timeFrom || ''); setTimeToDraft(legacyTime.timeTo || '')
+        setTimeFrom(legacyTime.timeFrom || ''); setTimeTo(legacyTime.timeTo || '')
+        if (legacyTime.timeFrom || legacyTime.timeTo) setShowTimeFilters(true)
+      }
+      const legacyDest = sessionStorage.getItem(destinationFilterKey) || ''
+      if (legacyDest) {
+        const d = legacyDest.trim()
+        setDestinationDraft(d); setFilterDestination(d)
       }
     } catch {}
-  }, [timeFilterKey, destinationFilterKey])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(filtersKey, JSON.stringify({
+        search, filterStatus, filterClient, filterSurtidor, filterDestination,
+        dateFrom, dateTo, timeFrom, timeTo,
+      }))
+    } catch {}
+  }, [filtersKey, search, filterStatus, filterClient, filterSurtidor, filterDestination, dateFrom, dateTo, timeFrom, timeTo])
 
   useEffect(() => {
     const syncAutoDateWindow = () => {
@@ -1092,13 +1127,25 @@ export default function Ordenes() {
   const totalPages  = Math.ceil(total / pageSize) || 1
   const pagedRecords = activeRecords.slice((page - 1) * pageSize, page * pageSize)
 
+  function patchTrackingCache(updated) {
+    if (!updated) return
+    qc.setQueryData(['wms-order-tracking'], (old) => {
+      if (!old?.data) return old
+      const idx = old.data.findIndex(r => r.outbound_order_no === updated.outbound_order_no)
+      if (idx === -1) return { ...old, data: [updated, ...old.data] }
+      const next = [...old.data]
+      next[idx] = { ...next[idx], ...updated }
+      return { ...old, data: next }
+    })
+  }
+
   const assignMut = useMutation({
     mutationFn: ({ obc, surtidorId }) => upsertOrderTracking(obc, {
       surtidor_id: surtidorId,
       ...(!surtidorId ? { status: 'pending_assignment' } : {}),
     }),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+    onSuccess: (data, vars) => {
+      patchTrackingCache(data?.data)
       qc.invalidateQueries({ queryKey: ['surtido-order-tracking-obc', vars.obc] })
       toast.success(t('common.save') + ' OK')
     },
@@ -1111,12 +1158,24 @@ export default function Ordenes() {
       status,
       notes,
     }),
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+    onSuccess: (data, vars) => {
+      patchTrackingCache(data?.data)
       qc.invalidateQueries({ queryKey: ['surtido-order-tracking-obc', vars.obc] })
       toast.success(t('common.save') + ' OK')
     },
     onError: () => toast.error(t('toast.error')),
+  })
+
+  const forceValidateMut = useMutation({
+    mutationFn: ({ obc, reason }) => forceValidateOrder(obc, { reason }),
+    onSuccess: (data) => {
+      patchTrackingCache(data?.data)
+      setForceValidateTarget(null)
+      setForceReason('')
+      setQuickEditObc(null)
+      toast.success('Orden cerrada forzosamente')
+    },
+    onError: (err) => toast.error(err?.response?.data?.error || t('toast.error')),
   })
 
   const bulkAssignMut = useMutation({
@@ -1165,6 +1224,7 @@ export default function Ordenes() {
     setBulkSearchCodes([])
     localStorage.removeItem(timeFilterKey)
     sessionStorage.removeItem(destinationFilterKey)
+    sessionStorage.removeItem(filtersKey)
   }
 
   const hasFilters =
@@ -1611,8 +1671,45 @@ export default function Ordenes() {
           quickEditMut.mutate({ obc: quickEditObc, surtidorId: canChangeSurtidor ? surtidorId : undefined, status, notes })
         }}
         isSaving={quickEditMut.isPending}
+        onForceValidate={user?.rol_nombre === 'Administrador' ? (obc) => { setForceValidateTarget(obc); setForceReason('') } : undefined}
         t={t}
       />
+
+      <Modal
+        isOpen={!!forceValidateTarget}
+        onClose={() => { setForceValidateTarget(null); setForceReason('') }}
+        title="Cerrar orden / Forzar validación"
+        icon={ShieldAlert}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => { setForceValidateTarget(null); setForceReason('') }}>Cancelar</button>
+            <button
+              className="btn-danger"
+              disabled={!forceReason.trim() || forceValidateMut.isPending}
+              onClick={() => forceValidateMut.mutate({ obc: forceValidateTarget, reason: forceReason })}
+            >
+              {forceValidateMut.isPending ? <Loader2 size={14} className="animate-spin inline mr-1" /> : null}
+              Confirmar cierre
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-600">
+            Se marcará la orden <span className="font-mono font-semibold text-warm-900">{forceValidateTarget}</span> como <span className="font-semibold text-success-700">Completa</span>. Esta acción queda registrada en el historial de la orden.
+          </p>
+          <div>
+            <label className="block text-xs font-semibold text-warm-700 mb-1">Motivo (requerido)</label>
+            <textarea
+              className="input-field text-sm w-full h-20 resize-none"
+              placeholder="Describe el motivo del cierre forzado..."
+              value={forceReason}
+              onChange={e => setForceReason(e.target.value)}
+              autoFocus
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

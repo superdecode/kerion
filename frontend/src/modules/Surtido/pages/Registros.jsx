@@ -453,6 +453,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
 
 function QuickSearchModal({ isOpen, onClose, onValidate }) {
   const { t } = useI18nStore()
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [isSearching, setIsSearching] = useState(false)
@@ -572,8 +573,8 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
               const pct = tracking && (tracking.total_expected ?? 0) > 0
                 ? Math.min(100, Math.round(((tracking.total_scanned ?? 0) / tracking.total_expected) * 100))
                 : null
-              const isComplete = tracking?.status === 'complete'
-              const isValidating = tracking?.status === 'validating'
+              const isComplete = tracking?.status === 'complete' || tracking?.status === 'partial' || (pct !== null && pct >= 100)
+              const isValidating = !isComplete && tracking?.status === 'validating'
 
               let statusBadge = null
               if (tracking) {
@@ -628,11 +629,19 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                   )}
 
                   <div className="px-4 pb-3 pt-1">
-                    <button
-                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 active:bg-primary-800 transition-colors shadow-sm"
-                      onClick={() => { onValidate(r.outboundOrderNo); onClose() }}>
-                      <ScanBarcode size={11} /> {t('surtido.validacion.card_validate')}
-                    </button>
+                    {isComplete ? (
+                      <button
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-warm-100 text-warm-700 text-xs font-semibold hover:bg-warm-200 transition-colors shadow-sm"
+                        onClick={() => { onClose(); navigate(`/Surtido/registros?obc=${encodeURIComponent(r.outboundOrderNo)}`) }}>
+                        <BadgeCheck size={11} /> Ver Registros
+                      </button>
+                    ) : (
+                      <button
+                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 active:bg-primary-800 transition-colors shadow-sm"
+                        onClick={() => { onValidate(r.outboundOrderNo); onClose() }}>
+                        <ScanBarcode size={11} /> {t('surtido.validacion.card_validate')}
+                      </button>
+                    )}
                   </div>
                 </div>
               )

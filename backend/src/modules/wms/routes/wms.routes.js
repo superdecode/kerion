@@ -483,7 +483,7 @@ router.put('/scan-session/:id',
   requirePermission('surtido.validacion', 'actualizar'),
   async (req, res) => {
     try {
-      const { status, notes, total_scanned, ubicacion_id } = req.body
+      const { status, notes, total_scanned, ubicacion_id, ubicacion_nota } = req.body
       if (status !== undefined && !PICK_SESSION_STATUSES.has(String(status))) {
         return res.status(400).json({ success: false, error: 'Estado de sesión inválido' })
       }
@@ -505,6 +505,7 @@ router.put('/scan-session/:id',
       if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
       if (total_scanned !== undefined) { fields.push(`total_scanned = $${p++}`); params.push(parsePositiveInt(total_scanned, 0)) }
       if (ubicacion_id !== undefined) { fields.push(`ubicacion_id = $${p++}`); params.push(ubicacion_id || null) }
+      if (ubicacion_nota !== undefined) { fields.push(`ubicacion_nota = $${p++}`); params.push(normalizeOptionalText(ubicacion_nota)) }
       if (status === 'complete' || status === 'with_discrepancies') {
         fields.push(`completed_at = $${p++}`)
         params.push(new Date().toISOString())
@@ -835,7 +836,7 @@ router.post('/inventory-session',
   async (req, res) => {
     const client = await req.tGetClient()
     try {
-      const { scan_type, scans = [], notes, ubicacion_id, tarima_code } = req.body
+      const { scan_type, scans = [], notes, ubicacion_id, tarima_code, origin_location } = req.body
       if (!scan_type || !['unificado', 'clasificacion'].includes(scan_type)) {
         return res.status(400).json({ success: false, error: 'scan_type inválido' })
       }
@@ -887,11 +888,11 @@ router.post('/inventory-session',
       const sessionRes = await client.query(
         `INSERT INTO inv_sessions
            (tenant_id, operator_id, scan_type, status, started_at, completed_at, notes, ubicacion_id,
-            tarima_code, total_scans, total_ok, total_blocked, total_nowms)
-         VALUES ($1,$2,$3,'saved',$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            tarima_code, origin_location, total_scans, total_ok, total_blocked, total_nowms)
+         VALUES ($1,$2,$3,'saved',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          RETURNING *`,
         [req.tenantId, req.user.id, scan_type, startedAt, completedAt, normalizedNotes, ubicacion_id || null,
-         sectionCode, totals.total, totals.ok, totals.blocked, totals.nowms]
+         sectionCode, origin_location || null, totals.total, totals.ok, totals.blocked, totals.nowms]
       )
       const session = sessionRes.rows[0]
 
@@ -1743,6 +1744,54 @@ router.put('/order-tracking/:obc',
     } catch (err) {
       console.error('PUT order-tracking error:', err.message)
       res.status(500).json({ success: false, error: 'Error actualizando seguimiento' })
+    }
+  }
+)
+
+// POST /force-validate/:obc — admin only, force-complete an order with audit trail
+router.post('/force-validate/:obc',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'actualizar'),
+  async (req, res) => {
+    try {
+      if (req.fullUser.rol_nombre !== 'Administrador') {
+        return res.status(403).json({ success: false, error: 'Solo administradores pueden forzar la validación' })
+      }
+      const { reason } = req.body
+      if (!reason?.trim()) {
+        return res.status(400).json({ success: false, error: 'Se requiere un motivo para forzar la validación' })
+      }
+      const operatorName = req.fullUser.nombre_completo || req.user.email || 'Admin'
+      const auditNote = `[Forzado por ${operatorName} - ${new Date().toISOString().slice(0,19).replace('T',' ')}]: ${reason.trim()}`
+
+      const existing = await req.tQuery(
+        'SELECT * FROM pick_order_tracking WHERE tenant_id = $1 AND outbound_order_no = $2',
+        [req.tenantId, req.params.obc]
+      )
+
+      let result
+      if (existing.rows.length === 0) {
+        result = await req.tQuery(
+          `INSERT INTO pick_order_tracking
+             (tenant_id, outbound_order_no, status, validation_completed_at, notes, validated_by)
+           VALUES ($1, $2, 'complete', now(), $3, $4) RETURNING *`,
+          [req.tenantId, req.params.obc, auditNote, operatorName]
+        )
+      } else {
+        const prev = existing.rows[0].notes
+        const newNotes = prev ? `${prev}\n${auditNote}` : auditNote
+        result = await req.tQuery(
+          `UPDATE pick_order_tracking
+           SET status = 'complete', validation_completed_at = now(), notes = $1,
+               validated_by = $2, updated_at = now()
+           WHERE tenant_id = $3 AND outbound_order_no = $4 RETURNING *`,
+          [newNotes, operatorName, req.tenantId, req.params.obc]
+        )
+      }
+      res.json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      console.error('POST force-validate error:', err.message)
+      res.status(500).json({ success: false, error: 'Error forzando validación' })
     }
   }
 )

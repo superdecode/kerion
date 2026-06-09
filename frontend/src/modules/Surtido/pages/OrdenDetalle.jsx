@@ -5,13 +5,14 @@ import { motion } from 'framer-motion'
 import {
   ArrowLeft, Copy, Check, Package2, Truck, Clock, User, Hash,
   ScanBarcode, UserCheck, ClipboardList, CheckCircle2, Loader2,
-  Boxes, BarChart3,
+  Boxes, BarChart3, ShieldAlert,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
 import {
   getOutboundList,
@@ -19,6 +20,7 @@ import {
   getOrderTrackingByOBC,
   getScanSessions,
   upsertOrderTracking,
+  forceValidateOrder,
   getSurtidores,
   getRecords,
 } from '../services/surtidoService'
@@ -279,9 +281,13 @@ export default function OrdenDetalle() {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
+  const { user } = useAuthStore()
+  const isAdmin = user?.rol_nombre === 'Administrador'
 
   const [copied, setCopied] = useState(false)
   const [showAssign, setShowAssign] = useState(false)
+  const [showForceValidate, setShowForceValidate] = useState(false)
+  const [forceReason, setForceReason] = useState('')
 
   const { data: wmsListData } = useQuery({
     queryKey: ['wms-outbound'],
@@ -349,6 +355,19 @@ export default function OrdenDetalle() {
     onError: () => toast.error(t('toast.error')),
   })
 
+  const forceValidateMut = useMutation({
+    mutationFn: (reason) => forceValidateOrder(obc, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      qc.invalidateQueries({ queryKey: ['wms-tracking-obc', obc] })
+      refetchTracking()
+      setShowForceValidate(false)
+      setForceReason('')
+      toast.success('Orden cerrada forzosamente')
+    },
+    onError: (err) => toast.error(err?.response?.data?.error || t('toast.error')),
+  })
+
   if (detailLoading && !wmsRecord) {
     return (
       <div className="flex flex-col h-full">
@@ -400,6 +419,14 @@ export default function OrdenDetalle() {
                 onClick={() => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}>
                 <ScanBarcode size={14} />
                 {t('surtido.ordenes.validate_btn')}
+              </button>
+            )}
+            {isAdmin && !isClosedOrder && (
+              <button
+                className="btn-ghost text-sm flex items-center gap-1.5 text-danger-600 border-danger-200 hover:bg-danger-50"
+                onClick={() => { setShowForceValidate(true); setForceReason('') }}>
+                <ShieldAlert size={14} />
+                Forzar validación
               </button>
             )}
           </div>
@@ -502,6 +529,42 @@ export default function OrdenDetalle() {
         onAssigned={(surtidorId) => assignMut.mutate(surtidorId)}
         t={t}
       />
+
+      <Modal
+        isOpen={showForceValidate}
+        onClose={() => { setShowForceValidate(false); setForceReason('') }}
+        title="Cerrar orden / Forzar validación"
+        icon={ShieldAlert}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => { setShowForceValidate(false); setForceReason('') }}>Cancelar</button>
+            <button
+              className="btn-danger"
+              disabled={!forceReason.trim() || forceValidateMut.isPending}
+              onClick={() => forceValidateMut.mutate(forceReason)}
+            >
+              {forceValidateMut.isPending ? <Loader2 size={14} className="animate-spin inline mr-1" /> : null}
+              Confirmar cierre
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-600">
+            Se marcará la orden <span className="font-mono font-semibold text-warm-900">{obc}</span> como <span className="font-semibold text-success-700">Completa</span>. Esta acción queda registrada en el historial de la orden.
+          </p>
+          <div>
+            <label className="block text-xs font-semibold text-warm-700 mb-1">Motivo (requerido)</label>
+            <textarea
+              className="input-field text-sm w-full h-20 resize-none"
+              placeholder="Describe el motivo del cierre forzado..."
+              value={forceReason}
+              onChange={e => setForceReason(e.target.value)}
+              autoFocus
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

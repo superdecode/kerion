@@ -23,7 +23,6 @@ import {
   getManualEntryReasons,
   upsertOrderTracking, getScanSessions, getRecords,
 } from '../services/surtidoService'
-import { getUbicaciones } from '../../WmsHub/services/wmsHubService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
 import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
 
@@ -708,8 +707,8 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
               const pct = tracking && (tracking.total_expected ?? 0) > 0
                 ? Math.min(100, Math.round(((tracking.total_scanned ?? 0) / tracking.total_expected) * 100))
                 : null
-              const isComplete = tracking?.status === 'complete'
-              const isValidating = tracking?.status === 'validating'
+              const isComplete = tracking?.status === 'complete' || tracking?.status === 'partial' || (pct !== null && pct >= 100)
+              const isValidating = !isComplete && tracking?.status === 'validating'
 
               let statusBadge = null
               if (tracking) {
@@ -838,7 +837,7 @@ function MissingList({ items, itemCounts, t }) {
 
 /* ═══════════════════════════════════════════════════════════ */
 /* ─── TabSession ─────────────────────────────────────────── */
-function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionChange, onUpdateTab, onNewOrder, canCreate, canUpdate, canDelete }) {
+function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionChange, onUpdateTab, onNewOrder, onOpenObc, canCreate, canUpdate, canDelete }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
@@ -871,8 +870,6 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const [sessionStatusFilter, setSessionStatusFilter] = useState('')
   const [ubicacionConfirmed, setUbicacionConfirmed] = useState(false)
   const [locationInputValue, setLocationInputValue] = useState('')
-  const [showLocationNotFound, setShowLocationNotFound] = useState(false)
-  const [locationNotFoundCode, setLocationNotFoundCode] = useState('')
   const [locationFlash, setLocationFlash] = useState(false)
   const [obcCopied, setObcCopied] = useState(false)
   const [sidebarVisible, setSidebarVisible] = useState(true)
@@ -883,7 +880,12 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const sidebarStorageKey = `kirion_surtido_validation_sidebar_${user?.id || 'guest'}`
   const sessionCompleteLocked = showCompletionModal || !!completionSnapshot
 
-  const sessionElapsed = useSessionTimer(sessionStart)
+  const firstScanTs = useMemo(() => {
+    const ts = history.map(h => h.ts).filter(Boolean)
+    return ts.length > 0 ? Math.min(...ts) : null
+  }, [history])
+
+  const sessionElapsed = useSessionTimer(firstScanTs || sessionStart)
   const storageKey = SESSION_KEY(tabId)
 
   useEffect(() => {
@@ -919,17 +921,12 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     enabled: !!obc && step !== 'search',
     staleTime: 60000,
   })
-  const { data: ubicacionesData } = useQuery({
-    queryKey: ['wms-ubicaciones', 'surtido'],
-    queryFn: () => getUbicaciones('surtido'),
-    staleTime: 120000,
-  })
-  const { data: reasonsData } = useQuery({
+const { data: reasonsData } = useQuery({
     queryKey: ['wms-manual-entry-reasons'],
     queryFn: getManualEntryReasons,
     staleTime: 120000,
   })
-  const { data: trackingData } = useQuery({
+  const { data: trackingData, status: trackingStatus } = useQuery({
     queryKey: ['wms-order-tracking'],
     queryFn: () => getScanSessions({ pageSize: 100 }),
     staleTime: 60000,
@@ -1013,8 +1010,43 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   // Add render logic for the conflict modal
   // (Note: This component would need to be added to the JSX return as well)
 
+  // Early guard: fire as soon as tracking data is ready, no need to wait for detailData
+  useEffect(() => {
+    if (!autoStartPending || step !== 'session' || trackingStatus === 'pending' || sessionId) return
+    const existingTracking = getRecords(trackingData).find(s => s.outbound_order_no === obc)
+    if (!existingTracking) return
+    const prevScanned = Number(existingTracking.total_scanned ?? 0)
+    const prevExpected = Number(existingTracking.total_expected ?? 0)
+    const alreadyComplete = existingTracking.status === 'complete' || existingTracking.status === 'partial' ||
+      (prevExpected > 0 && prevScanned >= prevExpected)
+    if (!alreadyComplete) return
+    setAutoStartPending(false)
+    setCounts({ ok: prevScanned, rejected: 0 })
+    const startedAt = existingTracking.validation_started_at || null
+    const completedAt = existingTracking.validation_completed_at || existingTracking.updated_at || null
+    const elapsedSecs = startedAt && completedAt
+      ? Math.floor((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+      : 0
+    setCompletionSnapshot({
+      source: 'history',
+      obc,
+      scanned: prevScanned,
+      expected: prevExpected,
+      rejected: 0,
+      missing: Math.max(0, prevExpected - prevScanned),
+      progress: prevExpected > 0 ? Math.min(100, Math.round((prevScanned / prevExpected) * 100)) : 0,
+      sessionStart: startedAt,
+      elapsed: elapsedSecs,
+      startedAt,
+      completedAt,
+    })
+    setShowCompletionModal(true)
+  }, [autoStartPending, step, trackingStatus, trackingData, obc, sessionId]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!autoStartPending || step !== 'session' || detailLoading || !detailData || sessionId || createSessionMut.isPending) return
+    // Wait for tracking data before deciding — prevents creating duplicate sessions for already-validated orders
+    if (trackingStatus === 'pending') return
     const validation = validateOrderBoxData(detailData)
     if (!validation.ok) {
       setAutoStartPending(false)
@@ -1036,7 +1068,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     }
     setAutoStartPending(false)
     createSessionMut.mutate()
-  }, [autoStartPending, step, detailLoading, detailData, sessionId, createSessionMut.isPending, canCreate, t]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoStartPending, step, detailLoading, detailData, sessionId, createSessionMut.isPending, canCreate, t, trackingStatus, trackingData, obc]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!onSessionChange) return
@@ -1097,13 +1129,13 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   useEffect(() => () => window.clearTimeout(copyTimeoutRef.current), [])
 
   const updateUbicacionMut = useMutation({
-    mutationFn: (ubicacion) => updateScanSession(sessionId, { ubicacion_id: ubicacion?.id || null }),
-    onSuccess: (_, ubicacion) => confirmUbicacionLocally(ubicacion),
-    onError:   (_, ubicacion) => confirmUbicacionLocally(ubicacion),
+    mutationFn: (texto) => updateScanSession(sessionId, { ubicacion_nota: texto || null }),
+    onSuccess: (_, texto) => confirmUbicacionLocally(texto),
+    onError:   (_, texto) => confirmUbicacionLocally(texto),
   })
 
-  function confirmUbicacionLocally(ubicacion) {
-    setSelectedUbicacion(ubicacion)
+  function confirmUbicacionLocally(texto) {
+    setSelectedUbicacion(texto || null)
     setUbicacionConfirmed(true)
     setLocationInputValue('')
     setLocationFlash(true)
@@ -1112,7 +1144,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     if (saved) {
       try {
         const s = JSON.parse(saved)
-        sessionStorage.setItem(storageKey, JSON.stringify({ ...s, ubicacion, ubicacionConfirmed: true }))
+        sessionStorage.setItem(storageKey, JSON.stringify({ ...s, ubicacion: texto || null, ubicacionConfirmed: true }))
       } catch {}
     }
     setTimeout(() => scanRef.current?.focus(), 80)
@@ -1121,22 +1153,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   function tryConfirmUbicacion(raw) {
     const val = raw.trim()
     if (!val) return
-    const ubicaciones = ubicacionesData?.data ?? []
-    if (ubicaciones.length === 0) {
-      setUbicacionConfirmed(true)
-      setTimeout(() => scanRef.current?.focus(), 80)
-      return
-    }
-    const norm = val.toLowerCase()
-    const found = ubicaciones.find(u =>
-      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
-    )
-    if (found) {
-      updateUbicacionMut.mutate({ id: found.id, codigo: found.codigo, nombre: found.nombre })
-    } else {
-      setLocationNotFoundCode(val)
-      setShowLocationNotFound(true)
-    }
+    updateUbicacionMut.mutate(val)
   }
 
   const addEventMut = useMutation({
@@ -1263,7 +1280,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const finalizeMut = useMutation({
     mutationFn: ({ source = 'manual' } = {}) => {
       const sessionStatus = counts.ok < totalExpected ? 'with_discrepancies' : 'complete'
-      return updateScanSession(sessionId, { status: sessionStatus, notes: finalNotes, total_scanned: counts.ok, ubicacion_id: selectedUbicacion?.id || null })
+      return updateScanSession(sessionId, { status: sessionStatus, notes: finalNotes, total_scanned: counts.ok, ubicacion_nota: selectedUbicacion || null })
     },
     onSuccess: (_, vars) => {
       const orderStatus = totalExpected > 0 && counts.ok >= totalExpected ? 'complete' : 'partial'
@@ -1271,6 +1288,11 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       toast.success(t('surtido.escaneo.session_saved'))
       qc.invalidateQueries({ queryKey: ['wms-scan-sessions'] })
       autoFinalizeLockRef.current = true
+      const lastTs = history.length > 0 ? history[0].ts : Date.now()
+      const startTs = firstScanTs || sessionStart?.getTime()
+      const startedAtIso = startTs ? new Date(startTs).toISOString() : null
+      const completedAtIso = new Date(lastTs).toISOString()
+      const elapsedSecs = startTs ? Math.floor((lastTs - startTs) / 1000) : sessionElapsed
       setCompletionSnapshot({
         source: vars?.source || 'manual',
         obc,
@@ -1279,9 +1301,10 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
         rejected: counts.rejected,
         missing: Math.max(0, totalExpected - counts.ok),
         progress,
-        sessionStart,
-        elapsed: sessionElapsed,
-        completedAt: new Date().toISOString(),
+        sessionStart: startedAtIso,
+        elapsed: elapsedSecs,
+        startedAt: startedAtIso,
+        completedAt: completedAtIso,
       })
       setShowFinalize(false)
       setShowCompletionModal(true)
@@ -1426,16 +1449,13 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                   }`}
                   initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}>
                   <MapPin size={11} className={`shrink-0 ${locationFlash ? 'text-success-600' : 'text-accent-600'}`} />
-                  <span className={`font-mono text-xs font-semibold ${locationFlash ? 'text-success-700' : 'text-accent-700'}`}>{selectedUbicacion.codigo}</span>
-                  {selectedUbicacion.nombre && selectedUbicacion.nombre !== selectedUbicacion.codigo && (
-                    <span className={`text-[11px] truncate ${locationFlash ? 'text-success-500' : 'text-accent-500'}`}>{selectedUbicacion.nombre}</span>
-                  )}
+                  <span className={`font-mono text-xs font-semibold ${locationFlash ? 'text-success-700' : 'text-accent-700'}`}>{selectedUbicacion}</span>
                   <button
                     className="ml-auto p-1 rounded-lg hover:bg-accent-200 text-accent-400 hover:text-accent-700 transition-colors"
                     title={t('surtido.validacion.ubicacion_edit')}
                     onClick={() => {
                       setUbicacionConfirmed(false)
-                      setLocationInputValue(selectedUbicacion?.codigo || '')
+                      setLocationInputValue(selectedUbicacion || '')
                       setTimeout(() => locationRef.current?.focus(), 80)
                     }}>
                     <Pencil size={10} />
@@ -1517,22 +1537,6 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                     {updateUbicacionMut.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                   </button>
                 </div>
-                {ubicacionesData?.data?.length > 0 && locationInputValue.trim() && (
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {(ubicacionesData.data).filter(u =>
-                      (u.codigo || '').toLowerCase().includes(locationInputValue.toLowerCase()) ||
-                      (u.nombre || '').toLowerCase().includes(locationInputValue.toLowerCase())
-                    ).slice(0, 6).map(u => (
-                      <button key={u.id}
-                        className="w-full text-left px-3 py-1.5 rounded-xl hover:bg-accent-100 transition-colors text-xs flex items-center gap-2"
-                        onClick={() => updateUbicacionMut.mutate({ id: u.id, codigo: u.codigo, nombre: u.nombre })}>
-                        <MapPin size={10} className="text-accent-500 shrink-0" />
-                        <span className="code-main">{u.codigo}</span>
-                        <span className="text-warm-500">{u.nombre}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </motion.div>
             )}
 
@@ -1739,6 +1743,15 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
                     <div className={`h-full rounded-full transition-all ${isComplete ? 'bg-success-400' : 'bg-primary-400'}`}
                       style={{ width: `${pct}%` }} />
                   </div>
+                  {!isComplete && onOpenObc && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenObc(s.outbound_order_no)}
+                      className="mt-2 w-full btn-primary text-[10px] py-1 h-7"
+                    >
+                      Validar
+                    </button>
+                  )}
                 </div>
               )
             })
@@ -1817,25 +1830,6 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
         </div>
       </Modal>
 
-      {/* Location not found modal */}
-      <Modal isOpen={showLocationNotFound} onClose={() => setShowLocationNotFound(false)}
-        title={t('surtido.validacion.ubicacion_not_found_title')} icon={MapPin}
-        footer={
-          <div className="flex gap-3 justify-end">
-            <button className="btn-ghost" onClick={() => setShowLocationNotFound(false)}>{t('common.cancel')}</button>
-            <button className="btn-primary" onClick={() => {
-              setShowLocationNotFound(false)
-              updateUbicacionMut.mutate({ id: null, codigo: locationNotFoundCode, nombre: locationNotFoundCode })
-            }}>
-              {t('surtido.validacion.ubicacion_create_btn')}
-            </button>
-          </div>
-        }>
-        <p className="text-sm text-warm-600">
-          <strong className="font-mono text-warm-800">{locationNotFoundCode}</strong> — {t('surtido.validacion.ubicacion_not_found_body')}
-        </p>
-      </Modal>
-
       {/* Cancel confirm modal */}
       <Modal isOpen={showCancelConfirm} onClose={() => setShowCancelConfirm(false)}
         title={t('surtido.escaneo.cancel_confirm_title')} icon={XOctagon}
@@ -1899,8 +1893,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
           {selectedUbicacion && (
             <div className="bg-accent-50 rounded-xl px-3 py-2 text-xs flex items-center gap-2">
               <MapPin size={12} className="text-accent-600 shrink-0" />
-              <span className="font-mono font-semibold text-accent-700">{selectedUbicacion.codigo}</span>
-              <span className="text-accent-600">{selectedUbicacion.nombre}</span>
+              <span className="font-mono font-semibold text-accent-700">{selectedUbicacion}</span>
             </div>
           )}
           <textarea
@@ -1982,38 +1975,56 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
             <p className="mt-1 text-sm text-success-600">{t('surtido.validacion.complete_hint')}</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-warm-200 bg-warm-50 p-3">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-warm-400 font-semibold">{t('surtido.validacion.complete_summary')}</p>
-              <div className="mt-2 space-y-1 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-warm-500">{t('surtido.escaneo.scanned')}</span>
-                  <span className="font-bold text-warm-800 tabular-nums">{completionSnapshot?.scanned ?? counts.ok}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-warm-500">{t('surtido.escaneo.expected')}</span>
-                  <span className="font-bold text-warm-800 tabular-nums">{completionSnapshot?.expected ?? totalExpected}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-warm-500">{t('surtido.validacion.rejected_abbr')}</span>
-                  <span className="font-bold text-warm-800 tabular-nums">{completionSnapshot?.rejected ?? counts.rejected}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-warm-500">{t('surtido.validacion.time_label')}</span>
-                  <span className="font-bold text-warm-800 tabular-nums">{fmtElapsed(completionSnapshot?.elapsed ?? sessionElapsed)}</span>
-                </div>
+          <div className="rounded-2xl border border-warm-200 bg-gradient-to-br from-warm-50 to-white p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-warm-400 font-semibold">{t('surtido.validacion.order_label')}</p>
+                <p className="mt-0.5 font-mono text-sm font-bold text-primary-700 break-all">{completionSnapshot?.obc ?? obc}</p>
+              </div>
+              <span className={`badge text-[9px] shrink-0 ${(completionSnapshot?.progress ?? progress) >= 100 ? 'bg-success-100 text-success-700' : 'bg-warning-100 text-warning-700'}`}>
+                {(completionSnapshot?.progress ?? progress) >= 100 ? 'Completa' : 'Con diferencias'}
+              </span>
+            </div>
+
+            {selectedUbicacion && (
+              <div className="flex items-center gap-2 rounded-xl bg-white border border-warm-100 px-3 py-2 text-xs">
+                <MapPin size={12} className="text-accent-600 shrink-0" />
+                <span className="font-mono font-semibold text-accent-700">{selectedUbicacion}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-2 border-t border-warm-100 pt-3">
+              <div className="text-center">
+                <p className="text-xl font-extrabold text-success-600 tabular-nums">{completionSnapshot?.scanned ?? counts.ok}</p>
+                <p className="text-[9px] text-warm-400 uppercase tracking-wide mt-0.5">{t('surtido.escaneo.scanned')}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-extrabold text-warm-600 tabular-nums">{completionSnapshot?.expected ?? totalExpected}</p>
+                <p className="text-[9px] text-warm-400 uppercase tracking-wide mt-0.5">{t('surtido.escaneo.expected')}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-extrabold text-danger-500 tabular-nums">{completionSnapshot?.rejected ?? counts.rejected}</p>
+                <p className="text-[9px] text-warm-400 uppercase tracking-wide mt-0.5">{t('surtido.validacion.rejected_abbr')}</p>
               </div>
             </div>
-            <div className="rounded-2xl border border-primary-200 bg-primary-50 p-3">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-primary-500 font-semibold">{t('surtido.validacion.order_label')}</p>
-              <p className="mt-1 font-mono text-sm font-bold text-primary-700 break-all">{completionSnapshot?.obc ?? obc}</p>
-              {selectedUbicacion && (
-                <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-xs">
-                  <MapPin size={12} className="text-accent-600 shrink-0" />
-                  <span className="font-mono font-semibold text-accent-700">{selectedUbicacion.codigo}</span>
-                  <span className="text-accent-600 truncate">{selectedUbicacion.nombre}</span>
+
+            <div className="space-y-1.5 border-t border-warm-100 pt-3 text-xs">
+              {completionSnapshot?.startedAt && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-warm-400">Inicio</span>
+                  <span className="font-mono text-warm-600">{fmtDateTime(completionSnapshot.startedAt)}</span>
                 </div>
               )}
+              {completionSnapshot?.completedAt && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-warm-400">Fin</span>
+                  <span className="font-mono text-warm-600">{fmtDateTime(completionSnapshot.completedAt)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-warm-400">{t('surtido.validacion.time_label')}</span>
+                <span className="font-mono font-bold text-warm-800">{fmtElapsed(completionSnapshot?.elapsed ?? sessionElapsed)}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -2264,6 +2275,7 @@ export default function SurtidoValidacion() {
               canCreate={canCreateValidation}
               canUpdate={canUpdateValidation}
               canDelete={canDeleteValidation}
+              onOpenObc={addTabWithObc}
             />
           </div>
         ))}

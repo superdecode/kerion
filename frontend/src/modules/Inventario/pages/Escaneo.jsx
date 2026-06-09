@@ -7,7 +7,8 @@ import {
   Loader2, Wifi, WifiOff, Trash2, ArrowRight, MoveRight,
   Square, AlertCircle, ScanBarcode, Clock, Timer,
   RefreshCw, PanelRightClose, PanelRightOpen, Search, Maximize2,
-  MapPin, Pencil, ChevronDown, ChevronUp,
+  MapPin, Pencil, ChevronDown, ChevronUp, Calendar, Hash, Layers, List,
+  Copy, Check,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -34,31 +35,49 @@ const STATUS_META = {
     labelKey: 'inventario.escaneo.group_disponible',
     bg: 'bg-success-100 text-success-700',
     icon: CheckCircle2,
-    flash: 'bg-success-50/80 border-success-200',
-    card: 'border-success-200/80 bg-gradient-to-br from-success-50 via-white to-success-100/70 text-success-700 shadow-[0_16px_32px_-24px_rgba(34,197,94,0.55)]',
-    pill: 'border-success-200/90 bg-gradient-to-r from-success-50 via-white to-success-100/75 text-success-700 shadow-[0_10px_22px_-18px_rgba(34,197,94,0.5)]',
+    flash: 'bg-success-50 border-success-300',
+    card: 'border-success-300 bg-gradient-to-br from-success-100 to-success-50/60 text-success-700 shadow-[0_16px_32px_-24px_rgba(34,197,94,0.55)]',
+    pill: 'border-success-300 bg-gradient-to-r from-success-100 to-success-50 text-success-700 shadow-[0_10px_22px_-18px_rgba(34,197,94,0.5)]',
     soft: 'bg-gradient-to-br from-success-50 via-white to-success-100/75 border-success-200/80 text-success-700',
-    tint: 'from-success-50/95 via-white to-success-100/65',
+    tint: 'from-success-200 to-success-100/70',
+    cardBorder: 'border-success-300',
+    headerFg: 'text-success-800',
+    itemBadge: 'bg-success-200 text-success-800',
+    rowHover: 'hover:bg-success-50',
+    divider: 'divide-success-100',
+    footerBg: 'bg-success-50 border-success-200',
   },
   blocked: {
     labelKey: 'inventario.escaneo.group_bloqueado',
     bg: 'bg-warning-100 text-warning-700',
     icon: AlertTriangle,
-    flash: 'bg-warning-50/80 border-warning-200',
-    card: 'border-warning-200/80 bg-gradient-to-br from-warning-50 via-white to-warning-100/75 text-warning-700 shadow-[0_16px_32px_-24px_rgba(245,158,11,0.5)]',
-    pill: 'border-warning-200/90 bg-gradient-to-r from-warning-50 via-white to-warning-100/75 text-warning-700 shadow-[0_10px_22px_-18px_rgba(245,158,11,0.5)]',
+    flash: 'bg-warning-50 border-warning-300',
+    card: 'border-warning-300 bg-gradient-to-br from-warning-100 to-warning-50/60 text-warning-700 shadow-[0_16px_32px_-24px_rgba(245,158,11,0.5)]',
+    pill: 'border-warning-300 bg-gradient-to-r from-warning-100 to-warning-50 text-warning-700 shadow-[0_10px_22px_-18px_rgba(245,158,11,0.5)]',
     soft: 'bg-gradient-to-br from-warning-50 via-white to-warning-100/75 border-warning-200/80 text-warning-700',
-    tint: 'from-warning-50/95 via-white to-warning-100/70',
+    tint: 'from-warning-200 to-warning-100/70',
+    cardBorder: 'border-warning-300',
+    headerFg: 'text-warning-800',
+    itemBadge: 'bg-warning-200 text-warning-800',
+    rowHover: 'hover:bg-warning-50',
+    divider: 'divide-warning-100',
+    footerBg: 'bg-warning-50 border-warning-200',
   },
   nowms: {
     labelKey: 'inventario.escaneo.group_nowms',
     bg: 'bg-danger-100 text-danger-700',
     icon: Ban,
-    flash: 'bg-danger-50/80 border-danger-200',
-    card: 'border-danger-200/80 bg-gradient-to-br from-danger-50 via-white to-danger-100/75 text-danger-700 shadow-[0_16px_32px_-24px_rgba(239,68,68,0.5)]',
-    pill: 'border-danger-200/90 bg-gradient-to-r from-danger-50 via-white to-danger-100/75 text-danger-700 shadow-[0_10px_22px_-18px_rgba(239,68,68,0.5)]',
+    flash: 'bg-danger-50 border-danger-300',
+    card: 'border-danger-300 bg-gradient-to-br from-danger-100 to-danger-50/60 text-danger-700 shadow-[0_16px_32px_-24px_rgba(239,68,68,0.5)]',
+    pill: 'border-danger-300 bg-gradient-to-r from-danger-100 to-danger-50 text-danger-700 shadow-[0_10px_22px_-18px_rgba(239,68,68,0.5)]',
     soft: 'bg-gradient-to-br from-danger-50 via-white to-danger-100/75 border-danger-200/80 text-danger-700',
-    tint: 'from-danger-50/95 via-white to-danger-100/70',
+    tint: 'from-danger-200 to-danger-100/70',
+    cardBorder: 'border-danger-300',
+    headerFg: 'text-danger-800',
+    itemBadge: 'bg-danger-200 text-danger-800',
+    rowHover: 'hover:bg-danger-50',
+    divider: 'divide-danger-100',
+    footerBg: 'bg-danger-50 border-danger-200',
   },
 }
 
@@ -93,7 +112,10 @@ function useSessionTimer(startAt, endAt = null) {
 }
 
 const fmtElapsed = (secs) => {
-  const m = Math.floor(secs / 60); const s = secs % 60
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  const s = secs % 60
+  if (h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
 }
 
@@ -135,33 +157,90 @@ const formatConflictDate = (value, locale = 'es') => {
 
 /* ─── Modals ─────────────────────────────────────────────── */
 
+const SESSION_TYPES = (t) => [
+  {
+    value: 'unificado',
+    icon: List,
+    ring: 'border-primary-400',
+    gradient: 'from-primary-50/80 to-white',
+    iconBg: 'bg-primary-100',
+    iconFg: 'text-primary-600',
+    dotBg: 'bg-primary-500',
+    dotBorder: 'border-primary-400',
+    get label() { return t('inventario.escaneo.type_unificado') },
+    get desc() { return t('inventario.escaneo.type_unificado_desc') },
+  },
+  {
+    value: 'clasificacion',
+    icon: Layers,
+    ring: 'border-accent-400',
+    gradient: 'from-accent-50/80 to-white',
+    iconBg: 'bg-accent-100',
+    iconFg: 'text-accent-600',
+    dotBg: 'bg-accent-500',
+    dotBorder: 'border-accent-400',
+    get label() { return t('inventario.escaneo.type_clasificacion') },
+    get desc() { return t('inventario.escaneo.type_clasificacion_desc') },
+  },
+]
+
 function SessionTypeModal({ isOpen, onStart, onClose }) {
   const { t } = useI18nStore()
   const [selected, setSelected] = useState('unificado')
+  const types = SESSION_TYPES(t)
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.session_type_title')} icon={Package}
+    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.session_type_title')} icon={ScanBarcode}
       footer={
         <div className="flex gap-3 justify-end">
           <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn-primary inline-flex items-center gap-2" onClick={() => onStart(selected)}>
-            <ScanBarcode size={14} /> {t('inventario.escaneo.start_session')}
+            <ArrowRight size={14} /> {t('inventario.escaneo.start_session')}
           </button>
         </div>
       }
     >
-      <div className="space-y-3 py-2">
-        {[
-          { value: 'unificado', label: t('inventario.escaneo.type_unificado'), desc: t('inventario.escaneo.type_unificado_desc') },
-          { value: 'clasificacion', label: t('inventario.escaneo.type_clasificacion'), desc: t('inventario.escaneo.type_clasificacion_desc') },
-        ].map(opt => (
-          <button key={opt.value} onClick={() => setSelected(opt.value)}
-            className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${
-              selected === opt.value ? 'border-primary-500 bg-primary-50' : 'border-warm-200 hover:border-warm-300'
-            }`}>
-            <p className="font-semibold text-warm-900 text-sm">{opt.label}</p>
-            <p className="text-xs text-warm-500 mt-0.5">{opt.desc}</p>
-          </button>
-        ))}
+      <div className="space-y-2.5 py-1">
+        {types.map(opt => {
+          const Icon = opt.icon
+          const active = selected === opt.value
+          return (
+            <button
+              key={opt.value}
+              onClick={() => setSelected(opt.value)}
+              className={`group w-full text-left flex items-center gap-4 px-4 py-4 rounded-2xl border-2 transition-all duration-200
+                ${active
+                  ? `${opt.ring} bg-gradient-to-br ${opt.gradient} shadow-[0_6px_24px_-6px_rgba(0,0,0,0.13)]`
+                  : 'border-warm-200 bg-white hover:border-warm-300 hover:shadow-sm'
+                }`}
+            >
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200
+                shadow-sm ${active ? opt.iconBg : 'bg-warm-100 group-hover:bg-warm-200/60'}`}>
+                <Icon className={`w-5 h-5 transition-colors duration-200 ${active ? opt.iconFg : 'text-warm-400'}`} />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <p className={`font-semibold text-sm leading-tight transition-colors duration-200
+                  ${active ? 'text-warm-900' : 'text-warm-600'}`}>
+                  {opt.label}
+                </p>
+                <p className={`text-xs mt-1 leading-relaxed transition-colors duration-200
+                  ${active ? 'text-warm-500' : 'text-warm-400'}`}>
+                  {opt.desc}
+                </p>
+              </div>
+
+              <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all duration-200
+                ${active ? `${opt.dotBorder} ${opt.dotBg}` : 'border-warm-300 bg-white'}`}>
+                {active && <div className="w-2 h-2 rounded-full bg-white" />}
+              </div>
+            </button>
+          )
+        })}
+
+        <p className="text-[11px] text-warm-400 text-center pt-1 leading-relaxed">
+          El tipo no puede cambiarse una vez iniciada la sesión
+        </p>
       </div>
     </Modal>
   )
@@ -274,8 +353,11 @@ function CloseTabModal({ isOpen, count, onConfirm, onClose }) {
   )
 }
 
-function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicacionValidated, onChangeUbicacion }) {
+function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicacionValidated, onChangeUbicacion, originLocation }) {
   const { t } = useI18nStore()
+  const [blindCount, setBlindCount] = useState('')
+  useEffect(() => { if (isOpen) setBlindCount('') }, [isOpen])
+
   if (!tab) return null
   const counts = tab.items.reduce((a, i) => { a[i.status] = (a[i.status] || 0) + 1; return a }, {})
   const bounds = getTimeBounds(tab.items, { fallbackStart: tab.createdAt })
@@ -283,12 +365,15 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
   const ended = bounds.end ? new Date(bounds.end) : null
   const durSec = started && ended ? Math.floor((ended - started) / 1000) : 0
   const dur = durSec < 60 ? `${durSec}s` : `${Math.floor(durSec / 60)}m ${durSec % 60}s`
+  const actualCount = tab.items.length
+  const blindNum = parseInt(blindCount, 10)
+  const countConfirmed = !isNaN(blindNum) && blindNum === actualCount
   return (
     <Modal isOpen={isOpen} onClose={onContinue} title={t('inventario.escaneo.session_summary')} icon={Package}
       footer={
         <div className="flex gap-3 justify-end">
           <button className="btn-ghost" onClick={onContinue}>{t('inventario.escaneo.keep_scanning')}</button>
-          <button className="btn-primary inline-flex items-center gap-2" onClick={onSave} disabled={isSaving}>
+          <button className="btn-primary inline-flex items-center gap-2" onClick={onSave} disabled={isSaving || !countConfirmed}>
             {isSaving ? <Loader2 size={14} className="animate-spin" /> : null}
             {t('inventario.escaneo.save_registro')}
           </button>
@@ -327,7 +412,7 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
         </div>
         <div className="flex items-center justify-between rounded-2xl border border-primary-100/80 bg-gradient-to-r from-primary-50 via-white to-accent-50/55 px-4 py-2.5 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.42)]">
           <span className="text-warm-700">{t('inventario.escaneo.total')}</span>
-          <span className="font-bold text-primary-700 text-lg">{tab.items.length}</span>
+          <span className={`font-bold text-lg ${countConfirmed ? 'text-primary-700' : 'blur-sm select-none text-primary-300'}`}>{actualCount}</span>
         </div>
         {ubicacionValidated ? (
           <div className="flex items-center gap-2 bg-accent-50 rounded-xl px-3 py-2.5 border border-accent-100">
@@ -349,6 +434,169 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
             {t('inventario.escaneo.ubicacion_scan_title')}
           </button>
         )}
+        {originLocation && (
+          <div className="flex items-center gap-2 bg-warm-50 rounded-xl px-3 py-2 border border-warm-200">
+            <MapPin size={11} className="text-warm-400 shrink-0" />
+            <span className="text-[10px] text-warm-500 uppercase tracking-wide shrink-0">Origen:</span>
+            <span className="font-mono text-xs text-warm-700 truncate">{originLocation}</span>
+          </div>
+        )}
+        <div className="rounded-2xl border border-warning-200 bg-warning-50/70 p-3 space-y-2">
+          <p className="text-xs font-semibold text-warning-700">Confirmar conteo de cajas</p>
+          <p className="text-[11px] text-warning-600">Ingresa el número de cajas para confirmar el envío:</p>
+          <input
+            type="number"
+            min="0"
+            value={blindCount}
+            onChange={e => setBlindCount(e.target.value)}
+            placeholder="Número de cajas"
+            className={`w-full px-3 py-2 rounded-xl border text-sm font-mono outline-none transition-colors ${
+              countConfirmed
+                ? 'border-success-400 bg-success-50 text-success-700 focus:border-success-500'
+                : blindCount
+                ? 'border-danger-300 bg-danger-50 text-danger-700 focus:border-danger-400'
+                : 'border-warning-300 bg-white text-warm-700 focus:border-warning-400'
+            }`}
+            autoComplete="off"
+          />
+          {countConfirmed && (
+            <p className="text-[11px] text-success-600 font-semibold flex items-center gap-1">
+              <CheckCircle2 size={11} /> Conteo confirmado
+            </p>
+          )}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClose, isSaving, ubicacionValidated, originLocation }) {
+  const { t } = useI18nStore()
+  const [blindCount, setBlindCount] = useState('')
+  useEffect(() => { if (isOpen) setBlindCount('') }, [isOpen])
+
+  if (!tab || !group) return null
+  const meta = STATUS_META[group] ?? STATUS_META.nowms
+  const groupItems = tab.items.filter(item => getItemGroup(item) === group)
+  const bounds = getTimeBounds(groupItems.length > 0 ? groupItems : tab.items, { fallbackStart: tab.createdAt })
+  const durSec = bounds.start && bounds.end ? Math.floor((new Date(bounds.end) - new Date(bounds.start)) / 1000) : 0
+  const dur = durSec < 60
+    ? `${durSec}s`
+    : durSec < 3600
+    ? `${Math.floor(durSec / 60)}m ${durSec % 60}s`
+    : `${Math.floor(durSec / 3600)}h ${Math.floor((durSec % 3600) / 60)}m`
+  const sectionCode = formatPreviewSectionCode(tab, tabIndex)
+  const tarimaCode = formatPreviewTarimaCode(sectionCode, GROUPS.indexOf(group))
+  const actualCount = groupItems.length
+  const blindNum = parseInt(blindCount, 10)
+  const countConfirmed = !isNaN(blindNum) && blindNum === actualCount
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Enviar Tarima" icon={Square}
+      footer={
+        <div className="flex gap-3 justify-end">
+          <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="btn-primary inline-flex items-center gap-2" onClick={onSave} disabled={isSaving || !countConfirmed}>
+            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
+            Enviar Tarima
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3 text-sm">
+        {/* Hero: type + count */}
+        <div className={`rounded-2xl border p-4 flex items-center gap-4 ${meta.card}`}>
+          <div className="w-14 h-14 rounded-2xl bg-white/60 flex items-center justify-center shrink-0 shadow-sm">
+            <meta.icon size={28} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Tipo de Tarima</p>
+            <p className="font-black text-xl leading-tight mt-0.5">{t(meta.labelKey)}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-4xl font-black leading-none tabular-nums">{actualCount}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide opacity-50 mt-0.5">cajas</p>
+          </div>
+        </div>
+
+        {/* Info grid with icons */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-warm-100 bg-warm-50/80 p-3 flex items-start gap-2.5">
+            <Hash size={13} className="text-warm-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wide">Sección</p>
+              <p className="font-mono font-bold text-xs text-warm-800 mt-0.5 truncate">{sectionCode}</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-warm-100 bg-warm-50/80 p-3 flex items-start gap-2.5">
+            <Layers size={13} className="text-warm-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wide">Tarima</p>
+              <p className="font-mono font-bold text-xs text-warm-800 mt-0.5 truncate">{tarimaCode}</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-warm-100 bg-warm-50/80 p-3 flex items-start gap-2.5">
+            <Calendar size={13} className="text-warm-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wide">Fecha inicio</p>
+              <p className="font-mono text-[11px] text-warm-700 mt-0.5">{bounds.start ? fmtDateTime(bounds.start) : '—'}</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-warm-100 bg-warm-50/80 p-3 flex items-start gap-2.5">
+            <Calendar size={13} className="text-warm-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wide">Fecha final</p>
+              <p className="font-mono text-[11px] text-warm-700 mt-0.5">{bounds.end ? fmtDateTime(bounds.end) : '—'}</p>
+            </div>
+          </div>
+          <div className="col-span-2 rounded-xl border border-primary-100 bg-gradient-to-r from-primary-50 to-white p-3 flex items-center gap-2.5">
+            <Clock size={13} className="text-primary-400 shrink-0" />
+            <p className="text-[10px] text-primary-400 uppercase tracking-wide flex-1">{t('inventario.escaneo.duration')}</p>
+            <p className="font-bold text-sm text-primary-700">{dur}</p>
+          </div>
+        </div>
+
+        {ubicacionValidated && (
+          <div className="flex items-center gap-2 bg-accent-50 rounded-xl px-3 py-2.5 border border-accent-100">
+            <MapPin size={13} className="text-accent-600 shrink-0" />
+            <span className="font-mono font-semibold text-accent-700 text-xs">{ubicacionValidated.codigo}</span>
+            {ubicacionValidated.nombre && ubicacionValidated.nombre !== ubicacionValidated.codigo && (
+              <span className="text-accent-500 text-xs truncate">{ubicacionValidated.nombre}</span>
+            )}
+          </div>
+        )}
+        {originLocation && (
+          <div className="flex items-center gap-2 bg-warm-50 rounded-xl px-3 py-2 border border-warm-200">
+            <MapPin size={12} className="text-primary-400 shrink-0" />
+            <span className="text-[10px] text-warm-500 uppercase tracking-wide shrink-0">Origen:</span>
+            <span className="font-mono text-xs text-warm-700 truncate">{originLocation}</span>
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-warning-200 bg-warning-50/70 p-3 space-y-2">
+          <p className="text-xs font-semibold text-warning-700">Confirmar conteo de cajas</p>
+          <p className="text-[11px] text-warning-600">Ingresa el número de cajas en esta tarima ({t(meta.labelKey)}):</p>
+          <input
+            type="number"
+            min="0"
+            value={blindCount}
+            onChange={e => setBlindCount(e.target.value)}
+            placeholder="Número de cajas"
+            className={`w-full px-3 py-2 rounded-xl border text-sm font-mono outline-none transition-colors ${
+              countConfirmed
+                ? 'border-success-400 bg-success-50 text-success-700 focus:border-success-500'
+                : blindCount
+                ? 'border-danger-300 bg-danger-50 text-danger-700 focus:border-danger-400'
+                : 'border-warning-300 bg-white text-warm-700 focus:border-warning-400'
+            }`}
+            autoComplete="off"
+          />
+          {countConfirmed && (
+            <p className="text-[11px] text-success-600 font-semibold flex items-center gap-1">
+              <CheckCircle2 size={11} /> Conteo confirmado
+            </p>
+          )}
+        </div>
       </div>
     </Modal>
   )
@@ -517,15 +765,26 @@ function GroupDetailModal({
   onToggleMarked,
   onMarkVisible,
   onClearVisible,
+  originLocation,
 }) {
   const { t } = useI18nStore()
   const [search, setSearch] = useState('')
   const [markedOnly, setMarkedOnly] = useState(false)
+  const [copiedField, setCopiedField] = useState(null)
+
+  const copyToClipboard = (text, key) => {
+    if (!text || text === '—') return
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(key)
+      setTimeout(() => setCopiedField(null), 1500)
+    })
+  }
 
   useEffect(() => {
     if (!isOpen) {
       setSearch('')
       setMarkedOnly(false)
+      setCopiedField(null)
     }
   }, [isOpen])
 
@@ -557,6 +816,11 @@ function GroupDetailModal({
       size="full"
       headerAction={
         <div className="hidden md:flex items-center gap-2 text-[11px] font-medium text-warm-500">
+          {originLocation && (
+            <span className="flex items-center gap-1 font-mono text-accent-600">
+              <MapPin size={10} /> {originLocation}
+            </span>
+          )}
           <span>{t('inventario.escaneo.total')}: {baseItems.length}</span>
           <span>{t('inventario.escaneo.marked_count')}: {markedCount}</span>
           <span>{t('inventario.escaneo.filtered_count')}: {filtered.length}</span>
@@ -619,22 +883,46 @@ function GroupDetailModal({
               <div className="py-12 text-center text-sm text-warm-400">{t('common.noData')}</div>
             ) : (
               [...filtered].reverse().map((item, index) => (
-                <div key={item._idx} className={`grid grid-cols-[auto_minmax(0,0.95fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 px-4 py-3 items-start text-sm ${item.marked ? 'bg-primary-50/55' : 'bg-white'}`}>
-                  <div className="w-6 h-6 rounded-full bg-warm-100 text-warm-500 flex items-center justify-center shrink-0 text-[11px] font-bold">
+                <div key={item._idx} className={`grid grid-cols-[auto_minmax(0,0.95fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 px-4 py-3 items-center text-sm ${item.marked ? 'bg-primary-100/60 border-l-2 border-primary-400' : 'bg-white'}`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold ${item.marked ? 'bg-primary-200 text-primary-700' : 'bg-warm-100 text-warm-500'}`}>
                     {index + 1}
                   </div>
                   <div className="text-[11px] text-warm-500 whitespace-nowrap">
                     {item.ts ? fmtDateTime(item.ts) : '—'}
                   </div>
-                  <div className="font-mono text-xs font-normal text-warm-700 truncate">{item.code}</div>
-                  <div className="font-mono text-xs text-warm-500 truncate">{item.code2 || '—'}</div>
-                  <div className="text-xs text-warm-600 truncate">{item.location || '—'}</div>
+                  <div className="group relative flex items-center gap-1 min-w-0">
+                    <span className="font-mono text-xs font-normal text-warm-700 truncate">{item.code}</span>
+                    {item.code && (
+                      <button type="button" onClick={() => copyToClipboard(item.code, `code1-${item._idx}`)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-0.5 rounded text-warm-400 hover:text-primary-600">
+                        {copiedField === `code1-${item._idx}` ? <Check size={10} className="text-success-600" /> : <Copy size={10} />}
+                      </button>
+                    )}
+                  </div>
+                  <div className="group relative flex items-center gap-1 min-w-0">
+                    <span className="font-mono text-xs text-warm-500 truncate">{item.code2 || '—'}</span>
+                    {item.code2 && (
+                      <button type="button" onClick={() => copyToClipboard(item.code2, `code2-${item._idx}`)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-0.5 rounded text-warm-400 hover:text-primary-600">
+                        {copiedField === `code2-${item._idx}` ? <Check size={10} className="text-success-600" /> : <Copy size={10} />}
+                      </button>
+                    )}
+                  </div>
+                  <div className="group relative flex items-center gap-1 min-w-0">
+                    <span className="text-xs text-warm-600 truncate">{item.location || '—'}</span>
+                    {item.location && (
+                      <button type="button" onClick={() => copyToClipboard(item.location, `loc-${item._idx}`)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-0.5 rounded text-warm-400 hover:text-accent-600">
+                        {copiedField === `loc-${item._idx}` ? <Check size={10} className="text-success-600" /> : <Copy size={10} />}
+                      </button>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => onToggleMarked(item._idx)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
                       item.marked
-                        ? 'bg-primary-100 text-primary-700'
+                        ? 'bg-primary-200 text-primary-800'
                         : 'bg-warm-100 text-warm-600 hover:bg-warm-200'
                     }`}
                   >
@@ -815,9 +1103,9 @@ function ClasificacionPanel({
         return (
           <div
             key={g}
-            className="relative flex flex-col overflow-hidden rounded-2xl border border-warm-100/80 bg-white shadow-soft min-h-[22rem] sm:min-h-[24rem] lg:min-h-[26rem] xl:min-h-0 xl:h-[clamp(24rem,52vh,32rem)]"
+            className={`relative flex flex-col overflow-hidden rounded-2xl border bg-white shadow-soft min-h-[22rem] sm:min-h-[24rem] lg:min-h-[26rem] xl:min-h-0 xl:h-[clamp(24rem,52vh,32rem)] ${meta.cardBorder}`}
           >
-            <div className={`flex items-center gap-2 rounded-t-[calc(1rem-2px)] border-b px-4 py-2.5 shrink-0 bg-gradient-to-r ${meta.tint} border-current/10`}>
+            <div className={`flex items-center gap-2 rounded-t-[calc(1rem-2px)] border-b px-4 py-2.5 shrink-0 bg-gradient-to-r ${meta.tint} ${meta.headerFg} border-current/20`}>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <meta.icon size={14} />
@@ -837,13 +1125,13 @@ function ClasificacionPanel({
                 <Maximize2 size={14} />
               </button>
             </div>
-            <div className="flex-1 min-h-0 max-h-[42vh] overflow-y-auto overscroll-contain divide-y divide-warm-50 pr-1">
+            <div className={`flex-1 min-h-0 max-h-[42vh] overflow-y-auto overscroll-contain divide-y ${meta.divider} pr-1`}>
               {groupItems.length === 0 ? (
                 <p className="text-xs text-warm-400 text-center py-4">{t('common.noData')}</p>
               ) : (
                 groupItems.map((item, index) => (
-                  <div key={item._idx} className={`flex items-start gap-2 px-3 py-2 hover:bg-warm-50 ${item.marked ? 'bg-primary-50/50' : ''}`}>
-                    <div className="mt-0.5 w-6 h-6 rounded-full bg-warm-100 text-warm-500 flex items-center justify-center shrink-0 text-[11px] font-bold">
+                  <div key={item._idx} className={`flex items-start gap-2 px-3 py-2 ${meta.rowHover} ${item.marked ? 'bg-primary-50/50' : ''}`}>
+                    <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold ${meta.itemBadge}`}>
                       {index + 1}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -856,7 +1144,7 @@ function ClasificacionPanel({
                         {item.location || '—'}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 self-center">
                       <button className="p-1 rounded hover:bg-warm-200 text-warm-400 hover:text-primary-600 transition-colors"
                         onClick={() => onMove(item._idx)}><ArrowRight size={11} /></button>
                       <button className="p-1 rounded hover:bg-danger-50 text-warm-300 hover:text-danger-500 transition-colors"
@@ -867,7 +1155,7 @@ function ClasificacionPanel({
               )}
             </div>
             {/* Footer: inline ubicación input or action button — no marked count */}
-            <div ref={footerRef} className="relative shrink-0 border-t border-warm-100 bg-warm-50/40">
+            <div ref={footerRef} className={`relative shrink-0 border-t ${meta.footerBg}`}>
               {isInputActive ? (
                 <div className="px-2 py-2 space-y-1">
                   <div className="flex items-center gap-1">
@@ -1050,7 +1338,7 @@ function SidePanel({ tab, items }) {
             const isExpanded = expandedKey === tarima.key
             const tarimaCode = formatPreviewTarimaCode(sectionCode, index)
             return (
-              <div key={tarima.key} className={`rounded-2xl border bg-white shadow-[0_14px_30px_-24px_rgba(15,23,42,0.32)] transition-all hover:shadow-[0_20px_38px_-26px_rgba(37,99,235,0.32)] ${meta.flash || 'border-warm-200/90'}`}>
+              <div key={tarima.key} className={`rounded-2xl border shadow-[0_14px_30px_-24px_rgba(15,23,42,0.32)] transition-all hover:shadow-[0_20px_38px_-26px_rgba(37,99,235,0.32)] ${meta.flash || 'bg-white border-warm-200/90'}`}>
                 <button
                   type="button"
                   onClick={() => setExpandedKey(isExpanded ? null : tarima.key)}
@@ -1072,11 +1360,11 @@ function SidePanel({ tab, items }) {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden border-t border-warm-100/70"
+                      className="overflow-hidden border-t border-current/10"
                     >
                       <div className="max-h-56 overflow-y-auto px-3 py-2 space-y-1.5">
                         {tarima.items.map((item, itemIndex) => (
-                          <div key={`${tarima.key}-${item.code}-${itemIndex}`} className={`rounded-xl border border-warm-100/90 bg-white px-2.5 py-2 shadow-[0_8px_18px_-18px_rgba(15,23,42,0.35)] ${item.marked ? 'ring-1 ring-primary-200' : ''}`}>
+                          <div key={`${tarima.key}-${item.code}-${itemIndex}`} className={`rounded-xl border px-2.5 py-2 shadow-[0_8px_18px_-18px_rgba(15,23,42,0.25)] ${meta.card} ${item.marked ? 'ring-1 ring-primary-300' : ''}`}>
                             <p className="font-mono text-[11px] font-semibold text-warm-900 truncate">{item.code}</p>
                             <p className="font-mono text-[10px] text-warm-400 truncate mt-0.5">{item.code2 || '—'}</p>
                             <p className="text-[10px] text-warm-400 truncate mt-0.5">
@@ -1105,6 +1393,7 @@ export default function Escaneo() {
   const qc = useQueryClient()
   const scanRef = useRef(null)
   const code2Ref = useRef(null)
+  const originLocationRef = useRef(null)
 
   const {
     tabs, activeTabId, pendingCode1,
@@ -1162,6 +1451,9 @@ export default function Escaneo() {
   const [groupDetail, setGroupDetail] = useState(null)
   const [showQuickSearch, setShowQuickSearch] = useState(false)
   const [criticalError, setCriticalError] = useState(null)
+  const [originLocation, setOriginLocation] = useState('')
+  const [showClasifSummaryModal, setShowClasifSummaryModal] = useState(false)
+  const [pendingClasifGroup, setPendingClasifGroup] = useState(null)
 
   const buildSessionDuplicateConflicts = useCallback((codes) => {
     if (!activeTab) return []
@@ -1222,8 +1514,8 @@ export default function Escaneo() {
   }, [])
 
   useEffect(() => {
-    if (!pendingCode1) setTimeout(() => scanRef.current?.focus(), 80)
-    else setTimeout(() => code2Ref.current?.focus(), 80)
+    if (pendingCode1) setTimeout(() => code2Ref.current?.focus(), 80)
+    else setTimeout(() => originLocationRef.current?.focus(), 80)
   }, [activeTabId, pendingCode1])
 
   useEffect(() => {
@@ -1231,6 +1523,7 @@ export default function Escaneo() {
     setUbicacionId(null)
     setGroupUbicacion({ ok: null, blocked: null, nowms: null })
     setPendingInlineGroup(null)
+    setOriginLocation('')
   }, [activeTabId])
 
   const saveSessionMut = useMutation({
@@ -1243,6 +1536,7 @@ export default function Escaneo() {
         scan_type: tab.scanType,
         ubicacion_id: ubicacionId || null,
         tarima_code: null,
+        origin_location: originLocation || null,
         scans: tab.items.map(item => ({
           scanned_code: item.raw || item.scanned_code || item.code || item.normalized_code || item.code2 || '',
           normalized_code: item.code || item.normalized_code || item.raw || item.scanned_code || item.code2 || '',
@@ -1257,6 +1551,8 @@ export default function Escaneo() {
     },
     onSuccess: () => {
       setShowSummaryModal(false)
+      setShowClasifSummaryModal(false)
+      setPendingClasifGroup(null)
       setUbicacionId(null)
       closeTab(activeTabId)
       toast.success(t('inventario.escaneo.session_started'))
@@ -1335,7 +1631,8 @@ export default function Escaneo() {
   function handleClasificacionSend(group, ubicacion) {
     setUbicacionValidated(ubicacion)
     setUbicacionId(ubicacion?.id ?? null)
-    setShowSummaryModal(true)
+    setPendingClasifGroup(group)
+    setShowClasifSummaryModal(true)
   }
 
   function handleAddTab() { setShowTypeModal(true) }
@@ -1415,7 +1712,7 @@ export default function Escaneo() {
       }
       const { status, label } = classifyItem(item)
       doAddItem({ raw: rawCode, code, code2: null, wasSwapped: false, status, label,
-        sku: item.sku || '-', product: item.productName || '-', location: item.cellNo || '-', groupAssignment: 'auto' })
+        sku: item.customizeCode || '-', product: item.productName || '-', location: item.cellNo || '-', groupAssignment: 'auto' })
     }
 
     if (!item) {
@@ -1608,23 +1905,21 @@ export default function Escaneo() {
               <motion.div className="card p-3 shadow-sm overflow-hidden relative"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                    activeTab.scanType === 'clasificacion' ? 'bg-accent-50' : 'bg-primary-50'
+                <div className="flex items-start gap-3 mb-2">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    activeTab.scanType === 'clasificacion' ? 'bg-accent-100' : 'bg-primary-100'
                   }`}>
-                    <Package className={`w-4 h-4 ${activeTab.scanType === 'clasificacion' ? 'text-accent-600' : 'text-primary-600'}`} />
+                    <Package className={`w-5 h-5 ${activeTab.scanType === 'clasificacion' ? 'text-accent-600' : 'text-primary-600'}`} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-warm-800 truncate leading-tight">{activeTab.name}</p>
-                    <p className="text-[10px] text-warm-500 leading-tight">
+                    <p className="font-black text-warm-900 truncate leading-none font-mono text-xl tracking-tight">{activeTab.name}</p>
+                    <p className="text-[10px] text-warm-500 mt-0.5">
                       {activeTab.scanType === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado')}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-3xl font-black text-warm-800 tracking-tighter leading-none">
-                      {activeTab.items.length}
-                      <span className="text-xs font-medium text-warm-400 ml-1">{t('inventario.escaneo.scans_label')}</span>
-                    </p>
+                    <p className="text-4xl font-black text-warm-900 tracking-tighter leading-none">{activeTab.items.length}</p>
+                    <p className="text-xs font-medium text-warm-400 leading-tight">{t('inventario.escaneo.scans_label')}</p>
                   </div>
                 </div>
               <div className="grid grid-cols-4 gap-2 pt-2 border-t border-warm-100">
@@ -1657,8 +1952,22 @@ export default function Escaneo() {
                     </div>
                   </div>
                 </div>
-                <div className="mt-2 flex items-center justify-end text-[11px] text-warm-500">
-                  <span>{t('inventario.escaneo.total')}: <strong className="text-warm-700">{summary.total}</strong></span>
+                <div className="mt-2 flex items-center justify-between border-t border-warm-100 pt-2">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <MapPin size={13} className="text-primary-500 shrink-0" />
+                    <span className="text-warm-500 shrink-0 font-medium text-xs">Origen:</span>
+                    <input
+                      ref={originLocationRef}
+                      type="text"
+                      value={originLocation}
+                      onChange={e => setOriginLocation(e.target.value)}
+                      placeholder="Ubicación origen (opcional)"
+                      className="flex-1 min-w-0 font-mono text-xs bg-transparent border-0 outline-none placeholder:text-warm-300 text-warm-700 focus:text-primary-700"
+                      onKeyDown={e => { if (e.key === 'Enter') scanRef.current?.focus() }}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <span className="shrink-0 ml-3 text-xs text-warm-500">{t('inventario.escaneo.total')}: <strong className="text-warm-700">{summary.total}</strong></span>
                 </div>
               </motion.div>
 
@@ -1811,6 +2120,18 @@ export default function Escaneo() {
         isSaving={saveSessionMut.isPending}
         ubicacionValidated={ubicacionValidated}
         onChangeUbicacion={() => { setShowSummaryModal(false); setShowUbicacionModal(true) }}
+        originLocation={originLocation}
+      />
+      <ClasificacionSummaryModal
+        isOpen={showClasifSummaryModal}
+        group={pendingClasifGroup}
+        tab={activeTab}
+        tabIndex={activeTab ? tabs.findIndex(t => t.id === activeTab.id) : 0}
+        onSave={() => saveSessionMut.mutate()}
+        onClose={() => { setShowClasifSummaryModal(false); setPendingClasifGroup(null) }}
+        isSaving={saveSessionMut.isPending}
+        ubicacionValidated={ubicacionValidated}
+        originLocation={originLocation}
       />
       <DuplicateModal isOpen={!!duplicatePending} code={duplicatePending?.code} conflicts={duplicatePending?.conflicts || []}
         onConfirm={() => {
@@ -1841,6 +2162,7 @@ export default function Escaneo() {
         onToggleMarked={idx => activeTabId && toggleItemMarked(activeTabId, idx)}
         onMarkVisible={indices => activeTabId && groupDetail && setItemsMarkedByGroup(activeTabId, groupDetail, true, indices)}
         onClearVisible={indices => activeTabId && groupDetail && setItemsMarkedByGroup(activeTabId, groupDetail, false, indices)}
+        originLocation={originLocation}
       />
       <QuickCodeSearchModal
         isOpen={showQuickSearch}

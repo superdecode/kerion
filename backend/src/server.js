@@ -798,6 +798,9 @@ async function runMigrations() {
        WHEN duplicate_object THEN NULL;
      END $$`,
 
+    // ── 050: origin_location on inv_sessions ─────────────────────────────
+    `ALTER TABLE inv_sessions ADD COLUMN IF NOT EXISTS origin_location TEXT`,
+
     // ── 040: Enable RLS on every public-schema table ──────────────────────
     // Blocks all access through Supabase REST/anon key (deny-by-default: no
     // policies = no access for anon/authenticated roles).

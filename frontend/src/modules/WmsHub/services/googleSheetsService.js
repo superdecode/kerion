@@ -118,6 +118,8 @@ const INVENTORY_ALIASES = {
   ],
   cellNo: [
     'cell_no_库位',
+    '库位',
+    'cellno',
     'cell_no',
     'location_code',
     'location',

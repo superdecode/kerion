@@ -44,8 +44,8 @@ export function resolveSwap(pendingCode1, code2Result, rawCode2) {
       wasSwapped: true,
       status,
       label,
-      sku: item2.skuList?.[0]?.sku || '-',
-      product: item2.skuList?.[0]?.productName || '-',
+      sku: item2.skuList?.[0]?.skuCode || item2.customizeCode || '-',
+      product: item2.skuList?.[0]?.skuName || item2.productName || '-',
       location: item2.cellNo || '-',
     }
   }
