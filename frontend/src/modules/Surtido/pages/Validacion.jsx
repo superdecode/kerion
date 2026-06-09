@@ -837,7 +837,7 @@ function MissingList({ items, itemCounts, t }) {
 
 /* ═══════════════════════════════════════════════════════════ */
 /* ─── TabSession ─────────────────────────────────────────── */
-function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionChange, onUpdateTab, onNewOrder, onOpenObc, canCreate, canUpdate, canDelete }) {
+function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionChange, onUpdateTab, onNewOrder, onOpenObc, canCreate, canUpdate, canDelete, checkDuplicateObc }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
@@ -877,6 +877,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const [manualEntry, setManualEntry] = useState({ code: '', reasonId: '', notes: '' })
   const locationRef = useRef(null)
   const autoFinalizeLockRef = useRef(false)
+  const sessionCreateFiredRef = useRef(false)
   const sidebarStorageKey = `kirion_surtido_validation_sidebar_${user?.id || 'guest'}`
   const sessionCompleteLocked = showCompletionModal || !!completionSnapshot
 
@@ -1066,6 +1067,8 @@ const { data: reasonsData } = useQuery({
       clearSession()
       return
     }
+    if (sessionCreateFiredRef.current) return
+    sessionCreateFiredRef.current = true
     setAutoStartPending(false)
     createSessionMut.mutate()
   }, [autoStartPending, step, detailLoading, detailData, sessionId, createSessionMut.isPending, canCreate, t, trackingStatus, trackingData, obc]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1114,6 +1117,7 @@ const { data: reasonsData } = useQuery({
     setCompletionSnapshot(null)
     setAutoStartPending(false)
     autoFinalizeLockRef.current = false
+    sessionCreateFiredRef.current = false
     onUpdateTab({ obc: null, step: 'search' })
   }
 
@@ -1345,12 +1349,26 @@ const { data: reasonsData } = useQuery({
 
   /* ─── SEARCH / PREVIEW STEPS ────────────────────────────── */
   if (step === 'search') {
-    return <SearchStep onFound={foundObc => { setObc(foundObc); setStep('session'); setAutoStartPending(true); onUpdateTab({ obc: foundObc, step: 'session' }) }} />
+    return <SearchStep onFound={foundObc => {
+      if (checkDuplicateObc?.(foundObc)) {
+        toast.warning(`La orden ${foundObc} ya tiene una pestaña abierta`)
+        return
+      }
+      setObc(foundObc); setStep('session'); setAutoStartPending(true); onUpdateTab({ obc: foundObc, step: 'session' })
+    }} />
   }
 
   /* ─── ACTIVE SESSION ─────────────────────────────────── */
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden relative">
+      {/* Pending overlay: blocks content until sessionId is established */}
+      {!sessionId && (
+        <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-white">
+          <Loader2 className="w-10 h-10 animate-spin text-primary-400" />
+          <p className="font-mono text-sm font-semibold text-warm-700">{obc}</p>
+          <p className="text-xs text-warm-400">Verificando sesión de validación...</p>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
         <div className="p-6">
           <div className="max-w-3xl mx-auto space-y-4">
@@ -1907,19 +1925,19 @@ const { data: reasonsData } = useQuery({
 
       <Modal
         isOpen={!!conflictDetails}
-        onClose={() => setConflictDetails(null)}
+        onClose={() => { setConflictDetails(null); setStep('search'); setObc(null) }}
         title="Conflicto de validación"
         icon={AlertCircle}
         footer={
           <div className="flex gap-3 justify-end">
-            <button className="btn-ghost" onClick={() => setConflictDetails(null)}>Cancelar</button>
+            <button className="btn-ghost" onClick={() => { setConflictDetails(null); setStep('search'); setObc(null) }}>Cancelar</button>
             <button
               className="btn-danger inline-flex items-center gap-1.5"
-              onClick={() => {
-                createSessionMut.mutate(true)
-              }}
+              onClick={() => createSessionMut.mutate(true)}
+              disabled={createSessionMut.isPending}
             >
-              Forzar y continuar
+              {createSessionMut.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
+              Tomar control y continuar
             </button>
           </div>
         }
@@ -2076,6 +2094,7 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onClose, canAdd, t }) {
 /* ─── Main export ─────────────────────────────────────────── */
 export default function SurtidoValidacion() {
   const { t } = useI18nStore()
+  const toast = useToastStore.getState()
   const { hasPermission } = useAuthStore()
   const canCreateValidation = hasPermission('surtido.validacion', 'crear')
   const canUpdateValidation = hasPermission('surtido.validacion', 'actualizar')
@@ -2171,6 +2190,12 @@ export default function SurtidoValidacion() {
   const outboundSummaryPartial = outboundSummaryData?.data?.partial ?? getCacheStatus('outbound').partial
 
   function addTabWithObc(obc) {
+    const existingTab = tabs.find(t => t.label === obc || pendingTabObcs[t.id] === obc)
+    if (existingTab) {
+      setActiveTabId(existingTab.id)
+      toast.warning(`La orden ${obc} ya tiene una pestaña abierta`)
+      return
+    }
     const newId = genId()
     setTabs(prev => [...prev, { id: newId, label: obc }])
     setActiveTabId(newId)
@@ -2276,6 +2301,7 @@ export default function SurtidoValidacion() {
               canUpdate={canUpdateValidation}
               canDelete={canDeleteValidation}
               onOpenObc={addTabWithObc}
+              checkDuplicateObc={(obc) => tabs.some((t) => t.id !== tab.id && t.label === obc)}
             />
           </div>
         ))}

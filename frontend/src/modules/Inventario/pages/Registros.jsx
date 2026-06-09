@@ -772,19 +772,6 @@ export default function InventarioRegistros() {
     </div>
   )
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col h-full">
-        <Header
-          title={t('inventario.registros.title')}
-          subtitle={t('nav.inventario')}
-          actions={headerActions}
-        />
-        <LoadingSpinner text={t('common.loading')} />
-      </div>
-    )
-  }
-
   const hasActiveFilters = scanTypeFilter || dateFrom !== thirtyDaysAgo || dateTo !== today || !!search
   const resetFilters = () => {
     setScanTypeFilter('')
@@ -987,7 +974,48 @@ export default function InventarioRegistros() {
         </div>
 
         <div className="px-4 pb-4 pt-3 space-y-3">
-          {records.length === 0 ? (
+          {isLoading ? (
+            <div className="card overflow-hidden shadow-sm table-shell relative">
+              <div className="overflow-x-auto table-scroll">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-warm-50 border-b border-warm-100">
+                      <th className="table-header w-10 text-center"><div className="h-4 w-4 rounded bg-warm-200 animate-pulse mx-auto" /></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>Sección</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.type')}</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.date')}</span></th>
+                      <th className={`${TH_CLASS} hidden md:table-cell`}><span className={TH_TEXT}>{t('inventario.registros.operator')}</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>Disponible</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>Bloqueado</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>No WMS</span></th>
+                      <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('inventario.registros.total')}</span></th>
+                      <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-warm-50">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <tr key={i} className="table-row">
+                        <td className="table-cell w-10"><div className="h-4 w-4 rounded bg-warm-100 animate-pulse mx-auto" /></td>
+                        <td className="table-cell"><div className="h-3 rounded bg-warm-100 animate-pulse" style={{ width: `${60 + (i % 3) * 20}px` }} /></td>
+                        <td className="table-cell"><div className="h-5 w-16 rounded-full bg-warm-100 animate-pulse" /></td>
+                        <td className="table-cell"><div className="h-3 w-32 rounded bg-warm-100 animate-pulse" /></td>
+                        <td className="table-cell hidden md:table-cell"><div className="h-3 w-20 rounded bg-warm-100 animate-pulse" /></td>
+                        <td className="table-cell"><div className="h-3 w-6 rounded bg-warm-100 animate-pulse mx-auto" /></td>
+                        <td className="table-cell"><div className="h-3 w-6 rounded bg-warm-100 animate-pulse mx-auto" /></td>
+                        <td className="table-cell"><div className="h-3 w-6 rounded bg-warm-100 animate-pulse mx-auto" /></td>
+                        <td className="table-cell text-right"><div className="h-3 w-6 rounded bg-warm-100 animate-pulse ml-auto" /></td>
+                        <td className="table-cell text-right"><div className="h-3 w-12 rounded bg-warm-100 animate-pulse ml-auto" /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70 backdrop-blur-sm">
+                <Loader2 size={36} className="animate-spin text-primary-400" />
+                <p className="text-sm text-warm-500">{t('common.loading')}</p>
+              </div>
+            </div>
+          ) : records.length === 0 ? (
             <div className="card overflow-hidden shadow-sm min-h-64 flex flex-col items-center justify-center gap-3">
               <div className="w-16 h-16 rounded-2xl bg-warm-100 flex items-center justify-center">
                 <Package2 size={28} className="text-warm-300" />

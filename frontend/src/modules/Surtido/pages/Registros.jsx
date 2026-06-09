@@ -8,7 +8,6 @@ import {
   Loader2, AlertCircle, Eye, Truck, Calendar, Download, Pencil, Trash2, Search, ChevronRight,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
-import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -826,15 +825,6 @@ export default function SurtidoRegistros() {
     return () => { cancelled = true }
   }, [searchParams, t, toast])
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col h-full">
-        <Header title={t('surtido.registros.title')} subtitle={t('nav.surtido_wms')} />
-        <LoadingSpinner text={t('common.loading')} />
-      </div>
-    )
-  }
-
   return (
     <div className="flex flex-col h-full">
       <Header title={t('surtido.registros.title')} subtitle={t('nav.surtido_wms')} />
@@ -954,7 +944,48 @@ export default function SurtidoRegistros() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
-        {records.length === 0 ? (
+        {isLoading ? (
+          <div className="card overflow-hidden shadow-sm table-shell relative">
+            <div className="overflow-x-auto table-scroll">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-warm-50 border-b border-warm-100">
+                    <th className="table-header w-10 text-center"><div className="h-4 w-4 rounded bg-warm-200 animate-pulse mx-auto" /></th>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.order_no')}</span></th>
+                    <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.operator')}</span></th>
+                    <th className={`${TH_CLASS} hidden md:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.date')}</span></th>
+                    <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.duration')}</span></th>
+                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.expected')}</span></th>
+                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.validated')}</span></th>
+                    <th className={`${TH_CLASS} text-right hidden md:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.rejected')}</span></th>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.status')}</span></th>
+                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-warm-50">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i} className="table-row">
+                      <td className="table-cell w-10"><div className="h-4 w-4 rounded bg-warm-100 animate-pulse mx-auto" /></td>
+                      <td className="table-cell"><div className="h-3 rounded bg-warm-100 animate-pulse font-mono" style={{ width: `${80 + (i % 4) * 20}px` }} /></td>
+                      <td className="table-cell hidden lg:table-cell"><div className="h-3 w-24 rounded bg-warm-100 animate-pulse" /></td>
+                      <td className="table-cell hidden md:table-cell"><div className="h-3 w-32 rounded bg-warm-100 animate-pulse" /></td>
+                      <td className="table-cell hidden lg:table-cell"><div className="h-3 w-12 rounded bg-warm-100 animate-pulse" /></td>
+                      <td className="table-cell text-right"><div className="h-3 w-8 rounded bg-warm-100 animate-pulse ml-auto" /></td>
+                      <td className="table-cell text-right"><div className="h-3 w-8 rounded bg-warm-100 animate-pulse ml-auto" /></td>
+                      <td className="table-cell text-right hidden md:table-cell"><div className="h-3 w-6 rounded bg-warm-100 animate-pulse ml-auto" /></td>
+                      <td className="table-cell"><div className="h-5 w-20 rounded-full bg-warm-100 animate-pulse" /></td>
+                      <td className="table-cell text-right"><div className="h-3 w-12 rounded bg-warm-100 animate-pulse ml-auto" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70 backdrop-blur-sm">
+              <Loader2 size={36} className="animate-spin text-primary-400" />
+              <p className="text-sm text-warm-500">{t('common.loading')}</p>
+            </div>
+          </div>
+        ) : records.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-3">
             <div className="w-16 h-16 rounded-2xl bg-warm-100 flex items-center justify-center">
               <Package2 size={28} className="text-warm-300" />

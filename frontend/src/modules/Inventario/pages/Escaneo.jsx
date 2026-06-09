@@ -504,22 +504,7 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
       }
     >
       <div className="space-y-3 text-sm">
-        {/* Hero: type + count */}
-        <div className={`rounded-2xl border p-4 flex items-center gap-4 ${meta.card}`}>
-          <div className="w-14 h-14 rounded-2xl bg-white/60 flex items-center justify-center shrink-0 shadow-sm">
-            <meta.icon size={28} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-wider opacity-60">Tipo de Tarima</p>
-            <p className="font-black text-xl leading-tight mt-0.5">{t(meta.labelKey)}</p>
-          </div>
-          <div className="text-right shrink-0">
-            <p className="text-4xl font-black leading-none tabular-nums">{actualCount}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide opacity-50 mt-0.5">cajas</p>
-          </div>
-        </div>
-
-        {/* Info grid with icons */}
+        {/* General data: Sección, Tarima, Fechas */}
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-warm-100 bg-warm-50/80 p-3 flex items-start gap-2.5">
             <Hash size={13} className="text-warm-400 shrink-0 mt-0.5" />
@@ -549,27 +534,50 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
               <p className="font-mono text-[11px] text-warm-700 mt-0.5">{bounds.end ? fmtDateTime(bounds.end) : '—'}</p>
             </div>
           </div>
-          <div className="col-span-2 rounded-xl border border-primary-100 bg-gradient-to-r from-primary-50 to-white p-3 flex items-center gap-2.5">
+        </div>
+
+        {/* Tipo + Duración */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className={`rounded-xl border p-3 flex items-center gap-2.5 ${meta.soft}`}>
+            <meta.icon size={14} className="shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] uppercase tracking-wide opacity-60">Tipo</p>
+              <p className="font-bold text-xs mt-0.5 leading-tight">{t(meta.labelKey)}</p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-2xl font-black tabular-nums leading-none">{actualCount}</p>
+              <p className="text-[9px] uppercase tracking-wide opacity-50">cajas</p>
+            </div>
+          </div>
+          <div className="rounded-xl border border-primary-100 bg-gradient-to-r from-primary-50 to-white p-3 flex items-center gap-2.5">
             <Clock size={13} className="text-primary-400 shrink-0" />
-            <p className="text-[10px] text-primary-400 uppercase tracking-wide flex-1">{t('inventario.escaneo.duration')}</p>
-            <p className="font-bold text-sm text-primary-700">{dur}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] text-primary-400 uppercase tracking-wide">{t('inventario.escaneo.duration')}</p>
+              <p className="font-bold text-sm text-primary-700 mt-0.5">{dur}</p>
+            </div>
           </div>
         </div>
 
-        {ubicacionValidated && (
-          <div className="flex items-center gap-2 bg-accent-50 rounded-xl px-3 py-2.5 border border-accent-100">
-            <MapPin size={13} className="text-accent-600 shrink-0" />
-            <span className="font-mono font-semibold text-accent-700 text-xs">{ubicacionValidated.codigo}</span>
-            {ubicacionValidated.nombre && ubicacionValidated.nombre !== ubicacionValidated.codigo && (
-              <span className="text-accent-500 text-xs truncate">{ubicacionValidated.nombre}</span>
+        {/* Ubicaciones: destino + origen */}
+        {(ubicacionValidated || originLocation) && (
+          <div className="rounded-xl border border-accent-100 bg-accent-50/40 p-3 space-y-2">
+            {ubicacionValidated && (
+              <div className="flex items-center gap-2">
+                <MapPin size={12} className="text-accent-600 shrink-0" />
+                <span className="text-[10px] text-accent-500 uppercase tracking-wide shrink-0">Destino:</span>
+                <span className="font-mono font-semibold text-accent-700 text-xs truncate">{ubicacionValidated.codigo}</span>
+                {ubicacionValidated.nombre && ubicacionValidated.nombre !== ubicacionValidated.codigo && (
+                  <span className="text-accent-400 text-xs truncate">{ubicacionValidated.nombre}</span>
+                )}
+              </div>
             )}
-          </div>
-        )}
-        {originLocation && (
-          <div className="flex items-center gap-2 bg-warm-50 rounded-xl px-3 py-2 border border-warm-200">
-            <MapPin size={12} className="text-primary-400 shrink-0" />
-            <span className="text-[10px] text-warm-500 uppercase tracking-wide shrink-0">Origen:</span>
-            <span className="font-mono text-xs text-warm-700 truncate">{originLocation}</span>
+            {originLocation && (
+              <div className="flex items-center gap-2">
+                <MapPin size={12} className="text-warm-400 shrink-0" />
+                <span className="text-[10px] text-warm-500 uppercase tracking-wide shrink-0">Origen:</span>
+                <span className="font-mono text-xs text-warm-700 truncate">{originLocation}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1093,7 +1101,7 @@ function ClasificacionPanel({
   }))
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 xl:gap-5">
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 xl:gap-5 xl:h-full">
       {tarimaCards.map(({ group: g, code: tarimaCode }) => {
         const meta = STATUS_META[g]
         const groupItems = grouped[g]
@@ -1103,7 +1111,7 @@ function ClasificacionPanel({
         return (
           <div
             key={g}
-            className={`relative flex flex-col overflow-hidden rounded-2xl border bg-white shadow-soft min-h-[22rem] sm:min-h-[24rem] lg:min-h-[26rem] xl:min-h-0 xl:h-[clamp(24rem,52vh,32rem)] ${meta.cardBorder}`}
+            className={`relative flex flex-col overflow-hidden rounded-2xl border bg-white shadow-soft min-h-[22rem] sm:min-h-[24rem] lg:min-h-[26rem] xl:min-h-0 xl:h-full ${meta.cardBorder}`}
           >
             <div className={`flex items-center gap-2 rounded-t-[calc(1rem-2px)] border-b px-4 py-2.5 shrink-0 bg-gradient-to-r ${meta.tint} ${meta.headerFg} border-current/20`}>
               <div className="min-w-0">
@@ -1125,7 +1133,7 @@ function ClasificacionPanel({
                 <Maximize2 size={14} />
               </button>
             </div>
-            <div className={`flex-1 min-h-0 max-h-[42vh] overflow-y-auto overscroll-contain divide-y ${meta.divider} pr-1`}>
+            <div className={`flex-1 min-h-0 overflow-y-auto overscroll-contain divide-y ${meta.divider} pr-1`}>
               {groupItems.length === 0 ? (
                 <p className="text-xs text-warm-400 text-center py-4">{t('common.noData')}</p>
               ) : (
@@ -1451,7 +1459,7 @@ export default function Escaneo() {
   const [groupDetail, setGroupDetail] = useState(null)
   const [showQuickSearch, setShowQuickSearch] = useState(false)
   const [criticalError, setCriticalError] = useState(null)
-  const [originLocation, setOriginLocation] = useState('')
+  const [originLocation, setOriginLocation] = useState(() => sessionStorage.getItem('kirion_work_location') || '')
   const [showClasifSummaryModal, setShowClasifSummaryModal] = useState(false)
   const [pendingClasifGroup, setPendingClasifGroup] = useState(null)
 
@@ -1515,6 +1523,7 @@ export default function Escaneo() {
 
   useEffect(() => {
     if (pendingCode1) setTimeout(() => code2Ref.current?.focus(), 80)
+    else if (sessionStorage.getItem('kirion_work_location')) setTimeout(() => scanRef.current?.focus(), 80)
     else setTimeout(() => originLocationRef.current?.focus(), 80)
   }, [activeTabId, pendingCode1])
 
@@ -1523,7 +1532,6 @@ export default function Escaneo() {
     setUbicacionId(null)
     setGroupUbicacion({ ok: null, blocked: null, nowms: null })
     setPendingInlineGroup(null)
-    setOriginLocation('')
   }, [activeTabId])
 
   const saveSessionMut = useMutation({
@@ -1898,11 +1906,11 @@ export default function Escaneo() {
       {/* Active tab content + optional side panel */}
       {activeTab && (
         <div className="flex flex-1 overflow-hidden">
-          <div className="flex-1 p-6">
-            <div className="max-w-6xl 2xl:max-w-7xl mx-auto space-y-4">
+          <div className="flex-1 overflow-y-auto xl:overflow-hidden flex flex-col p-6">
+            <div className="max-w-6xl 2xl:max-w-7xl mx-auto w-full space-y-4 xl:space-y-0 xl:flex xl:flex-col xl:gap-4 xl:h-full xl:min-h-0">
 
               {/* Session info card */}
-              <motion.div className="card p-3 shadow-sm overflow-hidden relative"
+              <motion.div className="card p-3 shadow-sm overflow-hidden relative xl:shrink-0"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
                 <div className="flex items-start gap-3 mb-2">
@@ -1960,8 +1968,8 @@ export default function Escaneo() {
                       ref={originLocationRef}
                       type="text"
                       value={originLocation}
-                      onChange={e => setOriginLocation(e.target.value)}
-                      placeholder="Ubicación origen (opcional)"
+                      onChange={e => { const v = e.target.value; setOriginLocation(v); if (v) sessionStorage.setItem('kirion_work_location', v); else sessionStorage.removeItem('kirion_work_location') }}
+                      placeholder="Ubicación trabajo/origen"
                       className="flex-1 min-w-0 font-mono text-xs bg-transparent border-0 outline-none placeholder:text-warm-300 text-warm-700 focus:text-primary-700"
                       onKeyDown={e => { if (e.key === 'Enter') scanRef.current?.focus() }}
                       autoComplete="off"
@@ -1972,7 +1980,7 @@ export default function Escaneo() {
               </motion.div>
 
               {/* Scan input */}
-              <div>
+              <div className="xl:shrink-0">
                 {!pendingCode1 ? (
                   <div className="relative">
                     <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
@@ -2025,7 +2033,7 @@ export default function Escaneo() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10 }}
                     transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                    className={`p-4 rounded-2xl flex items-center gap-3 border backdrop-blur-sm shadow-sm ${
+                    className={`xl:shrink-0 p-4 rounded-2xl flex items-center gap-3 border backdrop-blur-sm shadow-sm ${
                       lastScan.status === 'ok'        ? 'bg-success-50/90 border-success-200' :
                       lastScan.status === 'blocked'   ? 'bg-warning-50/90 border-warning-200' :
                       lastScan.status === 'duplicate' ? 'bg-warning-50/90 border-warning-200' :
@@ -2053,19 +2061,21 @@ export default function Escaneo() {
 
               {/* Items panel */}
               {activeTab.scanType === 'clasificacion' ? (
-                <ClasificacionPanel
-                  tab={activeTab}
-                  tabIndex={tabs.findIndex((tab) => tab.id === activeTab.id)}
-                  items={activeTab.items}
-                  onRemove={idx => removeItem(activeTabId, idx)}
-                  onMove={idx => setMoveTarget(idx)}
-                  onOpenDetail={setGroupDetail}
-                  ubicaciones={ubicacionesData?.data ?? []}
-                  groupUbicacion={groupUbicacion}
-                  onGroupUbicacionChange={(g, ub) => setGroupUbicacion(prev => ({ ...prev, [g]: ub }))}
-                  onCreateRequest={handleClasificacionCreateRequest}
-                  onSend={handleClasificacionSend}
-                />
+                <div className="xl:flex-1 xl:min-h-0">
+                  <ClasificacionPanel
+                    tab={activeTab}
+                    tabIndex={tabs.findIndex((tab) => tab.id === activeTab.id)}
+                    items={activeTab.items}
+                    onRemove={idx => removeItem(activeTabId, idx)}
+                    onMove={idx => setMoveTarget(idx)}
+                    onOpenDetail={setGroupDetail}
+                    ubicaciones={ubicacionesData?.data ?? []}
+                    groupUbicacion={groupUbicacion}
+                    onGroupUbicacionChange={(g, ub) => setGroupUbicacion(prev => ({ ...prev, [g]: ub }))}
+                    onCreateRequest={handleClasificacionCreateRequest}
+                    onSend={handleClasificacionSend}
+                  />
+                </div>
               ) : (
                 <UnificadoPanel
                   items={activeTab.items}

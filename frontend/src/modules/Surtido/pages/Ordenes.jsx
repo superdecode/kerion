@@ -1325,14 +1325,6 @@ export default function Ordenes() {
     exportSheet(VAL_HEADERS, buildValidacionRows(filteredValidacion), 'Validación', `validacion_${getToday()}.xlsx`)
   }
 
-  if (wmsLoading) {
-    return (
-      <div className="flex flex-col h-full">
-        <Header title={t('surtido.ordenes.title')} subtitle={t('nav.surtido_wms')} />
-        <LoadingSpinner text={t('common.loading')} />
-      </div>
-    )
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -1577,10 +1569,25 @@ export default function Ordenes() {
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
                exit={{ opacity: 0 }}
-               className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400"
+               className="relative rounded-2xl overflow-hidden border border-warm-100"
              >
-               <Loader2 size={40} className="animate-spin opacity-50" />
-               <p className="text-sm">{t('common.loading')}</p>
+               {/* Skeleton rows */}
+               <div className="divide-y divide-warm-100">
+                 {Array.from({ length: 8 }).map((_, i) => (
+                   <div key={i} className="flex items-center gap-4 px-4 py-3 bg-white">
+                     <div className="h-3 w-3 rounded-full bg-warm-100 animate-pulse shrink-0" />
+                     <div className="h-3 rounded bg-warm-100 animate-pulse" style={{ width: `${40 + (i % 3) * 15}%` }} />
+                     <div className="ml-auto h-3 rounded bg-warm-100 animate-pulse w-16 shrink-0" />
+                     <div className="h-5 w-16 rounded-full bg-warm-100 animate-pulse shrink-0" />
+                     <div className="h-3 rounded bg-warm-100 animate-pulse w-20 shrink-0" />
+                   </div>
+                 ))}
+               </div>
+               {/* Spinner overlay */}
+               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70 backdrop-blur-sm">
+                 <Loader2 size={36} className="animate-spin text-primary-400" />
+                 <p className="text-sm text-warm-500">{t('common.loading')}</p>
+               </div>
              </motion.div>
           ) : pagedRecords.length === 0 ? (
             <motion.div
