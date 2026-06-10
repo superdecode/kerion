@@ -60,6 +60,15 @@ function getModuleLevel(permisos, modulePath) {
   return typeof current === 'string' ? normalizeLevel(current) : 'sin_acceso'
 }
 
+// Prefer the es_admin_tenant flag introduced in migration 041.
+// Fall back to rol_nombre string for tokens issued before that migration (1-release compat).
+function isTenantAdmin(user) {
+  if (!user) return false
+  if (user.es_admin_tenant === true) return true
+  if (user.es_admin_tenant === undefined && user.rol_nombre === 'Administrador') return true
+  return false
+}
+
 export const useAuthStore = create(
   persist(
     (set, get) => ({
@@ -198,7 +207,7 @@ export const useAuthStore = create(
       hasPermission: (modulePath, action) => {
         const { user } = get()
         if (!user) return false
-        if (user.rol_nombre === 'Administrador') return true
+        if (isTenantAdmin(user)) return true
         const level = getModuleLevel(user.permisos, modulePath)
         return resolvePermission(level, action)
       },
@@ -207,14 +216,14 @@ export const useAuthStore = create(
       getPermissionLevel: (modulePath) => {
         const { user } = get()
         if (!user) return 'sin_acceso'
-        if (user.rol_nombre === 'Administrador') return 'eliminar'
+        if (isTenantAdmin(user)) return 'eliminar'
         return getModuleLevel(user.permisos, modulePath)
       },
 
       canView: (modulePath) => {
         const { user } = get()
         if (!user) return false
-        if (user.rol_nombre === 'Administrador') return true
+        if (isTenantAdmin(user)) return true
         const level = getModuleLevel(user.permisos, modulePath)
         return level !== 'sin_acceso'
       },
@@ -222,7 +231,7 @@ export const useAuthStore = create(
       canWrite: (modulePath) => {
         const { user } = get()
         if (!user) return false
-        if (user.rol_nombre === 'Administrador') return true
+        if (isTenantAdmin(user)) return true
         const level = getModuleLevel(user.permisos, modulePath)
         return ['crear', 'actualizar', 'eliminar'].includes(level)
       },
@@ -230,7 +239,7 @@ export const useAuthStore = create(
       canDelete: (modulePath) => {
         const { user } = get()
         if (!user) return false
-        if (user.rol_nombre === 'Administrador') return true
+        if (isTenantAdmin(user)) return true
         const level = getModuleLevel(user.permisos, modulePath)
         return level === 'eliminar'
       },
@@ -238,7 +247,7 @@ export const useAuthStore = create(
       canUnlock: (modulePath) => {
         const { user } = get()
         if (!user) return false
-        if (user.rol_nombre === 'Administrador') return true
+        if (isTenantAdmin(user)) return true
         const level = getModuleLevel(user.permisos, modulePath)
         return level === 'eliminar'
       },

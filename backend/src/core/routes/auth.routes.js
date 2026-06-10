@@ -132,6 +132,7 @@ router.post('/login', async (req, res) => {
       email: user.email,
       rol_id: user.rol_id,
       rol_nombre: user.rol_nombre,
+      es_admin_tenant: user.es_admin_tenant === true,
       tenant_id: tenant.id,
       slug: tenant.slug,
       tenant_status: tenantInfo.status || tenant.status,
@@ -154,6 +155,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         rol_id: user.rol_id,
         rol_nombre: user.rol_nombre,
+        es_admin_tenant: user.es_admin_tenant === true,
         permisos,
         avatar_url: user.avatar_url,
         zona_horaria: user.zona_horaria || tenantInfo.zona_horaria || 'America/Mexico_City',
@@ -180,6 +182,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       query(
         `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id, u.estado,
                 u.avatar_url, u.permisos_override, u.ultimo_acceso, u.zona_horaria,
+                u.es_admin_tenant,
                 r.nombre as rol_nombre, r.permisos as rol_permisos
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id
@@ -206,6 +209,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       email: user.email,
       rol_id: user.rol_id,
       rol_nombre: user.rol_nombre,
+      es_admin_tenant: user.es_admin_tenant === true,
       permisos,
       avatar_url: user.avatar_url,
       estado: user.estado,

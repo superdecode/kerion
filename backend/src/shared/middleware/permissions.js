@@ -87,8 +87,14 @@ export function requirePermission(modulePath, action) {
       return res.status(401).json({ error: 'No autenticado' })
     }
 
-    // Admin fallback
-    if (user.rol_nombre === 'Administrador') {
+    // Admin bypass: prefer es_admin_tenant flag; fall back to rol_nombre string for
+    // tokens issued before migration 041 (backward compat for 1 release cycle).
+    const isAdmin = user.es_admin_tenant === true ||
+      (user.es_admin_tenant === undefined && user.rol_nombre === 'Administrador')
+    if (isAdmin) {
+      if (user.es_admin_tenant === undefined) {
+        console.warn('[permissions] admin bypass via legacy rol_nombre — user should re-login', user.id)
+      }
       return next()
     }
 
@@ -110,7 +116,12 @@ export function requireAnyPermission(candidates) {
       return res.status(401).json({ error: 'No autenticado' })
     }
 
-    if (user.rol_nombre === 'Administrador') {
+    const isAdmin = user.es_admin_tenant === true ||
+      (user.es_admin_tenant === undefined && user.rol_nombre === 'Administrador')
+    if (isAdmin) {
+      if (user.es_admin_tenant === undefined) {
+        console.warn('[permissions] admin bypass via legacy rol_nombre — user should re-login', user.id)
+      }
       return next()
     }
 

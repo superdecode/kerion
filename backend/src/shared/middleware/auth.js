@@ -86,8 +86,10 @@ export async function loadFullUser(req, res, next) {
       email: user.email,
       rol_id: user.rol_id,
       rol_nombre: user.rol_nombre,
+      es_admin_tenant: user.es_admin_tenant === true,
       permisos: user.permisos_override || user.rol_permisos || {},
       estado: user.estado,
+      tenant_id: user.tenant_id,
       zona_horaria: user.zona_horaria || user.tenant_zona_horaria || 'America/Mexico_City',
     }
     next()
