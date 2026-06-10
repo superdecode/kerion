@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import {
   RefreshCw, Plus, Edit2, Trash2, X, AlertCircle, Check,
-  CreditCard, Package, Eye, EyeOff, Save, ChevronUp, ChevronDown, Search, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  CreditCard, Package, Eye, EyeOff, Save, ChevronUp, ChevronDown, Search, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  ScanLine, Truck, Boxes, RotateCcw, Settings, BarChart3,
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 import { fmtDate, fmtDateString, toDateKey } from '../../../core/utils/dateFormat'
 
-// ── Plans CRUD ────────────────────────────────────────────────────────────────
+// ── Plans CRUD (3-col modal: Configuracion | Precios | Limites) ───────────────
 
 function PlanModal({ plan, onClose, onSaved }) {
   const [form, setForm] = useState({
@@ -15,6 +16,7 @@ function PlanModal({ plan, onClose, onSaved }) {
     guide_limit: '', warehouse_count: '1',
     is_visible: true, display_order: '0',
     price_annual: '',
+    surtido_limit: '', inventario_limit: '', devoluciones_limit: '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -32,6 +34,9 @@ function PlanModal({ plan, onClose, onSaved }) {
         is_visible: plan.is_visible !== false,
         display_order: plan.display_order ?? '0',
         price_annual: plan.price_annual ?? '',
+        surtido_limit: plan.surtido_limit ?? '',
+        inventario_limit: plan.inventario_limit ?? '',
+        devoluciones_limit: plan.devoluciones_limit ?? '',
       })
     }
   }, [plan])
@@ -51,6 +56,9 @@ function PlanModal({ plan, onClose, onSaved }) {
         guide_limit: form.guide_limit !== '' ? parseInt(form.guide_limit) : null,
         warehouse_count: form.warehouse_count !== '' ? parseInt(form.warehouse_count) : null,
         display_order: parseInt(form.display_order) || 0,
+        surtido_limit: form.surtido_limit !== '' ? parseInt(form.surtido_limit) : null,
+        inventario_limit: form.inventario_limit !== '' ? parseInt(form.inventario_limit) : null,
+        devoluciones_limit: form.devoluciones_limit !== '' ? parseInt(form.devoluciones_limit) : null,
       }
       if (plan) {
         await adminApi.put(`/plans/${plan.id}`, payload)
@@ -68,76 +76,151 @@ function PlanModal({ plan, onClose, onSaved }) {
   const inputCls = "w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
   const labelCls = "block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5"
 
+  const MODULE_LIMITS = [
+    {
+      icon: ScanLine, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20',
+      label: 'DropScan', sub: 'guías / mes', field: 'guide_limit',
+    },
+    {
+      icon: Truck, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20',
+      label: 'Surtido WMS', sub: 'OBCs / mes', field: 'surtido_limit',
+    },
+    {
+      icon: Boxes, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20',
+      label: 'Inventario', sub: 'escaneos / mes', field: 'inventario_limit',
+    },
+    {
+      icon: RotateCcw, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
+      label: 'Devoluciones', sub: 'entradas / mes', field: 'devoluciones_limit',
+    },
+  ]
+
+  const savingsAmt = form.price_amount !== '' && form.price_annual !== ''
+    ? Math.max(0, (parseFloat(form.price_amount) || 0) * 12 - (parseFloat(form.price_annual) || 0))
+    : null
+  const discountPct = savingsAmt != null && (parseFloat(form.price_amount) || 0) > 0
+    ? Math.round((1 - (parseFloat(form.price_annual) || 0) / ((parseFloat(form.price_amount) || 1) * 12)) * 100)
+    : null
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl">
-        <div className="flex items-center justify-between p-5 border-b border-gray-800">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-4xl shadow-2xl max-h-[92vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-gray-800 flex-shrink-0">
           <h2 className="text-white font-bold">{plan ? 'Editar plan' : 'Nuevo plan'}</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="p-5 overflow-y-auto flex-1">
           {error && (
-            <div className="flex items-center gap-2 bg-red-950/40 border border-red-800/40 rounded-lg p-3 text-red-300 text-sm">
+            <div className="flex items-center gap-2 bg-red-950/40 border border-red-800/40 rounded-lg p-3 text-red-300 text-sm mb-4">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               {error}
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Nombre *</label>
-              <input required value={form.name} onChange={set('name')} className={inputCls} placeholder="Basico" />
+          <div className="grid grid-cols-3 gap-6">
+            {/* Col 1: Configuracion */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2.5 border-b border-gray-800">
+                <Settings className="w-4 h-4 text-gray-500" />
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Configuracion</span>
+              </div>
+              <div>
+                <label className={labelCls}>Nombre *</label>
+                <input required value={form.name} onChange={set('name')} className={inputCls} placeholder="Basico" />
+              </div>
+              <div>
+                <label className={labelCls}>Codigo *</label>
+                <input required value={form.code} onChange={set('code')} className={inputCls} placeholder="basic" />
+              </div>
+              <div>
+                <label className={labelCls}>Descripcion</label>
+                <textarea value={form.description} onChange={set('description')} rows={3} className={`${inputCls} resize-none`} placeholder="Descripcion breve del plan..." />
+              </div>
+              <div>
+                <label className={labelCls}>Orden de display</label>
+                <input type="number" value={form.display_order} onChange={set('display_order')} className={inputCls} placeholder="0" />
+              </div>
+              <div>
+                <label className={labelCls}>Visible en landing</label>
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, is_visible: !f.is_visible }))}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border w-full ${
+                    form.is_visible
+                      ? 'bg-emerald-600/20 border-emerald-600/40 text-emerald-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-400'
+                  }`}
+                >
+                  {form.is_visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  {form.is_visible ? 'Visible' : 'Oculto'}
+                </button>
+              </div>
             </div>
-            <div>
-              <label className={labelCls}>Codigo *</label>
-              <input required value={form.code} onChange={set('code')} className={inputCls} placeholder="basic" />
+
+            {/* Col 2: Precios */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2.5 border-b border-gray-800">
+                <CreditCard className="w-4 h-4 text-emerald-500" />
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Precios</span>
+              </div>
+              <div>
+                <label className={labelCls}>Precio mensual (USD)</label>
+                <input type="number" step="0.01" value={form.price_amount} onChange={set('price_amount')} className={inputCls} placeholder="97.00" />
+              </div>
+              <div>
+                <label className={labelCls}>Precio anual (USD)</label>
+                <input type="number" step="0.01" value={form.price_annual} onChange={set('price_annual')} className={inputCls} placeholder="932.00" />
+              </div>
+              {savingsAmt != null && savingsAmt > 0 && (
+                <div className="bg-emerald-950/30 border border-emerald-800/30 rounded-lg px-3 py-2.5">
+                  <p className="text-emerald-400 text-xs font-medium">
+                    Ahorro anual: ${savingsAmt.toFixed(0)} USD
+                  </p>
+                  {discountPct != null && (
+                    <p className="text-emerald-600 text-[10px] mt-0.5">{discountPct}% descuento vs mensual</p>
+                  )}
+                </div>
+              )}
+              <div>
+                <label className={labelCls}>Bodegas incluidas</label>
+                <input type="number" value={form.warehouse_count} onChange={set('warehouse_count')} className={inputCls} placeholder="1" />
+              </div>
             </div>
-            <div>
-              <label className={labelCls}>Precio mensual (USD)</label>
-              <input type="number" step="0.01" value={form.price_amount} onChange={set('price_amount')} className={inputCls} placeholder="97.00" />
-            </div>
-            <div>
-              <label className={labelCls}>Precio anual (USD)</label>
-              <input type="number" step="0.01" value={form.price_annual} onChange={set('price_annual')} className={inputCls} placeholder="932.00" />
-            </div>
-            <div>
-              <label className={labelCls}>Limite de guias/mes</label>
-              <input type="number" value={form.guide_limit} onChange={set('guide_limit')} className={inputCls} placeholder="10000" />
-            </div>
-            <div>
-              <label className={labelCls}>Bodegas</label>
-              <input type="number" value={form.warehouse_count} onChange={set('warehouse_count')} className={inputCls} placeholder="1" />
-            </div>
-            <div>
-              <label className={labelCls}>Orden de display</label>
-              <input type="number" value={form.display_order} onChange={set('display_order')} className={inputCls} placeholder="0" />
-            </div>
-            <div className="flex flex-col justify-end">
-              <label className={labelCls}>Visible en landing</label>
-              <button
-                type="button"
-                onClick={() => setForm(f => ({ ...f, is_visible: !f.is_visible }))}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
-                  form.is_visible
-                    ? 'bg-emerald-600/20 border-emerald-600/40 text-emerald-300'
-                    : 'bg-gray-800 border-gray-700 text-gray-400'
-                }`}
-              >
-                {form.is_visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                {form.is_visible ? 'Visible' : 'Oculto'}
-              </button>
+
+            {/* Col 3: Limites por modulo */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pb-2.5 border-b border-gray-800">
+                <BarChart3 className="w-4 h-4 text-blue-400" />
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Limites / mes</span>
+              </div>
+              {MODULE_LIMITS.map(({ icon: Icon, color, bg, border, label, sub, field }) => (
+                <div key={field} className={`bg-gray-800/40 border rounded-xl p-3 ${border}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`w-7 h-7 rounded-lg ${bg} border ${border} flex items-center justify-center flex-shrink-0`}>
+                      <Icon className={`w-3.5 h-3.5 ${color}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-xs font-semibold leading-tight ${color}`}>{label}</p>
+                      <p className="text-gray-500 text-[10px] leading-tight">{sub}</p>
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    value={form[field]}
+                    onChange={set(field)}
+                    className={inputCls}
+                    placeholder="ilimitado"
+                  />
+                </div>
+              ))}
+              <p className="text-gray-600 text-[10px] pt-1">Vacio = sin limite (NULL en base de datos).</p>
             </div>
           </div>
 
-          <div>
-            <label className={labelCls}>Descripcion</label>
-            <textarea value={form.description} onChange={set('description')} rows={2} className={`${inputCls} resize-none`} placeholder="Descripcion breve del plan..." />
-          </div>
-
-          <div className="flex gap-3 justify-end pt-2">
+          <div className="flex gap-3 justify-end pt-5 mt-5 border-t border-gray-800">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
               Cancelar
             </button>
@@ -250,7 +333,7 @@ function PlansTab() {
               <tr className="border-b border-gray-800 bg-gray-800/40">
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Plan</th>
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Precio</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Limite guias</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Límites / mes</th>
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Orden</th>
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Estado</th>
                 <th className="text-right px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Acciones</th>
@@ -269,8 +352,13 @@ function PlansTab() {
                       <p className="text-gray-500 text-xs">${p.price_annual}/año</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-300">
-                    {p.guide_limit != null ? p.guide_limit.toLocaleString() : 'Ilimitado'}
+                  <td className="px-4 py-3">
+                    <div className="space-y-0.5 text-xs text-gray-400">
+                      <div><span className="text-gray-600">DS:</span> {p.guide_limit != null ? p.guide_limit.toLocaleString() : <span className="text-gray-600">∞</span>}</div>
+                      <div><span className="text-gray-600">Sur:</span> {p.surtido_limit != null ? p.surtido_limit.toLocaleString() : <span className="text-gray-600">∞</span>}</div>
+                      <div><span className="text-gray-600">Inv:</span> {p.inventario_limit != null ? p.inventario_limit.toLocaleString() : <span className="text-gray-600">∞</span>}</div>
+                      <div><span className="text-gray-600">Dev:</span> {p.devoluciones_limit != null ? p.devoluciones_limit.toLocaleString() : <span className="text-gray-600">∞</span>}</div>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-400">{p.display_order ?? 0}</td>
                   <td className="px-4 py-3">

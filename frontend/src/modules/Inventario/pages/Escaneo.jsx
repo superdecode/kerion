@@ -18,6 +18,8 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useInventarioStore } from '../stores/inventarioStore'
 import { useAutoSync } from '../hooks/useAutoSync'
+import ModuleLimitBanner from '../../../core/components/common/ModuleLimitBanner'
+import { useModuleUsage } from '../../../core/hooks/useModuleUsage'
 import { useBoxStock } from '../hooks/useBoxStock'
 import { findCodeInInventory } from '../../Shared/Wms/findCodeInInventory'
 import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
@@ -404,7 +406,7 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
             const meta = STATUS_META[g]
             return (
               <div key={g} className={`rounded-2xl border p-3 text-center ${meta.card}`}>
-                <p className="text-2xl font-black leading-none">{counts[g] || 0}</p>
+                <p className={`text-2xl font-black leading-none ${countConfirmed ? '' : 'blur-sm select-none'}`}>{counts[g] || 0}</p>
                 <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em]">{t(meta.labelKey)}</p>
               </div>
             )
@@ -545,7 +547,7 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
               <p className="font-bold text-xs mt-0.5 leading-tight">{t(meta.labelKey)}</p>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-2xl font-black tabular-nums leading-none">{actualCount}</p>
+              <p className={`text-2xl font-black tabular-nums leading-none ${countConfirmed ? '' : 'blur-sm select-none'}`}>{actualCount}</p>
               <p className="text-[9px] uppercase tracking-wide opacity-50">cajas</p>
             </div>
           </div>
@@ -1400,6 +1402,7 @@ export default function Escaneo() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const scanRef = useRef(null)
+  const { data: moduleUsage } = useModuleUsage()
   const code2Ref = useRef(null)
   const originLocationRef = useRef(null)
 
@@ -1832,6 +1835,7 @@ export default function Escaneo() {
 
   /* ─── ACTIVE TABS VIEW ────────────────────────────────── */
   return (
+    <ModuleLimitBanner module="inventario" usage={moduleUsage?.inventario}>
     <div className="flex flex-col h-full">
       <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')}
         actions={
@@ -2198,5 +2202,6 @@ export default function Escaneo() {
         message={criticalError?.message}
       />
     </div>
+    </ModuleLimitBanner>
   )
 }

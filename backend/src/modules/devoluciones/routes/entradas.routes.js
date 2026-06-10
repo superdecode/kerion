@@ -4,6 +4,9 @@ import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { generateDevCodigo, generateItemTrazabilidad } from '../utils/codigos.js'
 import { uploadEvidence, deleteEvidence, getEvidencePublicUrl } from '../utils/storage.js'
 import { instantDateInTZ } from '../../../shared/utils/dateUtils.js'
+import { usageGuard } from '../../middleware/usageGuard.js'
+
+const DEVOLUCIONES_COUNT_QUERY = `SELECT COUNT(*) FROM dev_sesiones WHERE tenant_id = $1 AND estado = 'confirmado' AND confirmado_at >= date_trunc('month', now())`
 
 const router = Router()
 
@@ -218,6 +221,7 @@ router.put('/:id',
 router.post('/:id/confirmar',
   authenticateToken, loadFullUser,
   requirePermission('devoluciones.entradas', 'actualizar'),
+  usageGuard({ limitField: 'devoluciones_limit', countQuery: DEVOLUCIONES_COUNT_QUERY, errorCode: 'DEVOLUCIONES_LIMIT_REACHED' }),
   async (req, res) => {
     let client
     try {

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Building2, TrendingUp, AlertCircle, Clock, CheckCircle2, XCircle,
-  ArrowRight, RefreshCw, Database, BarChart3, Package, Users, ScanLine, FileStack
+  ArrowRight, RefreshCw, Database, BarChart3, Package, Users, ScanLine, FileStack,
+  Truck, Boxes, RotateCcw,
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
@@ -38,6 +39,26 @@ function UsageCard({ icon: Icon, label, value, sub, color = 'text-blue-400', bor
         <p className="text-gray-400 text-xs uppercase tracking-wider mb-0.5">{label}</p>
         <p className="text-white font-bold text-xl leading-none">{value}</p>
         {sub && <p className="text-gray-500 text-xs mt-1">{sub}</p>}
+      </div>
+    </div>
+  )
+}
+
+function ModuleStatCard({ icon: Icon, label, total, month, unit, color, border, bg }) {
+  return (
+    <div className={`bg-gray-900 rounded-xl border ${border} p-4`}>
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`w-8 h-8 rounded-lg ${bg} border ${border} flex items-center justify-center flex-shrink-0`}>
+          <Icon className={`w-4 h-4 ${color}`} />
+        </div>
+        <p className={`text-xs font-semibold ${color} uppercase tracking-wider leading-tight`}>{label}</p>
+      </div>
+      <p className="text-white font-bold text-2xl leading-none mb-0.5">{fmt(total)}</p>
+      <p className="text-gray-600 text-xs">{unit} totales</p>
+      <div className="mt-2.5 pt-2 border-t border-gray-800 flex items-center gap-1">
+        <TrendingUp className={`w-3 h-3 ${color} opacity-70`} />
+        <span className={`text-xs font-medium ${color}`}>{fmt(month)}</span>
+        <span className="text-gray-600 text-xs">este mes</span>
       </div>
     </div>
   )
@@ -137,25 +158,45 @@ export default function AdminDashboard() {
         <StatCard stat="total"         value={stats.total} />
       </div>
 
-      {/* Usage stats */}
+      {/* Module usage stats */}
       {usage && (
         <div>
           <div className="flex items-center gap-2 mb-3">
             <BarChart3 className="w-4 h-4 text-purple-400" />
-            <h2 className="text-white font-semibold text-sm">Uso del sistema</h2>
+            <h2 className="text-white font-semibold text-sm">Uso por modulo</h2>
             {usage.db_size && (
               <span className="ml-auto flex items-center gap-1.5 text-xs text-gray-500 bg-gray-800 border border-gray-700 px-2.5 py-1 rounded-full">
                 <Database className="w-3 h-3" />
-                Base de datos: {usage.db_size}
+                {usage.db_size}
               </span>
             )}
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-            <UsageCard icon={ScanLine}  label="Guias totales"      value={fmt(usage.total_guias)}    sub={`+${fmt(usage.guias_last_30d)} este mes`} color="text-blue-400"    border="border-blue-500/20" />
-            <UsageCard icon={Package}   label="Tarimas"            value={fmt(usage.total_tarimas)}   color="text-purple-400"  border="border-purple-500/20" />
-            <UsageCard icon={FileStack} label="Folios entrega"     value={fmt(usage.total_folios)}    color="text-cyan-400"    border="border-cyan-500/20" />
-            <UsageCard icon={Users}     label="Escaneadores activos" value={fmt(usage.active_scanners)} color="text-amber-400" border="border-amber-500/20" />
-            <UsageCard icon={TrendingUp} label="Guias este mes"   value={fmt(usage.guias_last_30d)}   color="text-emerald-400" border="border-emerald-500/20" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <ModuleStatCard
+              icon={ScanLine} label="DropScan"
+              total={usage.total_guias} month={usage.guias_last_30d}
+              unit="guias" color="text-blue-400" border="border-blue-500/20" bg="bg-blue-500/10"
+            />
+            <ModuleStatCard
+              icon={Truck} label="Surtido WMS"
+              total={usage.total_obcs} month={usage.obcs_last_30d}
+              unit="OBCs" color="text-purple-400" border="border-purple-500/20" bg="bg-purple-500/10"
+            />
+            <ModuleStatCard
+              icon={Boxes} label="Inventario"
+              total={usage.total_scans} month={usage.scans_last_30d}
+              unit="escaneos" color="text-emerald-400" border="border-emerald-500/20" bg="bg-emerald-500/10"
+            />
+            <ModuleStatCard
+              icon={RotateCcw} label="Devoluciones"
+              total={usage.total_devoluciones} month={usage.devoluciones_last_30d}
+              unit="entradas" color="text-amber-400" border="border-amber-500/20" bg="bg-amber-500/10"
+            />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+            <UsageCard icon={Users}     label="Operadores activos" value={fmt(usage.active_scanners)} color="text-rose-400"   border="border-rose-500/20" />
+            <UsageCard icon={Package}   label="Tarimas (total)"    value={fmt(usage.total_tarimas)}   color="text-gray-400"   border="border-gray-700" />
+            <UsageCard icon={FileStack} label="Folios emitidos"    value={fmt(usage.total_folios)}    color="text-cyan-400"   border="border-cyan-500/20" />
           </div>
         </div>
       )}

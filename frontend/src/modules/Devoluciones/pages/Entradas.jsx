@@ -16,6 +16,8 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { createEntrada, listEntradas, downloadEntradaExcel, cancelEntrada, deleteEntrada } from '../services/devolucionesService'
 import { fmtDate, fmtTimeShort, getToday, subtractDays } from '../../../core/utils/dateFormat'
+import ModuleLimitBanner from '../../../core/components/common/ModuleLimitBanner'
+import { useModuleUsage } from '../../../core/hooks/useModuleUsage'
 
 const ESTADO_COLORS = {
   borrador:   'bg-warm-100 text-warm-600',
@@ -58,6 +60,7 @@ export default function Entradas() {
   const { hasPermission } = useAuthStore()
   const toast = useToastStore()
   const { t } = useI18nStore()
+  const { data: moduleUsage } = useModuleUsage()
 
   const defaultEnd = getToday()
   const defaultStart = subtractDays(defaultEnd, 30)
@@ -216,6 +219,7 @@ export default function Entradas() {
   const canExport = canEdit
 
   return (
+    <ModuleLimitBanner module="devoluciones" usage={moduleUsage?.devoluciones}>
     <div className="flex flex-col h-full">
       <Header title={t('dev.entradas.title')} subtitle={t('dev.entradas.subtitle')} />
 
@@ -547,5 +551,6 @@ export default function Entradas() {
         </p>
       </Modal>
     </div>
+    </ModuleLimitBanner>
   )
 }

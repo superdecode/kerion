@@ -1,0 +1,84 @@
+import { Router } from 'express'
+import { authenticateToken, loadFullUser } from '../../shared/middleware/auth.js'
+import { query } from '../../config/database.js'
+
+const router = Router()
+
+// GET /api/usage/summary — monthly usage across all modules for the current tenant
+router.get('/summary',
+  authenticateToken, loadFullUser,
+  async (req, res) => {
+    if (!req.tenantId) return res.status(401).json({ error: 'Tenant no identificado' })
+    try {
+      // Get all plan limits in one query
+      const planRes = await query(
+        `SELECT p.guide_limit, p.surtido_limit, p.inventario_limit, p.devoluciones_limit, p.name AS plan_name
+         FROM tenants t
+         LEFT JOIN plans p ON t.current_plan_id = p.id
+         WHERE t.id = $1`,
+        [req.tenantId]
+      )
+      const plan = planRes.rows[0] || {}
+
+      // Query usage for each module in parallel
+      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
+      const [dsRes, surtidoRes, invRes, devRes] = await Promise.all([
+        // DropScan: guías this calendar month (tenant tz-aware)
+        query(
+          `SELECT COUNT(*) AS count FROM guias
+           WHERE tenant_id = $1
+           AND DATE_TRUNC('month', scanned_at AT TIME ZONE $2) = DATE_TRUNC('month', NOW() AT TIME ZONE $2)`,
+          [req.tenantId, tz]
+        ).catch(() => ({ rows: [{ count: '0' }] })),
+
+        // Surtido: new OBCs entered into pick_order_tracking this month
+        query(
+          `SELECT COUNT(*) AS count FROM pick_order_tracking
+           WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`,
+          [req.tenantId]
+        ).catch(() => ({ rows: [{ count: '0' }] })),
+
+        // Inventario: individual scans this month
+        query(
+          `SELECT COUNT(*) AS count FROM inventory_scans
+           WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`,
+          [req.tenantId]
+        ).catch(() => ({ rows: [{ count: '0' }] })),
+
+        // Devoluciones: confirmed entradas this month
+        query(
+          `SELECT COUNT(*) AS count FROM dev_sesiones
+           WHERE tenant_id = $1 AND estado = 'confirmado'
+           AND confirmado_at >= date_trunc('month', now())`,
+          [req.tenantId]
+        ).catch(() => ({ rows: [{ count: '0' }] })),
+      ])
+
+      function buildStat(usedRaw, limit) {
+        const used = parseInt(usedRaw ?? '0', 10)
+        const lim = limit ?? null
+        const pct = lim != null && lim > 0 ? Math.min(100, Math.round((used / lim) * 100)) : (used > 0 ? 100 : 0)
+        return {
+          used,
+          limit: lim,
+          at_limit: lim !== null && used >= lim,
+          warning: lim !== null && pct >= 80 && used < lim,
+          pct,
+        }
+      }
+
+      res.json({
+        plan_name: plan.plan_name || null,
+        dropscan:     buildStat(dsRes.rows[0]?.count,      plan.guide_limit),
+        surtido:      buildStat(surtidoRes.rows[0]?.count, plan.surtido_limit),
+        inventario:   buildStat(invRes.rows[0]?.count,     plan.inventario_limit),
+        devoluciones: buildStat(devRes.rows[0]?.count,     plan.devoluciones_limit),
+      })
+    } catch (err) {
+      console.error('[usage/summary]', err.message)
+      res.status(500).json({ error: 'Error interno' })
+    }
+  }
+)
+
+export default router

@@ -8,7 +8,7 @@ import {
   Package2, Truck, ScanBarcode, Copy, Check, Eye, ClipboardList,
   User, Clock, BarChart3, RefreshCw, Database, CheckCircle2,
   MapPin, Timer, XCircle, AlertCircle, Pencil, BadgeCheck, Download,
-  ListFilter, Filter, CalendarClock, Save, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert,
+  ListFilter, Filter, CalendarClock, Save, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Printer,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -19,13 +19,19 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import {
-  getOutboundList,
+  getOutboundList, getOutboundDetail,
   getSurtidores, createSurtidor, deleteSurtidor,
   getOrderTracking, upsertOrderTracking, bulkUpsertOrderTracking, getScanSessions, getScanSession,
   getManualEntryReasons, createManualEntryReason, updateManualEntryReason, deleteManualEntryReason,
   forceValidateOrder,
   getRecords,
 } from '../services/surtidoService'
+import api from '../../../core/services/api'
+import { getBoxStock } from '../../Inventario/services/inventarioService'
+import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
+import PrintSurtidoUbicaciones from '../components/PrintSurtidoUbicaciones'
+import ModuleLimitBanner from '../../../core/components/common/ModuleLimitBanner'
+import { useModuleUsage } from '../../../core/hooks/useModuleUsage'
 import { refreshSheet, getCacheTimestamp, subscribeSheetCache } from '../../WmsHub/services/googleSheetsService'
 import { fmtDateTime as formatDateTimeTz, fmtDate as formatDateTz, fmtTimeShort, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
 
@@ -302,7 +308,7 @@ function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
   const qc = useQueryClient()
   const [nombre, setNombre] = useState('')
 
-  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 30000, enabled: isOpen })
+  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 5 * 60 * 1000 })
   const surtidores = getRecords(data)
 
   const addMut = useMutation({
@@ -514,7 +520,7 @@ function BulkSearchModal({ isOpen, onClose, onApply, initialValue }) {
 
 function AssignModal({ isOpen, order, onClose, onAssign }) {
   const { t } = useI18nStore()
-  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 30000, enabled: isOpen })
+  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 5 * 60 * 1000 })
   const surtidores = getRecords(data)
   const [selected, setSelected] = useState(null)
 
@@ -720,7 +726,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                   onClick={() => onForceValidate(obc)}
                   className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-xl text-xs font-semibold border border-danger-200 text-danger-600 hover:bg-danger-50 hover:border-danger-300 transition-colors"
                 >
-                  <ShieldAlert size={13} /> Cerrar orden / Forzar validación
+                  <ShieldAlert size={13} /> {t('surtido.ordenes.bulk.force_close_title')}
                 </button>
               )}
             </div>
@@ -863,6 +869,7 @@ export default function Ordenes() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { hasPermission, user } = useAuthStore()
+  const { data: moduleUsage } = useModuleUsage()
   const canCreateValidation = hasPermission('surtido.validacion', 'crear')
   const canUpdateOrders = hasPermission('surtido.ordenes', 'actualizar')
   const canDeleteOrders = hasPermission('surtido.ordenes', 'eliminar')
@@ -896,6 +903,8 @@ export default function Ordenes() {
   const [quickEditObc, setQuickEditObc] = useState(null)
   const [forceValidateTarget, setForceValidateTarget] = useState(null)
   const [forceReason, setForceReason] = useState('')
+  const [bulkForceCloseObcs, setBulkForceCloseObcs] = useState(null)
+  const [bulkForceReason, setBulkForceReason] = useState('')
   const [bulkSearchOpen, setBulkSearchOpen] = useState(false)
   const [bulkSearchText, setBulkSearchText] = useState('')
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
@@ -911,6 +920,9 @@ export default function Ordenes() {
 
   const [refreshing, setRefreshing] = useState(false)
   const [exportingDetailed, setExportingDetailed] = useState(false)
+  const [printData, setPrintData] = useState(null)
+  const [printLoading, setPrintLoading] = useState(false)
+  const [printModalOpen, setPrintModalOpen] = useState(false)
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
   const timeFilterKey = `kirion_surtido_ordenes_time_${user?.id || 'guest'}`
   const destinationFilterKey = `kirion_surtido_destination_${user?.id || 'guest'}`
@@ -1016,7 +1028,7 @@ export default function Ordenes() {
   const { data: trackingData } = useQuery({
     queryKey: ['wms-order-tracking'],
     queryFn: getOrderTracking,
-    staleTime: 30000,
+    staleTime: 5 * 60 * 1000,
     retry: 0,
   })
 
@@ -1279,6 +1291,19 @@ export default function Ordenes() {
     onError: (err) => toast.error(err?.response?.data?.error || t('toast.error')),
   })
 
+  const bulkForceCloseMut = useMutation({
+    mutationFn: ({ obcs, reason }) =>
+      Promise.all(obcs.map(obc => forceValidateOrder(obc, { reason }))),
+    onSuccess: (results) => {
+      results.forEach(res => { if (res?.data) patchTrackingCache(res.data) })
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      setBulkForceCloseObcs(null)
+      setBulkForceReason('')
+      toast.success(`${results.length} orden(es) cerrada(s) forzosamente`)
+    },
+    onError: (err) => toast.error(err?.response?.data?.error || t('toast.error')),
+  })
+
   const bulkAssignMut = useMutation({
     mutationFn: ({ obcs, surtidorId }) => bulkUpsertOrderTracking({
       obcs,
@@ -1468,6 +1493,149 @@ export default function Ordenes() {
     setExportingDetailed(false)
   }
 
+  async function handlePrintUbicaciones(obcs) {
+    if (!obcs.length) return
+    setPrintModalOpen(true)
+    setPrintLoading(true)
+    try {
+      // Step 1: fetch order details + inventory sheet in parallel
+      let detailResults, stockResult
+      try {
+        ;[detailResults, stockResult] = await Promise.all([
+          Promise.all(obcs.map(obc => getOutboundDetail(obc))),
+          getBoxStock(),
+        ])
+      } catch (err) {
+        const isConfig = err?.code === 'SHEET_NOT_CONFIGURED'
+        toast.error(isConfig
+          ? t('surtido.ordenes.print_ub.err_config')
+          : t('surtido.ordenes.print_ub.err_sheets'))
+        setPrintModalOpen(false)
+        return
+      }
+
+      // Step 2: collect box codes per order (normalised the same way the scan module does)
+      const codeToOrders = {}   // normalisedKey → Set<obc>
+      const rawCodeMap = {}     // normalisedKey → originalCode (for display)
+      detailResults.forEach((res, i) => {
+        const obc = obcs[i]
+        const pkgs = res?.data?.packageList || []
+        pkgs.forEach(pkg => {
+          const raw = (pkg.customizeCode || '').trim()
+          if (!raw) return
+          const key = normalizeCodeFast(raw)
+          if (!key) return
+          if (!codeToOrders[key]) { codeToOrders[key] = new Set(); rawCodeMap[key] = raw }
+          codeToOrders[key].add(obc)
+        })
+      })
+
+      if (Object.keys(codeToOrders).length === 0) {
+        toast.error(t('surtido.ordenes.print_ub.err_no_boxes'))
+        setPrintModalOpen(false)
+        return
+      }
+
+      // Step 3: build location map from inventory sheet
+      // Keys are normalised (normalizeCodeFast) — same as scan module — to match correctly
+      const stockRecords = stockResult?.data?.records || []
+      const stockMap = {}
+      stockRecords.forEach(item => {
+        const loc = (item.cellNo || '').trim()
+        if (!loc) return
+        const barcodeKey = normalizeCodeFast(item.customizeBarcode || '')
+        const skuKey = normalizeCodeFast(item.customizeCode || '')
+        if (barcodeKey) stockMap[barcodeKey] = loc
+        if (skuKey && !stockMap[skuKey]) stockMap[skuKey] = loc
+      })
+
+      // Step 4: for codes not found in Google Sheets, try inv_scans DB as fallback
+      const missingKeys = Object.keys(codeToOrders).filter(k => !stockMap[k])
+      if (missingKeys.length > 0) {
+        try {
+          const locRes = await api.post('/wmshub/box-locations', {
+            codes: missingKeys.map(k => rawCodeMap[k] || k),
+          })
+          const dbMap = locRes?.data?.data || {}
+          Object.entries(dbMap).forEach(([code, loc]) => {
+            if (loc) stockMap[normalizeCodeFast(code)] = loc
+          })
+        } catch { /* non-fatal */ }
+      }
+
+      // Step 5: consolidate per-location groups
+      const grupos = {}
+      let totalCajas = 0
+      for (const [key, orders] of Object.entries(codeToOrders)) {
+        const rawLoc = stockMap[key]
+        const location = rawLoc ? rawLoc : 'SIN UBICACIÓN'
+        if (!grupos[location]) grupos[location] = { location, cantCajas: 0, orders: new Set() }
+        grupos[location].cantCajas += orders.size
+        for (const obc of orders) grupos[location].orders.add(obc)
+        totalCajas += orders.size
+      }
+
+      const gruposArr = Object.values(grupos).map(g => ({
+        location: g.location,
+        cantCajas: g.cantCajas,
+        cantOrdenes: g.orders.size,
+      }))
+
+      if (gruposArr.every(g => g.location === 'SIN UBICACIÓN')) {
+        toast.warning(t('surtido.ordenes.print_ub.warn_no_loc'))
+      }
+
+      setPrintData({
+        grupos: gruposArr,
+        totalUbicaciones: gruposArr.filter(g => g.location !== 'SIN UBICACIÓN').length,
+        totalCajas,
+        totalOrdenes: obcs.length,
+        generatedAt: new Date(),
+        userName: user?.nombre_completo || user?.email || '',
+        dateFrom,
+        dateTo,
+        filterClient,
+        filterSurtidor,
+        filterDestination,
+        timeFrom,
+        timeTo,
+      })
+    } catch (err) {
+      console.error('[handlePrintUbicaciones]', err)
+      toast.error(t('surtido.ordenes.print_ub.err_unexpected'))
+      setPrintModalOpen(false)
+    } finally {
+      setPrintLoading(false)
+    }
+  }
+
+  function handleExportUbicaciones() {
+    if (!printData) return
+    try {
+      const headers = ['#', 'Ubicación', 'Cant. Cajas', 'Cant. Órdenes']
+      const rows = [...printData.grupos]
+        .sort((a, b) => {
+          if (a.location === 'SIN UBICACIÓN') return 1
+          if (b.location === 'SIN UBICACIÓN') return -1
+          return a.location.localeCompare(b.location, 'es')
+        })
+        .map((g, i) => [i + 1, g.location, g.cantCajas, g.cantOrdenes])
+      const summaryRow = ['', 'TOTAL', printData.totalCajas, printData.totalOrdenes]
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows, [], summaryRow])
+
+      // Column widths
+      ws['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 14 }, { wch: 14 }]
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Ubicaciones')
+      const date = new Date().toISOString().slice(0, 10)
+      XLSX.writeFile(wb, `surtido_ubicaciones_${date}.xlsx`)
+      toast.success('Excel exportado')
+    } catch {
+      toast.error('Error al exportar Excel')
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -1504,7 +1672,7 @@ export default function Ordenes() {
       )}
 
       {/* Filter bar */}
-      <div className="sticky top-[3.5rem] z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5">
+      <div className="sticky top-[3.5rem] z-[20] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5">
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
@@ -1695,17 +1863,6 @@ export default function Ordenes() {
               <Filter size={13} /> {t('common.apply')}
             </button>
 
-            {canExportOrders && filteredValidacion.length > 0 && (
-              <button
-                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-success-200 bg-success-50 px-4 text-xs font-semibold text-success-700 hover:bg-success-100 disabled:opacity-50 transition-colors"
-                onClick={handleExportDetailed}
-                disabled={exportingDetailed}
-                title="Exportar detalle de cajas escaneadas (una fila por caja)"
-              >
-                {exportingDetailed ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                Detalle
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -1762,7 +1919,8 @@ export default function Ordenes() {
               className="h-full"
             >
               <WmsTable
-                records={pagedRecords} trackingMap={trackingMap} surtidores={surtidores}
+                records={pagedRecords} allFilteredObcs={activeRecords.map(r => r.outboundOrderNo)} trackingMap={trackingMap} surtidores={surtidores}
+                onBulkForceClose={user?.rol_nombre === 'Administrador' ? (obcs) => { setBulkForceCloseObcs(obcs); setBulkForceReason('') } : undefined}
                 onAssign={r => setAssignTarget(r)}
                 onBulkAssign={(obcs, surtidorId) => bulkAssignMut.mutate({ obcs, surtidorId })}
                 onView={obc => navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`)}
@@ -1771,6 +1929,10 @@ export default function Ordenes() {
                 onBulkStatus={(obcs, status) => statusMut.mutate({ obcs, status })}
                 onExportSelected={handleExportWmsSelected}
                 onExportAll={handleExportWmsAll}
+                onExportDetailed={handleExportDetailed}
+                exportingDetailed={exportingDetailed}
+                onPrintUbicaciones={handlePrintUbicaciones}
+                printLoading={printLoading}
                 canAssign={canUpdateOrders}
                 canQuickEdit={canUpdateOrders}
                 canValidate={canCreateValidation}
@@ -1836,21 +1998,63 @@ export default function Ordenes() {
         t={t}
       />
 
+      {printModalOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { if (!printLoading) { setPrintModalOpen(false); setPrintData(null) } }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-warm-100 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <Printer size={18} className="text-sky-600" />
+                <span className="font-semibold text-warm-900">{t('surtido.ordenes.print_ub.title')}</span>
+              </div>
+              {!printLoading && (
+                <button onClick={() => { setPrintModalOpen(false); setPrintData(null) }} className="text-warm-400 hover:text-warm-600 transition-colors">
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 min-h-0">
+              {printLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <Loader2 size={40} className="animate-spin text-sky-400" />
+                  <p className="text-sm text-warm-500">{t('surtido.ordenes.print_ub.loading')}</p>
+                </div>
+              ) : printData ? (
+                <PrintSurtidoUbicaciones data={printData} />
+              ) : null}
+            </div>
+            {printData && !printLoading && (
+              <div className="px-6 py-4 border-t border-warm-100 flex justify-end gap-3 flex-shrink-0">
+                <button
+                  className="btn-success inline-flex items-center gap-2"
+                  onClick={handleExportUbicaciones}
+                >
+                  <Download size={14} /> {t('surtido.ordenes.print_ub.btn_export')}
+                </button>
+                <button className="btn-primary inline-flex items-center gap-2" onClick={() => window.print()}>
+                  <Printer size={14} /> {t('surtido.ordenes.print_ub.btn_print')}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <Modal
         isOpen={!!forceValidateTarget}
         onClose={() => { setForceValidateTarget(null); setForceReason('') }}
-        title="Cerrar orden / Forzar validación"
+        title={t('surtido.ordenes.bulk.force_close_title')}
         icon={ShieldAlert}
         footer={
           <div className="flex gap-3 justify-end">
-            <button className="btn-ghost" onClick={() => { setForceValidateTarget(null); setForceReason('') }}>Cancelar</button>
+            <button className="btn-ghost" onClick={() => { setForceValidateTarget(null); setForceReason('') }}>{t('common.cancel')}</button>
             <button
               className="btn-danger"
               disabled={!forceReason.trim() || forceValidateMut.isPending}
               onClick={() => forceValidateMut.mutate({ obc: forceValidateTarget, reason: forceReason })}
             >
               {forceValidateMut.isPending ? <Loader2 size={14} className="animate-spin inline mr-1" /> : null}
-              Confirmar cierre
+              {t('surtido.ordenes.bulk.force_close_btn')}
             </button>
           </div>
         }
@@ -1860,12 +2064,53 @@ export default function Ordenes() {
             Se marcará la orden <span className="font-mono font-semibold text-warm-900">{forceValidateTarget}</span> como <span className="font-semibold text-success-700">Completa</span>. Esta acción queda registrada en el historial de la orden.
           </p>
           <div>
-            <label className="block text-xs font-semibold text-warm-700 mb-1">Motivo (requerido)</label>
+            <label className="block text-xs font-semibold text-warm-700 mb-1">{t('surtido.ordenes.bulk.force_close_reason')}</label>
             <textarea
               className="input-field text-sm w-full h-20 resize-none"
-              placeholder="Describe el motivo del cierre forzado..."
+              placeholder={t('surtido.ordenes.bulk.force_close_placeholder')}
               value={forceReason}
               onChange={e => setForceReason(e.target.value)}
+              autoFocus
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!bulkForceCloseObcs}
+        onClose={() => { setBulkForceCloseObcs(null); setBulkForceReason('') }}
+        title={t('surtido.ordenes.bulk.force_close_title')}
+        icon={ShieldAlert}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button className="btn-ghost" onClick={() => { setBulkForceCloseObcs(null); setBulkForceReason('') }}>{t('common.cancel')}</button>
+            <button
+              className="btn-danger"
+              disabled={!bulkForceReason.trim() || bulkForceCloseMut.isPending}
+              onClick={() => bulkForceCloseMut.mutate({ obcs: bulkForceCloseObcs, reason: bulkForceReason })}
+            >
+              {bulkForceCloseMut.isPending ? <Loader2 size={14} className="animate-spin inline mr-1" /> : null}
+              {t('surtido.ordenes.bulk.force_close_btn')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-600">
+            {t('surtido.ordenes.bulk.force_close_body').replace('{n}', bulkForceCloseObcs?.length ?? 0)}
+          </p>
+          <div className="max-h-32 overflow-y-auto rounded-lg bg-warm-50 border border-warm-100 px-3 py-2 space-y-0.5">
+            {bulkForceCloseObcs?.map(obc => (
+              <p key={obc} className="font-mono text-xs text-warm-700">{obc}</p>
+            ))}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-warm-700 mb-1">{t('surtido.ordenes.bulk.force_close_reason')}</label>
+            <textarea
+              className="input-field text-sm w-full h-20 resize-none"
+              placeholder={t('surtido.ordenes.bulk.force_close_placeholder')}
+              value={bulkForceReason}
+              onChange={e => setBulkForceReason(e.target.value)}
               autoFocus
             />
           </div>
@@ -1875,7 +2120,7 @@ export default function Ordenes() {
   )
 }
 
-function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange, showScannedColumn = true }) {
+function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, onExportDetailed, exportingDetailed, onPrintUbicaciones, printLoading, onBulkForceClose, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange, showScannedColumn = true }) {
   const [selected, setSelected] = useState(new Set())
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
@@ -1917,6 +2162,8 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
 
   const allChecked = sortedRecords.length > 0 && sortedRecords.every(r => selected.has(r.outboundOrderNo))
   const someChecked = selected.size > 0
+  const allFilteredSelected = allFilteredObcs && selected.size === allFilteredObcs.length && allFilteredObcs.every(obc => selected.has(obc))
+  const canSelectAllFiltered = allChecked && allFilteredObcs && allFilteredObcs.length > sortedRecords.length && !allFilteredSelected
   const selectedRecords = sortedRecords.filter(r => selected.has(r.outboundOrderNo))
   const assignableSelected = selectedRecords.filter(r => !CLOSED_ORDER_STATUSES.has(trackingMap[r.outboundOrderNo]?.status || 'pending_assignment'))
   const assignableSelectedObcs = assignableSelected.map(r => r.outboundOrderNo)
@@ -1939,16 +2186,26 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
 
       {someChecked && (canExport || canAssign || canQuickEdit) && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100">
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100 flex-wrap">
           <span className="text-xs text-primary-700 font-semibold tabular-nums">
             {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
+            {allFilteredSelected && allFilteredObcs && (
+              <span className="ml-1 text-primary-500 font-normal">(todos los {allFilteredObcs.length} del filtro)</span>
+            )}
           </span>
+          {canSelectAllFiltered && (
+            <button
+              className="text-xs text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
+              onClick={() => setSelected(new Set(allFilteredObcs))}>
+              {t('surtido.ordenes.bulk.select_all_filter').replace('{n}', allFilteredObcs.length)}
+            </button>
+          )}
           {canAssign && (
             <button
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               onClick={() => setBulkAssignOpen(true)}
               disabled={assignableSelectedObcs.length === 0}>
-              <UserCheck size={12} /> Asignar
+              <UserCheck size={12} /> {t('surtido.ordenes.bulk.assign')}
             </button>
           )}
           {canQuickEdit && (
@@ -1956,19 +2213,51 @@ function WmsTable({ records, trackingMap, surtidores, onAssign, onBulkAssign, on
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-primary-700 border border-primary-200 hover:bg-primary-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               onClick={() => setBulkStatusOpen(true)}
               disabled={statusEditableSelectedObcs.length === 0}>
-              <ClipboardList size={12} /> Estado
+              <ClipboardList size={12} /> {t('surtido.ordenes.bulk.status')}
             </button>
           )}
-          <button
-            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors"
-            onClick={() => { onExportSelected([...selected]); setSelected(new Set()) }}>
-            <Download size={12} /> {t('common.export')} ({selected.size})
-          </button>
-          <button
-            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-success-700 border border-success-200 hover:bg-success-50 transition-colors"
-            onClick={onExportAll}>
-            <Download size={12} /> {t('common.export')} {t('common.all')}
-          </button>
+          {canExport && (
+            <button
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors"
+              onClick={() => { onExportSelected([...selected]); setSelected(new Set()) }}>
+              <Download size={12} /> {t('common.export')} ({selected.size})
+            </button>
+          )}
+          {canExport && (
+            <button
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-success-700 border border-success-200 hover:bg-success-50 transition-colors"
+              onClick={onExportAll}>
+              <Download size={12} /> {t('common.export')} {t('common.all')}
+            </button>
+          )}
+          {canExport && onExportDetailed && (
+            <button
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-violet-700 border border-violet-200 hover:bg-violet-50 disabled:opacity-50 transition-colors"
+              onClick={onExportDetailed}
+              disabled={exportingDetailed}
+              title={t('surtido.ordenes.bulk.export_detail')}>
+              {exportingDetailed ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+              {t('surtido.ordenes.bulk.export_detail')}
+            </button>
+          )}
+          {onPrintUbicaciones && (
+            <button
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-sky-700 border border-sky-200 hover:bg-sky-50 disabled:opacity-50 transition-colors"
+              onClick={() => { onPrintUbicaciones([...selected]); setSelected(new Set()) }}
+              disabled={printLoading || selected.size === 0}
+              title={t('surtido.ordenes.bulk.print_locations')}>
+              {printLoading ? <Loader2 size={12} className="animate-spin" /> : <Printer size={12} />}
+              {t('surtido.ordenes.bulk.print_locations')}
+            </button>
+          )}
+          {onBulkForceClose && (
+            <button
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-danger-700 border border-danger-200 hover:bg-danger-50 transition-colors"
+              onClick={() => { onBulkForceClose([...selected]); setSelected(new Set()) }}
+              title={t('surtido.ordenes.bulk.force_close_title')}>
+              <ShieldAlert size={12} /> {t('surtido.ordenes.bulk.force_close')}
+            </button>
+          )}
           <button
             className="inline-flex items-center gap-1 text-xs text-warm-500 hover:text-warm-700 transition-colors ml-auto"
             onClick={() => setSelected(new Set())}>
@@ -2290,6 +2579,7 @@ function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onV
   }
 
   return (
+    <ModuleLimitBanner module="surtido" usage={moduleUsage?.surtido}>
     <motion.div className="card overflow-hidden table-shell h-full"
       initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
@@ -2524,5 +2814,6 @@ function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onV
         </div>
       </Modal>
     </motion.div>
+    </ModuleLimitBanner>
   )
 }

@@ -2,6 +2,9 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { getInventoryMap } from '../../../shared/services/wmsClient.js'
+import { usageGuard } from '../../middleware/usageGuard.js'
+
+const INVENTARIO_COUNT_QUERY = `SELECT COUNT(*) FROM inventory_scans WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`
 
 const router = Router()
 
@@ -84,6 +87,7 @@ router.get('/sessions/active',
 router.post('/scans',
   authenticateToken, loadFullUser,
   requirePermission('inventory.escaneo', 'crear'),
+  usageGuard({ limitField: 'inventario_limit', countQuery: INVENTARIO_COUNT_QUERY, errorCode: 'INVENTARIO_LIMIT_REACHED' }),
   async (req, res) => {
     try {
       const { session_id, barcode } = req.body

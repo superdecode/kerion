@@ -228,8 +228,7 @@ function AssignSurtidorModal({ isOpen, obc, onClose, onAssigned, t }) {
   const { data } = useQuery({
     queryKey: ['wms-surtidores'],
     queryFn: getSurtidores,
-    staleTime: 30000,
-    enabled: isOpen,
+    staleTime: 5 * 60 * 1000,
   })
   const surtidores = getRecords(data)
   const [selected, setSelected] = useState(undefined)

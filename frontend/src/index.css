@@ -69,6 +69,13 @@
            active:scale-[0.97];
   }
 
+  .btn-success {
+    @apply px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold
+           hover:bg-emerald-700 active:bg-emerald-800 transition-all duration-200 ease-spring
+           hover:-translate-y-[1px] active:scale-[0.97] active:translate-y-0
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
   .btn-ghost {
     @apply px-4 py-2.5 rounded-xl text-warm-600 text-sm font-medium
            hover:bg-warm-100 active:bg-warm-200 transition-all duration-200;
@@ -336,4 +343,36 @@
 
 .tour-nav-arrow {
   animation: tour-arrow-bounce 0.7s ease-in-out infinite;
+}
+
+/* ── Print: Surtido por Ubicaciones ────────────────────────── */
+@media print {
+  @page {
+    size: Letter portrait;
+    margin: 1.5cm;
+  }
+
+  body * { visibility: hidden; }
+
+  #print-surtido-ubicaciones,
+  #print-surtido-ubicaciones * {
+    visibility: visible;
+  }
+
+  #print-surtido-ubicaciones {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: white;
+    z-index: 9999;
+  }
+
+  #print-surtido-ubicaciones table { display: table; }
+  #print-surtido-ubicaciones thead { display: table-header-group; }
+  #print-surtido-ubicaciones tbody { display: table-row-group; }
+  #print-surtido-ubicaciones tr    { display: table-row; page-break-inside: avoid; }
+  #print-surtido-ubicaciones th,
+  #print-surtido-ubicaciones td    { display: table-cell; }
+  .print-page-header                { display: block; }
 }

@@ -221,7 +221,7 @@ export default function AdminTenants() {
                         <span className="text-gray-600 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
+                    <td className="px-4 py-4">
                       <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-800 group-hover:bg-blue-600 border border-gray-700 group-hover:border-blue-500 text-gray-400 group-hover:text-white transition-colors">
                         <ChevronRight className="w-4 h-4" />
                       </div>

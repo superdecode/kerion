@@ -13,6 +13,7 @@ import {
   Check, ChevronRight, ArrowRight,
   ScanLine, Package, FileText, BarChart3, Users, ShieldCheck,
   AlertTriangle, X, Layers, Clock, Smartphone,
+  RotateCcw, Boxes, Truck, TrendingUp,
 } from 'lucide-react'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -25,71 +26,77 @@ const FEATURES = [
     color: 'text-blue-400',
     bg: 'bg-blue-500/10',
     border: 'border-blue-500/20',
-    title: 'Escaneo de guias',
-    desc: 'Registra guias en tiempo real con validacion automatica de duplicados y alerta sonora instantanea. Cero guias perdidas, cero repeticiones.',
+    module: 'DropScan',
+    title: 'Escaneo y control de guias',
+    desc: 'Registra guias en tiempo real con validacion automatica de duplicados y alerta sonora. Control de tarimas, auditoria de operadores y cero guias perdidas.',
   },
   {
-    icon: Layers,
+    icon: Truck,
     color: 'text-purple-400',
     bg: 'bg-purple-500/10',
     border: 'border-purple-500/20',
-    title: 'Control por tarimas',
-    desc: 'Agrupa guias en tarimas de entrega. Abre, cierra y rastrea cada tarima con su contenido exacto. Sabe en todo momento donde esta cada paquete.',
+    module: 'Surtido WMS',
+    title: 'Gestion de ordenes de salida',
+    desc: 'Asigna, rastrea y valida ordenes (OBCs) desde Google Sheets hasta el cierre. Detecta discrepancias y controla surtidores en tiempo real.',
   },
   {
-    icon: FileText,
-    color: 'text-cyan-400',
-    bg: 'bg-cyan-500/10',
-    border: 'border-cyan-500/20',
-    title: 'Folios de entrega',
-    desc: 'Genera actas de entrega automaticamente con el detalle de cada guia. Exportacion a PDF con un clic. Sin papel, sin excusas.',
-  },
-  {
-    icon: Smartphone,
-    color: 'text-amber-400',
-    bg: 'bg-amber-500/10',
-    border: 'border-amber-500/20',
-    title: 'Escaneadores con PIN',
-    desc: 'Cada operador tiene acceso con PIN unico. Auditoria completa de quien escaneo que y cuando. Control total de tu equipo en campo.',
-  },
-  {
-    icon: BarChart3,
+    icon: Boxes,
     color: 'text-emerald-400',
     bg: 'bg-emerald-500/10',
     border: 'border-emerald-500/20',
-    title: 'Reportes exportables',
-    desc: 'Metricas de productividad por operador, empresa y canal. Filtros avanzados y exportacion a Excel incluidos en todos los planes.',
+    module: 'Inventario',
+    title: 'Control de stock en bodega',
+    desc: 'Sesiones de conteo con escaneo de barcodes, localizacion de cajas por celda y reportes de disponibilidad. Stock siempre actualizado y exportable a Excel.',
   },
   {
-    icon: Package,
+    icon: RotateCcw,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/20',
+    module: 'Devoluciones',
+    title: 'Gestion de retornos y devoluciones',
+    desc: 'Registra y clasifica mercancia devuelta con trazabilidad completa: SKU, embalaje, evidencia fotografica y movimientos de inventario en cada entrada.',
+  },
+  {
+    icon: Smartphone,
+    color: 'text-indigo-400',
+    bg: 'bg-indigo-500/10',
+    border: 'border-indigo-500/20',
+    module: 'DropScan',
+    title: 'Operadores con PIN y auditoria',
+    desc: 'Cada operador accede con PIN unico. Registro completo de quien escaneo que, cuando y en que tarima. Control de equipo y auditoria sin pasos adicionales.',
+  },
+  {
+    icon: BarChart3,
     color: 'text-rose-400',
     bg: 'bg-rose-500/10',
     border: 'border-rose-500/20',
-    title: 'Multi-paqueteria',
-    desc: 'Compatible con FedEx, DHL, Estafeta, J&T, SHEIN, Shopee y cualquier otro canal en un mismo sistema. Sin separar hojas ni archivos.',
+    module: 'Todos',
+    title: 'Reportes y metricas unificados',
+    desc: 'Productividad por operador, tasa de error y tiempos por proceso desde todos los modulos. Exportacion a Excel y filtros avanzados incluidos en cada plan.',
   },
 ]
 
 const PAIN_POINTS = [
   {
     icon: AlertTriangle,
-    problem: 'Sin visibilidad, sin control',
-    solution: 'Las entregas sin sistema son caos — no sabes que paquete va donde, quien lo escaneo, o si se perdio. Kirion te da visibilidad total en tiempo real de cada guia.',
+    problem: 'Sin trazabilidad, sin responsabilidad',
+    solution: 'Sin un registro digital, no sabes quien movio que, cuando ni por que. Kirion registra cada operacion con usuario, timestamp y contexto. Auditoria total desde bodega hasta entrega.',
   },
   {
     icon: X,
     problem: 'Errores que cuestan dinero',
-    solution: 'Guias duplicadas, paquetes perdidos, entregas incompletas. Cada error es un cliente insatisfecho y costo operativo. Kirion previene errores con validacion automatica y rastreo.',
+    solution: 'Guias duplicadas, inventario desactualizado, devoluciones sin registro. Cada error es costo operativo y cliente perdido. Kirion valida y alerta antes de que el error ocurra.',
   },
   {
     icon: Clock,
-    problem: 'Procesos lentos y manuales',
-    solution: 'Registros en papel, hojas de calculo, coordinacion por mensajes. Todo es lento y propenso a errores. Con Kirion, escanea, agrupa, entrega — sin pasos extras.',
+    problem: 'Procesos lentos y fragmentados',
+    solution: 'Escaneo en papel, ordenes por WhatsApp, stock en Excel, devoluciones sin registro. Kirion atiende cada uno de esos flujos con herramientas especializadas y datos en tiempo real.',
   },
   {
     icon: BarChart3,
-    problem: 'Sin metricas, sin mejora',
-    solution: 'Si no mides, no mejoras. Kirion captura datos de cada entrega — productividad por operador, tasa de error, tiempos. Usa esos datos para optimizar operaciones.',
+    problem: 'Sin metricas, sin capacidad de mejorar',
+    solution: 'Si no mides, no optimizas. Kirion captura datos de cada modulo: productividad, tiempos de proceso y tasas de error. Toma decisiones con datos reales.',
   },
 ]
 
@@ -101,19 +108,71 @@ const STATS = [
 ]
 
 
+// Module metadata used in plan cards and module section
+const MODULES_META = [
+  {
+    id: 'dropscan',
+    icon: ScanLine,
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10',
+    border: 'border-blue-500/20',
+    name: 'DropScan',
+    tagline: 'Escaneo de guias',
+    desc: 'Registra guias en tiempo real con validacion automatica de duplicados. Control de tarimas, sesiones de escaneo y reportes de productividad.',
+    limitKey: 'guide_limit',
+    unit: 'guías',
+  },
+  {
+    id: 'surtido',
+    icon: Truck,
+    color: 'text-purple-400',
+    bg: 'bg-purple-500/10',
+    border: 'border-purple-500/20',
+    name: 'Surtido WMS',
+    tagline: 'Gestión de órdenes de salida',
+    desc: 'Asigna, rastrea y valida órdenes de salida (OBCs) desde Google Sheets hasta el cierre. Control de surtidores y discrepancias en tiempo real.',
+    limitKey: 'surtido_limit',
+    unit: 'órdenes',
+  },
+  {
+    id: 'inventario',
+    icon: Boxes,
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/10',
+    border: 'border-emerald-500/20',
+    name: 'Inventario',
+    tagline: 'Control de stock en bodega',
+    desc: 'Sesiones de conteo con escaneo de barcodes, localización de cajas por celda, reportes de disponibilidad y exportación a Excel.',
+    limitKey: 'inventario_limit',
+    unit: 'escaneos',
+  },
+  {
+    id: 'devoluciones',
+    icon: RotateCcw,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/20',
+    name: 'Devoluciones',
+    tagline: 'Gestión de entradas y salidas de retornos',
+    desc: 'Registra, clasifica y da seguimiento a mercancía devuelta con trazabilidad completa: SKU, embalaje, evidencia fotográfica y movimientos de inventario.',
+    limitKey: 'devoluciones_limit',
+    unit: 'entradas',
+  },
+]
+
 const PLANS_CONFIG = [
   {
     id: 'basic',
     name: 'Basico',
-    desc: 'Para operaciones de hasta 10,000 guias',
+    desc: 'Operaciones medianas con módulos esenciales',
     color: 'border-gray-700',
     badge: null,
+    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones'],
     features: [
-      'Hasta 10,000 guias / mes',
-      '1 bodega',
-      'Escaneo y control de tarimas',
-      'Folios de entrega',
-      'Reportes y exportacion a Excel',
+      'DropScan: hasta 10,000 guías / mes',
+      'Surtido: hasta 5,000 órdenes / mes',
+      'Inventario: hasta 50,000 escaneos / mes',
+      'Devoluciones: hasta 50 entradas / mes',
       'Operadores ilimitados',
       'Soporte por email',
     ],
@@ -121,16 +180,16 @@ const PLANS_CONFIG = [
   {
     id: 'pro',
     name: 'Profesional',
-    desc: 'Para operaciones de alto volumen',
+    desc: 'Alto volumen con todos los módulos sin restricciones operativas',
     color: 'border-blue-500',
     badge: 'Mas popular',
     badgeColor: 'bg-blue-600',
+    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones'],
     features: [
-      'Hasta 100,000 guias / mes',
-      '1 bodega',
-      'Escaneo y control de tarimas',
-      'Folios de entrega',
-      'Reportes y exportacion a Excel',
+      'DropScan: guías ilimitadas',
+      'Surtido: hasta 20,000 órdenes / mes',
+      'Inventario: hasta 500,000 escaneos / mes',
+      'Devoluciones: hasta 500 entradas / mes',
       'Operadores ilimitados',
       'Soporte prioritario',
       'Onboarding incluido',
@@ -139,17 +198,18 @@ const PLANS_CONFIG = [
   {
     id: 'custom',
     name: 'Personalizado',
-    desc: 'Multiples bodegas y volumen a medida',
+    desc: 'Límites a medida para operaciones de gran escala',
     color: 'border-purple-500',
     badge: 'Empresas grandes',
     badgeColor: 'bg-purple-600',
+    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones'],
     features: [
-      'Multiples bodegas (proximamente)',
-      'Guias ilimitadas',
-      'Todo lo del plan Profesional',
+      'Todos los módulos sin límite',
+      'Múltiples bodegas',
       'Integraciones a medida',
       'SLA garantizado',
       'Soporte dedicado',
+      'Facturación personalizada',
     ],
   },
 ]
@@ -168,7 +228,7 @@ function NavBar() {
         <div className="flex items-center gap-2.5">
           <img src="/logo.png" alt="Kirion" className="w-8 h-8 rounded-lg object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />
           <span className="text-white font-bold text-lg tracking-tight">Kirion</span>
-          <span className="text-blue-400 text-xs font-semibold bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">DropScan</span>
+          <span className="text-blue-400 text-xs font-semibold bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">WMS</span>
         </div>
         <div className="hidden md:flex items-center gap-6 text-sm text-gray-400">
           {[['funcionalidades', 'Funciones'], ['precios', 'Precios'], ['contacto', 'Contacto']].map(([id, label]) => (
@@ -212,19 +272,19 @@ function HeroSection() {
       <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-medium mb-6">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-          Control de guias para dropshipping y paqueteria
+          WMS integral para logistica y paqueteria
         </div>
 
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-tight mb-6">
-          Deja de controlar guias{' '}
+          Tu operacion logistica{' '}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-blue-300 to-cyan-400">
-            en hojas de calculo
+            bajo control total
           </span>
         </h1>
 
         <p className="text-lg sm:text-xl text-gray-400 leading-relaxed mb-10 max-w-2xl mx-auto">
-          Kirion DropScan organiza el escaneo, clasificacion y entrega de tus guias de forma sistematizada.
-          <span className="text-white font-medium"> Sin hojas de calculo, sin improvisacion, sin guias perdidas.</span>
+          Kirion cubre los vacios operativos que los sistemas generales no atienden: escaneo de guias, asignacion de surtido, conteo de inventario y control de devoluciones.
+          <span className="text-white font-medium"> Procesos mas rapidos, trazabilidad completa, mejor control.</span>
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
@@ -244,7 +304,7 @@ function HeroSection() {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
-          {['Sin tarjeta de credito', 'Setup en menos de 10 min', '100+ guias diarias'].map(t => (
+          {['Sin tarjeta de credito', 'Setup en menos de 10 min', '4 modulos integrados'].map(t => (
             <span key={t} className="flex items-center gap-1.5">
               <Check className="w-3.5 h-3.5 text-emerald-500" />
               {t}
@@ -313,17 +373,20 @@ function FeaturesSection() {
         <div className="text-center mb-14">
           <p className="text-blue-400 text-sm font-semibold uppercase tracking-wider mb-3">Funcionalidades</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Todo lo que necesitas para controlar tus entregas
+            Todo lo que necesitas para operar sin errores
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Kirion DropScan fue disenado para empresas que entregan mas de 100 guias diarias y necesitan precision, no improvisation.
+            Cuatro modulos especializados que cubren cada etapa de tu operacion logistica: desde el ingreso de guias hasta las devoluciones.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {FEATURES.map(({ icon: Icon, color, bg, border, title, desc }) => (
+          {FEATURES.map(({ icon: Icon, color, bg, border, title, desc, module }) => (
             <div key={title} className={`bg-gray-900 border rounded-xl p-6 hover:border-opacity-60 transition-all hover:-translate-y-0.5 ${border}`}>
-              <div className={`w-11 h-11 rounded-xl border ${bg} ${border} flex items-center justify-center mb-4`}>
-                <Icon className={`w-5 h-5 ${color}`} />
+              <div className="flex items-start justify-between mb-4">
+                <div className={`w-11 h-11 rounded-xl border ${bg} ${border} flex items-center justify-center`}>
+                  <Icon className={`w-5 h-5 ${color}`} />
+                </div>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${bg} ${border} ${color}`}>{module}</span>
               </div>
               <h3 className="text-white font-semibold mb-2">{title}</h3>
               <p className="text-gray-400 text-sm leading-relaxed">{desc}</p>
@@ -335,11 +398,71 @@ function FeaturesSection() {
   )
 }
 
+function BenefitsSection() {
+  return (
+    <section className="py-20 bg-gray-950">
+      <div className="max-w-5xl mx-auto px-4">
+        <div className="text-center mb-12">
+          <p className="text-emerald-400 text-sm font-semibold uppercase tracking-wider mb-3">Por que Kirion</p>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            Mas velocidad, trazabilidad y control desde el primer dia
+          </h2>
+          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+            No es solo software. Es el sistema operativo de tu bodega. Cada proceso digitalizado, cada movimiento registrado.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-gray-900 border border-blue-500/20 rounded-2xl p-6">
+            <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-5">
+              <TrendingUp className="w-6 h-6 text-blue-400" />
+            </div>
+            <div className="mb-3">
+              <span className="text-4xl font-black text-blue-400">5x</span>
+              <span className="text-sm font-medium text-blue-400 ml-1.5">mas rapido</span>
+            </div>
+            <h3 className="text-white font-bold mb-2">Eficiencia operativa</h3>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              Reemplaza hojas de calculo, mensajes y registros en papel con flujos digitales integrados. Menos tiempo por operacion, mas entregas completadas al dia.
+            </p>
+          </div>
+          <div className="bg-gray-900 border border-emerald-500/20 rounded-2xl p-6">
+            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-5">
+              <Layers className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div className="mb-3">
+              <span className="text-4xl font-black text-emerald-400">100%</span>
+              <span className="text-sm font-medium text-emerald-400 ml-1.5">trazabilidad</span>
+            </div>
+            <h3 className="text-white font-bold mb-2">Registro de cada movimiento</h3>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              Guias, ordenes, escaneos y devoluciones con usuario, fecha y contexto completo. Sabe exactamente que paso, cuando y quien lo hizo en cualquier momento.
+            </p>
+          </div>
+          <div className="bg-gray-900 border border-purple-500/20 rounded-2xl p-6">
+            <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-5">
+              <ShieldCheck className="w-6 h-6 text-purple-400" />
+            </div>
+            <div className="mb-3">
+              <span className="text-4xl font-black text-purple-400">4</span>
+              <span className="text-sm font-medium text-purple-400 ml-1.5">modulos integrados</span>
+            </div>
+            <h3 className="text-white font-bold mb-2">Control centralizado</h3>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              DropScan, Surtido WMS, Inventario y Devoluciones en una sola plataforma. Un login, una base de datos, reportes unificados para toda la operacion.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function PricingSection() {
   const [annual, setAnnual] = useState(false)
   const [liveMonthly, setLiveMonthly] = useState({})
   const [liveAnnualPerMonth, setLiveAnnualPerMonth] = useState({})
   const [liveAnnualTotal, setLiveAnnualTotal] = useState({})
+  const [liveLimits, setLiveLimits] = useState({})
   const [avgDiscountPct, setAvgDiscountPct] = useState(null)
 
   useEffect(() => {
@@ -348,11 +471,20 @@ function PricingSection() {
       const monthly = {}
       const annualPerMonth = {}
       const annualTotal = {}
+      const limits = {}
       const discounts = []
       rows.forEach(p => {
         const key = p.code === 'basic' || p.code?.startsWith('basic') ? 'basic'
           : p.code === 'pro' || p.code?.startsWith('pro') ? 'pro' : null
-        if (!key || p.price_amount == null) return
+        if (!key) return
+        limits[key] = {
+          guide_limit: p.guide_limit,
+          surtido_limit: p.surtido_limit,
+          inventario_limit: p.inventario_limit,
+          devoluciones_limit: p.devoluciones_limit,
+          modules: p.modules,
+        }
+        if (p.price_amount == null) return
         const m = Number(p.price_amount)
         monthly[key] = m
         if (p.price_annual != null) {
@@ -365,6 +497,7 @@ function PricingSection() {
       setLiveMonthly(monthly)
       setLiveAnnualPerMonth(annualPerMonth)
       setLiveAnnualTotal(annualTotal)
+      setLiveLimits(limits)
       if (discounts.length > 0) {
         const avg = discounts.reduce((a, b) => a + b, 0) / discounts.length
         setAvgDiscountPct(Math.round(avg * 100))
@@ -477,7 +610,31 @@ function PricingSection() {
 
         <div className="mt-6 text-center space-y-1">
           <p className="text-gray-600 text-sm">Todos los precios en USD. IVA segun pais.</p>
-          <p className="text-gray-600 text-sm">Multiples bodegas disponibles en plan Personalizado (funcion en desarrollo).</p>
+          <p className="text-gray-600 text-sm">Límites vacíos en el plan Personalizado = ilimitado. Nuevos módulos se agregan sin romper los planes existentes.</p>
+        </div>
+
+        {/* Modules breakdown */}
+        <div className="mt-14">
+          <div className="text-center mb-8">
+            <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2">Módulos disponibles</p>
+            <h3 className="text-white text-xl font-bold">Un sistema, cuatro módulos integrados</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {MODULES_META.map(({ id, icon: Icon, color, bg, border, name, tagline, desc }) => (
+              <div key={id} className={`bg-gray-900 border rounded-xl p-5 ${border}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl ${bg} border ${border} flex items-center justify-center flex-shrink-0`}>
+                    <Icon className={`w-5 h-5 ${color}`} />
+                  </div>
+                  <div>
+                    <p className="text-white font-semibold text-sm mb-0.5">{name}</p>
+                    <p className={`text-xs font-medium mb-1.5 ${color}`}>{tagline}</p>
+                    <p className="text-gray-400 text-xs leading-relaxed">{desc}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -579,7 +736,7 @@ function Footer() {
               <span className="text-white font-bold">Kirion</span>
             </div>
             <p className="text-gray-500 text-sm leading-relaxed">
-              Sistema de control de guias para empresas de dropshipping y paqueteria en Latinoamerica y Asia.
+              Plataforma WMS para logistica moderna: DropScan, Surtido, Inventario y Devoluciones integrados en un solo sistema.
             </p>
           </div>
           <div>
@@ -647,6 +804,7 @@ export default function Landing() {
       <StatsSection />
       <ProblemSection />
       <FeaturesSection />
+      <BenefitsSection />
       <PricingSection />
 
       {/* Contact */}

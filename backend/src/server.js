@@ -15,6 +15,7 @@ import wmsRoutes from './core/routes/wms.routes.js'
 import adminRoutes from './core/routes/admin.routes.js'
 import publicRoutes from './core/routes/public.routes.js'
 import cronRoutes from './core/routes/cron.routes.js'
+import usageRoutes from './core/routes/usage.routes.js'
 
 // Multi-tenant middleware
 import { tenantContext } from './modules/middleware/tenantContext.js'
@@ -144,10 +145,10 @@ app.use('/api/dropscan/dashboard', tenantContext, tenantDB, moduleGuard('dropsca
 app.use('/api/dropscan/config', tenantContext, tenantDB, moduleGuard('dropscan'), dropscanConfigRoutes)
 app.use('/api/dropscan/operadores', tenantContext, tenantDB, moduleGuard('dropscan'), operadoresRoutes)
 
-// Inventory — require inventory module (not in MVP plans, returns 403 for trial/basic)
-app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventory'), invScanRoutes)
-app.use('/api/inventory/tarimas', tenantContext, tenantDB, moduleGuard('inventory'), invTarimasRoutes)
-app.use('/api/inventory/historial', tenantContext, tenantDB, moduleGuard('inventory'), invTarimasRoutes)
+// Inventory — require inventario module
+app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventario'), invScanRoutes)
+app.use('/api/inventory/tarimas', tenantContext, tenantDB, moduleGuard('inventario'), invTarimasRoutes)
+app.use('/api/inventory/historial', tenantContext, tenantDB, moduleGuard('inventario'), invTarimasRoutes)
 
 // FEP — require dropscan module (FEP is part of dropscan)
 app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)
@@ -158,8 +159,11 @@ app.use('/api/devoluciones/inventario', tenantContext, tenantDB, moduleGuard('de
 app.use('/api/devoluciones/salidas', tenantContext, tenantDB, moduleGuard('devoluciones'), devSalidasRoutes)
 app.use('/api/devoluciones', tenantContext, tenantDB, moduleGuard('devoluciones'), devUtilsRoutes)
 
-// WMS Hub module
-app.use('/api/wmshub', tenantContext, tenantDB, wmsHubRoutes)
+// WMS Hub module (Surtido) — require surtido module
+app.use('/api/wmshub', tenantContext, tenantDB, moduleGuard('surtido'), wmsHubRoutes)
+
+// Usage summary — available to all authenticated tenants
+app.use('/api/usage', tenantContext, tenantDB, usageRoutes)
 
 
 // Inline migrations extracted to backend/migrations/048_server_inline_extract.sql

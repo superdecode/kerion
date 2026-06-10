@@ -3,6 +3,9 @@ import crypto from 'crypto'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission, getPermissionLevel, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { getToday, instantDateInTZ } from '../../../shared/utils/dateUtils.js'
+import { checkModuleLimit } from '../../middleware/usageGuard.js'
+
+const SURTIDO_COUNT_QUERY = `SELECT COUNT(*) FROM pick_order_tracking WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`
 
 const router = Router()
 const DEFAULT_TZ = 'America/Mexico_City'
@@ -620,12 +623,13 @@ router.post('/scan-event',
 
       const result = await req.tQuery(
         `INSERT INTO pick_events
-           (session_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
+           (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
             input_method, manual_reason_id, manual_reason_label, manual_notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [
           session_id,
+          req.tenantId,
           String(scanned_code).trim(),
           normalizeOptionalText(normalized_code) || String(scanned_code).trim(),
           normalizeOptionalText(matched_sku),
@@ -688,12 +692,13 @@ router.post('/scan-event/manual',
       const reason = reasonRes.rows[0]
       const result = await req.tQuery(
         `INSERT INTO pick_events
-           (session_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
+           (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
             input_method, manual_reason_id, manual_reason_label, manual_notes)
-         VALUES ($1, $2, $3, $4, $5, 'ok', $6, 'manual', $7, $8, $9)
+         VALUES ($1, $2, $3, $4, $5, $6, 'ok', $7, 'manual', $8, $9, $10)
          RETURNING *`,
         [
           session_id,
+          req.tenantId,
           String(scanned_code).trim(),
           normalizeOptionalText(normalized_code) || String(scanned_code).trim(),
           normalizeOptionalText(matched_sku),
@@ -926,18 +931,18 @@ router.post('/inventory-session',
         })
 
         const values = preparedScans.map((_, i) => {
-          const b = i * 11
-          return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11})`
+          const b = i * 12
+          return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12})`
         }).join(',')
         const params = preparedScans.flatMap(s => [
-          session.id, s.scanned_code, s.normalized_code, s.code2 || null,
+          session.id, req.tenantId, s.scanned_code, s.normalized_code, s.code2 || null,
           s.was_swapped || false, s.scan_status, s.sku || null,
           s.product_name || null, s.cell_no || null, s.group_assignment || 'auto',
           s.scanned_at || startedAt,
         ])
         await client.query(
           `INSERT INTO inv_scans
-             (session_id, scanned_code, normalized_code, code2, was_swapped,
+             (session_id, tenant_id, scanned_code, normalized_code, code2, was_swapped,
               scan_status, sku, product_name, cell_no, group_assignment, scanned_at)
            VALUES ${values}`,
           params
@@ -1135,12 +1140,13 @@ router.post('/inventory-scan',
 
       const result = await req.tQuery(
         `INSERT INTO inv_scans
-           (session_id, scanned_code, normalized_code, code2, was_swapped, scan_status, sku, product_name,
+           (session_id, tenant_id, scanned_code, normalized_code, code2, was_swapped, scan_status, sku, product_name,
             cell_no, group_assignment, input_method, manual_notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'manual',$11)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'manual',$12)
          RETURNING *`,
         [
           session_id,
+          req.tenantId,
           String(scanned_code).trim(),
           normalizeOptionalText(normalized_code) || String(scanned_code).trim(),
           normalizeOptionalText(code2),
@@ -1300,6 +1306,80 @@ router.get('/inventory-code-search',
     } catch (err) {
       console.error('GET wmshub/inventory-code-search error:', err.message)
       res.status(500).json({ success: false, error: 'Error buscando código en inventario' })
+    }
+  }
+)
+
+// POST /api/wmshub/box-locations — batch lookup of box locations from inv_scans
+// Used by surtido ubicaciones print: given a list of box codes, returns the most
+// recent cell_no for each code (scanned_code / normalized_code / code2 match).
+router.post('/box-locations',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'inventario.registros', action: 'ver' },
+  ]),
+  async (req, res) => {
+    try {
+      const { codes } = req.body
+      if (!Array.isArray(codes) || codes.length === 0) {
+        return res.json({ success: true, data: {} })
+      }
+
+      const normalized = [...new Set(codes.map(c => String(c).trim().toLowerCase()).filter(Boolean))]
+      if (normalized.length === 0) return res.json({ success: true, data: {} })
+
+      // Limit to 2000 codes per call
+      const batch = normalized.slice(0, 2000)
+
+      const result = await req.tQuery(
+        `SELECT DISTINCT ON (LOWER(sc.scanned_code))
+                LOWER(sc.scanned_code) AS code,
+                sc.cell_no,
+                sc.scanned_at
+           FROM inv_scans sc
+           JOIN inv_sessions sess ON sess.id = sc.session_id
+          WHERE sess.tenant_id = $1
+            AND sc.cell_no IS NOT NULL
+            AND sc.cell_no <> ''
+            AND LOWER(sc.scanned_code) = ANY($2::text[])
+          ORDER BY LOWER(sc.scanned_code), sc.scanned_at DESC`,
+        [req.tenantId, batch]
+      )
+
+      // Also try normalized_code and code2 for any codes not found yet
+      const foundCodes = new Set(result.rows.map(r => r.code))
+      const remaining = batch.filter(c => !foundCodes.has(c))
+
+      let extra = { rows: [] }
+      if (remaining.length > 0) {
+        extra = await req.tQuery(
+          `SELECT DISTINCT ON (LOWER(sc.normalized_code))
+                  LOWER(sc.normalized_code) AS code,
+                  sc.cell_no,
+                  sc.scanned_at
+             FROM inv_scans sc
+             JOIN inv_sessions sess ON sess.id = sc.session_id
+            WHERE sess.tenant_id = $1
+              AND sc.cell_no IS NOT NULL
+              AND sc.cell_no <> ''
+              AND LOWER(sc.normalized_code) = ANY($2::text[])
+            ORDER BY LOWER(sc.normalized_code), sc.scanned_at DESC`,
+          [req.tenantId, remaining]
+        )
+      }
+
+      const locationMap = {}
+      for (const row of [...result.rows, ...extra.rows]) {
+        if (row.code && row.cell_no && !locationMap[row.code]) {
+          locationMap[row.code] = row.cell_no
+        }
+      }
+
+      res.json({ success: true, data: locationMap })
+    } catch (err) {
+      console.error('POST wmshub/box-locations error:', err.message)
+      res.status(500).json({ success: false, error: 'Error buscando ubicaciones de cajas' })
     }
   }
 )
@@ -1550,7 +1630,7 @@ router.get('/order-tracking',
 
 router.get('/order-tracking/:obc',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.ordenes', 'ver'),
+  requirePermission('surtido.validacion', 'ver'),
   async (req, res) => {
     try {
       const row = await req.tQuery(
@@ -1607,6 +1687,16 @@ router.post('/order-tracking/bulk',
           )
 
           if (existing.rows.length === 0) {
+            // Check monthly surtido limit before creating a new OBC entry
+            const limitCheck = await checkModuleLimit(req.tenantId, 'surtido_limit', SURTIDO_COUNT_QUERY)
+            if (limitCheck.limited) {
+              const err = new Error('Límite mensual de órdenes surtido alcanzado.')
+              err.statusCode = 402
+              err.code = 'SURTIDO_LIMIT_REACHED'
+              err.used = limitCheck.used
+              err.limit = limitCheck.limit
+              throw err
+            }
             const resInsert = await client.query(
               `INSERT INTO pick_order_tracking
                  (tenant_id, outbound_order_no, surtidor_id, surtidor_nombre, status, notes)
@@ -1662,7 +1752,14 @@ router.post('/order-tracking/bulk',
       res.json({ success: true, data: results })
     } catch (err) {
       console.error('POST order-tracking/bulk error:', err.message)
-      res.status(err.statusCode || 500).json({ success: false, error: err.statusCode ? err.message : 'Error en actualización masiva' })
+      const status = err.statusCode || 500
+      res.status(status).json({
+        success: false,
+        error: err.statusCode ? err.message : 'Error en actualización masiva',
+        code: err.code || undefined,
+        used: err.used ?? undefined,
+        limit: err.limit ?? undefined,
+      })
     }
   }
 )
@@ -1691,6 +1788,16 @@ router.put('/order-tracking/:obc',
       }
 
       if (existing.rows.length === 0) {
+        const limitCheck = await checkModuleLimit(req.tenantId, 'surtido_limit', SURTIDO_COUNT_QUERY)
+        if (limitCheck.limited) {
+          return res.status(402).json({
+            success: false,
+            error: 'Límite mensual de órdenes surtido alcanzado.',
+            code: 'SURTIDO_LIMIT_REACHED',
+            used: limitCheck.used,
+            limit: limitCheck.limit,
+          })
+        }
         const result = await req.tQuery(
           `INSERT INTO pick_order_tracking
              (tenant_id, outbound_order_no, third_order_no, surtidor_id, surtidor_nombre, status, notes)

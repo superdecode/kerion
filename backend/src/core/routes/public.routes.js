@@ -159,7 +159,8 @@ router.get('/plans', async (_req, res) => {
     try {
       result = await query(
         `SELECT id, code, name, description, price_amount, price_annual, price_currency,
-                guide_limit, warehouse_count, modules, display_order
+                guide_limit, warehouse_count, modules, display_order,
+                surtido_limit, inventario_limit, devoluciones_limit
          FROM plans
          WHERE is_active = true AND is_visible = true
          ORDER BY display_order ASC NULLS LAST, price_amount ASC`

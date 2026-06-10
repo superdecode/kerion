@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -156,12 +156,76 @@ function DuplicateConfirmModal({ isOpen, code, conflicts = [], onConfirm, onClos
   )
 }
 
-function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
+function MultiSelect({ value, onChange, options, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const count = value.length
+  const label = count === 0
+    ? `${placeholder} — Todos`
+    : count === 1
+    ? (options.find(o => o === value[0]) || value[0])
+    : `${placeholder} (${count})`
+
+  const toggle = useCallback((val) => onChange(
+    value.includes(val) ? value.filter(v => v !== val) : [...value, val]
+  ), [value, onChange])
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <button
+        type="button"
+        className={`relative h-10 min-w-[180px] pl-3 pr-8 rounded-xl border text-sm text-left outline-none transition-all ${
+          open ? 'border-primary-400 ring-2 ring-primary-100' : 'border-warm-200 hover:border-warm-300'
+        } ${count > 0 ? 'bg-primary-50 text-primary-700 border-primary-200' : 'bg-warm-50 text-warm-700'}`}
+        onClick={() => setOpen(o => !o)}
+      >
+        <span className="block truncate pr-2 text-sm">{label}</span>
+        <ChevronDown size={12} className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-warm-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1 left-0 z-[20] min-w-full bg-white rounded-xl border border-warm-200 shadow-lg overflow-hidden">
+          <div className="max-h-52 overflow-y-auto scrollbar-thin">
+            {options.map(opt => (
+              <label
+                key={opt}
+                className="flex items-center gap-2.5 px-3 py-2 text-sm text-warm-700 hover:bg-warm-50 cursor-pointer"
+                onMouseDown={e => { e.preventDefault(); toggle(opt) }}
+              >
+                <input type="checkbox" checked={value.includes(opt)} readOnly className="rounded border-warm-300 text-primary-600 pointer-events-none" />
+                <span className="truncate">{opt}</span>
+              </label>
+            ))}
+          </div>
+          {count > 0 && (
+            <div className="border-t border-warm-100 px-3 py-2">
+              <button type="button" className="text-xs text-primary-600 hover:text-primary-700 font-semibold"
+                onMouseDown={e => { e.preventDefault(); onChange([]); setOpen(false) }}>
+                Limpiar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initialReadOnly = true }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
   const [detailTab, setDetailTab] = useState('tarimas')
+  const [isReadOnly, setIsReadOnly] = useState(initialReadOnly)
   const [expandedTarimaCode, setExpandedTarimaCode] = useState(null)
   const [editingScanId, setEditingScanId] = useState(null)
   const [editingCode, setEditingCode] = useState('')
@@ -234,12 +298,13 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
   }, { tarimas: 0, total: 0, ok: 0, blocked: 0, nowms: 0 }), [tarimas])
 
   useEffect(() => {
+    setIsReadOnly(initialReadOnly)
     setDetailTab(initialTab)
     setExpandedTarimaCode(null)
     setEditingScanId(null)
     setEditingCode('')
     setDuplicatePending(null)
-  }, [initialTab, isOpen])
+  }, [initialTab, initialReadOnly, isOpen])
 
   const confirmPotentialDuplicate = async ({ codes, displayCode, excludeScanId = null, onAccept }) => {
     const variantSet = buildCodeVariantSet(...codes)
@@ -357,12 +422,23 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
       }
       icon={ScanBarcode}
       size="xl"
-      headerAction={!isLoading && scans.length > 0 && (
-        <button
-          onClick={handleExportDetail}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-success-50 text-success-700 rounded-lg hover:bg-success-100 font-semibold transition-all border border-success-200">
-          <Download className="w-3.5 h-3.5" /> {t('common.export')}
-        </button>
+      headerAction={!isLoading && (
+        <div className="flex items-center gap-2">
+          {isReadOnly && (canEditScans || canDeleteScans) && (
+            <button
+              onClick={() => setIsReadOnly(false)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-warning-50 text-warning-700 rounded-lg hover:bg-warning-100 font-semibold transition-all border border-warning-200">
+              <Pencil className="w-3.5 h-3.5" /> {t('common.edit')}
+            </button>
+          )}
+          {scans.length > 0 && (
+            <button
+              onClick={handleExportDetail}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-success-50 text-success-700 rounded-lg hover:bg-success-100 font-semibold transition-all border border-success-200">
+              <Download className="w-3.5 h-3.5" /> {t('common.export')}
+            </button>
+          )}
+        </div>
       )}
       footer={
         <div className="flex justify-end">
@@ -374,7 +450,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
         <div className="flex justify-center py-12"><LoadingSpinner /></div>
       ) : (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: t('inventario.registros.operator'), value: sessionData.operator_nombre || '—', Icon: User },
               { label: 'Fecha inicio', value: scanBounds.start ? fmtDateTime(scanBounds.start) : '—', Icon: Clock },
@@ -427,8 +503,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
               </div>
 
               {detailTab === 'tarimas' && (
-                <div className="max-h-96 overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
-                  <table className="w-full text-xs">
+                <div className="overflow-x-auto rounded-xl border border-warm-100">
+                  <div className="max-h-96 overflow-y-auto scrollbar-thin">
+                  <table className="w-full min-w-[520px] text-xs">
                     <thead className="bg-warm-50 sticky top-0">
                       <tr>
                         <th className={TH_CLASS}><span className={TH_TEXT}>Tarima</span></th>
@@ -519,12 +596,14 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
 
               {detailTab === 'detallado' && (
-                <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
-                  <table className="w-full text-xs">
+                <div className="overflow-x-auto rounded-xl border border-warm-100">
+                  <div className="max-h-[28rem] overflow-y-auto scrollbar-thin">
+                  <table className="w-full min-w-[680px] text-xs">
                     <thead className="bg-warm-50 sticky top-0">
                       <tr>
                         <th className={TH_CLASS}><span className={TH_TEXT}>#</span></th>
@@ -542,7 +621,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                         const meta = STATUS_META_KEYS[sc.scan_status] ?? STATUS_META_KEYS.nowms
                         const Icon = meta.icon
                         return (
-                          <tr key={sc.id || i} className="table-row">
+                          <tr key={sc.id || i} className="table-row whitespace-nowrap">
                             <td className="table-cell text-warm-400">{i + 1}</td>
                             <td className="table-cell">
                               <span className="font-mono text-xs font-semibold text-warm-700">
@@ -593,6 +672,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                               {sc.scanned_at ? fmtDateTime(sc.scanned_at) : '—'}
                             </td>
                             <td className="table-cell">
+                              {!isReadOnly && (
                               <div className="flex items-center gap-1">
                                 {canEditScans && editingScanId === sc.id ? (
                                   <button
@@ -621,11 +701,12 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                                   </button>
                                 )}
                               </div>
+                              )}
                             </td>
                           </tr>
                         )
                       })}
-                      {canEditScans && (
+                      {!isReadOnly && canEditScans && (
                       <tr className="bg-warm-50/70">
                         <td className="table-cell text-warm-400">+</td>
                         <td className="table-cell">
@@ -664,6 +745,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas' }) {
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
             </div>
@@ -704,8 +786,10 @@ export default function InventarioRegistros() {
   const [copiedCode, setCopiedCode] = useState('')
   const [detailSession, setDetailSession] = useState(null)
   const [detailInitialTab, setDetailInitialTab] = useState('tarimas')
+  const [detailReadOnly, setDetailReadOnly] = useState(true)
   const [deleteConfirmSession, setDeleteConfirmSession] = useState(null)
   const [scanTypeFilter, setScanTypeFilter] = useState('')
+  const [filterOperators, setFilterOperators] = useState([])
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [exportingBulk, setExportingBulk] = useState(false)
   const [exportConfirm, setExportConfirm] = useState(null)
@@ -733,6 +817,14 @@ export default function InventarioRegistros() {
   const records = data?.data?.records ?? []
   const total = data?.data?.total ?? 0
   const totalPages = Math.ceil(total / pageSize) || 1
+
+  const operatorOptions = useMemo(() =>
+    [...new Set(records.map(r => r.operator_nombre).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')),
+  [records])
+
+  const filteredRecords = useMemo(() =>
+    filterOperators.length === 0 ? records : records.filter(r => filterOperators.includes(r.operator_nombre)),
+  [records, filterOperators])
   const { data: ubicacionesAdminData } = useQuery({
     queryKey: ['wms-ubicaciones-admin', 'inventario'],
     queryFn: () => getUbicacionesAdmin('inventario'),
@@ -774,9 +866,10 @@ export default function InventarioRegistros() {
     </div>
   )
 
-  const hasActiveFilters = scanTypeFilter || dateFrom !== thirtyDaysAgo || dateTo !== today || !!search
+  const hasActiveFilters = scanTypeFilter || filterOperators.length > 0 || dateFrom !== thirtyDaysAgo || dateTo !== today || !!search
   const resetFilters = () => {
     setScanTypeFilter('')
+    setFilterOperators([])
     setDateFrom(thirtyDaysAgo)
     setDateTo(today)
     setDatePreset('30')
@@ -816,8 +909,8 @@ export default function InventarioRegistros() {
     return next
   })
   const toggleSelectAll = () => {
-    if (selectedIds.size === records.length) setSelectedIds(new Set())
-    else setSelectedIds(new Set(records.map(r => r.id)))
+    if (selectedIds.size === filteredRecords.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(filteredRecords.map(r => r.id)))
   }
   const INV_HEADERS = ['Sección', 'Tipo', 'Fecha', 'Operador', 'Disponible', 'Bloqueado', 'No WMS', 'Total']
   const INV_COLS = [{ wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }]
@@ -875,8 +968,9 @@ export default function InventarioRegistros() {
     }
   }
 
-  const openDetail = (session, initialTab = 'tarimas') => {
+  const openDetail = (session, initialTab = 'tarimas', readOnly = true) => {
     setDetailInitialTab(initialTab)
+    setDetailReadOnly(readOnly)
     setDetailSession(session)
   }
 
@@ -935,6 +1029,15 @@ export default function InventarioRegistros() {
                 <option value="unificado">{t('inventario.escaneo.type_unificado')}</option>
                 <option value="clasificacion">{t('inventario.escaneo.type_clasificacion')}</option>
               </select>
+
+              {operatorOptions.length > 0 && (
+                <MultiSelect
+                  value={filterOperators}
+                  onChange={v => { setFilterOperators(v); setPage(1) }}
+                  options={operatorOptions}
+                  placeholder={t('inventario.registros.operator')}
+                />
+              )}
 
               <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[240px] max-w-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
                 <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
@@ -1049,7 +1152,7 @@ export default function InventarioRegistros() {
                     <tr className="bg-warm-50 border-b border-warm-100">
                       <th className="table-header w-10 text-center">
                         <input type="checkbox"
-                          checked={selectedIds.size === records.length && records.length > 0}
+                          checked={selectedIds.size === filteredRecords.length && filteredRecords.length > 0}
                           onChange={toggleSelectAll}
                           className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
                       </th>
@@ -1065,7 +1168,7 @@ export default function InventarioRegistros() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warm-50">
-                    {records.map(r => {
+                    {filteredRecords.map(r => {
                       const isSelected = selectedIds.has(r.id)
                       return (
                         <tr key={r.id}
@@ -1124,14 +1227,14 @@ export default function InventarioRegistros() {
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
-                                onClick={e => { e.stopPropagation(); openDetail(r) }}
+                                onClick={e => { e.stopPropagation(); openDetail(r, 'tarimas', true) }}
                                 title={t('inventario.registros.detail')}>
                                 <Eye size={13} />
                               </button>
                               {canEdit && (
                                 <button
                                   className="p-1.5 rounded-lg hover:bg-warning-50 text-warm-400 hover:text-warning-600 transition-colors"
-                                  onClick={e => { e.stopPropagation(); openDetail(r, 'detallado') }}
+                                  onClick={e => { e.stopPropagation(); openDetail(r, 'detallado', false) }}
                                   title={t('common.edit')}>
                                   <Pencil size={13} />
                                 </button>
@@ -1170,8 +1273,9 @@ export default function InventarioRegistros() {
       <DetailModal
         session={detailSession}
         isOpen={!!detailSession}
-        onClose={() => { setDetailSession(null); setDetailInitialTab('tarimas') }}
+        onClose={() => { setDetailSession(null); setDetailInitialTab('tarimas'); setDetailReadOnly(true) }}
         initialTab={detailInitialTab}
+        initialReadOnly={detailReadOnly}
       />
 
       <Modal

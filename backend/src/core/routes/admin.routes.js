@@ -697,16 +697,37 @@ router.delete('/tenants/:id', authenticateAdmin, async (req, res) => {
       return res.status(400).json({ error: 'El nombre de confirmacion no coincide' })
     }
 
-    // Cascade delete in order (FK dependencies)
-    await query(`DELETE FROM folios_entrega WHERE tenant_id = $1`, [id]).catch(() => {})
+    // Cascade delete in FK-safe order (child tables before parents)
+    // WMS picks — must precede usuarios (operator_id RESTRICT/NO ACTION)
+    await query(`DELETE FROM pick_sessions WHERE tenant_id = $1`, [id]).catch(() => {})        // cascades pick_events
+    await query(`DELETE FROM inv_sessions WHERE tenant_id = $1`, [id]).catch(() => {})          // cascades inv_scans
+    await query(`DELETE FROM pick_order_tracking WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM pick_surtidores WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM pick_manual_reasons WHERE tenant_id = $1`, [id]).catch(() => {})
+    // Old inventory — must precede usuarios (user_id RESTRICT)
+    await query(`DELETE FROM inventory_sessions WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM inventory_scans WHERE tenant_id = $1`, [id]).catch(() => {})
+    // DropScan — folios_entrega before tarimas (folios_entrega_tarimas.tarima_id RESTRICT)
+    await query(`DELETE FROM folios_entrega WHERE tenant_id = $1`, [id]).catch(() => {})        // cascades folios_entrega_tarimas + log
     await query(`DELETE FROM guias WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM sesiones_escaneo WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM alertas_duplicados WHERE tenant_id = $1`, [id]).catch(() => {})
     await query(`DELETE FROM tarimas WHERE tenant_id = $1`, [id]).catch(() => {})
-    await query(`DELETE FROM usuarios_internos WHERE tenant_id = $1`, [id]).catch(() => {})
+    // Config/credentials
+    await query(`DELETE FROM wms_credentials WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM wms_cache WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM wms_config WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM configuraciones WHERE tenant_id = $1`, [id]).catch(() => {})
+    // Users and auth
+    await query(`DELETE FROM usuarios_internos WHERE tenant_id = $1`, [id]).catch(() => {})     // cascades logs_usuarios_internos
     await query(`DELETE FROM notifications_outbox WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM tenant_signup_requests WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`UPDATE tenant_signup_requests SET resulting_tenant_id = NULL WHERE resulting_tenant_id = $1`, [id]).catch(() => {})
+    // CASCADE tables (auto-deleted, explicit for clarity)
     await query(`DELETE FROM subscriptions WHERE tenant_id = $1`, [id]).catch(() => {})
     await query(`DELETE FROM provisioning_log WHERE tenant_id = $1`, [id]).catch(() => {})
     await query(`DELETE FROM roles WHERE tenant_id = $1`, [id]).catch(() => {})
-    await query(`DELETE FROM usuarios WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM usuarios WHERE tenant_id = $1`, [id]).catch(() => {})              // cascades token_blacklist
     await query(`DELETE FROM tenants WHERE id = $1`, [id])
 
     adminAudit(req.admin.id, 'DELETE_TENANT', 'tenant', id, { legal_name: tenant.legal_name, deleted_at: new Date().toISOString() })
@@ -747,15 +768,16 @@ router.get('/plans', authenticateAdmin, async (req, res) => {
 // POST /api/admin/plans — create plan
 router.post('/plans', authenticateAdmin, async (req, res) => {
   try {
-    const { code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order } = req.body
+    const { code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order, surtido_limit, inventario_limit, devoluciones_limit } = req.body
     if (!name || price_amount === undefined) return res.status(400).json({ error: 'name y price_amount son requeridos' })
     const safeCode = code || name.toLowerCase().replace(/[^a-z0-9]/g, '_')
     const result = await query(
-      `INSERT INTO plans (code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [safeCode, name, description || null, guide_limit || null, warehouse_count || 1,
-       price_amount, price_annual || null, price_currency || 'USD',
-       JSON.stringify(modules || ['dropscan']), is_active !== false, is_visible !== false, display_order || 0]
+      `INSERT INTO plans (code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order, surtido_limit, inventario_limit, devoluciones_limit)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      [safeCode, name, description || null, guide_limit ?? null, warehouse_count || 1,
+       price_amount, price_annual ?? null, price_currency || 'USD',
+       JSON.stringify(modules || ['dropscan']), is_active !== false, is_visible !== false, display_order || 0,
+       surtido_limit ?? null, inventario_limit ?? null, devoluciones_limit ?? null]
     )
     adminAudit(req.admin.id, 'CREATE_PLAN', 'plan', result.rows[0].id, { name })
     res.status(201).json({ success: true, data: result.rows[0] })
@@ -769,7 +791,7 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
 router.put('/plans/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params
-    const { name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order } = req.body
+    const { name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order, surtido_limit, inventario_limit, devoluciones_limit } = req.body
     await query(
       `UPDATE plans SET
          name = COALESCE($1, name),
@@ -783,10 +805,14 @@ router.put('/plans/:id', authenticateAdmin, async (req, res) => {
          is_active = COALESCE($9, is_active),
          is_visible = COALESCE($10, is_visible),
          display_order = COALESCE($11, display_order),
+         surtido_limit = $13,
+         inventario_limit = $14,
+         devoluciones_limit = $15,
          updated_at = now()
        WHERE id = $12`,
       [name, description ?? null, guide_limit ?? null, warehouse_count, price_amount, price_annual ?? null,
-       price_currency, modules ? JSON.stringify(modules) : null, is_active, is_visible, display_order, id]
+       price_currency, modules ? JSON.stringify(modules) : null, is_active, is_visible, display_order, id,
+       surtido_limit ?? null, inventario_limit ?? null, devoluciones_limit ?? null]
     )
     adminAudit(req.admin.id, 'UPDATE_PLAN', 'plan', id, { name })
     res.json({ success: true })
@@ -1063,7 +1089,10 @@ router.get('/usage-stats', authenticateAdmin, async (_req, res) => {
       catch (err) { console.error('[usage-stats query]', sql.slice(0, 60), err.message); return [] }
     }
 
-    const [totalGuias, guias30d, topTenants, dbSize, tarimas, folios, usersInternos] = await Promise.all([
+    const [
+      totalGuias, guias30d, topTenants, dbSize, tarimas, folios, usersInternos,
+      totalOBCs, obcs30d, totalScans, scans30d, totalDevs, devs30d,
+    ] = await Promise.all([
       safeQuery(`SELECT COUNT(*) AS total FROM guias`),
       safeQuery(`SELECT COUNT(*) AS total FROM guias WHERE created_at >= now() - INTERVAL '30 days'`),
       safeQuery(`
@@ -1078,6 +1107,12 @@ router.get('/usage-stats', authenticateAdmin, async (_req, res) => {
       safeQuery(`SELECT COUNT(*) AS total FROM tarimas`),
       safeQuery(`SELECT COUNT(*) AS total FROM folios_entrega`),
       safeQuery(`SELECT COUNT(*) AS total FROM usuarios_internos WHERE activo = true`),
+      safeQuery(`SELECT COUNT(*) AS total FROM pick_order_tracking`),
+      safeQuery(`SELECT COUNT(*) AS total FROM pick_order_tracking WHERE created_at >= now() - INTERVAL '30 days'`),
+      safeQuery(`SELECT COUNT(*) AS total FROM inventory_scans`),
+      safeQuery(`SELECT COUNT(*) AS total FROM inventory_scans WHERE created_at >= now() - INTERVAL '30 days'`),
+      safeQuery(`SELECT COUNT(*) AS total FROM dev_sesiones WHERE estado = 'confirmado'`),
+      safeQuery(`SELECT COUNT(*) AS total FROM dev_sesiones WHERE estado = 'confirmado' AND confirmado_at >= now() - INTERVAL '30 days'`),
     ])
 
     res.json({
@@ -1089,6 +1124,12 @@ router.get('/usage-stats', authenticateAdmin, async (_req, res) => {
       active_scanners: Number(usersInternos[0]?.total ?? 0),
       db_size: dbSize[0]?.db_size ?? 'N/A',
       top_tenants: topTenants,
+      total_obcs: Number(totalOBCs[0]?.total ?? 0),
+      obcs_last_30d: Number(obcs30d[0]?.total ?? 0),
+      total_scans: Number(totalScans[0]?.total ?? 0),
+      scans_last_30d: Number(scans30d[0]?.total ?? 0),
+      total_devoluciones: Number(totalDevs[0]?.total ?? 0),
+      devoluciones_last_30d: Number(devs30d[0]?.total ?? 0),
     })
   } catch (err) {
     console.error('[admin/usage-stats]', err)
