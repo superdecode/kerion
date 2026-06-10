@@ -1,19 +1,34 @@
 -- Migration 047: Add CHECK constraint to audit_log to prevent tenant-less app-level events.
 --
--- Background: audit_log.tenant_id is nullable by design to support system-level
--- events (e.g. super_admin actions, cron jobs). However, any event triggered by a
--- regular user (user_id IS NOT NULL) must always have a tenant_id. Without this
--- constraint it is possible to accidentally INSERT an audit row for a user action
--- without tenant context, which makes per-tenant audit reports incomplete.
+-- First backfill tenant_id from usuarios for any existing rows that have a user_id
+-- but are missing tenant_id (created before multi-tenant was enforced).
+
+UPDATE audit_log al
+SET tenant_id = u.tenant_id
+FROM usuarios u
+WHERE al.user_id = u.id
+  AND al.tenant_id IS NULL
+  AND u.tenant_id IS NOT NULL;
+
+-- Any remaining rows with user_id but still no resolvable tenant: null out user_id
+-- so they are treated as system events (rather than dropping them).
+UPDATE audit_log
+SET user_id = NULL
+WHERE tenant_id IS NULL
+  AND user_id IS NOT NULL;
+
+-- Now safe to add the constraint:
+-- user-triggered events must have a tenant_id; system events have user_id = NULL.
+ALTER TABLE audit_log
+  DROP CONSTRAINT IF EXISTS audit_log_tenant_or_system;
 
 ALTER TABLE audit_log
   ADD CONSTRAINT audit_log_tenant_or_system
   CHECK (
     tenant_id IS NOT NULL
-    OR user_id IS NULL   -- system/super_admin events have no user_id
+    OR user_id IS NULL
   );
 
--- Also insert migration 047 into schema_migrations if the table exists
 INSERT INTO schema_migrations (version, description)
 VALUES ('047', 'audit_log tenant_or_system constraint')
 ON CONFLICT (version) DO NOTHING;
