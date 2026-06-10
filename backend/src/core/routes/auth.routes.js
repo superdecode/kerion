@@ -108,7 +108,7 @@ router.post('/login', async (req, res) => {
 
     const permisos = normalizePermisos(user.permisos_override || user.rol_permisos || {})
 
-    const [subRes, tenantRes] = await Promise.all([
+    const [subRes, tenantRes, modulesRes] = await Promise.all([
       query(
         `SELECT p.modules FROM subscriptions s
          JOIN plans p ON s.plan_id = p.id
@@ -121,9 +121,14 @@ router.post('/login', async (req, res) => {
          FROM tenants WHERE id = $1`,
         [tenant.id]
       ),
+      query(
+        'SELECT module_code FROM tenant_modules WHERE tenant_id = $1 AND enabled = true',
+        [tenant.id]
+      ),
     ])
     const modules = subRes.rows.length > 0 ? subRes.rows[0].modules : ['dropscan']
     const tenantInfo = tenantRes.rows[0] || {}
+    const enabledModules = modulesRes.rows.map(r => r.module_code)
 
     const jti = crypto.randomBytes(16).toString('hex')
     const payload = {
@@ -167,6 +172,7 @@ router.post('/login', async (req, res) => {
         tenant_contact_email: tenantInfo.contact_email || user.email,
         subscription_expires_at: tenantInfo.subscription_expires_at || null,
         trial_expires_at: tenantInfo.trial_expires_at || null,
+        enabledModules,
       }
     })
   } catch (error) {
@@ -178,7 +184,7 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/me
 router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const [result, tenantRes] = await Promise.all([
+    const [result, tenantRes, modulesRes] = await Promise.all([
       query(
         `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id, u.estado,
                 u.avatar_url, u.permisos_override, u.ultimo_acceso, u.zona_horaria,
@@ -192,6 +198,9 @@ router.get('/me', authenticateToken, async (req, res) => {
       req.user.tenant_id
         ? query(`SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email, zona_horaria FROM tenants WHERE id = $1`, [req.user.tenant_id])
         : Promise.resolve({ rows: [] }),
+      req.user.tenant_id
+        ? query('SELECT module_code FROM tenant_modules WHERE tenant_id = $1 AND enabled = true', [req.user.tenant_id])
+        : Promise.resolve({ rows: [] }),
     ])
 
     if (result.rows.length === 0) {
@@ -201,6 +210,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     const user = result.rows[0]
     const tenantInfo = tenantRes.rows[0] || {}
     const permisos = normalizePermisos(user.permisos_override || user.rol_permisos || {})
+    const enabledModules = modulesRes.rows.map(r => r.module_code)
 
     res.json({
       id: user.id,
@@ -220,6 +230,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       tenant_contact_email: tenantInfo.contact_email || user.email,
       subscription_expires_at: tenantInfo.subscription_expires_at || null,
       trial_expires_at: tenantInfo.trial_expires_at || null,
+      enabledModules,
     })
   } catch (error) {
     console.error('Auth/me error:', error)

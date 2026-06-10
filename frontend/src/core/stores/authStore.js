@@ -76,6 +76,7 @@ export const useAuthStore = create(
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      enabledModules: [],
 
       login: async (email, password) => {
         set({ isLoading: true })
@@ -103,6 +104,7 @@ export const useAuthStore = create(
             token: data.token,
             isAuthenticated: true,
             isLoading: false,
+            enabledModules: data.user?.enabledModules || [],
           })
 
           // Subdomain redirect: if on main domain and slug available, redirect to tenant subdomain
@@ -152,6 +154,7 @@ export const useAuthStore = create(
               user: data,
               token,
               isAuthenticated: true,
+              enabledModules: data.enabledModules || [],
             })
             // Remove token from URL
             window.history.replaceState({}, '', window.location.pathname)
@@ -167,15 +170,20 @@ export const useAuthStore = create(
         try {
           await api.post('/auth/logout')
         } catch (_e) { /* ignore — token may already be expired */ }
-        set({ user: null, token: null, isAuthenticated: false })
-        localStorage.removeItem('wms-auth')
+        set({ user: null, token: null, isAuthenticated: false, enabledModules: [] })
+        Object.keys(localStorage)
+          .filter(k => k === 'wms-auth' || k.startsWith('kirion_'))
+          .forEach(k => localStorage.removeItem(k))
       },
 
       refreshUser: async () => {
         try {
           const { data } = await api.get('/auth/me')
           if (data.zona_horaria) setTimezone(data.zona_horaria)
-          set((state) => ({ user: { ...state.user, ...data } }))
+          set((state) => ({
+            user: { ...state.user, ...data },
+            enabledModules: data.enabledModules || state.enabledModules,
+          }))
         } catch (e) {
           // Only logout on 401 (token truly invalid/expired).
           // Other errors (network, 5xx) should NOT trigger logout — prevents login loops.
@@ -251,6 +259,14 @@ export const useAuthStore = create(
         const level = getModuleLevel(user.permisos, modulePath)
         return level === 'eliminar'
       },
+
+      // Check per-tenant module entitlement (from tenant_modules table)
+      isModuleEnabled: (moduleCode) => {
+        const { user, enabledModules } = get()
+        if (!user) return false
+        if (isTenantAdmin(user)) return true
+        return enabledModules.includes(moduleCode)
+      },
     }),
     {
       name: 'wms-auth',
@@ -258,6 +274,7 @@ export const useAuthStore = create(
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
+        enabledModules: state.enabledModules,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.user?.zona_horaria) setTimezone(state.user.zona_horaria)

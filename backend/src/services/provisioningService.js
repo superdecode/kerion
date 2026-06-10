@@ -169,6 +169,22 @@ export async function provisionTenant(requestId, approvedByAdminId) {
     await logStep(tenantId, requestId, 'create_admin_user', 'skipped', null, { note: 'idempotent' })
   }
 
+  // ── Step 2.5: seed_tenant_modules ─────────────────────────────────────────────
+  try {
+    for (const code of ['dropscan', 'surtido', 'inventario', 'devoluciones']) {
+      await query(
+        `INSERT INTO tenant_modules (tenant_id, module_code, enabled, enabled_at, enabled_by, notes)
+         VALUES ($1, $2, true, now(), 'system', 'provisioned with tenant')
+         ON CONFLICT (tenant_id, module_code) DO NOTHING`,
+        [tenantId, code]
+      )
+    }
+    await logStep(tenantId, requestId, 'seed_tenant_modules', 'ok')
+  } catch (err) {
+    await logStep(tenantId, requestId, 'seed_tenant_modules', 'failed', err.message)
+    // Non-fatal: migration 043 backfill covers existing tenants
+  }
+
   // ── Step 3: seed_default_dropscan_config ──────────────────────────────────────
   try {
     await tenantTransaction(tenantId, async (client) => {

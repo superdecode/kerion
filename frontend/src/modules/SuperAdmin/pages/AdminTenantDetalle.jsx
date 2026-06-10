@@ -5,7 +5,7 @@ import {
   Edit2, Save, X, Plus, Calendar, Users, CreditCard, Activity,
   AlertCircle, Check, Clock, Building2, FileText, Package, Zap,
   Trash2, KeyRound, Copy, Search, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, SlidersHorizontal,
-  ChevronUp, ChevronDown
+  ChevronUp, ChevronDown, Puzzle, ToggleLeft, ToggleRight
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 import { fmtDate, fmtDateTime, fmtTime } from '../../../core/utils/dateFormat'
@@ -953,6 +953,118 @@ function ResetPasswordModal({ tenant, onClose }) {
   )
 }
 
+const MODULE_LABELS = {
+  dropscan: 'DropScan',
+  surtido: 'Surtido',
+  inventario: 'Inventario',
+  devoluciones: 'Devoluciones',
+}
+const ALL_MODULE_CODES = ['dropscan', 'surtido', 'inventario', 'devoluciones']
+
+function ModulesPanel({ tenantId, onSaved }) {
+  const [modules, setModules] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(null)
+  const [error, setError] = useState('')
+
+  async function loadModules() {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await adminApi.get(`/tenants/${tenantId}/modules`)
+      setModules(res.data.data || [])
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error cargando modulos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadModules() }, [tenantId])
+
+  async function toggle(code, currentEnabled) {
+    setSaving(code)
+    setError('')
+    try {
+      await adminApi.put(`/tenants/${tenantId}/modules/${code}`, { enabled: !currentEnabled })
+      setModules(prev => prev.map(m =>
+        m.module_code === code ? { ...m, enabled: !currentEnabled } : m
+      ))
+      onSaved(`Modulo ${MODULE_LABELS[code] || code} ${!currentEnabled ? 'habilitado' : 'deshabilitado'}`)
+    } catch (err) {
+      setError(err.response?.data?.error || 'Error actualizando modulo')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const moduleMap = Object.fromEntries(modules.map(m => [m.module_code, m]))
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-white font-semibold flex items-center gap-2">
+          <Puzzle className="w-4 h-4 text-purple-400" />
+          Modulos
+        </h2>
+        <button
+          onClick={loadModules}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white rounded-lg border border-gray-700 transition-colors"
+        >
+          <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 bg-red-950/30 border border-red-800/40 rounded-lg p-3 mb-3 text-xs text-red-300">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {ALL_MODULE_CODES.map(code => {
+          const m = moduleMap[code]
+          const enabled = m?.enabled ?? false
+          const isSaving = saving === code
+          return (
+            <div key={code} className="flex items-center justify-between p-3 bg-gray-800/40 rounded-lg border border-gray-700/40">
+              <div className="min-w-0">
+                <p className="text-white text-sm font-medium">{MODULE_LABELS[code]}</p>
+                {m?.enabled_at && enabled && (
+                  <p className="text-gray-500 text-xs mt-0.5">Habilitado {fmtDate(m.enabled_at)}</p>
+                )}
+                {m?.disabled_at && !enabled && (
+                  <p className="text-gray-500 text-xs mt-0.5">Deshabilitado {fmtDate(m.disabled_at)}</p>
+                )}
+              </div>
+              <button
+                onClick={() => toggle(code, enabled)}
+                disabled={isSaving}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                  enabled
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'
+                    : 'bg-gray-700/50 border-gray-600/50 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                {isSaving ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : enabled ? (
+                  <ToggleRight className="w-3.5 h-3.5" />
+                ) : (
+                  <ToggleLeft className="w-3.5 h-3.5" />
+                )}
+                {enabled ? 'Activo' : 'Inactivo'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminTenantDetalle() {
   const { id } = useParams()
   const [data, setData] = useState(null)
@@ -1150,9 +1262,12 @@ export default function AdminTenantDetalle() {
         <p className="text-xs text-gray-600 -mt-2">Abre consola (F12) → pestaña Console para ver errores. Verifica que las migraciones se hayan ejecutado.</p>
       ) : null}
 
-      {/* Main grid: left = tenant info, right = subscriptions + provisioning log stacked */}
+      {/* Main grid: left = tenant info + modules, right = subscriptions + provisioning log stacked */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-stretch">
-        <EditInfoCard tenant={tenant} activeSub={active_subscription} onSaved={(msg) => { showToast(msg); load() }} />
+        <div className="flex flex-col gap-5 h-full">
+          <EditInfoCard tenant={tenant} activeSub={active_subscription} onSaved={(msg) => { showToast(msg); load() }} />
+          <ModulesPanel tenantId={id} onSaved={showToast} />
+        </div>
 
         <div className="flex flex-col gap-5 h-full">
           <SubscriptionCard

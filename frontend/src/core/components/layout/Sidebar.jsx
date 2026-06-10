@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import {
   LayoutDashboard,
@@ -70,7 +70,7 @@ const getAdminNav = (t) => [
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
-  const { user, canView } = useAuthStore()
+  const { user, canView, isModuleEnabled } = useAuthStore()
   const { t } = useI18nStore()
   const tourActive = useTourStore((s) => s.active)
   const highlightedSidebarItem = useTourStore((s) => s.highlightedSidebarItem)
@@ -90,35 +90,45 @@ export default function Sidebar() {
 
   const roleName = user?.rol_nombre || user?.rol || ''
 
+  const { pathname } = useLocation()
+
   const renderLink = (item) => {
     if (!canView(item.permission)) return null
     const Icon = item.icon
     const isTourHighlighted = tourActive && highlightedSidebarItem === item.tourId
+    const lp = pathname.toLowerCase()
+    const forceActive = item.path === '/surtido'
+      ? (lp === '/surtido' || lp.startsWith('/surtido/ordenes'))
+      : null
     return (
       <NavLink
         key={item.path}
         to={item.path}
         end={item.path === '/dropscan' || item.path === '/surtido'}
         data-tour={item.tourId}
-        className={({ isActive }) =>
-          `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-            isActive
+        className={({ isActive }) => {
+          const active = forceActive !== null ? forceActive : isActive
+          return `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+            active
               ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
               : 'text-blue-200/70 hover:text-white hover:bg-white/10'
           }`
-        }
+        }}
       >
-        {({ isActive }) => (
-          <>
-            <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-blue-400' : ''}`} />
-            {!collapsed && <span className="truncate flex-1">{item.label}</span>}
-            {isTourHighlighted && (
-              <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-white flex-shrink-0 tour-nav-arrow" aria-hidden="true">
-                <path d="M8 5l8 7-8 7V5z" />
-              </svg>
-            )}
-          </>
-        )}
+        {({ isActive }) => {
+          const active = forceActive !== null ? forceActive : isActive
+          return (
+            <>
+              <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-blue-400' : ''}`} />
+              {!collapsed && <span className="truncate flex-1">{item.label}</span>}
+              {isTourHighlighted && (
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-white flex-shrink-0 tour-nav-arrow" aria-hidden="true">
+                  <path d="M8 5l8 7-8 7V5z" />
+                </svg>
+              )}
+            </>
+          )
+        }}
       </NavLink>
     )
   }
@@ -152,6 +162,7 @@ export default function Sidebar() {
       {/* Nav */}
       <nav data-tour="sidebar" className="flex-1 p-2 space-y-0.5 overflow-y-auto scrollbar-thin sidebar-scrollbar">
         {navItems.map((group) => {
+          if (!isModuleEnabled(group.id)) return null
           const visibleItems = group.items.filter(item => canView(item.permission))
           if (visibleItems.length === 0) return null
           return (

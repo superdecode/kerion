@@ -244,6 +244,13 @@ export default function AdminTenants() {
   )
 }
 
+const ALL_MODULES = [
+  { code: 'dropscan', label: 'DropScan (escaneo de guias)' },
+  { code: 'surtido', label: 'Surtido (ordenes de picking)' },
+  { code: 'inventario', label: 'Inventario (conteos)' },
+  { code: 'devoluciones', label: 'Devoluciones (DEV)' },
+]
+
 function CreateTenantModal({ onClose, onSuccess }) {
   const [form, setForm] = useState({
     legal_name: '',
@@ -254,6 +261,7 @@ function CreateTenantModal({ onClose, onSuccess }) {
     plan_id: '',
     subscription_type: 'monthly',
     zona_horaria: 'America/Mexico_City',
+    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones'],
   })
   const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(false)
@@ -439,6 +447,28 @@ function CreateTenantModal({ onClose, onSuccess }) {
                 <option key={tz.value} value={tz.value}>{tz.label}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Modulos habilitados</label>
+            <div className="space-y-2">
+              {ALL_MODULES.map(m => (
+                <label key={m.code} className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={form.modules.includes(m.code)}
+                    onChange={e => setForm(f => ({
+                      ...f,
+                      modules: e.target.checked
+                        ? [...f.modules, m.code]
+                        : f.modules.filter(c => c !== m.code),
+                    }))}
+                    className="w-4 h-4 rounded accent-emerald-500"
+                  />
+                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">{m.label}</span>
+                </label>
+              ))}
+            </div>
           </div>
         </div>
 

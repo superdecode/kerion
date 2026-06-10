@@ -10,9 +10,15 @@ const MODULE_ROUTES = [
   { module: 'dropscan.reportes', path: '/DropScan/reportes' },
   { module: 'dropscan.configuracion', path: '/DropScan/configuracion' },
   { module: 'fep.folios', path: '/DropScan/folios' },
-  { module: 'inventario.escaneo', path: '/Inventory/escaneo' },
-  { module: 'inventario.registros', path: '/Inventory/registros' },
-  { module: 'sistema.wms', path: '/wms' },
+  { module: 'inventario.escaneo', path: '/Inventario/escaneo' },
+  { module: 'inventario.registros', path: '/Inventario/registros' },
+  { module: 'devoluciones.entradas', path: '/Devoluciones/entradas' },
+  { module: 'devoluciones.inventario', path: '/Devoluciones/inventario' },
+  { module: 'devoluciones.salidas', path: '/Devoluciones/salidas' },
+  { module: 'surtido.ordenes', path: '/surtido' },
+  { module: 'surtido.validacion', path: '/Surtido/validacion' },
+  { module: 'surtido.registros', path: '/Surtido/registros' },
+  { module: 'sistema.wms', path: '/wmshub' },
   { module: 'global.administracion', path: '/admin' },
 ]
 

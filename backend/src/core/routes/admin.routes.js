@@ -416,7 +416,10 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
 
 // POST /api/admin/tenants — create tenant directly without signup flow
 router.post('/tenants', authenticateAdmin, async (req, res) => {
-  const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at, zona_horaria } = req.body
+  const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at, zona_horaria, modules: reqModules } = req.body
+  const modulesToSeed = Array.isArray(reqModules) && reqModules.length > 0
+    ? reqModules.filter(m => ['dropscan', 'surtido', 'inventario', 'devoluciones'].includes(m))
+    : ['dropscan', 'surtido', 'inventario', 'devoluciones']
   if (!legal_name || !contact_name || !contact_email || !admin_password) {
     return res.status(400).json({ error: 'legal_name, contact_name, contact_email y admin_password son requeridos' })
   }
@@ -552,6 +555,17 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       )
     }
     console.log('[admin/tenants POST] step 5 ok')
+
+    // 5.5. Seed tenant_modules
+    for (const code of modulesToSeed) {
+      await client.query(
+        `INSERT INTO tenant_modules (tenant_id, module_code, enabled, enabled_at, enabled_by, notes)
+         VALUES ($1, $2, true, now(), 'admin_api', 'seeded at tenant creation')
+         ON CONFLICT (tenant_id, module_code) DO NOTHING`,
+        [tenant.id, code]
+      )
+    }
+    console.log('[admin/tenants POST] step 5.5 ok: tenant_modules seeded')
 
     // 6. Log provisioning
     console.log('[admin/tenants POST] step 6: provisioning log')
@@ -1195,6 +1209,55 @@ router.delete('/notifications/:id', authenticateAdmin, async (req, res) => {
     await query(`DELETE FROM notifications_outbox WHERE id = $1`, [req.params.id])
     res.json({ success: true })
   } catch (err) {
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// GET /api/admin/tenants/:id/modules
+router.get('/tenants/:id/modules', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT module_code, enabled, enabled_at, enabled_by, disabled_at, disabled_by, notes, updated_at
+       FROM tenant_modules WHERE tenant_id = $1 ORDER BY module_code`,
+      [req.params.id]
+    )
+    res.json({ success: true, data: result.rows })
+  } catch (err) {
+    console.error('[admin/tenants/:id/modules GET]', err)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// PUT /api/admin/tenants/:id/modules/:code — toggle a single module
+router.put('/tenants/:id/modules/:code', authenticateAdmin, async (req, res) => {
+  const { enabled, notes } = req.body
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'enabled (boolean) es requerido' })
+  }
+  try {
+    await query(
+      `INSERT INTO tenant_modules (tenant_id, module_code, enabled, enabled_at, enabled_by, disabled_at, disabled_by, notes)
+       VALUES ($1, $2, $3,
+         CASE WHEN $3 THEN now() ELSE NULL END,
+         CASE WHEN $3 THEN $4 ELSE NULL END,
+         CASE WHEN $3 THEN NULL ELSE now() END,
+         CASE WHEN $3 THEN NULL ELSE $4 END,
+         $5)
+       ON CONFLICT (tenant_id, module_code) DO UPDATE SET
+         enabled     = EXCLUDED.enabled,
+         enabled_at  = CASE WHEN EXCLUDED.enabled AND NOT tenant_modules.enabled THEN now() ELSE tenant_modules.enabled_at END,
+         enabled_by  = CASE WHEN EXCLUDED.enabled AND NOT tenant_modules.enabled THEN $4 ELSE tenant_modules.enabled_by END,
+         disabled_at = CASE WHEN NOT EXCLUDED.enabled AND tenant_modules.enabled THEN now() ELSE tenant_modules.disabled_at END,
+         disabled_by = CASE WHEN NOT EXCLUDED.enabled AND tenant_modules.enabled THEN $4 ELSE tenant_modules.disabled_by END,
+         notes       = COALESCE($5, tenant_modules.notes),
+         updated_at  = now()`,
+      [req.params.id, req.params.code, enabled, String(req.admin.id), notes || null]
+    )
+    adminAudit(req.admin.id, enabled ? 'ENABLE_MODULE' : 'DISABLE_MODULE', 'tenant_module',
+      req.params.id, { module_code: req.params.code })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[admin/tenants/:id/modules/:code PUT]', err)
     res.status(500).json({ error: 'Error interno' })
   }
 })
