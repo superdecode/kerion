@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -695,7 +696,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
               onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
               autoComplete="off"
             />
-            {suggestions.length > 0 && dropdownStyle && (
+            {suggestions.length > 0 && dropdownStyle && createPortal(
               <div style={dropdownStyle} className="max-h-44 overflow-y-auto rounded-2xl border border-accent-200 bg-white p-1.5 shadow-depth">
                 {suggestions.map(u => (
                   <button
@@ -710,7 +711,8 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
                     )}
                   </button>
                 ))}
-              </div>
+              </div>,
+              document.body
             )}
           </div>
           <button className="btn-primary px-4 py-3.5 rounded-2xl" onClick={handleConfirm} disabled={!inputValue.trim()}>
@@ -1037,23 +1039,31 @@ function ClasificacionPanel({
   const [inputValue, setInputValue] = useState('')
   const [notFound, setNotFound] = useState(false)
   const [notFoundCode, setNotFoundCode] = useState('')
-  const [openUpward, setOpenUpward] = useState(true)
+  const [inlineDropStyle, setInlineDropStyle] = useState(null)
   const inputRef = useRef(null)
+  const inputWrapperRef = useRef(null)
   const footerRef = useRef(null)
 
   useEffect(() => {
     if (activeInputGroup) {
-      setTimeout(() => {
-        inputRef.current?.focus()
-        const footerRect = footerRef.current?.getBoundingClientRect()
-        if (footerRect) {
-          const spaceAbove = footerRect.top
-          const spaceBelow = window.innerHeight - footerRect.bottom
-          setOpenUpward(spaceAbove >= 220 || spaceAbove > spaceBelow)
-        }
-      }, 50)
+      setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [activeInputGroup])
+
+  useEffect(() => {
+    if (!activeInputGroup || !inputValue.trim() || notFound || !inputWrapperRef.current) {
+      setInlineDropStyle(null)
+      return
+    }
+    const rect = inputWrapperRef.current.getBoundingClientRect()
+    const dropH = 160
+    const spaceBelow = window.innerHeight - rect.bottom
+    const openUp = spaceBelow < dropH && rect.top > dropH
+    setInlineDropStyle(openUp
+      ? { position: 'fixed', bottom: window.innerHeight - rect.top + 4, left: rect.left, width: rect.width, zIndex: 99999 }
+      : { position: 'fixed', top: rect.bottom + 4, left: rect.left, width: rect.width, zIndex: 99999 }
+    )
+  }, [activeInputGroup, inputValue, notFound])
 
   const grouped = { ok: [], blocked: [], nowms: [] }
   items.forEach((item, idx) => {
@@ -1074,6 +1084,7 @@ function ClasificacionPanel({
     setInputValue('')
     setNotFound(false)
     setNotFoundCode('')
+    setInlineDropStyle(null)
   }
 
   function confirmInput(g) {
@@ -1172,7 +1183,7 @@ function ClasificacionPanel({
               {isInputActive ? (
                 <div className="px-2 py-2 space-y-1">
                   <div className="flex items-center gap-1">
-                    <div className="relative flex-1">
+                    <div ref={inputWrapperRef} className="relative flex-1">
                       <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-warm-300" />
                       <input
                         ref={inputRef}
@@ -1201,27 +1212,27 @@ function ClasificacionPanel({
                       <X size={12} />
                     </button>
                   </div>
-                  {suggestions.length > 0 && (
-                    <div className={`absolute left-2 right-2 z-[100] overflow-hidden rounded-xl border border-accent-200 bg-white shadow-depth ${
-                      openUpward ? 'bottom-full mb-2' : 'top-full mt-2'
-                    }`}>
+                  {suggestions.length > 0 && inlineDropStyle && createPortal(
+                    <div style={inlineDropStyle} className="overflow-hidden rounded-xl border border-accent-200 bg-white shadow-depth">
                       <div className="max-h-40 overflow-y-auto py-1">
-                      {suggestions.map(u => (
-                        <button key={u.id}
-                          className="w-full text-left px-2.5 py-1.5 hover:bg-accent-50 transition-colors text-[10px] flex items-center gap-1.5"
-                          onClick={() => {
-                            onGroupUbicacionChange(g, { id: u.id, codigo: u.codigo, nombre: u.nombre })
-                            closeInput()
-                          }}>
-                          <MapPin size={8} className="text-accent-400 shrink-0" />
-                          <span className="font-mono font-semibold text-accent-700">{u.codigo}</span>
-                          {u.nombre && u.nombre !== u.codigo && (
-                            <span className="text-warm-400 truncate">{u.nombre}</span>
-                          )}
-                        </button>
-                      ))}
+                        {suggestions.map(u => (
+                          <button key={u.id}
+                            className="w-full text-left px-2.5 py-1.5 hover:bg-accent-50 transition-colors text-[10px] flex items-center gap-1.5"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => {
+                              onGroupUbicacionChange(g, { id: u.id, codigo: u.codigo, nombre: u.nombre })
+                              closeInput()
+                            }}>
+                            <MapPin size={8} className="text-accent-400 shrink-0" />
+                            <span className="font-mono font-semibold text-accent-700">{u.codigo}</span>
+                            {u.nombre && u.nombre !== u.codigo && (
+                              <span className="text-warm-400 truncate">{u.nombre}</span>
+                            )}
+                          </button>
+                        ))}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                   {notFound && (
                     <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-warning-50 border border-warning-200">
