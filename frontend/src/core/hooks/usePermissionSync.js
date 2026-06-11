@@ -66,16 +66,25 @@ export function usePermissionSync() {
     }
   }, [isAuthenticated, refreshUser])
 
-  // Check if user still has access to current page
+  // Check if user still has access to current page (permission + module enablement)
   useEffect(() => {
     if (!isAuthenticated) return
+
+    const { isModuleEnabled } = useAuthStore.getState()
 
     // Find the module for current path
     const currentRoute = MODULE_ROUTES.find(r => location.pathname === r.path ||
                                                (r.path !== '/' && location.pathname.startsWith(r.path)))
 
-    if (currentRoute && !canView(currentRoute.module)) {
-      // User lost access to this page, redirect to allowed route
+    if (!currentRoute) return
+
+    // Check both permission and module enablement
+    const moduleCode = currentRoute.module.split('.')[0]
+    const hasPermission = canView(currentRoute.module)
+    const isModuleActive = ['admin', 'super-admin'].includes(moduleCode) || isModuleEnabled(moduleCode)
+
+    if (!hasPermission || !isModuleActive) {
+      // User lost access/module disabled, redirect to allowed route
       const allowedPath = findAllowedRoute(canView)
       navigate(allowedPath, { replace: true })
     }
