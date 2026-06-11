@@ -1417,8 +1417,9 @@ router.get('/inventory-code-search',
 )
 
 // POST /api/wmshub/box-locations — batch lookup of box locations from inv_scans
-// Used by surtido ubicaciones print: given a list of box codes, returns the most
-// recent cell_no for each code (scanned_code / normalized_code / code2 match).
+// Primary source: Google Sheets inventory (handled client-side).
+// This endpoint is a secondary DB fallback using cell_no stored per scan from WMS.
+// Search order: scanned_code → normalized_code → code2.
 router.post('/box-locations',
   authenticateToken, loadFullUser,
   requireAnyPermission([
@@ -1438,10 +1439,10 @@ router.post('/box-locations',
       // Limit to 2000 codes per call
       const batch = normalized.slice(0, 2000)
 
-      const result = await req.tQuery(
+      const byScannedCode = await req.tQuery(
         `SELECT DISTINCT ON (LOWER(sc.scanned_code))
                 LOWER(sc.scanned_code) AS code,
-                sc.cell_no,
+                sc.cell_no AS location,
                 sc.scanned_at
            FROM inv_scans sc
            JOIN inv_sessions sess ON sess.id = sc.session_id
@@ -1453,16 +1454,15 @@ router.post('/box-locations',
         [req.tenantId, batch]
       )
 
-      // Also try normalized_code and code2 for any codes not found yet
-      const foundCodes = new Set(result.rows.map(r => r.code))
-      const remaining = batch.filter(c => !foundCodes.has(c))
+      const foundCodes = new Set(byScannedCode.rows.map(r => r.code))
+      const rem1 = batch.filter(c => !foundCodes.has(c))
 
-      let extra = { rows: [] }
-      if (remaining.length > 0) {
-        extra = await req.tQuery(
+      let byNormalizedCode = { rows: [] }
+      if (rem1.length > 0) {
+        byNormalizedCode = await req.tQuery(
           `SELECT DISTINCT ON (LOWER(sc.normalized_code))
                   LOWER(sc.normalized_code) AS code,
-                  sc.cell_no,
+                  sc.cell_no AS location,
                   sc.scanned_at
              FROM inv_scans sc
              JOIN inv_sessions sess ON sess.id = sc.session_id
@@ -1471,14 +1471,36 @@ router.post('/box-locations',
               AND sc.cell_no <> ''
               AND LOWER(sc.normalized_code) = ANY($2::text[])
             ORDER BY LOWER(sc.normalized_code), sc.scanned_at DESC`,
-          [req.tenantId, remaining]
+          [req.tenantId, rem1]
+        )
+      }
+
+      const foundAfterNorm = new Set([...foundCodes, ...byNormalizedCode.rows.map(r => r.code)])
+      const rem2 = batch.filter(c => !foundAfterNorm.has(c))
+
+      let byCode2 = { rows: [] }
+      if (rem2.length > 0) {
+        byCode2 = await req.tQuery(
+          `SELECT DISTINCT ON (LOWER(sc.code2))
+                  LOWER(sc.code2) AS code,
+                  sc.cell_no AS location,
+                  sc.scanned_at
+             FROM inv_scans sc
+             JOIN inv_sessions sess ON sess.id = sc.session_id
+            WHERE sess.tenant_id = $1
+              AND sc.code2 IS NOT NULL
+              AND sc.cell_no IS NOT NULL
+              AND sc.cell_no <> ''
+              AND LOWER(sc.code2) = ANY($2::text[])
+            ORDER BY LOWER(sc.code2), sc.scanned_at DESC`,
+          [req.tenantId, rem2]
         )
       }
 
       const locationMap = {}
-      for (const row of [...result.rows, ...extra.rows]) {
-        if (row.code && row.cell_no && !locationMap[row.code]) {
-          locationMap[row.code] = row.cell_no
+      for (const row of [...byScannedCode.rows, ...byNormalizedCode.rows, ...byCode2.rows]) {
+        if (row.code && row.location && !locationMap[row.code]) {
+          locationMap[row.code] = row.location
         }
       }
 

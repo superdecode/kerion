@@ -1637,39 +1637,21 @@ export default function Ordenes() {
         return
       }
 
-      // Step 3: build location map from inventory sheet
-      // Keys are normalised (normalizeCodeFast) — same as scan module — to match correctly
+      // Step 3: build location map from inventory sheet (same codes as outbound, direct match)
       const stockRecords = stockResult?.data?.records || []
       const stockMap = {}
       stockRecords.forEach(item => {
         const loc = (item.cellNo || '').trim()
         if (!loc) return
-        const barcodeKey = normalizeCodeFast(item.customizeBarcode || '')
-        const skuKey = normalizeCodeFast(item.customizeCode || '')
-        if (barcodeKey) stockMap[barcodeKey] = loc
-        if (skuKey && !stockMap[skuKey]) stockMap[skuKey] = loc
+        const k = normalizeCodeFast(item.customizeBarcode || '')
+        if (k) stockMap[k] = loc
       })
 
-      // Step 4: for codes not found in Google Sheets, try inv_scans DB as fallback
-      const missingKeys = Object.keys(codeToOrders).filter(k => !stockMap[k])
-      if (missingKeys.length > 0) {
-        try {
-          const locRes = await api.post('/wmshub/box-locations', {
-            codes: missingKeys.map(k => rawCodeMap[k] || k),
-          })
-          const dbMap = locRes?.data?.data || {}
-          Object.entries(dbMap).forEach(([code, loc]) => {
-            if (loc) stockMap[normalizeCodeFast(code)] = loc
-          })
-        } catch { /* non-fatal */ }
-      }
-
-      // Step 5: consolidate per-location groups
+      // Step 4: consolidate per-location groups
       const grupos = {}
       let totalCajas = 0
       for (const [key, orders] of Object.entries(codeToOrders)) {
-        const rawLoc = stockMap[key]
-        const location = rawLoc ? rawLoc : 'SIN UBICACIÓN'
+        const location = stockMap[key] || 'SIN UBICACIÓN'
         if (!grupos[location]) grupos[location] = { location, cantCajas: 0, orders: new Set() }
         grupos[location].cantCajas += orders.size
         for (const obc of orders) grupos[location].orders.add(obc)
