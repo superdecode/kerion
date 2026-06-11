@@ -660,6 +660,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
 export default function SurtidoRegistros() {
   const { t } = useI18nStore()
   const { hasPermission } = useAuthStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -699,6 +700,7 @@ export default function SurtidoRegistros() {
     }),
     staleTime: 30000,
     retry: 0,
+    enabled: backendOnline,
   })
 
   const records = getRecords(data)
@@ -1066,6 +1068,12 @@ export default function SurtidoRegistros() {
                                   ? <Check size={13} className="text-success-600" />
                                   : <Copy size={13} />}
                               </button>
+                            )}
+                            {(r.tiene_faltantes || r.tiene_anormalidades) && (
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${r.tiene_anormalidades ? 'bg-warning-500' : 'bg-danger-500'}`}
+                                title={r.tiene_anormalidades ? 'Con anormalidades' : 'Con faltantes'}
+                              />
                             )}
                           </div>
                         </td>

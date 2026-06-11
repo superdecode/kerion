@@ -58,6 +58,7 @@ export default function Entradas() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const toast = useToastStore()
   const { t } = useI18nStore()
   const { data: moduleUsage } = useModuleUsage()
@@ -88,6 +89,7 @@ export default function Entradas() {
       fecha_desde: fechaDesde,
       fecha_hasta: fechaHasta,
     }),
+    enabled: backendOnline,
   })
 
   const createMutation = useMutation({

@@ -77,10 +77,12 @@ function EmpresasTab({ canEdit, canToggle, canRemove }) {
   const [editingEmpresa, setEditingEmpresa] = useState(null)
   const queryClient = useQueryClient()
   const toast = useToastStore.getState()
+  const backendOnline = useAuthStore(s => s.backendOnline)
 
   const { data: empresasRaw, isLoading, isError } = useQuery({
     queryKey: ['dropscan-empresas'],
-    queryFn: () => configService.getEmpresas()
+    queryFn: () => configService.getEmpresas(),
+    enabled: backendOnline,
   })
   const empresas = Array.isArray(empresasRaw) ? empresasRaw : empresasRaw?.items || empresasRaw?.empresas || []
 
@@ -435,10 +437,12 @@ function CanalesTab({ canEdit, canToggle, canRemove }) {
   const [editingCanal, setEditingCanal] = useState(null)
   const queryClient = useQueryClient()
   const toast = useToastStore.getState()
+  const backendOnline = useAuthStore(s => s.backendOnline)
 
   const { data: canalesRaw, isLoading, isError } = useQuery({
     queryKey: ['dropscan-canales'],
-    queryFn: () => configService.getCanales()
+    queryFn: () => configService.getCanales(),
+    enabled: backendOnline,
   })
   const canales = Array.isArray(canalesRaw) ? canalesRaw : canalesRaw?.items || canalesRaw?.canales || []
 
@@ -699,7 +703,8 @@ function CanalModal({ canal, onClose, onSubmit, isLoading }) {
 
   const { data: empresasRaw } = useQuery({
     queryKey: ['dropscan-empresas'],
-    queryFn: () => configService.getEmpresas()
+    queryFn: () => configService.getEmpresas(),
+    enabled: backendOnline,
   })
   const empresas = Array.isArray(empresasRaw) ? empresasRaw : empresasRaw?.items || empresasRaw?.empresas || []
 
@@ -854,6 +859,7 @@ function ParametrosTab({ canEdit }) {
   const [unidadPeso, setUnidadPeso] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const toast = useToastStore.getState()
+  const backendOnline = useAuthStore(s => s.backendOnline)
 
   const { data: parametros, isLoading } = useQuery({
     queryKey: ['dropscan-parametros'],
@@ -861,6 +867,7 @@ function ParametrosTab({ canEdit }) {
       const { data } = await api.get('/DropScan/config/parametros')
       return data
     },
+    enabled: backendOnline,
   })
 
   useEffect(() => {
@@ -1022,10 +1029,12 @@ function OperadoresTab({ canEdit, canToggle, canRemove }) {
   const queryClient = useQueryClient()
   const toast = useToastStore.getState()
   const { t } = useI18nStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
 
   const { data: operadoresRaw, isLoading } = useQuery({
     queryKey: ['dropscan-operadores'],
-    queryFn: () => operadoresService.getOperadores()
+    queryFn: () => operadoresService.getOperadores(),
+    enabled: backendOnline,
   })
   const operadores = Array.isArray(operadoresRaw) ? operadoresRaw : []
 

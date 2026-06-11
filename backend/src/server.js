@@ -44,6 +44,12 @@ import devUtilsRoutes from './modules/devoluciones/routes/utils.routes.js'
 // WMS Hub module routes
 import wmsHubRoutes from './modules/wms/routes/wms.routes.js'
 
+// Anormalidades module routes
+import anormRegistroRoutes from './modules/anormalidades/routes/registro.routes.js'
+import anormDashboardRoutes from './modules/anormalidades/routes/dashboard.routes.js'
+import anormMejorasRoutes from './modules/anormalidades/routes/mejoras.routes.js'
+import anormConfigRoutes from './modules/anormalidades/routes/config.routes.js'
+
 const app = express()
 
 function isAllowedDevOrigin(origin) {
@@ -161,6 +167,12 @@ app.use('/api/devoluciones', tenantContext, tenantDB, moduleGuard('devoluciones'
 
 // WMS Hub module (Surtido) — require surtido module
 app.use('/api/wmshub', tenantContext, tenantDB, moduleGuard('surtido'), wmsHubRoutes)
+
+// Anormalidades module
+app.use('/api/anormalidades/dashboard', tenantContext, tenantDB, moduleGuard('anormalidades'), anormDashboardRoutes)
+app.use('/api/anormalidades/mejoras', tenantContext, tenantDB, moduleGuard('anormalidades'), anormMejorasRoutes)
+app.use('/api/anormalidades/config', tenantContext, tenantDB, moduleGuard('anormalidades'), anormConfigRoutes)
+app.use('/api/anormalidades', tenantContext, tenantDB, moduleGuard('anormalidades'), anormRegistroRoutes)
 
 // Usage summary — available to all authenticated tenants
 app.use('/api/usage', tenantContext, tenantDB, usageRoutes)

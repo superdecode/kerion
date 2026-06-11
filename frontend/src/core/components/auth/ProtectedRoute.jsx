@@ -22,6 +22,7 @@ const PERM_TO_MODULE = {
   inventory: 'inventario',
   devoluciones: 'devoluciones',
   surtido: 'surtido',
+  anormalidades: 'anormalidades',
 }
 
 export function PermissionRoute({ children, module, fallback = null }) {

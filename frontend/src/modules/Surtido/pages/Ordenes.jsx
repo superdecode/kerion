@@ -308,8 +308,9 @@ function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const [nombre, setNombre] = useState('')
+  const backendOnline = useAuthStore(s => s.backendOnline)
 
-  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 5 * 60 * 1000 })
+  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 5 * 60 * 1000, enabled: backendOnline })
   const surtidores = getRecords(data)
 
   const addMut = useMutation({
@@ -521,7 +522,8 @@ function BulkSearchModal({ isOpen, onClose, onApply, initialValue }) {
 
 function AssignModal({ isOpen, order, onClose, onAssign }) {
   const { t } = useI18nStore()
-  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 5 * 60 * 1000 })
+  const backendOnline = useAuthStore(s => s.backendOnline)
+  const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 5 * 60 * 1000, enabled: backendOnline })
   const surtidores = getRecords(data)
   const [selected, setSelected] = useState(null)
 
@@ -870,6 +872,7 @@ export default function Ordenes() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { hasPermission, user } = useAuthStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const { data: moduleUsage } = useModuleUsage()
   const canCreateValidation = hasPermission('surtido.validacion', 'crear')
   const canUpdateOrders = hasPermission('surtido.ordenes', 'actualizar')
@@ -1025,6 +1028,7 @@ export default function Ordenes() {
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 0,
+    enabled: backendOnline,
   })
 
   const { data: trackingData } = useQuery({
@@ -1033,6 +1037,7 @@ export default function Ordenes() {
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 0,
+    enabled: backendOnline,
   })
 
   const { data: surtidoresData } = useQuery({
@@ -1041,6 +1046,7 @@ export default function Ordenes() {
     staleTime: 60000,
     refetchOnWindowFocus: false,
     retry: 0,
+    enabled: backendOnline,
   })
 
   const allWmsRecords = getRecords(wmsData)
@@ -2196,7 +2202,17 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
           onClick={e => e.stopPropagation()} />
       </td>
 
-      <td className="table-cell col-code"><CopyableObc obc={obc} /></td>
+      <td className="table-cell col-code">
+        <div className="flex items-center gap-1.5">
+          <CopyableObc obc={obc} />
+          {(tracking?.tiene_faltantes || tracking?.tiene_anormalidades) && (
+            <span
+              className={`w-2 h-2 rounded-full shrink-0 ${tracking?.tiene_anormalidades ? 'bg-warning-500' : 'bg-danger-500'}`}
+              title={tracking?.tiene_anormalidades ? 'Con anormalidades' : 'Con faltantes'}
+            />
+          )}
+        </div>
+      </td>
 
       <td className="table-cell hidden xl:table-cell col-date">
         <div className="leading-none" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
@@ -2728,7 +2744,17 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                       onClick={e => e.stopPropagation()} />
                   </td>
 
-                  <td className="table-cell col-code"><CopyableObc obc={obc} /></td>
+                  <td className="table-cell col-code">
+                    <div className="flex items-center gap-1.5">
+                      <CopyableObc obc={obc} />
+                      {(tr?.tiene_faltantes || tr?.tiene_anormalidades) && (
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${tr?.tiene_anormalidades ? 'bg-warning-500' : 'bg-danger-500'}`}
+                          title={tr?.tiene_anormalidades ? 'Con anormalidades' : 'Con faltantes'}
+                        />
+                      )}
+                    </div>
+                  </td>
                   <td className="table-cell hidden lg:table-cell col-date">
                     <div className="leading-none" title={wms?.outboundTime ? formatDateTimeTz(wms.outboundTime) : '—'}>
                       <span className="block text-xs text-warm-700">{wms?.outboundTime ? formatDateTz(wms.outboundTime) : '—'}</span>

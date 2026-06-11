@@ -163,6 +163,7 @@ export default function Escaneo() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { canDelete, canWrite, hasPermission, user } = useAuthStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const toast = useToastStore.getState()
   const { t } = useI18nStore()
   const { isAuthenticated: operadorAuthed, getSessionPayload, clearOperador } = useOperadorStore()
@@ -220,9 +221,9 @@ export default function Escaneo() {
     } catch { toast.error(t('toast.error')) }
   }
 
-  const { data: empresasData, isSuccess: empresasLoaded } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas })
-  const { data: canalesData, isSuccess: canalesLoaded } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales })
-  const { data: parametrosData } = useQuery({ queryKey: ['dropscan-parametros'], queryFn: ds.getParametros })
+  const { data: empresasData, isSuccess: empresasLoaded } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas, enabled: backendOnline })
+  const { data: canalesData, isSuccess: canalesLoaded } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales, enabled: backendOnline })
+  const { data: parametrosData } = useQuery({ queryKey: ['dropscan-parametros'], queryFn: ds.getParametros, enabled: backendOnline })
   const gpt = parametrosData?.guias_por_tarima || 100
   const pesoHabilitado = parametrosData?.peso_habilitado === true
   const unidadPeso = parametrosData?.unidad_peso || 'kg'
@@ -243,7 +244,8 @@ export default function Escaneo() {
     queryKey: ['dropscan-guide-usage'],
     queryFn: ds.getGuideUsage,
     staleTime: 60_000,
-    refetchInterval: 60_000,
+    refetchInterval: backendOnline ? 60_000 : false,
+    enabled: backendOnline,
   })
   const empresas = (Array.isArray(empresasData) ? empresasData : empresasData?.items || empresasData?.empresas || []).filter(e => e.activo !== false)
   const allCanales = Array.isArray(canalesData) ? canalesData : canalesData?.items || canalesData?.canales || []
@@ -280,7 +282,7 @@ export default function Escaneo() {
   const { data: todayHistoryData } = useQuery({
     queryKey: ['dropscan-today-history', todayStr],
     queryFn: () => ds.getTarimas({ fecha_inicio: todayStr, fecha_fin: todayStr }),
-    enabled: tabs.length === 0,
+    enabled: backendOnline && tabs.length === 0,
   })
   const todayTarimasDup = todayHistoryData?.items || todayHistoryData?.tarimas || []
   const todayTarimas = todayTarimasDup.filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i)
@@ -289,8 +291,8 @@ export default function Escaneo() {
   const { data: panelTodayData } = useQuery({
     queryKey: ['dropscan-panel-today', todayStr],
     queryFn: () => ds.getTarimas({ fecha_inicio: todayStr, fecha_fin: todayStr, limit: 100 }),
-    enabled: tabs.length > 0,
-    refetchInterval: 15000,
+    enabled: backendOnline && tabs.length > 0,
+    refetchInterval: backendOnline ? 15000 : false,
   })
 
   /* panel detail query for active tab */
@@ -299,7 +301,7 @@ export default function Escaneo() {
   const { data: panelDetailData } = useQuery({
     queryKey: ['dropscan-tarima-detail', panelDetailId],
     queryFn: () => ds.getTarimaDetail(panelDetailId),
-    enabled: !!panelDetailId,
+    enabled: backendOnline && !!panelDetailId,
   })
 
   /* restore active backend sessions on mount (multi-tab) */

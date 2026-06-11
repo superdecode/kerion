@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { useAuthStore } from '../../../core/stores/authStore'
 import * as ds from '../services/dropscanService'
 import { getToday, subtractDays } from '../../../core/utils/dateFormat'
 import {
@@ -66,6 +67,7 @@ function getDateRange(preset) {
 
 export default function DropScanDashboard() {
   const { t } = useI18nStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const DATE_PRESETS = getDatePresets(t)
   const [activePreset, setActivePreset] = useState('today')
   const [showCustom, setShowCustom] = useState(false)
@@ -105,7 +107,8 @@ export default function DropScanDashboard() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['dropscan-dashboard', dateRange],
     queryFn: () => ds.getDashboard(dateRange.from, dateRange.to),
-    refetchInterval: 30000,
+    refetchInterval: backendOnline ? 30000 : false,
+    enabled: backendOnline,
   })
 
   if (isLoading) {

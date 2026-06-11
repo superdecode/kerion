@@ -18,6 +18,9 @@ import {
   PackageMinus,
   Package,
   Wifi,
+  AlertTriangle,
+  TrendingUp,
+  Target,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
@@ -59,6 +62,16 @@ const getNavItems = (t) => [
       { path: '/Surtido/validacion', tourId: 'nav-sur-validacion', label: t('nav.sur.validacion'),  icon: BadgeCheck,  permission: 'surtido.validacion' },
       { path: '/surtido',            tourId: 'nav-sur-ordenes',    label: t('nav.sur.ordenes'),     icon: FileText,    permission: 'surtido.ordenes' },
       { path: '/Surtido/registros',  tourId: 'nav-sur-registros',  label: t('nav.sur.registros'),   icon: History,     permission: 'surtido.registros' },
+    ],
+  },
+  {
+    id: 'anormalidades',
+    label: t('nav.anormalidades'),
+    items: [
+      { path: '/Anormalidades/dashboard',  tourId: 'nav-anorm-dashboard',  label: t('nav.anorm.dashboard'),  icon: LayoutDashboard, permission: 'anormalidades.dashboard' },
+      { path: '/Anormalidades/registro',   tourId: 'nav-anorm-registro',   label: t('nav.anorm.registro'),   icon: AlertTriangle, permission: 'anormalidades.registro' },
+      { path: '/Anormalidades/mejoras',    tourId: 'nav-anorm-mejoras',    label: t('nav.anorm.mejoras'),    icon: Target,        permission: 'anormalidades.mejoras' },
+      { path: '/Anormalidades/configuracion', tourId: 'nav-anorm-config',  label: t('nav.configuration'),    icon: Settings,      permission: 'anormalidades.configuracion' },
     ],
   },
 ]

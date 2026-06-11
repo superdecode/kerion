@@ -168,6 +168,30 @@ async function refreshPickSessionTotals(req, sessionId) {
   )
 }
 
+const BOX_STATUS_TRANSITIONS = {
+  pendiente:   new Set(['faltante', 'anormalidad']),
+  validada:    new Set([]),
+  faltante:    new Set(['pendiente', 'anormalidad']),
+  anormalidad: new Set(['pendiente', 'faltante']),
+}
+
+async function refreshOrderFlags(req, obc) {
+  await req.tQuery(
+    `UPDATE pick_order_tracking
+     SET tiene_faltantes = EXISTS(
+           SELECT 1 FROM pick_box_status
+           WHERE tenant_id = $1 AND outbound_order_no = $2 AND estado = 'faltante'
+         ),
+         tiene_anormalidades = EXISTS(
+           SELECT 1 FROM pick_box_status
+           WHERE tenant_id = $1 AND outbound_order_no = $2 AND estado = 'anormalidad'
+         ),
+         updated_at = now()
+     WHERE tenant_id = $1 AND outbound_order_no = $2`,
+    [req.tenantId, obc]
+  )
+}
+
 async function refreshInventorySessionTotals(req, sessionId) {
   await req.tQuery(
     `UPDATE inv_sessions s
@@ -453,9 +477,13 @@ router.get('/scan-sessions',
       const where = conditions.join(' AND ')
       const [sessionsRes, countRes] = await Promise.all([
         req.tQuery(
-          `SELECT s.*, u.nombre_completo as operator_nombre
+          `SELECT s.*, u.nombre_completo as operator_nombre,
+                  COALESCE(ot.tiene_faltantes, false)     AS tiene_faltantes,
+                  COALESCE(ot.tiene_anormalidades, false) AS tiene_anormalidades
            FROM pick_sessions s
            LEFT JOIN usuarios u ON u.id = s.operator_id
+           LEFT JOIN pick_order_tracking ot
+             ON ot.tenant_id = s.tenant_id AND ot.outbound_order_no = s.outbound_order_no
            WHERE ${where}
            ORDER BY s.started_at DESC
            LIMIT $${p} OFFSET $${p + 1}`,
@@ -652,13 +680,14 @@ router.post('/scan-event',
       }
 
       const sessionCheck = await req.tQuery(
-        'SELECT id, operator_id FROM pick_sessions WHERE id = $1 AND tenant_id = $2 AND status = $3',
+        'SELECT id, operator_id, outbound_order_no FROM pick_sessions WHERE id = $1 AND tenant_id = $2 AND status = $3',
         [session_id, req.tenantId, 'open']
       )
       if (sessionCheck.rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Sesión no encontrada o no activa' })
       }
 
+      const normCode = normalizeOptionalText(normalized_code) || String(scanned_code).trim()
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
@@ -669,7 +698,7 @@ router.post('/scan-event',
           session_id,
           req.tenantId,
           String(scanned_code).trim(),
-          normalizeOptionalText(normalized_code) || String(scanned_code).trim(),
+          normCode,
           normalizeOptionalText(matched_sku),
           normalizeOptionalText(matched_box_type),
           scan_result,
@@ -682,6 +711,18 @@ router.post('/scan-event',
       )
 
       await refreshPickSessionTotals(req, session_id)
+
+      if (scan_result === 'ok') {
+        const obc = sessionCheck.rows[0].outbound_order_no
+        if (obc && normCode) {
+          await req.tQuery(
+            `INSERT INTO pick_box_status (tenant_id, outbound_order_no, box_code, estado, updated_by)
+             VALUES ($1, $2, $3, 'validada', $4)
+             ON CONFLICT (tenant_id, outbound_order_no, box_code) DO NOTHING`,
+            [req.tenantId, obc, normCode, req.user.email || String(req.user.id)]
+          )
+        }
+      }
 
       res.status(201).json({ success: true, data: result.rows[0] })
     } catch (err) {
@@ -728,6 +769,7 @@ router.post('/scan-event/manual',
       }
 
       const reason = reasonRes.rows[0]
+      const normCodeManual = normalizeOptionalText(normalized_code) || String(scanned_code).trim()
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
@@ -738,7 +780,7 @@ router.post('/scan-event/manual',
           session_id,
           req.tenantId,
           String(scanned_code).trim(),
-          normalizeOptionalText(normalized_code) || String(scanned_code).trim(),
+          normCodeManual,
           normalizeOptionalText(matched_sku),
           normalizeOptionalText(matched_box_type),
           parsePositiveInt(quantity, 1),
@@ -748,6 +790,14 @@ router.post('/scan-event/manual',
         ]
       )
       await refreshPickSessionTotals(req, session_id)
+      if (session.outbound_order_no && normCodeManual) {
+        await req.tQuery(
+          `INSERT INTO pick_box_status (tenant_id, outbound_order_no, box_code, estado, updated_by)
+           VALUES ($1, $2, $3, 'validada', $4)
+           ON CONFLICT (tenant_id, outbound_order_no, box_code) DO NOTHING`,
+          [req.tenantId, session.outbound_order_no, normCodeManual, req.user.email || String(req.user.id)]
+        )
+      }
       res.status(201).json({ success: true, data: result.rows[0] })
     } catch (err) {
       console.error('POST wmshub/scan-event/manual error:', err.message)
@@ -2188,6 +2238,85 @@ router.delete('/ubicaciones/:id',
       }
       console.error('DELETE wmshub/ubicaciones/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error eliminando ubicacion' })
+    }
+  }
+)
+
+// ── Box status per caja ──────────────────────────────────────────────────────
+
+// GET /wmshub/box-status/:obc — returns { [boxCode]: estado }
+router.get('/box-status/:obc',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'ver' },
+  ]),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `SELECT box_code, estado FROM pick_box_status
+         WHERE tenant_id = $1 AND outbound_order_no = $2`,
+        [req.tenantId, req.params.obc]
+      )
+      const data = {}
+      for (const row of result.rows) data[row.box_code] = row.estado
+      res.json({ success: true, data })
+    } catch (err) {
+      console.error('GET box-status error:', err.message)
+      res.status(500).json({ success: false, error: 'Error obteniendo estado de cajas' })
+    }
+  }
+)
+
+// PATCH /wmshub/box-status/:obc/:code — update box estado with transition validation
+router.patch('/box-status/:obc/:code',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'actualizar'),
+  async (req, res) => {
+    try {
+      const { estado, notas } = req.body
+      const validEstados = ['pendiente', 'validada', 'faltante', 'anormalidad']
+      if (!estado || !validEstados.includes(estado)) {
+        return res.status(400).json({ success: false, error: 'Estado inválido' })
+      }
+      const obc = req.params.obc
+      const boxCode = req.params.code
+
+      const existing = await req.tQuery(
+        `SELECT estado FROM pick_box_status
+         WHERE tenant_id = $1 AND outbound_order_no = $2 AND box_code = $3`,
+        [req.tenantId, obc, boxCode]
+      )
+
+      const currentEstado = existing.rows[0]?.estado ?? 'pendiente'
+      const allowed = BOX_STATUS_TRANSITIONS[currentEstado]
+      if (!allowed || !allowed.has(estado)) {
+        return res.status(409).json({
+          success: false,
+          error: currentEstado === 'validada'
+            ? 'Las cajas validadas no pueden cambiar de estado'
+            : `Transición no permitida: ${currentEstado} → ${estado}`,
+        })
+      }
+
+      const operator = req.fullUser.nombre_completo || req.user.email || String(req.user.id)
+      const result = await req.tQuery(
+        `INSERT INTO pick_box_status (tenant_id, outbound_order_no, box_code, estado, notas, updated_by, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, now())
+         ON CONFLICT (tenant_id, outbound_order_no, box_code) DO UPDATE SET
+           estado = EXCLUDED.estado,
+           notas = EXCLUDED.notas,
+           updated_by = EXCLUDED.updated_by,
+           updated_at = now()
+         RETURNING *`,
+        [req.tenantId, obc, boxCode, estado, normalizeOptionalText(notas), operator]
+      )
+
+      await refreshOrderFlags(req, obc)
+      res.json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      console.error('PATCH box-status error:', err.message)
+      res.status(500).json({ success: false, error: 'Error actualizando estado de caja' })
     }
   }
 )

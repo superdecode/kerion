@@ -12,6 +12,11 @@ export function normalizeCode(rawCode) {
   code = code.replace(/[\x00-\x1F\x7F]/g, '')
   code = code.replace(/^GS1:|^\]C1|^\]E0|^\]d2/i, '')
 
+  // Unicode dash/slash normalization — must run before pattern matching so
+  // full-width chars (exported by WMS systems) map to ASCII separators correctly
+  code = code.replace(/／/g, '/')  // ／ full-width solidus
+  code = code.replace(/[－‒–—―]/g, '-') // －‒–—― dashes
+
   // Top priority: extract ID from JSON blob first (before char normalization)
   const jsonMatch = code.match(/"ID"\s*:\s*"(\d+[\/\-]\d+)"/i)
   if (jsonMatch?.[1]) return jsonMatch[1]
@@ -68,7 +73,9 @@ export function normalizeCode(rawCode) {
  */
 export function normalizeCodeFast(rawCode) {
   if (!rawCode) return ''
-  return String(rawCode).trim().toUpperCase().replace(/[^A-Z0-9\-\/]/g, '')
+  let code = String(rawCode).trim()
+  code = code.replace(/／/g, '/').replace(/[－‒–—―]/g, '-')
+  return code.toUpperCase().replace(/[^A-Z0-9\-\/]/g, '')
 }
 
 /**

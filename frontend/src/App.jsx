@@ -60,6 +60,12 @@ import SurtidoRegistros from './modules/Surtido/pages/Registros'
 // WMS Hub Module
 import WMSHubConfiguracion from './modules/WmsHub/pages/Configuracion'
 
+// Anormalidades Module
+import AnormRegistro from './modules/Anormalidades/pages/Registro'
+import AnormDashboard from './modules/Anormalidades/pages/Dashboard'
+import AnormMejoras from './modules/Anormalidades/pages/Mejoras'
+import AnormConfiguracion from './modules/Anormalidades/pages/Configuracion'
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -90,6 +96,9 @@ const MODULE_ROUTES = [
   { module: 'surtido.validacion', path: '/Surtido/validacion' },
   { module: 'surtido.registros', path: '/Surtido/registros' },
   { module: 'sistema.wms', path: '/wmshub' },
+  { module: 'anormalidades.registro', path: '/Anormalidades/registro' },
+  { module: 'anormalidades.dashboard', path: '/Anormalidades/dashboard' },
+  { module: 'anormalidades.mejoras', path: '/Anormalidades/mejoras' },
 ]
 
 function SmartRedirect() {
@@ -242,6 +251,20 @@ function AppRoutes() {
         } />
         <Route path="surtido/escaneo" element={<Navigate to="/Surtido/validacion" replace />} />
         <Route path="surtido/historial" element={<Navigate to="/Surtido/registros" replace />} />
+
+        {/* Anormalidades Module */}
+        <Route path="anormalidades/registro" element={
+          <PermissionRoute module="anormalidades.registro"><ErrorBoundary><AnormRegistro /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="anormalidades/dashboard" element={
+          <PermissionRoute module="anormalidades.dashboard"><ErrorBoundary><AnormDashboard /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="anormalidades/mejoras" element={
+          <PermissionRoute module="anormalidades.mejoras"><ErrorBoundary><AnormMejoras /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="anormalidades/configuracion" element={
+          <PermissionRoute module="anormalidades.configuracion"><ErrorBoundary><AnormConfiguracion /></ErrorBoundary></PermissionRoute>
+        } />
 
         {/* Administration */}
         <Route path="admin" element={

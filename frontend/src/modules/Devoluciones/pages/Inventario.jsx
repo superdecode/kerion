@@ -141,6 +141,7 @@ export default function Inventario() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const toast = useToastStore()
   const { t } = useI18nStore()
 
@@ -184,6 +185,7 @@ export default function Inventario() {
   const inventarioQuery = useQuery({
     queryKey: ['dev-inventario', qFilter],
     queryFn: () => listInventario({ q: qFilter }),
+    enabled: backendOnline,
   })
   const historialQuery = useQuery({
     queryKey: ['dev-movimientos', tiposHistorial, historialFechaDesde, historialFechaHasta],
@@ -192,8 +194,9 @@ export default function Inventario() {
       fecha_inicio: historialFechaDesde,
       fecha_fin: historialFechaHasta,
     }),
+    enabled: backendOnline,
   })
-  const ubicacionesQuery = useQuery({ queryKey: ['dev-ubicaciones'], queryFn: listUbicaciones })
+  const ubicacionesQuery = useQuery({ queryKey: ['dev-ubicaciones'], queryFn: listUbicaciones, enabled: backendOnline })
 
   const ajusteMutation = useMutation({
     mutationFn: createAjuste,

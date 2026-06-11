@@ -56,6 +56,16 @@ const MODULE_GROUPS = [
     ]
   },
   {
+    group: 'Anormalidades',
+    groupKey: 'perm.group.anormalidades',
+    modules: [
+      { key: 'anormalidades.dashboard',     label: 'Dashboard',     labelKey: 'perm.sub.anorm.dashboard' },
+      { key: 'anormalidades.registro',      label: 'Anormalidades', labelKey: 'perm.sub.anorm.registro' },
+      { key: 'anormalidades.mejoras',       label: 'Mejoras',       labelKey: 'perm.sub.anorm.mejoras' },
+      { key: 'anormalidades.configuracion', label: 'Configuración', labelKey: 'perm.sub.anorm.config' },
+    ]
+  },
+  {
     group: 'Sistema',
     groupKey: 'admin.group.sistema',
     modules: [
@@ -438,9 +448,10 @@ function UsersTab({ canEdit, canDel }) {
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const { t } = useI18nStore()
+  const backendOnline = useAuthStore((s) => s.backendOnline)
 
-  const { data, isLoading, isError: usersError } = useQuery({ queryKey: ['admin-users'], queryFn: getUsers, retry: 1 })
-  const { data: rolesData } = useQuery({ queryKey: ['admin-roles'], queryFn: getRoles, retry: 1 })
+  const { data, isLoading, isError: usersError } = useQuery({ queryKey: ['admin-users'], queryFn: getUsers, retry: 0, enabled: backendOnline })
+  const { data: rolesData } = useQuery({ queryKey: ['admin-roles'], queryFn: getRoles, retry: 0, enabled: backendOnline })
   const users = data?.usuarios || data?.users || []
   const roles = rolesData?.roles || []
 
@@ -667,9 +678,10 @@ function RolesTab({ canEdit, canDel }) {
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const { t } = useI18nStore()
+  const backendOnline = useAuthStore((s) => s.backendOnline)
 
-  const { data, isLoading, isError: rolesError } = useQuery({ queryKey: ['admin-roles'], queryFn: getRoles, retry: 1 })
-  const { data: usersData } = useQuery({ queryKey: ['admin-users'], queryFn: getUsers, retry: 1 })
+  const { data, isLoading, isError: rolesError } = useQuery({ queryKey: ['admin-roles'], queryFn: getRoles, retry: 0, enabled: backendOnline })
+  const { data: usersData } = useQuery({ queryKey: ['admin-users'], queryFn: getUsers, retry: 0, enabled: backendOnline })
   const roles = data?.roles || data || []
   const users = usersData?.usuarios || usersData?.users || []
 

@@ -18,6 +18,9 @@ const MODULE_ROUTES = [
   { module: 'surtido.ordenes', path: '/surtido' },
   { module: 'surtido.validacion', path: '/Surtido/validacion' },
   { module: 'surtido.registros', path: '/Surtido/registros' },
+  { module: 'anormalidades.registro', path: '/Anormalidades/registro' },
+  { module: 'anormalidades.dashboard', path: '/Anormalidades/dashboard' },
+  { module: 'anormalidades.mejoras', path: '/Anormalidades/mejoras' },
   { module: 'sistema.wms', path: '/wmshub' },
   { module: 'global.administracion', path: '/admin' },
 ]
@@ -31,24 +34,35 @@ export function usePermissionSync() {
   const navigate = useNavigate()
   const location = useLocation()
   const { refreshUser, canView, isAuthenticated } = useAuthStore()
+  const backendOnline = useAuthStore((s) => s.backendOnline)
 
   useEffect(() => {
     if (!isAuthenticated) return
 
-    // Refresh permissions every 45 seconds
+    // Refresh permissions every 45 seconds — skip if backend is unreachable
     const interval = setInterval(() => {
-      refreshUser().catch(() => { /* already logged out */ })
+      if (!useAuthStore.getState().backendOnline) return
+      refreshUser().catch(() => {})
     }, 45000)
 
-    // Also refresh when window regains focus
+    // Refresh on window focus — skip if backend is unreachable
     const handleFocus = () => {
-      refreshUser().catch(() => { /* already logged out */ })
+      if (!useAuthStore.getState().backendOnline) return
+      refreshUser().catch(() => {})
+    }
+
+    // When browser reports connectivity restored, try once to reconnect
+    const handleOnline = () => {
+      useAuthStore.setState({ backendOnline: true })
+      refreshUser().catch(() => {})
     }
 
     window.addEventListener('focus', handleFocus)
+    window.addEventListener('online', handleOnline)
     return () => {
       clearInterval(interval)
       window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('online', handleOnline)
     }
   }, [isAuthenticated, refreshUser])
 

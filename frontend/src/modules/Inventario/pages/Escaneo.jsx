@@ -619,7 +619,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
   const [notFoundCode, setNotFoundCode] = useState('')
   const locationRef = useRef(null)
   const inputShellRef = useRef(null)
-  const [openUpward, setOpenUpward] = useState(false)
+  const [dropdownStyle, setDropdownStyle] = useState(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -631,13 +631,18 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
   }, [isOpen])
 
   useEffect(() => {
-    if (!isOpen || !inputValue.trim() || notFound) return
-    const rect = inputShellRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const estimatedMenuHeight = 176
+    if (!isOpen || !inputValue.trim() || notFound || !inputShellRef.current) {
+      setDropdownStyle(null)
+      return
+    }
+    const rect = inputShellRef.current.getBoundingClientRect()
+    const dropH = 176
     const spaceBelow = window.innerHeight - rect.bottom
-    const spaceAbove = rect.top
-    setOpenUpward(spaceBelow < estimatedMenuHeight && spaceAbove > spaceBelow)
+    const openUp = spaceBelow < dropH && rect.top > dropH
+    setDropdownStyle(openUp
+      ? { position: 'fixed', bottom: window.innerHeight - rect.top + 8, left: rect.left, width: rect.width, zIndex: 99999 }
+      : { position: 'fixed', top: rect.bottom + 8, left: rect.left, width: rect.width, zIndex: 99999 }
+    )
   }, [isOpen, inputValue, notFound, ubicaciones])
 
   function handleConfirm() {
@@ -663,7 +668,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
     : []
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.ubicacion_scan_title')} icon={MapPin}
+    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.ubicacion_scan_title')} icon={MapPin} size="sm"
       footer={
         <div className="flex gap-3 justify-between w-full">
           <button className="btn-ghost text-sm" onClick={onSkip}>{t('inventario.escaneo.ubicacion_skip')}</button>
@@ -681,7 +686,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
             <input
               ref={locationRef}
               type="text"
-              className="w-full pl-10 pr-4 py-3 text-base bg-white border-2 border-accent-200 rounded-2xl
+              className="w-full pl-10 pr-4 py-3.5 text-base bg-white border-2 border-accent-200 rounded-2xl
                 focus:border-accent-500 focus:shadow-md
                 transition-all outline-none placeholder:text-warm-300 font-mono"
               placeholder="UB-XXX"
@@ -690,10 +695,8 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
               onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
               autoComplete="off"
             />
-            {suggestions.length > 0 && (
-              <div className={`absolute left-0 right-0 z-[120] max-h-44 overflow-y-auto rounded-2xl border border-accent-200 bg-white p-1.5 shadow-depth ${
-                openUpward ? 'bottom-[calc(100%+0.5rem)]' : 'top-[calc(100%+0.5rem)]'
-              }`}>
+            {suggestions.length > 0 && dropdownStyle && (
+              <div style={dropdownStyle} className="max-h-44 overflow-y-auto rounded-2xl border border-accent-200 bg-white p-1.5 shadow-depth">
                 {suggestions.map(u => (
                   <button
                     key={u.id}
@@ -710,7 +713,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
               </div>
             )}
           </div>
-          <button className="btn-primary px-4 py-3 rounded-2xl" onClick={handleConfirm} disabled={!inputValue.trim()}>
+          <button className="btn-primary px-4 py-3.5 rounded-2xl" onClick={handleConfirm} disabled={!inputValue.trim()}>
             <CheckCircle2 size={16} />
           </button>
         </div>
@@ -1765,6 +1768,21 @@ export default function Escaneo() {
     })
   }
 
+  async function handleSkipCode2() {
+    if (!pendingCode1) return
+    const p = pendingCode1
+    clearPendingCode1()
+    await confirmPotentialDuplicate({
+      codes: [p.code],
+      displayCode: p.code,
+      onAccept: () => {
+        doAddItem({ raw: p.raw, code: p.code, code2: null, wasSwapped: false,
+          status: 'nowms', label: 'NO WMS', sku: '-', product: '-', location: '-', groupAssignment: 'auto' })
+        setTimeout(() => scanRef.current?.focus(), 80)
+      },
+    })
+  }
+
   /* ─── NO SESSION: empty state ─────────────────────────── */
   if (tabs.length === 0) {
     return (
@@ -2036,6 +2054,15 @@ export default function Escaneo() {
                         onKeyDown={e => { if (e.key === 'Enter') { processCode2(e.target.value.trim()); e.target.value = '' } }}
                         autoComplete="off"
                       />
+                    </div>
+                    <div className="text-right">
+                      <button
+                        type="button"
+                        onClick={handleSkipCode2}
+                        className="text-[11px] text-warm-400 hover:text-warm-600 transition-colors leading-none"
+                      >
+                        {t('inventario.escaneo.skip_code2')}
+                      </button>
                     </div>
                   </div>
                 )}

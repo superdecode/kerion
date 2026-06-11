@@ -86,3 +86,10 @@ export const forceValidateOrder = (obc, body) =>
 
 export const bulkForceValidateOrders = (body) =>
   api.post('/wmshub/force-validate/bulk', body).then(r => r.data)
+
+// Box status per caja
+export const getBoxStatus = (obc) =>
+  api.get(`/wmshub/box-status/${encodeURIComponent(obc)}`).then(r => r.data)
+
+export const updateBoxStatus = (obc, code, estado, notas) =>
+  api.patch(`/wmshub/box-status/${encodeURIComponent(obc)}/${encodeURIComponent(code)}`, { estado, notas }).then(r => r.data)

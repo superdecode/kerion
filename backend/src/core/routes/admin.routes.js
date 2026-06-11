@@ -418,8 +418,8 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
 router.post('/tenants', authenticateAdmin, async (req, res) => {
   const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at, zona_horaria, modules: reqModules } = req.body
   const modulesToSeed = Array.isArray(reqModules) && reqModules.length > 0
-    ? reqModules.filter(m => ['dropscan', 'surtido', 'inventario', 'devoluciones'].includes(m))
-    : ['dropscan', 'surtido', 'inventario', 'devoluciones']
+    ? reqModules.filter(m => ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades'].includes(m))
+    : ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades']
   if (!legal_name || !contact_name || !contact_email || !admin_password) {
     return res.status(400).json({ error: 'legal_name, contact_name, contact_email y admin_password son requeridos' })
   }
@@ -495,9 +495,11 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
       dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
       fep: { folios: 'eliminar' },
-      inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
+      inventario: { escaneo: 'eliminar', registros: 'eliminar' },
       devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
       surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
+      anormalidades: { registro: 'eliminar', dashboard: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
+      sistema: { wms: 'eliminar' },
     }
     const roleRes = await client.query(
       `INSERT INTO roles (tenant_id, nombre, permisos, is_default)

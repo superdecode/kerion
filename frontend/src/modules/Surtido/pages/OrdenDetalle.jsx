@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, Copy, Check, Package2, Truck, Clock, User, Hash,
   ScanBarcode, UserCheck, ClipboardList, CheckCircle2, Loader2,
-  Boxes, BarChart3, ShieldAlert,
+  Boxes, BarChart3, ShieldAlert, AlertTriangle, ExternalLink,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -14,6 +14,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
+import { normalizeCode } from '../../Shared/Wms/normalizeCode'
 import {
   getOutboundList,
   getOutboundDetail,
@@ -23,7 +24,106 @@ import {
   forceValidateOrder,
   getSurtidores,
   getRecords,
+  getBoxStatus,
+  updateBoxStatus,
 } from '../services/surtidoService'
+
+const BOX_STATUS_TRANSITIONS = {
+  pendiente:   ['faltante', 'anormalidad'],
+  validada:    [],
+  faltante:    ['pendiente', 'anormalidad'],
+  anormalidad: ['pendiente', 'faltante'],
+}
+
+const BOX_STATUS_META = {
+  pendiente:   { cls: 'bg-warm-100 text-warm-600',       dot: 'bg-warm-400' },
+  validada:    { cls: 'bg-success-100 text-success-700', dot: 'bg-success-500', locked: true },
+  faltante:    { cls: 'bg-danger-100 text-danger-700',   dot: 'bg-danger-500' },
+  anormalidad: { cls: 'bg-warning-100 text-warning-700', dot: 'bg-warning-500' },
+}
+
+function BoxStatusChip({ code, estado, onOpen, t, disabled }) {
+  const meta = BOX_STATUS_META[estado] ?? BOX_STATUS_META.pendiente
+  const isLocked = meta.locked || disabled
+  return (
+    <button
+      type="button"
+      onClick={isLocked ? undefined : () => onOpen(code, estado)}
+      disabled={isLocked}
+      title={isLocked ? t('surtido.ordenes.box_status.locked_validada') : t('surtido.ordenes.box_status.change_title')}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all
+        ${meta.cls} ${isLocked ? 'cursor-default' : 'cursor-pointer hover:opacity-75'}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot}`} />
+      {t(`surtido.ordenes.box_status.${estado}`)}
+    </button>
+  )
+}
+
+function BoxStatusChangeModal({ isOpen, code, currentEstado, onClose, onConfirm, isPending, t }) {
+  const allowed = BOX_STATUS_TRANSITIONS[currentEstado] ?? []
+  const [selected, setSelected] = useState(allowed[0] ?? 'pendiente')
+  const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    if (isOpen) {
+      const next = BOX_STATUS_TRANSITIONS[currentEstado] ?? []
+      setSelected(next[0] ?? 'pendiente')
+      setNotes('')
+    }
+  }, [isOpen, currentEstado])
+
+  if (!isOpen) return null
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.ordenes.box_status.change_title')} icon={AlertTriangle}
+      footer={
+        <div className="flex gap-3 justify-end">
+          <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
+          <button
+            className={selected === 'faltante' ? 'btn-danger' : selected === 'anormalidad' ? 'btn-primary' : 'btn-ghost'}
+            disabled={!selected || isPending}
+            onClick={() => onConfirm(selected, notes)}
+          >
+            {isPending ? <Loader2 size={13} className="animate-spin inline mr-1" /> : null}
+            {t('common.confirm')}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-xs text-warm-500">
+          {t('surtido.ordenes.box_status.title')}: <span className="font-mono font-bold text-warm-900">{code}</span>
+        </p>
+        <div className="space-y-1.5">
+          {allowed.map(s => {
+            const meta = BOX_STATUS_META[s]
+            return (
+              <button key={s} type="button"
+                onClick={() => setSelected(s)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-sm transition-all
+                  ${selected === s ? 'border-primary-300 bg-primary-50' : 'border-warm-100 hover:border-warm-200 hover:bg-warm-50'}`}
+              >
+                <span className={`w-2.5 h-2.5 rounded-full ${meta.dot}`} />
+                <span className="font-medium">{t(`surtido.ordenes.box_status.${s}`)}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-warm-700 mb-1">{t('surtido.ordenes.box_status.notes_label')}</label>
+          <input
+            type="text"
+            className="input-field text-sm w-full"
+            placeholder={t('surtido.ordenes.box_status.notes_placeholder')}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+          />
+        </div>
+      </div>
+    </Modal>
+  )
+}
 
 const STATUS_META = {
   pending_assignment: { labelKey: 'surtido.ordenes.status.pending_assignment', cls: 'bg-warm-100 text-warm-600' },
@@ -169,7 +269,7 @@ function TraceabilityTimeline({ tracking, t }) {
   )
 }
 
-function PackagesTable({ packages, referencia, trackingNo, t }) {
+function PackagesTable({ packages, referencia, trackingNo, obc, boxStatuses, onOpenStatus, navigate, t }) {
   if (packages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-2 text-warm-300">
@@ -189,21 +289,46 @@ function PackagesTable({ packages, referencia, trackingNo, t }) {
             <th className="table-header text-right">{t('surtido.ordenes.detail.qty')}</th>
             <th className="table-header">{t('surtido.ordenes.referencia')}</th>
             <th className="table-header">{t('surtido.ordenes.detail.tracking')}</th>
+            <th className="table-header">{t('surtido.ordenes.box_status.title')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-warm-50">
           {packages.map((p, i) => {
-            const code = p.customizeCode || p.boxCode || p.code || '—'
+            const rawCode = p.customizeCode || p.boxCode || p.code || '—'
+            const normKey = rawCode !== '—' ? normalizeCode(rawCode) : null
+            const estado = (normKey && boxStatuses?.[normKey]) ?? 'pendiente'
             const type = p.boxType || p.type || '—'
             const qty = p.quantity ?? p.qty ?? p.count ?? 1
             return (
               <tr key={i} className="table-row">
                 <td className="table-cell text-warm-400 font-bold tabular-nums w-8">{i + 1}</td>
                 <td className="table-cell text-warm-600">{type}</td>
-                <td className="table-cell font-mono font-semibold text-warm-800">{code}</td>
+                <td className="table-cell font-mono font-semibold text-warm-800">{rawCode}</td>
                 <td className="table-cell text-right font-semibold text-warm-700 tabular-nums">{qty}</td>
                 <td className="table-cell font-mono text-xs text-warm-500">{referencia || '—'}</td>
                 <td className="table-cell font-mono text-xs text-warm-500">{trackingNo || '—'}</td>
+                <td className="table-cell">
+                  <div className="flex items-center gap-1.5">
+                    {normKey ? (
+                      <BoxStatusChip
+                        code={normKey}
+                        estado={estado}
+                        onOpen={onOpenStatus}
+                        t={t}
+                      />
+                    ) : <span className="text-warm-300 text-[11px]">—</span>}
+                    {estado === 'anormalidad' && normKey && (
+                      <button
+                        type="button"
+                        title={t('surtido.ordenes.box_status.ver_anorm')}
+                        onClick={() => navigate(`/anormalidades?proceso=Picking&orden=${encodeURIComponent(obc)}&caja=${encodeURIComponent(normKey)}`)}
+                        className="p-0.5 rounded text-warning-500 hover:text-warning-700 hover:bg-warning-50 transition-colors"
+                      >
+                        <ExternalLink size={11} />
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             )
           })}
@@ -276,6 +401,7 @@ export default function OrdenDetalle() {
   const [showAssign, setShowAssign] = useState(false)
   const [showForceValidate, setShowForceValidate] = useState(false)
   const [forceReason, setForceReason] = useState('')
+  const [statusModal, setStatusModal] = useState(null) // { code, currentEstado }
 
   const { data: wmsListData } = useQuery({
     queryKey: ['wms-outbound'],
@@ -301,6 +427,27 @@ export default function OrdenDetalle() {
     queryKey: ['wms-scan-sessions-obc', obc],
     queryFn: () => getScanSessions({ outbound_order_no: obc, pageSize: 100 }),
     staleTime: 30000,
+  })
+
+  const { data: boxStatusRaw, refetch: refetchBoxStatus } = useQuery({
+    queryKey: ['wms-box-status', obc],
+    queryFn: () => getBoxStatus(obc),
+    staleTime: 30000,
+    retry: 0,
+  })
+  const boxStatuses = boxStatusRaw?.data ?? {}
+
+  const boxStatusMut = useMutation({
+    mutationFn: ({ code, estado, notes }) => updateBoxStatus(obc, code, estado, notes),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['wms-box-status', obc] })
+      qc.invalidateQueries({ queryKey: ['wms-tracking-obc', obc] })
+      refetchBoxStatus()
+      refetchTracking()
+      setStatusModal(null)
+      toast.success(t('common.save') + ' OK')
+    },
+    onError: (err) => toast.error(err?.response?.data?.error || t('toast.error')),
   })
 
   const allWmsRecords = getRecords(wmsListData)
@@ -492,6 +639,10 @@ export default function OrdenDetalle() {
             packages={packageList}
             referencia={referencia !== '—' ? referencia : ''}
             trackingNo={trackingNo !== '—' ? trackingNo : ''}
+            obc={obc}
+            boxStatuses={boxStatuses}
+            onOpenStatus={(code, currentEstado) => setStatusModal({ code, currentEstado })}
+            navigate={navigate}
             t={t}
           />
         </motion.div>
@@ -540,6 +691,16 @@ export default function OrdenDetalle() {
           </div>
         </div>
       </Modal>
+
+      <BoxStatusChangeModal
+        isOpen={!!statusModal}
+        code={statusModal?.code ?? ''}
+        currentEstado={statusModal?.currentEstado ?? 'pendiente'}
+        onClose={() => setStatusModal(null)}
+        onConfirm={(estado, notes) => boxStatusMut.mutate({ code: statusModal.code, estado, notes })}
+        isPending={boxStatusMut.isPending}
+        t={t}
+      />
     </div>
   )
 }

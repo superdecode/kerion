@@ -32,6 +32,7 @@ const CHART_DEFAULTS = {
 export default function Reportes() {
   const { t } = useI18nStore()
   const { hasPermission } = useAuthStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const today = getToday()
 
   const CHART_OPTIONS = [
@@ -100,8 +101,8 @@ export default function Reportes() {
     return next
   })
 
-  const { data: empresasData } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas })
-  const { data: canalesData } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales })
+  const { data: empresasData } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas, enabled: backendOnline })
+  const { data: canalesData } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales, enabled: backendOnline })
   const empresas = (Array.isArray(empresasData) ? empresasData : empresasData?.items || empresasData?.empresas || []).filter(e => e.activo !== false)
   const canales = (Array.isArray(canalesData) ? canalesData : canalesData?.items || canalesData?.canales || []).filter(c => c.activo !== false)
 
@@ -111,7 +112,7 @@ export default function Reportes() {
       empresaFilter.length ? empresaFilter : undefined,
       canalFilter.length ? canalFilter : undefined,
       escaneadorFilter.length ? escaneadorFilter : undefined),
-    enabled: !!fechaInicio && !!fechaFin,
+    enabled: backendOnline && !!fechaInicio && !!fechaFin,
   })
 
   const { data: escaneadoresData } = useQuery({
@@ -119,14 +120,14 @@ export default function Reportes() {
     queryFn: () => ds.getMetrics(fechaInicio, fechaFin,
       empresaFilter.length ? empresaFilter : undefined,
       canalFilter.length ? canalFilter : undefined),
-    enabled: !!fechaInicio && !!fechaFin,
+    enabled: backendOnline && !!fechaInicio && !!fechaFin,
   })
   const escaneadoresOpts = (escaneadoresData?.por_escaneador || []).map(e => ({ value: e.escaneador, label: e.escaneador }))
 
   const { data: foliosData } = useQuery({
     queryKey: ['fep-folios-reportes', fechaInicio, fechaFin],
     queryFn: () => getFolios({ fecha_desde: fechaInicio, fecha_hasta: fechaFin, limit: 500 }),
-    enabled: !!fechaInicio && !!fechaFin,
+    enabled: backendOnline && !!fechaInicio && !!fechaFin,
   })
   const foliosPorDia = useMemo(() => {
     const folios = foliosData?.folios || []

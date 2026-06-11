@@ -64,6 +64,7 @@ export default function Salidas() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const toast = useToastStore()
   const { t } = useI18nStore()
 
@@ -94,6 +95,7 @@ export default function Salidas() {
       fecha_hasta: fechaHasta,
       q: qFilter,
     }),
+    enabled: backendOnline,
   })
 
   const handleQChange = (val) => {

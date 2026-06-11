@@ -134,9 +134,11 @@ export async function provisionTenant(requestId, approvedByAdminId) {
             global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
             dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
             fep: { folios: 'eliminar' },
-            inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
+            inventario: { escaneo: 'eliminar', registros: 'eliminar' },
             devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
             surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
+            anormalidades: { registro: 'eliminar', dashboard: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
+            sistema: { wms: 'eliminar' },
           })]
         )
         const roleId = roleRes.rows[0].id
@@ -171,7 +173,7 @@ export async function provisionTenant(requestId, approvedByAdminId) {
 
   // ── Step 2.5: seed_tenant_modules ─────────────────────────────────────────────
   try {
-    for (const code of ['dropscan', 'surtido', 'inventario', 'devoluciones']) {
+    for (const code of ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades']) {
       await query(
         `INSERT INTO tenant_modules (tenant_id, module_code, enabled, enabled_at, enabled_by, notes)
          VALUES ($1, $2, true, now(), 'system', 'provisioned with tenant')
@@ -183,6 +185,57 @@ export async function provisionTenant(requestId, approvedByAdminId) {
   } catch (err) {
     await logStep(tenantId, requestId, 'seed_tenant_modules', 'failed', err.message)
     // Non-fatal: migration 043 backfill covers existing tenants
+  }
+
+  // ── Step 2.6: seed_anormalidades_codigos ──────────────────────────────────────
+  try {
+    const CODIGOS_BASE = [
+      ['IN-01','Recibo incorrecto','收货错误','Recibo','L2'],
+      ['IN-02','Daño en recibo','收货损坏','Recibo','L2'],
+      ['IN-03','Faltante en recibo','收货短缺','Recibo','L2'],
+      ['IN-04','Sobrante en recibo','收货多余','Recibo','L1'],
+      ['IN-05','Error de documentación en recibo','收货文件错误','Recibo','L2'],
+      ['IN-06','Recibo fuera de horario','超时收货','Recibo','L1'],
+      ['INV-01','Diferencia de inventario','库存差异','Inventario','L2'],
+      ['INV-02','Producto mal ubicado','货物错位','Inventario','L2'],
+      ['INV-03','Producto sin etiqueta','货物无标签','Inventario','L1'],
+      ['INV-04','Producto caducado','过期货物','Inventario','L3'],
+      ['INV-05','Daño en almacén','仓储损坏','Inventario','L2'],
+      ['INV-06','Faltante de inventario','库存短缺','Inventario','L3'],
+      ['PICK-01','Error de picking','拣货错误','Picking','L2'],
+      ['PICK-02','Producto incorrecto en pedido','货物错误','Picking','L2'],
+      ['PICK-03','Cantidad incorrecta en pedido','数量错误','Picking','L2'],
+      ['PICK-04','Ubicación incorrecta de picking','位置错误','Picking','L2'],
+      ['PICK-05','Retraso en picking','拣货延误','Picking','L1'],
+      ['OUT-01','Error en packing','打包错误','Salida','L2'],
+      ['OUT-02','Documentación de salida incorrecta','出库文件错误','Salida','L2'],
+      ['OUT-03','Ruta de entrega incorrecta','路线错误','Salida','L2'],
+      ['OUT-04','Faltante en envío','发货短缺','Salida','L3'],
+      ['OUT-05','Daño en envío','发货损坏','Salida','L2'],
+      ['OUT-06','Retraso en salida','出库延误','Salida','L1'],
+      ['POD-01','Rechazo del cliente','客户拒收','POD','L3'],
+      ['POD-02','Entrega parcial','部分交付','POD','L2'],
+      ['POD-03','Entrega a dirección incorrecta','错误地址交付','POD','L3'],
+      ['POD-04','Firma no válida','签名无效','POD','L2'],
+      ['POD-05','Retraso en entrega','交货延误','POD','L1'],
+      ['SYS-01','Error del sistema','系统错误','Sistema','L3'],
+      ['SYS-02','Error de integración','集成错误','Sistema','L2'],
+    ]
+    for (const [codigo, nombre_es, nombre_zh, proceso, nivel_sugerido] of CODIGOS_BASE) {
+      await query(
+        `INSERT INTO anormalidades_codigos (tenant_id, codigo, nombre_es, nombre_zh, proceso, nivel_sugerido, es_default)
+         VALUES ($1,$2,$3,$4,$5,$6,true)
+         ON CONFLICT (tenant_id, codigo) DO NOTHING`,
+        [tenantId, codigo, nombre_es, nombre_zh, proceso, nivel_sugerido]
+      )
+    }
+    await query(
+      `INSERT INTO anormalidades_config (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING`,
+      [tenantId]
+    )
+    await logStep(tenantId, requestId, 'seed_anormalidades_codigos', 'ok')
+  } catch (err) {
+    await logStep(tenantId, requestId, 'seed_anormalidades_codigos', 'failed', err.message)
   }
 
   // ── Step 3: seed_default_dropscan_config ──────────────────────────────────────

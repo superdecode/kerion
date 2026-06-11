@@ -772,6 +772,7 @@ const thirtyDaysAgo = subtractDays(today, 30)
 export default function InventarioRegistros() {
   const { t } = useI18nStore()
   const { hasPermission } = useAuthStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const canCreate = hasPermission('inventario.escaneo', 'crear')
@@ -809,6 +810,7 @@ export default function InventarioRegistros() {
     queryKey: ['wms-inventory-sessions', { page, pageSize, ...filters }],
     queryFn: () => getInventorySessions({ page, pageSize, ...filters }),
     staleTime: 30000,
+    enabled: backendOnline,
   })
 
   const records = data?.data?.records ?? []

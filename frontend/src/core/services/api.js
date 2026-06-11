@@ -39,6 +39,13 @@ let isHandling401 = false
 let backendUnavailableUntil = 0
 const BACKEND_COOLDOWN_MS = 15000
 
+// Callback registered by authStore to sync backendOnline Zustand state.
+// Using a callback avoids circular imports (authStore imports api.js).
+let _onBackendStatus = null
+export function setBackendStatusCallback(cb) {
+  _onBackendStatus = cb
+}
+
 function isProtectedAuthRequest(config) {
   const url = String(config?.url || '')
   return url.includes('/auth/login') || url.includes('/auth/logout')
@@ -78,11 +85,19 @@ api.interceptors.request.use((config) => {
 
 // Response interceptor - handle 401 gracefully
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // First success after an outage — notify store
+    if (backendUnavailableUntil > 0) {
+      backendUnavailableUntil = 0
+      _onBackendStatus?.(true)
+    }
+    return response
+  },
   (error) => {
     const isNetworkFailure = !error.response && (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || /Network Error/i.test(error.message || ''))
     if (isNetworkFailure && !shouldSkipBackendCooldown(error.config)) {
       backendUnavailableUntil = Date.now() + BACKEND_COOLDOWN_MS
+      _onBackendStatus?.(false)
     }
 
     if (error.response?.status === 401) {

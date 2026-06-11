@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import api from '../services/api.js'
+import api, { setBackendStatusCallback } from '../services/api.js'
 import { mockLogin, mockAuthMe } from '../services/mockAuth.js'
 import { setTimezone } from '../utils/dateFormat.js'
 
@@ -17,6 +17,13 @@ const MODULE_ALIASES = {
   'inventory.historial': 'inventory.tarimas',
   'dropscan.folios': 'fep.folios',
   'fep.historial': 'fep.folios',
+}
+
+// Fallback keys: if primary lookup returns sin_acceso, try these alternate paths.
+// Handles tokens issued before migration 052 that used 'inventory' instead of 'inventario'.
+const MODULE_FALLBACKS = {
+  'inventario.escaneo': 'inventory.escaneo',
+  'inventario.registros': 'inventory.tarimas',
 }
 
 function normalizeLevel(level) {
@@ -46,9 +53,8 @@ function resolvePermission(level, action) {
   return lvlRank >= minRank
 }
 
-function getModuleLevel(permisos, modulePath) {
-  if (!permisos || !modulePath) return 'sin_acceso'
-  const parts = (MODULE_ALIASES[modulePath] || modulePath).split('.')
+function lookupPath(permisos, path) {
+  const parts = path.split('.')
   let current = permisos
   for (const part of parts) {
     if (current && typeof current === 'object' && part in current) {
@@ -58,6 +64,16 @@ function getModuleLevel(permisos, modulePath) {
     }
   }
   return typeof current === 'string' ? normalizeLevel(current) : 'sin_acceso'
+}
+
+function getModuleLevel(permisos, modulePath) {
+  if (!permisos || !modulePath) return 'sin_acceso'
+  const resolved = MODULE_ALIASES[modulePath] || modulePath
+  const level = lookupPath(permisos, resolved)
+  if (level !== 'sin_acceso') return level
+  // Try legacy fallback key (pre-052 tokens used 'inventory' instead of 'inventario')
+  const fallback = MODULE_FALLBACKS[modulePath]
+  return fallback ? lookupPath(permisos, fallback) : 'sin_acceso'
 }
 
 // Prefer the es_admin_tenant flag introduced in migration 041.
@@ -77,6 +93,7 @@ export const useAuthStore = create(
       isAuthenticated: false,
       isLoading: false,
       enabledModules: [],
+      backendOnline: true,
 
       login: async (email, password) => {
         set({ isLoading: true })
@@ -183,8 +200,14 @@ export const useAuthStore = create(
           set((state) => ({
             user: { ...state.user, ...data },
             enabledModules: data.enabledModules || state.enabledModules,
+            backendOnline: true,
           }))
         } catch (e) {
+          // Network error (no response) → backend is unreachable, stop polling
+          if (!e.response) {
+            set({ backendOnline: false })
+            return
+          }
           // Only logout on 401 (token truly invalid/expired).
           // Other errors (network, 5xx) should NOT trigger logout — prevents login loops.
           if (e.response?.status === 401) {
@@ -282,3 +305,9 @@ export const useAuthStore = create(
     }
   )
 )
+
+// Sync api.js network failure detection → Zustand backendOnline flag.
+// This runs once at module load — no circular imports because api.js doesn't import authStore.
+setBackendStatusCallback((online) => {
+  useAuthStore.setState({ backendOnline: online })
+})

@@ -81,6 +81,7 @@ export default function Tarimas() {
   const [detailTab, setDetailTab] = useState('guias')
   const [newGuiaCode, setNewGuiaCode] = useState('')
   const { canDelete, canView, hasPermission, user, getPermissionLevel } = useAuthStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const canViewDetails = canView('dropscan.tarimas')           // ver+
   const tarimasLevel = getPermissionLevel('dropscan.tarimas')
   const canManageStatus = user.rol_nombre === 'Administrador' || tarimasLevel === 'actualizar'  // ONLY actualizar role
@@ -124,12 +125,12 @@ export default function Tarimas() {
   }, [syncRollingDateRange])
 
   // Fetch empresas/canales/escaneadores for filters
-  const { data: empresasData } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas })
-  const { data: canalesData } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales })
+  const { data: empresasData } = useQuery({ queryKey: ['dropscan-empresas'], queryFn: ds.getEmpresas, enabled: backendOnline })
+  const { data: canalesData } = useQuery({ queryKey: ['dropscan-canales'], queryFn: ds.getCanales, enabled: backendOnline })
   const { data: escaneadoresListData } = useQuery({
     queryKey: ['dropscan-escaneadores-list', filters.fecha_inicio, filters.fecha_fin, filters.empresa_ids, filters.canal_ids],
     queryFn: () => ds.getEscaneadoresList(filters.fecha_inicio, filters.fecha_fin, filters.empresa_ids.length ? filters.empresa_ids : undefined, filters.canal_ids.length ? filters.canal_ids : undefined),
-    enabled: !!filters.fecha_inicio && !!filters.fecha_fin,
+    enabled: backendOnline && !!filters.fecha_inicio && !!filters.fecha_fin,
   })
   const empresasOpts = (Array.isArray(empresasData) ? empresasData : empresasData?.empresas || [])
     .filter(e => e.activo !== false).map(e => ({ value: e.id, label: e.nombre, color: e.color }))
@@ -205,6 +206,7 @@ export default function Tarimas() {
       codigo_guia: guiaSearch || undefined,
       page, limit: pageLimit,
     }),
+    enabled: backendOnline,
   })
 
   const rawTarimasDup = data?.tarimas || []
@@ -229,19 +231,19 @@ export default function Tarimas() {
   const { data: detailData, isLoading: detailLoading } = useQuery({
     queryKey: ['dropscan-tarima-detail', selectedTarima],
     queryFn: () => ds.getTarimaDetail(selectedTarima),
-    enabled: !!selectedTarima,
+    enabled: backendOnline && !!selectedTarima,
   })
 
   const { data: duplicadosData, isLoading: duplicadosLoading } = useQuery({
     queryKey: ['dropscan-tarima-duplicados', selectedTarima],
     queryFn: () => ds.getTarimaDuplicados(selectedTarima),
-    enabled: !!selectedTarima && detailTab === 'duplicados',
+    enabled: backendOnline && !!selectedTarima && detailTab === 'duplicados',
   })
 
   const { data: logData } = useQuery({
     queryKey: ['dropscan-tarima-log', selectedTarima],
     queryFn: () => ds.getTarimaLog(selectedTarima),
-    enabled: !!selectedTarima && detailTab === 'historial',
+    enabled: backendOnline && !!selectedTarima && detailTab === 'historial',
   })
   const tarimaLog = logData?.log || []
 
