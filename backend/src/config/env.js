@@ -10,7 +10,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const env = {
-  NODE_ENV: process.env.NODE_ENV || 'development',
+  NODE_ENV: process.env.NODE_ENV || 'production',
   PORT: parseInt(process.env.PORT, 10) || 3001,
   DB_HOST: process.env.DB_HOST || 'localhost',
   DB_PORT: parseInt(process.env.DB_PORT, 10) || 5432,
