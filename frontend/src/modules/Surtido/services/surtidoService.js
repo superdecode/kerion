@@ -83,3 +83,6 @@ export const bulkUpsertOrderTracking = (body) =>
 
 export const forceValidateOrder = (obc, body) =>
   api.post(`/wmshub/force-validate/${encodeURIComponent(obc)}`, body).then(r => r.data)
+
+export const bulkForceValidateOrders = (body) =>
+  api.post('/wmshub/force-validate/bulk', body).then(r => r.data)

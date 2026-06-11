@@ -77,7 +77,7 @@ export default function Entradas() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [selectedIds, setSelectedIds] = useState(new Set())
-  const [exportConfirm, setExportConfirm] = useState(null)
+
   const debounceRef = useRef(null)
 
   const { data, isLoading } = useQuery({
@@ -177,6 +177,8 @@ export default function Entradas() {
 
   const allChecked = paginatedSesiones.length > 0 && paginatedSesiones.every(r => selectedIds.has(r.id))
   const someChecked = selectedIds.size > 0
+  const allFilteredSelected = sesiones.length > 0 && selectedIds.size === sesiones.length
+  const canSelectAllFiltered = allChecked && sesiones.length > paginatedSesiones.length && !allFilteredSelected
 
   const toggleAll = () => setSelectedIds(prev => {
     const next = new Set(prev)
@@ -198,18 +200,6 @@ export default function Entradas() {
       toast.success(t('common.export') + ' OK')
       setSelectedIds(new Set())
     } catch { toast.error(t('toast.error')) }
-  }
-
-  const doExportAll = () => {
-    try {
-      exportToXlsx(buildRows(sesiones), `entradas_${getToday()}.xlsx`)
-      toast.success(t('common.export') + ' OK')
-    } catch { toast.error(t('toast.error')) }
-  }
-
-  const handleExportAll = () => {
-    if (!sesiones.length) return
-    setExportConfirm({ count: sesiones.length, label: 'entradas', onConfirm: doExportAll })
   }
 
   const hasActiveFilters = !!(qFilter || estados.length)
@@ -277,15 +267,6 @@ export default function Entradas() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              {canExport && (
-                <button
-                  onClick={handleExportAll}
-                  disabled={sesiones.length === 0}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 h-9 rounded-xl bg-success-50 text-success-700 border border-success-200 hover:bg-success-100 transition-all disabled:opacity-40"
-                >
-                  <Download className="w-3.5 h-3.5" /> {t('common.export')}
-                </button>
-              )}
               {canCreate && (
                 <button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}
                   className="btn-primary inline-flex items-center gap-2 hover:shadow-glow hover:-translate-y-[1px] transition-all duration-200 active:scale-[0.97]">
@@ -337,19 +318,24 @@ export default function Entradas() {
               <>
                 {/* Bulk action bar */}
                 {someChecked && canExport && (
-                  <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100">
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100 flex-wrap">
                     <span className="text-xs text-primary-700 font-semibold tabular-nums">
                       {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+                      {allFilteredSelected && (
+                        <span className="ml-1 text-primary-500 font-normal">(todos los {sesiones.length} del filtro)</span>
+                      )}
                     </span>
+                    {canSelectAllFiltered && (
+                      <button
+                        className="text-xs text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
+                        onClick={() => setSelectedIds(new Set(sesiones.map(r => r.id)))}>
+                        Seleccionar todos ({sesiones.length})
+                      </button>
+                    )}
                     <button
                       onClick={handleExportSelected}
                       className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors">
                       <Download className="w-3 h-3" /> {t('common.export')} ({selectedIds.size})
-                    </button>
-                    <button
-                      onClick={handleExportAll}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-success-700 border border-success-200 hover:bg-success-50 transition-colors">
-                      <Download className="w-3 h-3" /> {t('common.export')} {t('common.all')}
                     </button>
                     <button
                       onClick={() => setSelectedIds(new Set())}
@@ -466,40 +452,6 @@ export default function Entradas() {
           </motion.div>
         </div>
       </div>
-
-      <Modal
-        isOpen={!!exportConfirm}
-        onClose={() => setExportConfirm(null)}
-        title="Confirmar exportación"
-        icon={Download}
-        size="sm"
-        footer={
-          <>
-            <button onClick={() => setExportConfirm(null)}
-              className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600 hover:bg-warm-50 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={() => { exportConfirm?.onConfirm(); setExportConfirm(null) }}
-              className="px-4 py-2 rounded-xl bg-success-600 text-white text-sm font-semibold hover:bg-success-700 transition-colors">
-              Exportar
-            </button>
-          </>
-        }
-      >
-        <div className="space-y-3 py-1">
-          <p className="text-sm text-warm-600">Se exportará la información visible en la tabla con los filtros actuales.</p>
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-success-50 border border-success-100">
-            <div className="w-9 h-9 rounded-xl bg-success-100 flex items-center justify-center shrink-0">
-              <Download className="w-4 h-4 text-success-700" />
-            </div>
-            <div>
-              <p className="text-[11px] text-success-600 font-semibold uppercase tracking-wide">Registros a exportar</p>
-              <p className="text-2xl font-bold text-success-700 tabular-nums leading-tight">{exportConfirm?.count}</p>
-            </div>
-          </div>
-        </div>
-      </Modal>
 
       <Modal
         isOpen={!!cancelRow}

@@ -425,7 +425,7 @@ export async function getInventoryList() {
   const map = buildHeaderMap(headerRow, INVENTORY_ALIASES)
   const records = dataRows
     .map(row => mapRowToInventory(row, map))
-    .filter(r => r.customizeBarcode)
+    .filter(r => r.customizeBarcode || r.customizeCode)
   const { partial } = getCacheStatus('inventory')
   return { success: true, data: { records, total: records.length, partial } }
 }

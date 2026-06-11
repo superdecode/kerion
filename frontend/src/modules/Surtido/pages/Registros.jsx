@@ -773,12 +773,6 @@ export default function SurtidoRegistros() {
     setExportingBulk(false)
   }
 
-  const handleExportAll = () => {
-    try {
-      writeExcel(buildRegistrosRows(records), `surtido_registros_${getToday()}.xlsx`)
-    } catch { toast.error(t('toast.error')) }
-  }
-
   const handleCopyCode = async (event, code) => {
     event.stopPropagation()
     if (!code) return
@@ -941,16 +935,6 @@ export default function SurtidoRegistros() {
             </span>
           )}
 
-          {canExport && (
-            <button
-              onClick={handleExportAll}
-              disabled={records.length === 0}
-              className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 h-9 rounded-xl bg-success-50 text-success-700 border border-success-200 hover:bg-success-100 transition-all disabled:opacity-40"
-              title={t('common.export') + ' ' + t('common.all')}
-            >
-              <Download className="w-3.5 h-3.5" /> {t('common.export')}
-            </button>
-          )}
         </div>
       </div>
 
@@ -1006,16 +990,24 @@ export default function SurtidoRegistros() {
         ) : (
           <div className="card overflow-hidden shadow-sm table-shell">
             {selectedIds.size > 0 && canExport && (
-              <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700">
-                <span className="font-semibold">{selectedIds.size} seleccionados</span>
+              <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex-wrap">
+                <span className="font-semibold">
+                  {selectedIds.size} seleccionados
+                  {selectedIds.size === records.length && records.length > 0 && (
+                    <span className="ml-1 font-normal text-primary-500">(todos de esta página)</span>
+                  )}
+                </span>
+                {selectedIds.size < records.length && (
+                  <button
+                    className="text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
+                    onClick={toggleSelectAll}>
+                    Seleccionar todos ({records.length})
+                  </button>
+                )}
                 <button onClick={handleBulkExport} disabled={exportingBulk}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-success-600 text-white font-semibold hover:bg-success-700 transition-colors disabled:opacity-50">
                   {exportingBulk ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-3 h-3" />}
-                  Exportar selección
-                </button>
-                <button onClick={handleExportAll}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-success-200 text-success-700 font-semibold hover:bg-success-50 transition-colors">
-                  <Download className="w-3 h-3" /> Exportar todo
+                  Exportar ({selectedIds.size})
                 </button>
                 <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-primary-500 hover:text-primary-700 font-semibold">
                   <X className="w-3.5 h-3.5" />

@@ -422,26 +422,24 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
       }
       icon={ScanBarcode}
       size="xl"
-      headerAction={!isLoading && (
-        <div className="flex items-center gap-2">
-          {isReadOnly && (canEditScans || canDeleteScans) && (
-            <button
-              onClick={() => setIsReadOnly(false)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-warning-50 text-warning-700 rounded-lg hover:bg-warning-100 font-semibold transition-all border border-warning-200">
-              <Pencil className="w-3.5 h-3.5" /> {t('common.edit')}
-            </button>
-          )}
-          {scans.length > 0 && (
-            <button
-              onClick={handleExportDetail}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-success-50 text-success-700 rounded-lg hover:bg-success-100 font-semibold transition-all border border-success-200">
-              <Download className="w-3.5 h-3.5" /> {t('common.export')}
-            </button>
-          )}
-        </div>
+      headerAction={!isLoading && scans.length > 0 && (
+        <button
+          onClick={handleExportDetail}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-success-50 text-success-700 rounded-lg hover:bg-success-100 font-semibold transition-all border border-success-200">
+          <Download className="w-3.5 h-3.5" /> {t('common.export')}
+        </button>
       )}
       footer={
-        <div className="flex justify-end">
+        <div className="flex justify-between items-center">
+          <div>
+            {!isLoading && isReadOnly && (canEditScans || canDeleteScans) && (
+              <button
+                onClick={() => setIsReadOnly(false)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-warning-50 text-warning-700 rounded-lg hover:bg-warning-100 font-semibold transition-all border border-warning-200">
+                <Pencil className="w-3.5 h-3.5" /> {t('common.edit')}
+              </button>
+            )}
+          </div>
           <button className="btn-secondary" onClick={onClose}>{t('common.close')}</button>
         </div>
       }
@@ -792,7 +790,6 @@ export default function InventarioRegistros() {
   const [filterOperators, setFilterOperators] = useState([])
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [exportingBulk, setExportingBulk] = useState(false)
-  const [exportConfirm, setExportConfirm] = useState(null)
   const [dateFrom, setDateFrom] = useState(thirtyDaysAgo)
   const [dateTo, setDateTo] = useState(today)
   const [datePreset, setDatePreset] = useState('30')
@@ -943,17 +940,6 @@ export default function InventarioRegistros() {
     setExportingBulk(false)
   }
 
-  const doExportAll = () => {
-    try {
-      writeInvExcel(buildInvRows(records), `inventario_registros_${getToday()}.xlsx`)
-    } catch { toast.error(t('toast.error')) }
-  }
-
-  const handleExportAll = () => {
-    if (!records.length) return
-    setExportConfirm({ count: records.length, onConfirm: doExportAll })
-  }
-
   const handleCopyCode = async (event, code) => {
     event.stopPropagation()
     if (!code) return
@@ -1057,14 +1043,6 @@ export default function InventarioRegistros() {
             </div>
 
             <div className="flex items-center gap-2">
-              {canExport && (
-                <button
-                  onClick={handleExportAll}
-                  disabled={records.length === 0}
-                  className="inline-flex items-center gap-1.5 px-3 h-10 rounded-xl text-xs font-semibold bg-success-50 border border-success-200 text-success-700 hover:bg-success-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                  <Download className="w-3.5 h-3.5" /> {t('common.export') || 'Exportar'}
-                </button>
-              )}
               {canCreate && (
                 <Link
                   to="/inventario/escaneo"
@@ -1130,16 +1108,24 @@ export default function InventarioRegistros() {
           ) : (
             <div className="card overflow-hidden shadow-sm table-shell">
               {selectedIds.size > 0 && canExport && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700">
-                  <span className="font-semibold">{selectedIds.size} seleccionados</span>
+                <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex-wrap">
+                  <span className="font-semibold">
+                    {selectedIds.size} seleccionados
+                    {selectedIds.size === filteredRecords.length && filteredRecords.length > 0 && (
+                      <span className="ml-1 font-normal text-primary-500">(todos del filtro)</span>
+                    )}
+                  </span>
+                  {selectedIds.size < filteredRecords.length && (
+                    <button
+                      className="text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
+                      onClick={() => setSelectedIds(new Set(filteredRecords.map(r => r.id)))}>
+                      Seleccionar todos ({filteredRecords.length})
+                    </button>
+                  )}
                   <button onClick={handleBulkExport} disabled={exportingBulk}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-success-600 text-white font-semibold hover:bg-success-700 transition-colors disabled:opacity-50">
                     {exportingBulk ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-3 h-3" />}
-                    Exportar selección
-                  </button>
-                  <button onClick={handleExportAll}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-success-200 text-success-700 font-semibold hover:bg-success-50 transition-colors">
-                    <Download className="w-3 h-3" /> Exportar todo
+                    Exportar ({selectedIds.size})
                   </button>
                   <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-primary-500 hover:text-primary-700 font-semibold">
                     <X className="w-3.5 h-3.5" />
@@ -1277,40 +1263,6 @@ export default function InventarioRegistros() {
         initialTab={detailInitialTab}
         initialReadOnly={detailReadOnly}
       />
-
-      <Modal
-        isOpen={!!exportConfirm && canExport}
-        onClose={() => setExportConfirm(null)}
-        title="Confirmar exportación"
-        icon={Download}
-        size="sm"
-        footer={
-          <div className="flex gap-3 justify-end">
-            <button onClick={() => setExportConfirm(null)}
-              className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600 hover:bg-warm-50 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={() => { exportConfirm?.onConfirm(); setExportConfirm(null) }}
-              className="px-4 py-2 rounded-xl bg-success-600 text-white text-sm font-semibold hover:bg-success-700 transition-colors">
-              Exportar
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-3 py-1">
-          <p className="text-sm text-warm-600">Se exportará la información visible en la tabla con los filtros actuales.</p>
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-success-50 border border-success-100">
-            <div className="w-9 h-9 rounded-xl bg-success-100 flex items-center justify-center shrink-0">
-              <Download className="w-4 h-4 text-success-700" />
-            </div>
-            <div>
-              <p className="text-[11px] text-success-600 font-semibold uppercase tracking-wide">Registros a exportar</p>
-              <p className="text-2xl font-bold text-success-700 tabular-nums leading-tight">{exportConfirm?.count}</p>
-            </div>
-          </div>
-        </div>
-      </Modal>
 
       <Modal
         isOpen={!!deleteConfirmSession}

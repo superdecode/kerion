@@ -17,6 +17,7 @@ const CLOSED_ORDER_TRACKING_STATUSES = new Set(['complete', 'partial'])
 
 // ── Sheet CSV cache (per tenant+url, stale-while-revalidate) ───────────────
 const _csvCache = new Map()
+const _inFlight = new Map()
 const CSV_CACHE_TTL = 5 * 60 * 1000 // 5 min
 
 function getLastNRows(text, n) {
@@ -31,24 +32,37 @@ function getLastNRows(text, n) {
   return normalized.slice(0, newlines[0] + 1) + normalized.slice(cutLine + 1)
 }
 
-async function fetchAndCacheSheet(tenantId, url) {
+async function fetchAndCacheSheet(tenantId, url, dbWriter = null) {
   const cacheKey = `${tenantId}:${url}`
+
+  // In-flight dedupe: if a concurrent fetch is already running, wait for it
+  const pending = _inFlight.get(cacheKey)
+  if (pending) return pending
+
   const existing = _csvCache.get(cacheKey)
   if (existing) existing.refreshing = true
-  try {
-    const res = await fetch(url, {
-      headers: { Accept: 'text/csv,text/plain' },
-      signal: AbortSignal.timeout(25000),
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const text = await res.text()
-    const rowCount = (text.match(/\n/g) || []).length
-    _csvCache.set(cacheKey, { text, rowCount, fetchedAt: Date.now(), refreshing: false })
-    return text
-  } catch (err) {
-    if (existing) existing.refreshing = false
-    throw err
-  }
+
+  const fetchPromise = (async () => {
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: 'text/csv,text/plain' },
+        signal: AbortSignal.timeout(25000),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const text = await res.text()
+      const rowCount = (text.match(/\n/g) || []).length
+      _csvCache.set(cacheKey, { text, rowCount, fetchedAt: Date.now(), refreshing: false })
+      if (dbWriter) dbWriter(text, rowCount).catch(() => {})
+      return text
+    } catch (err) {
+      if (existing) existing.refreshing = false
+      throw err
+    }
+  })()
+
+  _inFlight.set(cacheKey, fetchPromise)
+  fetchPromise.finally(() => _inFlight.delete(cacheKey))
+  return fetchPromise
 }
 
 function tenantLockKey(tenantId, suffix = '') {
@@ -294,6 +308,7 @@ router.get('/proxy/sheet',
       }
       const limitNum = parseInt(limit) || 0
       const cacheKey = `${req.tenantId}:${url}`
+      const pgKey = `csv:proxy:${crypto.createHash('sha256').update(url).digest('hex').slice(0, 24)}`
       const cached = _csvCache.get(cacheKey)
       const now = Date.now()
 
@@ -305,22 +320,45 @@ router.get('/proxy/sheet',
           .send(payload)
       }
 
+      // DB writer: persist to wms_cache after a Google fetch so it survives restarts
+      const dbWriter = async (text, rowCount) => {
+        await req.tQuery(
+          `INSERT INTO wms_cache (key, data, expires_at, tenant_id)
+           VALUES ($1, $2, now() + interval '360 seconds', $3)
+           ON CONFLICT (tenant_id, key) DO UPDATE
+             SET data = EXCLUDED.data, expires_at = EXCLUDED.expires_at, created_at = now()`,
+          [pgKey, JSON.stringify({ text, rowCount }), req.tenantId]
+        )
+      }
+
       if (cached) {
         const age = now - cached.fetchedAt
         if (age < CSV_CACHE_TTL) {
-          // Fresh cache hit — respond immediately
           return send(cached.text, 'hit', cached.rowCount)
         }
         // Stale — respond immediately with old data + refresh in background
         send(cached.text, 'stale', cached.rowCount)
         if (!cached.refreshing) {
-          fetchAndCacheSheet(req.tenantId, url).catch(() => {})
+          fetchAndCacheSheet(req.tenantId, url, dbWriter).catch(() => {})
         }
         return
       }
 
-      // Cache miss — fetch, cache, respond
-      const text = await fetchAndCacheSheet(req.tenantId, url)
+      // In-memory miss: check Postgres (survives server restarts)
+      try {
+        const pgResult = await req.tQuery(
+          `SELECT data FROM wms_cache WHERE key = $1 AND expires_at > now()`,
+          [pgKey]
+        )
+        if (pgResult.rows.length > 0) {
+          const { text, rowCount } = pgResult.rows[0].data
+          _csvCache.set(cacheKey, { text, rowCount, fetchedAt: Date.now(), refreshing: false })
+          return send(text, 'pg-hit', rowCount)
+        }
+      } catch { /* non-fatal: fall through to Google fetch */ }
+
+      // Full miss — fetch from Google, cache in memory + DB
+      const text = await fetchAndCacheSheet(req.tenantId, url, dbWriter)
       const entry = _csvCache.get(cacheKey)
       send(text, 'miss', entry?.rowCount || 0)
     } catch (err) {
@@ -1000,9 +1038,11 @@ router.get('/inventory-sessions',
 
       const [rows, countRes] = await Promise.all([
         req.tQuery(
-          `SELECT s.*, u.nombre_completo as operator_nombre
+          `SELECT s.*, u.nombre_completo as operator_nombre,
+                  ub.codigo as ubicacion_codigo, ub.nombre as ubicacion_nombre
            FROM inv_sessions s
            LEFT JOIN usuarios u ON u.id = s.operator_id
+           LEFT JOIN dev_ubicaciones ub ON ub.id = s.ubicacion_id
            WHERE ${where}
            ORDER BY s.completed_at DESC
            LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
@@ -1032,9 +1072,11 @@ router.get('/inventory-session/:id',
     try {
       const [sessionRes, scansRes] = await Promise.all([
         req.tQuery(
-          `SELECT s.*, u.nombre_completo as operator_nombre
+          `SELECT s.*, u.nombre_completo as operator_nombre,
+                  ub.codigo as ubicacion_codigo, ub.nombre as ubicacion_nombre
            FROM inv_sessions s
            LEFT JOIN usuarios u ON u.id = s.operator_id
+           LEFT JOIN dev_ubicaciones ub ON ub.id = s.ubicacion_id
            WHERE s.id = $1 AND s.tenant_id = $2`,
           [req.params.id, req.tenantId]
         ),
@@ -1677,76 +1719,97 @@ router.post('/order-tracking/bulk',
       }
 
       const results = await req.tTransaction(async (client) => {
-        const updated = []
         const userNombre = req.fullUser?.nombre_completo || null
 
-        for (const obc of obcs) {
-          const existing = await client.query(
-            'SELECT id, status FROM pick_order_tracking WHERE tenant_id = $1 AND outbound_order_no = $2',
-            [req.tenantId, obc]
-          )
+        // 1. Fetch all existing rows in one query (eliminates N SELECTs)
+        const existingRows = await client.query(
+          `SELECT outbound_order_no, status
+           FROM pick_order_tracking
+           WHERE tenant_id = $1 AND outbound_order_no = ANY($2::text[])`,
+          [req.tenantId, obcs]
+        )
+        const existingMap = new Map(existingRows.rows.map(r => [r.outbound_order_no, r]))
 
-          if (existing.rows.length === 0) {
-            // Check monthly surtido limit before creating a new OBC entry
-            const limitCheck = await checkModuleLimit(req.tenantId, 'surtido_limit', SURTIDO_COUNT_QUERY)
-            if (limitCheck.limited) {
-              const err = new Error('Límite mensual de órdenes surtido alcanzado.')
-              err.statusCode = 402
-              err.code = 'SURTIDO_LIMIT_REACHED'
-              err.used = limitCheck.used
-              err.limit = limitCheck.limit
-              throw err
-            }
-            const resInsert = await client.query(
-              `INSERT INTO pick_order_tracking
-                 (tenant_id, outbound_order_no, surtidor_id, surtidor_nombre, status, notes)
-               VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-              [req.tenantId, obc, surtidor_id || null, surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes)]
-            )
-            updated.push(resInsert.rows[0])
-          } else {
-            const existingStatus = existing.rows[0].status
-            if (CLOSED_ORDER_TRACKING_STATUSES.has(existingStatus) && (
-              surtidor_id !== undefined ||
-              (status !== undefined && String(status) !== existingStatus)
-            )) {
-              const err = new Error('No se puede modificar surtidor o estatus en órdenes completadas o parciales')
-              err.statusCode = 409
-              throw err
-            }
-            const fields = ['updated_at = now()']
-            const params = []
-            let p = 1
-            if (status !== undefined) {
-              fields.push(`status = $${p++}`); params.push(status)
-              if (status === 'assigned') {
-                fields.push(`assigned_at = now()`)
-                fields.push(`assigned_by = $${p++}`); params.push(userNombre)
-              }
-              if (status === 'sorting')            fields.push(`sorting_started_at = now()`)
-              if (status === 'pending_validation') fields.push(`sorting_completed_at = now()`)
-              if (status === 'validating')         fields.push(`validation_started_at = now()`)
-              if (status === 'complete') {
-                fields.push(`validation_completed_at = now()`)
-                fields.push(`validated_by = $${p++}`); params.push(userNombre)
-              }
-            }
-            if (surtidor_id !== undefined) {
-              fields.push(`surtidor_id = $${p++}`); params.push(surtidor_id || null)
-              fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
-            }
-            if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
-            
-            params.push(req.tenantId, obc)
-            const resUpdate = await client.query(
-              `UPDATE pick_order_tracking SET ${fields.join(', ')}
-               WHERE tenant_id = $${p++} AND outbound_order_no = $${p} RETURNING *`,
-              params
-            )
-            updated.push(resUpdate.rows[0])
+        // 2. Detect closed orders that would be illegally modified
+        const closedAndModified = obcs.filter(obc => {
+          const row = existingMap.get(obc)
+          if (!row) return false
+          if (!CLOSED_ORDER_TRACKING_STATUSES.has(row.status)) return false
+          return surtidor_id !== undefined ||
+            (status !== undefined && String(status) !== row.status)
+        })
+        if (closedAndModified.length > 0) {
+          const err = new Error('No se puede modificar surtidor o estatus en órdenes completadas o parciales')
+          err.statusCode = 409
+          throw err
+        }
+
+        const newObcs = obcs.filter(obc => !existingMap.has(obc))
+        const updateObcs = obcs.filter(obc => existingMap.has(obc))
+
+        // 3. Check module limit once for all new OBCs
+        if (newObcs.length > 0) {
+          const limitCheck = await checkModuleLimit(req.tenantId, 'surtido_limit', SURTIDO_COUNT_QUERY)
+          if (limitCheck.limited) {
+            const err = new Error('Límite mensual de órdenes surtido alcanzado.')
+            err.statusCode = 402
+            err.code = 'SURTIDO_LIMIT_REACHED'
+            err.used = limitCheck.used
+            err.limit = limitCheck.limit
+            throw err
           }
         }
-        return updated
+
+        const inserted = []
+        const updated = []
+
+        // 4. INSERT all new OBCs in one UNNEST query
+        if (newObcs.length > 0) {
+          const resInsert = await client.query(
+            `INSERT INTO pick_order_tracking
+               (tenant_id, outbound_order_no, surtidor_id, surtidor_nombre, status, notes)
+             SELECT $1, unnest($2::text[]), $3, $4, $5, $6 RETURNING *`,
+            [req.tenantId, newObcs, surtidor_id || null, surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes)]
+          )
+          inserted.push(...resInsert.rows)
+        }
+
+        // 5. UPDATE all existing OBCs in one ANY query
+        if (updateObcs.length > 0) {
+          const fields = ['updated_at = now()']
+          const params = []
+          let p = 1
+          if (status !== undefined) {
+            fields.push(`status = $${p++}`); params.push(status)
+            if (status === 'assigned') {
+              fields.push(`assigned_at = now()`)
+              fields.push(`assigned_by = $${p++}`); params.push(userNombre)
+            }
+            if (status === 'sorting')            fields.push(`sorting_started_at = now()`)
+            if (status === 'pending_validation') fields.push(`sorting_completed_at = now()`)
+            if (status === 'validating')         fields.push(`validation_started_at = now()`)
+            if (status === 'complete') {
+              fields.push(`validation_completed_at = now()`)
+              fields.push(`validated_by = $${p++}`); params.push(userNombre)
+            }
+          }
+          if (surtidor_id !== undefined) {
+            fields.push(`surtidor_id = $${p++}`); params.push(surtidor_id || null)
+            fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
+            if (surtidor_id) fields.push(`assigned_at = COALESCE(assigned_at, now())`)
+          }
+          if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
+
+          params.push(req.tenantId, updateObcs)
+          const resUpdate = await client.query(
+            `UPDATE pick_order_tracking SET ${fields.join(', ')}
+             WHERE tenant_id = $${p++} AND outbound_order_no = ANY($${p}::text[]) RETURNING *`,
+            params
+          )
+          updated.push(...resUpdate.rows)
+        }
+
+        return [...inserted, ...updated]
       })
 
       res.json({ success: true, data: results })
@@ -1800,10 +1863,11 @@ router.put('/order-tracking/:obc',
         }
         const result = await req.tQuery(
           `INSERT INTO pick_order_tracking
-             (tenant_id, outbound_order_no, third_order_no, surtidor_id, surtidor_nombre, status, notes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+             (tenant_id, outbound_order_no, third_order_no, surtidor_id, surtidor_nombre, status, notes, assigned_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
           [req.tenantId, req.params.obc, normalizeOptionalText(third_order_no), surtidor_id || null,
-           surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes)]
+           surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes),
+           surtidor_id ? new Date() : null]
         )
         return res.json({ success: true, data: result.rows[0] })
       }
@@ -1837,6 +1901,7 @@ router.put('/order-tracking/:obc',
       if (surtidor_id !== undefined) {
         fields.push(`surtidor_id = $${p++}`); params.push(surtidor_id || null)
         fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
+        if (surtidor_id) fields.push(`assigned_at = COALESCE(assigned_at, now())`)
       }
       if (third_order_no !== undefined) { fields.push(`third_order_no = $${p++}`); params.push(normalizeOptionalText(third_order_no)) }
       if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
@@ -1851,6 +1916,49 @@ router.put('/order-tracking/:obc',
     } catch (err) {
       console.error('PUT order-tracking error:', err.message)
       res.status(500).json({ success: false, error: 'Error actualizando seguimiento' })
+    }
+  }
+)
+
+// POST /force-validate/bulk — admin only, force-complete many orders in one query
+router.post('/force-validate/bulk',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'actualizar'),
+  async (req, res) => {
+    try {
+      if (req.fullUser.rol_nombre !== 'Administrador') {
+        return res.status(403).json({ success: false, error: 'Solo administradores pueden forzar la validación' })
+      }
+      const { obcs, reason } = req.body
+      if (!Array.isArray(obcs) || obcs.length === 0) {
+        return res.status(400).json({ success: false, error: 'Lista de órdenes (obcs) es requerida' })
+      }
+      if (!reason?.trim()) {
+        return res.status(400).json({ success: false, error: 'Se requiere un motivo para forzar la validación' })
+      }
+      const operatorName = req.fullUser.nombre_completo || req.user.email || 'Admin'
+      const auditNote = `[Forzado por ${operatorName} - ${new Date().toISOString().slice(0,19).replace('T',' ')}]: ${reason.trim()}`
+
+      const result = await req.tQuery(
+        `INSERT INTO pick_order_tracking
+           (tenant_id, outbound_order_no, status, validation_completed_at, notes, validated_by)
+         SELECT $1, unnest($2::text[]), 'complete', now(), $3, $4
+         ON CONFLICT (tenant_id, outbound_order_no) DO UPDATE SET
+           status = 'complete',
+           validation_completed_at = now(),
+           notes = CASE
+             WHEN pick_order_tracking.notes IS NOT NULL THEN pick_order_tracking.notes || E'\\n' || EXCLUDED.notes
+             ELSE EXCLUDED.notes
+           END,
+           validated_by = EXCLUDED.validated_by,
+           updated_at = now()
+         RETURNING *`,
+        [req.tenantId, obcs, auditNote, operatorName]
+      )
+      res.json({ success: true, count: result.rows.length, data: result.rows })
+    } catch (err) {
+      console.error('POST force-validate/bulk error:', err.message)
+      res.status(500).json({ success: false, error: 'Error forzando validación masiva' })
     }
   }
 )

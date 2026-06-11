@@ -41,15 +41,6 @@ function safeDate(v) {
   try { return fmtDateTime(v) } catch { return '—' }
 }
 
-function calcTraceDuration(from, to) {
-  if (!from || !to) return null
-  const ms = new Date(to) - new Date(from)
-  if (ms <= 0) return null
-  const min = Math.floor(ms / 60000)
-  const h = Math.floor(min / 60)
-  const m = min % 60
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
-}
 
 function GeneralInfoBlock({ icon: Icon, label, value, tone = 'warm', mono = false, compact = false }) {
   const toneCls = {
@@ -75,27 +66,30 @@ function GeneralInfoBlock({ icon: Icon, label, value, tone = 'warm', mono = fals
 
 function ValidationProgressCard({ scanned, expected, pct, t }) {
   const done = pct !== null && pct >= 100
+  const tone = done ? 'success' : 'primary'
+  const toneCls = {
+    primary: 'border-primary-100/80 bg-primary-50/55 text-primary-600',
+    success: 'border-success-100/80 bg-success-50/55 text-success-600',
+  }
   return (
-    <div className={`rounded-2xl border p-3 flex items-center gap-3 shadow-soft hover:shadow-card hover:-translate-y-0.5 transition-all duration-200 ${
-      done ? 'border-success-100 bg-success-50' : 'border-primary-100 bg-primary-50'
-    }`}>
-      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-white shadow-sm ${done ? 'text-success-600' : 'text-primary-600'}`}>
-        <CheckCircle2 className="w-4 h-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between">
-          <p className={`text-[10px] font-semibold uppercase tracking-wider opacity-70 ${done ? 'text-success-700' : 'text-primary-600'}`}>
-            {t('surtido.ordenes.detail.validation_progress')}
-          </p>
-          <span className="text-xs font-bold tabular-nums text-warm-700 ml-2 shrink-0">
-            {scanned}/{expected || '?'} {pct !== null ? `· ${pct}%` : ''}
-          </span>
+    <div className={`rounded-2xl border px-3 py-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.4)] ${toneCls[tone]}`}>
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm">
+          <CheckCircle2 className="h-4 w-4" />
         </div>
-        <div className="mt-1.5 h-1.5 bg-white/60 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-700 ${done ? 'bg-success-500' : 'bg-primary-400'}`}
-            style={{ width: `${pct ?? 0}%` }}
-          />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">
+            {t('surtido.ordenes.trace.step_validation')}
+          </p>
+          <p className="text-sm mt-1 font-bold text-warm-800 tabular-nums">
+            {scanned}/{expected || '?'}{pct !== null ? ` · ${pct}%` : ''}
+          </p>
+          <div className="mt-1.5 h-1.5 bg-white/60 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${done ? 'bg-success-500' : 'bg-primary-400'}`}
+              style={{ width: `${pct ?? 0}%` }}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -118,7 +112,6 @@ function TraceabilityTimeline({ tracking, t }) {
       label: t('surtido.ordenes.trace.step_assigned'),
       Icon: UserCheck,
       at: tracking?.assigned_at,
-      to: null,
       by: tracking?.assigned_by || tracking?.surtidor_nombre || null,
       done: !!(tracking?.assigned_at || tracking?.surtidor_nombre),
     },
@@ -126,8 +119,7 @@ function TraceabilityTimeline({ tracking, t }) {
       key: 'sorting',
       label: t('surtido.ordenes.trace.step_sorting'),
       Icon: Package2,
-      at: tracking?.sorting_started_at,
-      to: tracking?.sorting_completed_at,
+      at: tracking?.sorting_completed_at,
       by: tracking?.surtidor_nombre || null,
       done: !!(tracking?.sorting_started_at),
     },
@@ -135,8 +127,7 @@ function TraceabilityTimeline({ tracking, t }) {
       key: 'validation',
       label: t('surtido.ordenes.trace.step_validation'),
       Icon: ScanBarcode,
-      at: tracking?.validation_started_at,
-      to: tracking?.validation_completed_at,
+      at: tracking?.validation_completed_at,
       by: tracking?.validated_by,
       done: !!(tracking?.validation_started_at),
     },
@@ -145,7 +136,6 @@ function TraceabilityTimeline({ tracking, t }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       {steps.map((step, idx) => {
-        const duration = calcTraceDuration(step.at, step.to)
         const isConnected = idx < steps.length - 1
         return (
           <div key={step.key} className="relative">
@@ -165,9 +155,8 @@ function TraceabilityTimeline({ tracking, t }) {
               </p>
               {step.done ? (
                 <div className="space-y-0.5">
-                  {step.at && <p className="text-[10px] text-warm-500 tabular-nums">{safeDate(step.at)}</p>}
+                  <p className="text-[10px] text-warm-500 tabular-nums">{step.at ? safeDate(step.at) : '—'}</p>
                   {step.by && <p className="text-[10px] text-primary-600 font-semibold">{step.by}</p>}
-                  {duration && <p className="text-[10px] text-warm-400">{duration}</p>}
                 </div>
               ) : (
                 <p className="text-[10px] text-warm-300">{t('surtido.ordenes.trace.pending')}</p>
@@ -441,21 +430,7 @@ export default function OrdenDetalle() {
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
         >
           <div className="border-b border-warm-100/80 bg-gradient-to-r from-white via-white to-primary-50/50 px-5 py-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary-500">Informacion general</p>
-              </div>
-              {hasValidation && (
-                <div className="w-full lg:w-[320px]">
-                  <ValidationProgressCard
-                    scanned={totalScanned}
-                    expected={totalExpected}
-                    pct={pct}
-                    t={t}
-                  />
-                </div>
-              )}
-            </div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary-500">Informacion general</p>
           </div>
 
           <div className="px-5 py-5">
@@ -467,7 +442,14 @@ export default function OrdenDetalle() {
               <GeneralInfoBlock icon={Truck} label={t('surtido.ordenes.canal')} value={d?.logisticsChannel || '—'} compact />
               <GeneralInfoBlock icon={Hash} label={t('surtido.ordenes.referencia')} value={referencia} tone="accent" mono compact />
               <GeneralInfoBlock icon={BarChart3} label={t('surtido.ordenes.detail.tracking')} value={trackingNo} tone="accent" mono compact />
-              <GeneralInfoBlock icon={UserCheck} label={t('surtido.ordenes.surtidor')} value={tracking?.surtidor_nombre || '—'} tone="success" compact />
+              {hasValidation && (
+                <ValidationProgressCard
+                  scanned={totalScanned}
+                  expected={totalExpected}
+                  pct={pct}
+                  t={t}
+                />
+              )}
             </div>
           </div>
         </motion.div>
@@ -485,12 +467,6 @@ export default function OrdenDetalle() {
             <p className="text-[10px] uppercase tracking-wider font-bold text-primary-600">
               {t('surtido.ordenes.trace.operacion') || 'Operación'}
             </p>
-            {tracking?.surtidor_nombre && (
-              <span className="ml-auto flex items-center gap-1.5 text-[11px] text-warm-500">
-                <UserCheck size={11} className="text-primary-400" />
-                <span className="font-semibold text-warm-700">{tracking.surtidor_nombre}</span>
-              </span>
-            )}
           </div>
           {tracking ? (
             <TraceabilityTimeline tracking={tracking} t={t} />

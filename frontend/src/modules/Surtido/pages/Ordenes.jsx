@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -24,6 +24,7 @@ import {
   getOrderTracking, upsertOrderTracking, bulkUpsertOrderTracking, getScanSessions, getScanSession,
   getManualEntryReasons, createManualEntryReason, updateManualEntryReason, deleteManualEntryReason,
   forceValidateOrder,
+  bulkForceValidateOrders,
   getRecords,
 } from '../services/surtidoService'
 import api from '../../../core/services/api'
@@ -1022,6 +1023,7 @@ export default function Ordenes() {
     queryKey: ['wms-outbound'],
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
     retry: 0,
   })
 
@@ -1029,6 +1031,7 @@ export default function Ordenes() {
     queryKey: ['wms-order-tracking'],
     queryFn: getOrderTracking,
     staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
     retry: 0,
   })
 
@@ -1036,6 +1039,7 @@ export default function Ordenes() {
     queryKey: ['wms-surtidores'],
     queryFn: getSurtidores,
     staleTime: 60000,
+    refetchOnWindowFocus: false,
     retry: 0,
   })
 
@@ -1055,13 +1059,15 @@ export default function Ordenes() {
     })
   }, [fromPersistentCache, isPartial, qc])
 
-  const trackingMap = trackingList.reduce((m, tr) => {
-    m[tr.outbound_order_no] = tr; return m
-  }, {})
+  const trackingMap = useMemo(() =>
+    trackingList.reduce((m, tr) => { m[tr.outbound_order_no] = tr; return m }, {}),
+    [trackingList]
+  )
 
-  const wmsMap = allWmsRecords.reduce((m, r) => {
-    m[r.outboundOrderNo] = r; return m
-  }, {})
+  const wmsMap = useMemo(() =>
+    allWmsRecords.reduce((m, r) => { m[r.outboundOrderNo] = r; return m }, {}),
+    [allWmsRecords]
+  )
 
   const combinedRecords = useMemo(() => {
     const records = [...allWmsRecords]
@@ -1146,11 +1152,10 @@ export default function Ordenes() {
 
   const destinationQuery = filterDestination.trim().toLowerCase()
 
-  const filteredWms = combinedRecords.filter(r => {
+  const filteredWms = useMemo(() => combinedRecords.filter(r => {
     const tracking = trackingMap[r.outboundOrderNo]
     const currentStatus = tracking?.status || 'pending_assignment'
 
-    // Calculate effective completion
     const scanned = Number(tracking?.total_scanned ?? 0)
     const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
     const is100Percent = expected > 0 && scanned >= expected
@@ -1159,19 +1164,15 @@ export default function Ordenes() {
 
     if (filterStatus) {
       if (filterStatus === 'complete') {
-        // Show only if it is completed (100% or explicit complete)
         if (!isCompleted) return false
       } else if (filterStatus === 'validating') {
-        // Validando tab: show if (status is validating OR has scans) AND is NOT completed
         const hasScans = scanned > 0
         if (isCompleted) return false
         if (currentStatus !== 'validating' && !hasScans) return false
       } else if (filterStatus === 'sorting' || filterStatus === 'pending_assignment') {
-        // Sorting/Pending: show if status matches AND it has NO scans AND is NOT completed
         if (isCompleted || scanned > 0) return false
         if (currentStatus !== filterStatus) return false
       } else {
-        // For 'partial' or 'cancelled', we show them even if 100% (though partial shouldn't be 100%)
         if (currentStatus !== filterStatus) return false
       }
     }
@@ -1183,11 +1184,10 @@ export default function Ordenes() {
       if (!matchesUnassigned && !matchesNamed) return false
     }
     if (destinationQuery && !(r.receiverName || '').toLowerCase().includes(destinationQuery)) return false
-    
-    // Ignore date filter if searching by OBC/Code or using bulk filter
+
     const skipDateFilter = q || bulkSearchCodes.length > 0
     if (!skipDateFilter && !matchesDateFilter(getFilterDateValue(r))) return false
-    
+
     if (!withinTimeRange(r.outboundTime || r.expectedTime || r.orderCreateTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(r.outboundOrderNo)) return false
     if (q) {
@@ -1195,9 +1195,10 @@ export default function Ordenes() {
       if (!haystack.includes(q)) return false
     }
     return true
-  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [combinedRecords, trackingMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo])
 
-  const filteredValidacion = trackingList.filter(tr => {
+  const filteredValidacion = useMemo(() => trackingList.filter(tr => {
     if (filterStatus && tr.status !== filterStatus) return false
     const wms = wmsMap[tr.outbound_order_no]
     if (filterClient.length > 0 && !filterClient.includes(wms?.customerCode || wms?.customerNo || wms?.customerName || '')) return false
@@ -1207,11 +1208,10 @@ export default function Ordenes() {
       if (!matchesUnassigned && !matchesNamed) return false
     }
     if (destinationQuery && !(wms?.receiverName || '').toLowerCase().includes(destinationQuery)) return false
-    
-    // Ignore date filter if searching by OBC/Code or using bulk filter
+
     const skipDateFilter = q || bulkSearchCodes.length > 0
     if (!skipDateFilter && !matchesDateFilter(getFilterDateValue(wms) || tr.updated_at)) return false
-    
+
     if (!withinTimeRange(wms?.outboundTime || wms?.expectedTime || wms?.orderCreateTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
     if (q) {
@@ -1219,12 +1219,16 @@ export default function Ordenes() {
       if (!haystack.includes(q)) return false
     }
     return true
-  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [trackingList, wmsMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo])
 
   const activeRecords = filteredWms
   const total       = activeRecords.length
   const totalPages  = Math.ceil(total / pageSize) || 1
-  const pagedRecords = activeRecords.slice((page - 1) * pageSize, page * pageSize)
+  const pagedRecords = useMemo(() =>
+    activeRecords.slice((page - 1) * pageSize, page * pageSize),
+    [activeRecords, page, pageSize]
+  )
 
   function patchTrackingCache(updated) {
     if (!updated) return
@@ -1292,16 +1296,26 @@ export default function Ordenes() {
   })
 
   const bulkForceCloseMut = useMutation({
-    mutationFn: ({ obcs, reason }) =>
-      Promise.all(obcs.map(obc => forceValidateOrder(obc, { reason }))),
-    onSuccess: (results) => {
-      results.forEach(res => { if (res?.data) patchTrackingCache(res.data) })
+    mutationFn: ({ obcs, reason }) => bulkForceValidateOrders({ obcs, reason }),
+    onMutate: ({ obcs }) => {
+      const prev = qc.getQueryData(['wms-order-tracking'])
+      const obcSet = new Set(obcs)
+      qc.setQueryData(['wms-order-tracking'], (old) => {
+        if (!old?.data) return old
+        return { ...old, data: old.data.map(r => obcSet.has(r.outbound_order_no) ? { ...r, status: 'complete' } : r) }
+      })
+      return { prev }
+    },
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
       setBulkForceCloseObcs(null)
       setBulkForceReason('')
-      toast.success(`${results.length} orden(es) cerrada(s) forzosamente`)
+      toast.success(`${data?.count ?? 0} orden(es) cerrada(s) forzosamente`)
     },
-    onError: (err) => toast.error(err?.response?.data?.error || t('toast.error')),
+    onError: (err, vars, context) => {
+      if (context?.prev) qc.setQueryData(['wms-order-tracking'], context.prev)
+      toast.error(err?.response?.data?.error || t('toast.error'))
+    },
   })
 
   const bulkAssignMut = useMutation({
@@ -1310,20 +1324,50 @@ export default function Ordenes() {
       surtidor_id: surtidorId,
       ...(!surtidorId ? { status: 'pending_assignment' } : {}),
     }),
+    onMutate: ({ obcs, surtidorId }) => {
+      const prev = qc.getQueryData(['wms-order-tracking'])
+      const s = surtidores.find(x => x.id === surtidorId || x.id === Number(surtidorId))
+      const updateMap = new Map(obcs.map(obc => [obc, { surtidor_id: surtidorId || null, surtidor_nombre: s?.nombre || null }]))
+      qc.setQueryData(['wms-order-tracking'], (old) => {
+        if (!old?.data) return old
+        return {
+          ...old,
+          data: old.data.map(r =>
+            updateMap.has(r.outbound_order_no) ? { ...r, ...updateMap.get(r.outbound_order_no) } : r
+          ),
+        }
+      })
+      return { prev }
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
       toast.success(`${vars.obcs.length} ordenes actualizadas`)
     },
-    onError: () => toast.error(t('toast.error')),
+    onError: (err, vars, context) => {
+      if (context?.prev) qc.setQueryData(['wms-order-tracking'], context.prev)
+      toast.error(t('toast.error'))
+    },
   })
 
   const statusMut = useMutation({
     mutationFn: ({ obcs, status }) => bulkUpsertOrderTracking({ obcs, status }),
+    onMutate: ({ obcs, status }) => {
+      const prev = qc.getQueryData(['wms-order-tracking'])
+      const obcSet = new Set(obcs)
+      qc.setQueryData(['wms-order-tracking'], (old) => {
+        if (!old?.data) return old
+        return { ...old, data: old.data.map(r => obcSet.has(r.outbound_order_no) ? { ...r, status } : r) }
+      })
+      return { prev }
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
       if (vars.obcs.length > 1) toast.success(`${vars.obcs.length} ${t('surtido.ordenes.item_label')} actualizadas`)
     },
-    onError: () => toast.error(t('toast.error')),
+    onError: (err, vars, context) => {
+      if (context?.prev) qc.setQueryData(['wms-order-tracking'], context.prev)
+      toast.error(t('toast.error'))
+    },
   })
 
   function clearFilters() {
@@ -2120,6 +2164,157 @@ export default function Ordenes() {
   )
 }
 
+const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, onAssign, onQuickEdit, onValidate, canAssign, canQuickEdit, canValidate, t, showScannedColumn }) {
+  const obc = r.outboundOrderNo
+  const scanned = Number(tracking?.total_scanned ?? 0)
+  const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
+  const is100Percent = expected > 0 && scanned >= expected
+  const rawStatus = tracking?.status || 'pending_assignment'
+  const displayStatus = (is100Percent && rawStatus !== 'complete' && rawStatus !== 'partial' && rawStatus !== 'cancelled') ? 'complete' : rawStatus
+  const meta = STATUS_META[displayStatus] ?? STATUS_META.pending_assignment
+  const noSurtidor = !tracking?.surtidor_nombre
+  const isClosedOrder = CLOSED_ORDER_STATUSES.has(displayStatus)
+  const cliente = r.customerCode || r.customerNo || r.customerName || '—'
+  const destino = r.receiverName || '—'
+  const canal = r.logisticsChannel || '—'
+  const referencia = r.thirdOrderNo || r.referenceNo || '—'
+  const cajas = r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? '—'
+  const pct = showScannedColumn
+    ? (expected > 0 ? Math.min(100, Math.round((scanned / expected) * 100)) : (scanned > 0 ? 100 : 0))
+    : 0
+
+  return (
+    <tr
+      onClick={() => onView(obc)}
+      className={`transition-colors cursor-pointer hover:bg-primary-50/50 ${isChecked ? 'bg-primary-50/20' : noSurtidor ? 'bg-warning-50/20' : ''}`}>
+
+      <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
+        <input type="checkbox"
+          checked={isChecked}
+          onChange={() => onToggle(obc)}
+          className="rounded border-warm-300 text-primary-600 cursor-pointer"
+          onClick={e => e.stopPropagation()} />
+      </td>
+
+      <td className="table-cell col-code"><CopyableObc obc={obc} /></td>
+
+      <td className="table-cell hidden xl:table-cell col-date">
+        <div className="leading-none" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
+          <span className="block text-xs text-warm-700">{r.outboundTime ? formatDateTz(r.outboundTime) : '—'}</span>
+          <span className="mt-1 block text-[10px] text-warm-400">{r.outboundTime ? fmtTimeShort(r.outboundTime) : ''}</span>
+        </div>
+      </td>
+
+      <td className="table-cell hidden lg:table-cell col-name">
+        <span className="block truncate font-mono text-xs font-semibold text-primary-700" title={cliente}>{cliente}</span>
+      </td>
+
+      <td className="table-cell hidden xl:table-cell col-name">
+        <span className="text-warm-600 text-xs flex items-center gap-1">
+          <MapPin size={10} className="text-warm-300" />
+          <span className="block max-w-[160px] truncate" title={destino}>{destino}</span>
+        </span>
+      </td>
+
+      <td className="table-cell hidden xl:table-cell col-name">
+        <span className="text-warm-600 text-xs flex items-center gap-1">
+          <Truck size={10} className="text-warm-300" />
+          <span className="block max-w-[120px] truncate" title={canal}>{canal}</span>
+        </span>
+      </td>
+
+      <td className="table-cell hidden 2xl:table-cell col-name">
+        <span className="block truncate font-mono text-xs text-warm-600" title={referencia}>{referencia}</span>
+      </td>
+
+      <td className="table-cell text-right">
+        <span className="font-semibold text-warm-700">{cajas}</span>
+      </td>
+
+      {showScannedColumn && (
+        <td className="table-cell">
+          <div className="flex items-center justify-end gap-2 min-w-[88px]">
+            <span className="font-semibold text-success-700 tabular-nums leading-none min-w-[1.25rem] text-right">
+              {scanned}
+            </span>
+            {scanned > 0 && (
+              <div
+                className="h-2 w-20 overflow-hidden rounded-full bg-success-100/80 shadow-inner"
+                title={`${scanned}/${expected || '—'}`}
+              >
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-success-400 to-success-500 transition-all duration-300"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            )}
+          </div>
+        </td>
+      )}
+
+      <td className="table-cell col-name">
+        {canAssign && !isClosedOrder ? (
+          <button
+            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all hover:shadow-sm ${
+              noSurtidor
+                ? 'border-warning-300 text-warning-700 bg-warning-50 hover:border-warning-400'
+                : 'border-warm-200 text-warm-700 hover:border-primary-300 hover:text-primary-700'
+            }`}
+            onClick={e => { e.stopPropagation(); onAssign(r) }}>
+            <UserCheck size={11} />
+            <span className="max-w-[110px] truncate" title={tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}>
+              {tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}
+            </span>
+            <ChevronDown size={9} />
+          </button>
+        ) : (
+          <span className="text-warm-600 text-xs">{tracking?.surtidor_nombre || '—'}</span>
+        )}
+      </td>
+
+      <td className="table-cell">
+        <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
+      </td>
+
+      <td className="table-cell text-right">
+        <div className="flex items-center justify-end gap-1">
+          <button title={t('admin.view')}
+            className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+            onClick={e => { e.stopPropagation(); onView(obc) }}>
+            <Eye size={13} />
+          </button>
+          {canQuickEdit && (
+            <button title="Edición rápida"
+              className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+              onClick={e => { e.stopPropagation(); onQuickEdit(obc) }}>
+              <ClipboardList size={13} />
+            </button>
+          )}
+          {canValidate && (
+            isClosedOrder ? (
+              <button title="Ver Registros"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-warm-500 hover:text-warm-700 hover:bg-warm-100 border border-transparent transition-all"
+                onClick={e => { e.stopPropagation(); onView(obc) }}>
+                <Database size={13} />
+              </button>
+            ) : (
+              <button title={t('surtido.ordenes.validate_btn')}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-primary-600 hover:text-primary-800 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+                onClick={e => { e.stopPropagation(); onValidate(obc) }}>
+                <ScanBarcode size={13} />
+              </button>
+            )
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}, (prev, next) =>
+  prev.isChecked === next.isChecked &&
+  prev.tracking === next.tracking &&
+  prev.r === next.r
+)
+
 function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, onExportDetailed, exportingDetailed, onPrintUbicaciones, printLoading, onBulkForceClose, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange, showScannedColumn = true }) {
   const [selected, setSelected] = useState(new Set())
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
@@ -2174,11 +2369,11 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
     else sortedRecords.forEach(r => next.add(r.outboundOrderNo))
     return next
   })
-  const toggleRow = (obc) => setSelected(prev => {
+  const toggleRow = useCallback((obc) => setSelected(prev => {
     const next = new Set(prev)
     next.has(obc) ? next.delete(obc) : next.add(obc)
     return next
-  })
+  }), [])
 
   return (
     <motion.div className="card overflow-hidden table-shell h-full"
@@ -2221,13 +2416,6 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors"
               onClick={() => { onExportSelected([...selected]); setSelected(new Set()) }}>
               <Download size={12} /> {t('common.export')} ({selected.size})
-            </button>
-          )}
-          {canExport && (
-            <button
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-success-700 border border-success-200 hover:bg-success-50 transition-colors"
-              onClick={onExportAll}>
-              <Download size={12} /> {t('common.export')} {t('common.all')}
             </button>
           )}
           {canExport && onExportDetailed && (
@@ -2314,162 +2502,24 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
-            {sortedRecords.map((r, i) => {
-              const obc = r.outboundOrderNo
-              const tracking = trackingMap[obc]
-              
-              const scanned = Number(tracking?.total_scanned ?? 0)
-              const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
-              const is100Percent = expected > 0 && scanned >= expected
-              
-              const rawStatus = tracking?.status || 'pending_assignment'
-              const displayStatus = (is100Percent && rawStatus !== 'complete' && rawStatus !== 'partial' && rawStatus !== 'cancelled') ? 'complete' : rawStatus
-              const meta = STATUS_META[displayStatus] ?? STATUS_META.pending_assignment
-              
-              const status = rawStatus
-              const noSurtidor = !tracking?.surtidor_nombre
-              const isClosedOrder = CLOSED_ORDER_STATUSES.has(displayStatus)
-              const cliente = r.customerCode || r.customerNo || r.customerName || '—'
-              const destino = r.receiverName || '—'
-              const canal = r.logisticsChannel || '—'
-              const referencia = r.thirdOrderNo || r.referenceNo || '—'
-              const cajas = r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? '—'
-              const isChecked = selected.has(obc)
-              return (
-                <tr key={obc || i}
-                  onClick={() => onView(obc)}
-                  className={`transition-colors cursor-pointer hover:bg-primary-50/50 ${isChecked ? 'bg-primary-50/20' : noSurtidor ? 'bg-warning-50/20' : ''}`}>
-
-                  <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
-                    <input type="checkbox"
-                      checked={isChecked}
-                      onChange={() => toggleRow(obc)}
-                      className="rounded border-warm-300 text-primary-600 cursor-pointer"
-                      onClick={e => e.stopPropagation()} />
-                  </td>
-
-                  <td className="table-cell col-code"><CopyableObc obc={obc} /></td>
-
-                  <td className="table-cell hidden xl:table-cell col-date">
-                    <div className="leading-none" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
-                      <span className="block text-xs text-warm-700">{r.outboundTime ? formatDateTz(r.outboundTime) : '—'}</span>
-                      <span className="mt-1 block text-[10px] text-warm-400">{r.outboundTime ? fmtTimeShort(r.outboundTime) : ''}</span>
-                    </div>
-                  </td>
-
-                  <td className="table-cell hidden lg:table-cell col-name">
-                    <span className="block truncate font-mono text-xs font-semibold text-primary-700" title={cliente}>{cliente}</span>
-                  </td>
-
-                  <td className="table-cell hidden xl:table-cell col-name">
-                    <span className="text-warm-600 text-xs flex items-center gap-1">
-                      <MapPin size={10} className="text-warm-300" />
-                      <span className="block max-w-[160px] truncate" title={destino}>{destino}</span>
-                    </span>
-                  </td>
-
-                  <td className="table-cell hidden xl:table-cell col-name">
-                    <span className="text-warm-600 text-xs flex items-center gap-1">
-                      <Truck size={10} className="text-warm-300" />
-                      <span className="block max-w-[120px] truncate" title={canal}>{canal}</span>
-                    </span>
-                  </td>
-
-                  <td className="table-cell hidden 2xl:table-cell col-name">
-                    <span className="block truncate font-mono text-xs text-warm-600" title={referencia}>{referencia}</span>
-                  </td>
-
-                  <td className="table-cell text-right">
-                    <span className="font-semibold text-warm-700">{cajas}</span>
-                  </td>
-
-                  {showScannedColumn && (
-                    <td className="table-cell">
-                      {(() => {
-                        const pct = expected > 0
-                          ? Math.min(100, Math.round((scanned / expected) * 100))
-                          : (scanned > 0 ? 100 : 0)
-
-                        return (
-                          <div className="flex items-center justify-end gap-2 min-w-[88px]">
-                            <span className="font-semibold text-success-700 tabular-nums leading-none min-w-[1.25rem] text-right">
-                              {scanned}
-                            </span>
-                            {scanned > 0 && (
-                              <div
-                                className="h-2 w-20 overflow-hidden rounded-full bg-success-100/80 shadow-inner"
-                                title={`${scanned}/${expected || '—'}`}
-                              >
-                                <div
-                                  className="h-full rounded-full bg-gradient-to-r from-success-400 to-success-500 transition-all duration-300"
-                                  style={{ width: `${pct}%` }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })()}
-                    </td>
-                  )}
-
-                  <td className="table-cell col-name">
-                    {canAssign && !isClosedOrder ? (
-                      <button
-                        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-all hover:shadow-sm ${
-                          noSurtidor
-                            ? 'border-warning-300 text-warning-700 bg-warning-50 hover:border-warning-400'
-                            : 'border-warm-200 text-warm-700 hover:border-primary-300 hover:text-primary-700'
-                        }`}
-                        onClick={e => { e.stopPropagation(); onAssign(r) }}>
-                        <UserCheck size={11} />
-                        <span className="max-w-[110px] truncate" title={tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}>
-                          {tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}
-                        </span>
-                        <ChevronDown size={9} />
-                      </button>
-                    ) : (
-                      <span className="text-warm-600 text-xs">{tracking?.surtidor_nombre || '—'}</span>
-                    )}
-                  </td>
-
-                  <td className="table-cell">
-                    <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
-                  </td>
-
-                  <td className="table-cell text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button title={t('admin.view')}
-                        className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
-                        onClick={e => { e.stopPropagation(); onView(obc) }}>
-                        <Eye size={13} />
-                      </button>
-                      {canQuickEdit && (
-                        <button title="Edición rápida"
-                          className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
-                          onClick={e => { e.stopPropagation(); onQuickEdit(obc) }}>
-                          <ClipboardList size={13} />
-                        </button>
-                      )}
-                      {canValidate && (
-                         isClosedOrder ? (
-                          <button title="Ver Registros"
-                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-warm-500 hover:text-warm-700 hover:bg-warm-100 border border-transparent transition-all"
-                            onClick={e => { e.stopPropagation(); onView(obc) }}>
-                            <Database size={13} />
-                          </button>
-                         ) : (
-                          <button title={t('surtido.ordenes.validate_btn')}
-                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-primary-600 hover:text-primary-800 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
-                            onClick={e => { e.stopPropagation(); onValidate(obc) }}>
-                            <ScanBarcode size={13} />
-                          </button>
-                         )
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
+            {sortedRecords.map((r) => (
+              <WmsRow
+                key={r.outboundOrderNo}
+                r={r}
+                tracking={trackingMap[r.outboundOrderNo]}
+                isChecked={selected.has(r.outboundOrderNo)}
+                onToggle={toggleRow}
+                onView={onView}
+                onAssign={onAssign}
+                onQuickEdit={onQuickEdit}
+                onValidate={onValidate}
+                canAssign={canAssign}
+                canQuickEdit={canQuickEdit}
+                canValidate={canValidate}
+                t={t}
+                showScannedColumn={showScannedColumn}
+              />
+            ))}
           </tbody>
         </table>
       </div>
@@ -2548,7 +2598,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
   )
 }
 
-function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onValidate, onStatusChange, onBulkAssign, onExportSelected, onExportAll, canQuickEdit, canValidate, canUpdateStatus, canExport, canAssign, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
+function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView, onQuickEdit, onValidate, onStatusChange, onBulkAssign, onExportSelected, onExportAll, canQuickEdit, canValidate, canUpdateStatus, canExport, canAssign, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange }) {
   const [selected, setSelected] = useState(new Set())
   const [editStatusObc, setEditStatusObc] = useState(null)
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
@@ -2560,6 +2610,8 @@ function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onV
 
   const allChecked = records.length > 0 && records.every(r => selected.has(r.outbound_order_no))
   const someChecked = selected.size > 0
+  const allFilteredSelected = allFilteredObcs && selected.size === allFilteredObcs.length && allFilteredObcs.length > 0
+  const canSelectAllFiltered = allChecked && allFilteredObcs && allFilteredObcs.length > records.length && !allFilteredSelected
 
   const toggleAll = () => {
     setSelected(prev => {
@@ -2585,10 +2637,20 @@ function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onV
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
 
       {someChecked && (canUpdateStatus || canExport || canAssign) && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100">
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100 flex-wrap">
           <span className="text-xs text-primary-700 font-semibold tabular-nums">
             {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
+            {allFilteredSelected && allFilteredObcs && (
+              <span className="ml-1 text-primary-500 font-normal">(todos los {allFilteredObcs.length} del filtro)</span>
+            )}
           </span>
+          {canSelectAllFiltered && (
+            <button
+              className="text-xs text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
+              onClick={() => setSelected(new Set(allFilteredObcs))}>
+              Seleccionar todos ({allFilteredObcs.length})
+            </button>
+          )}
           {canAssign && (
             <button
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
@@ -2608,13 +2670,6 @@ function ValidacionTable({ records, wmsMap, surtidores, onView, onQuickEdit, onV
               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors"
               onClick={() => { onExportSelected([...selected]); setSelected(new Set()) }}>
               <Download size={12} /> {t('common.export')} ({selected.size})
-            </button>
-          )}
-          {canExport && (
-            <button
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-success-700 border border-success-200 hover:bg-success-50 transition-colors"
-              onClick={onExportAll}>
-              <Download size={12} /> {t('common.export')} {t('common.all')}
             </button>
           )}
           <button
