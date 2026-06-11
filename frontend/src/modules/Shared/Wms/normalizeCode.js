@@ -70,11 +70,31 @@ export function normalizeCode(rawCode) {
 
 /**
  * Fast normalization for bulk data loading (no complex pattern extraction).
+ * Must match normalizeCode's character substitutions so inventory codes are consistent.
  */
 export function normalizeCodeFast(rawCode) {
   if (!rawCode) return ''
   let code = String(rawCode).trim()
-  code = code.replace(/／/g, '/').replace(/[－‒–—―]/g, '-')
+
+  // Unicode dash/slash normalization
+  code = code.replace(/／/g, '/')
+  code = code.replace(/[－‒–—―]/g, '-')
+
+  // Character substitutions — same as normalizeCode to ensure consistency
+  code = code.replace(/ö/gi, 'o')
+  code = code.replace(/ï/gi, 'i')
+  code = code.replace(/Ñ/g, ':')
+  code = code.replace(/ñ/g, ':')
+  code = code.replace(/\^/g, '')
+  code = code.replace(/¨/g, '"')
+  code = code.replace(/\[/g, '"')
+  code = code.replace(/\]/g, '"')
+  code = code.replace(/\'/g, '/') // Apóstrofes → slashes
+  code = code.replace(/\*/g, '')
+  code = code.replace(/&/g, '/')
+  code = code.replace(/[""«»„‟‚‛''¨]/g, '"')
+  code = code.replace(/\?/g, '_')
+
   return code.toUpperCase().replace(/[^A-Z0-9\-\/]/g, '')
 }
 

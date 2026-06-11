@@ -1649,12 +1649,16 @@ export default function Ordenes() {
 
       // Step 4: consolidate per-location groups
       const grupos = {}
+      const obcsSinUbicacion = new Set()
       let totalCajas = 0
       for (const [key, orders] of Object.entries(codeToOrders)) {
         const location = stockMap[key] || 'SIN UBICACIÓN'
         if (!grupos[location]) grupos[location] = { location, cantCajas: 0, orders: new Set() }
         grupos[location].cantCajas += orders.size
-        for (const obc of orders) grupos[location].orders.add(obc)
+        for (const obc of orders) {
+          grupos[location].orders.add(obc)
+          if (!stockMap[key]) obcsSinUbicacion.add(obc)
+        }
         totalCajas += orders.size
       }
 
@@ -1673,6 +1677,7 @@ export default function Ordenes() {
         totalUbicaciones: gruposArr.filter(g => g.location !== 'SIN UBICACIÓN').length,
         totalCajas,
         totalOrdenes: obcs.length,
+        obcsSinUbicacion: [...obcsSinUbicacion].sort(),
         generatedAt: new Date(),
         userName: user?.nombre_completo || user?.email || '',
         dateFrom,
@@ -2103,7 +2108,30 @@ export default function Ordenes() {
                   <p className="text-sm text-warm-500">{t('surtido.ordenes.print_ub.loading')}</p>
                 </div>
               ) : printData ? (
-                <PrintSurtidoUbicaciones data={printData} />
+                <>
+                  <PrintSurtidoUbicaciones data={printData} />
+                  {printData.obcsSinUbicacion?.length > 0 && (
+                    <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white">
+                        <AlertCircle size={15} className="flex-shrink-0" />
+                        <span className="font-semibold text-sm">
+                          {printData.obcsSinUbicacion.length} {printData.obcsSinUbicacion.length === 1 ? 'orden sin' : 'órdenes sin'} ubicación registrada
+                        </span>
+                        <span className="ml-auto text-blue-200 text-xs font-normal">Solo visible en pantalla — no se imprime</span>
+                      </div>
+                      <div className="px-4 py-3">
+                        <p className="text-xs text-blue-700 mb-2">Las siguientes órdenes tienen cajas sin ubicación en el inventario actual:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {printData.obcsSinUbicacion.map(obc => (
+                            <span key={obc} className="font-mono text-xs bg-white border border-blue-200 text-blue-800 rounded px-2 py-0.5 font-semibold">
+                              {obc}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : null}
             </div>
             {printData && !printLoading && (
@@ -2114,7 +2142,24 @@ export default function Ordenes() {
                 >
                   <Download size={14} /> {t('surtido.ordenes.print_ub.btn_export')}
                 </button>
-                <button className="btn-primary inline-flex items-center gap-2" onClick={() => window.print()}>
+                <button className="btn-primary inline-flex items-center gap-2" onClick={() => {
+                  const el = document.getElementById('print-surtido-ubicaciones')
+                  if (!el) return
+                  const win = window.open('', '_blank', 'width=900,height=700')
+                  win.document.write(`<!DOCTYPE html><html><head><title>Surtido por Ubicaciones</title>
+                    <style>
+                      *{box-sizing:border-box}
+                      body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#1a1a1a;margin:0;padding:16px}
+                      @page{size:A4 portrait;margin:12mm 14mm}
+                      table{width:100%;border-collapse:collapse;page-break-inside:auto}
+                      tr{page-break-inside:avoid;page-break-after:auto}
+                      thead{display:table-header-group}
+                    </style>
+                  </head><body>${el.outerHTML}</body></html>`)
+                  win.document.close()
+                  win.focus()
+                  setTimeout(() => { win.print(); win.close() }, 300)
+                }}>
                   <Printer size={14} /> {t('surtido.ordenes.print_ub.btn_print')}
                 </button>
               </div>
