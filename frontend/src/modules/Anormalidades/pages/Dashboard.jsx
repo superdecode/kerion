@@ -19,10 +19,10 @@ const NIVEL_COLOR = { L1: '#22c55e', L2: '#f59e0b', L3: '#ef4444' }
 const CHART_COLORS = ['#2e57fe', '#a855f7', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4']
 
 const ESTADO_META = {
-  nuevo:      { label: 'Nuevo',      cls: 'bg-primary-100 text-primary-700 border-primary-200' },
-  en_proceso: { label: 'En proceso', cls: 'bg-accent-100 text-accent-700 border-accent-200' },
-  cerrado:    { label: 'Cerrado',    cls: 'bg-success-100 text-success-700 border-success-200' },
-  vencido:    { label: 'Vencido',    cls: 'bg-danger-100 text-danger-700 border-danger-200' },
+  nuevo:      { labelKey: 'anorm.estado.nuevo',      cls: 'bg-primary-100 text-primary-700 border-primary-200' },
+  en_proceso: { labelKey: 'anorm.estado.en_proceso', cls: 'bg-accent-100 text-accent-700 border-accent-200' },
+  cerrado:    { labelKey: 'anorm.estado.cerrado',    cls: 'bg-success-100 text-success-700 border-success-200' },
+  vencido:    { labelKey: 'anorm.estado.vencido',    cls: 'bg-danger-100 text-danger-700 border-danger-200' },
 }
 
 function NivelChip({ nivel }) {
@@ -31,8 +31,9 @@ function NivelChip({ nivel }) {
 }
 
 function EstadoChip({ estado }) {
+  const { t } = useI18nStore()
   const m = ESTADO_META[estado] || ESTADO_META.nuevo
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${m.cls}`}>{m.label}</span>
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${m.cls}`}>{t(m.labelKey)}</span>
 }
 
 export default function AnormDashboard() {

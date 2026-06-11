@@ -15,14 +15,15 @@ import {
 } from '../services/anormalidadesService'
 
 const ESTADO_META = {
-  nuevo:      { label: 'Nuevo',      cls: 'bg-primary-100 text-primary-700 border-primary-200' },
-  en_proceso: { label: 'En proceso', cls: 'bg-accent-100 text-accent-700 border-accent-200' },
-  cerrado:    { label: 'Cerrado',    cls: 'bg-success-100 text-success-700 border-success-200' },
+  nuevo:      { labelKey: 'anorm.estado.nuevo',      cls: 'bg-primary-100 text-primary-700 border-primary-200' },
+  en_proceso: { labelKey: 'anorm.estado.en_proceso', cls: 'bg-accent-100 text-accent-700 border-accent-200' },
+  cerrado:    { labelKey: 'anorm.estado.cerrado',    cls: 'bg-success-100 text-success-700 border-success-200' },
 }
 
 function EstadoChip({ estado }) {
+  const { t } = useI18nStore()
   const m = ESTADO_META[estado] || ESTADO_META.nuevo
-  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${m.cls}`}>{m.label}</span>
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${m.cls}`}>{t(m.labelKey)}</span>
 }
 
 const FORM_EMPTY = {
@@ -102,7 +103,7 @@ export default function AnormMejoras() {
             {['', 'nuevo', 'en_proceso', 'cerrado'].map(e => (
               <button key={e} onClick={() => { setEstadoFilter(e); setPage(1) }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${estadoFilter === e ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-600 hover:text-warm-800'}`}>
-                {e ? (ESTADO_META[e]?.label || e) : t('common.all')}
+                {e ? t(ESTADO_META[e]?.labelKey || e) : t('common.all')}
               </button>
             ))}
           </div>
@@ -276,7 +277,7 @@ function MejoraFormModal({ isOpen, onClose, usuarios, onSubmit, loading, title, 
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('common.status')}</label>
             <select value={form.estado} onChange={e => set('estado', e.target.value)} className={inp}>
-              {['nuevo', 'en_proceso', 'cerrado'].map(e => <option key={e} value={e}>{ESTADO_META[e]?.label || e}</option>)}
+              {['nuevo', 'en_proceso', 'cerrado'].map(e => <option key={e} value={e}>{t(ESTADO_META[e]?.labelKey || e)}</option>)}
             </select>
           </div>
         </div>

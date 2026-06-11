@@ -17,6 +17,12 @@ export const useWmsHubStore = create(
           [type]: new Date().toISOString(),
         },
       })),
+
+      sheetsValidated: null,  // { ok: bool, testedAt: ISO } | null
+      setSheetsValidated: (ok) => set({
+        sheetsValidated: { ok, testedAt: new Date().toISOString() },
+      }),
+      clearSheetsValidated: () => set({ sheetsValidated: null }),
     }),
     { name: 'kirion-wmshub' }
   )

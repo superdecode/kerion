@@ -559,6 +559,22 @@ function AssignModal({ isOpen, order, onClose, onAssign }) {
   )
 }
 
+function PanelObcCopy({ obc }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      className="group flex items-center gap-1.5 min-w-0 text-left"
+      onClick={() => obc && navigator.clipboard.writeText(obc).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })}
+    >
+      <span className="code-main truncate">{obc || '—'}</span>
+      <span className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        {copied ? <Check size={12} className="text-success-600" /> : <Copy size={12} className="text-warm-400" />}
+      </span>
+    </button>
+  )
+}
+
 function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose, onSave, isSaving, onForceValidate, t }) {
   const navigate = useNavigate()
   const [localSurtidorId, setLocalSurtidorId] = useState('')
@@ -607,7 +623,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                 <ClipboardList size={17} className="text-primary-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="code-main truncate">{obc || '—'}</p>
+                <PanelObcCopy obc={obc} />
                 <span className={`badge text-[10px] font-semibold mt-0.5 inline-block ${meta.cls}`}>{t(meta.labelKey)}</span>
               </div>
               <button onClick={onClose} className="shrink-0 p-1.5 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition-colors">
@@ -634,6 +650,41 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                   </div>
                 ))}
               </div>
+
+              {/* Incidencias summary */}
+              {tracking && (() => {
+                const hasFaltante    = tracking.tiene_faltantes
+                const hasAnormalidad = tracking.tiene_anormalidades
+                const hasReparacion  = tracking.tiene_reparacion
+                const hasRastreo     = tracking.tiene_rastreo
+                const tieneIncidencias = hasFaltante || hasAnormalidad || hasReparacion || hasRastreo
+                const typeCount = [hasFaltante, hasAnormalidad, hasReparacion, hasRastreo].filter(Boolean).length
+                const badgeCls = tieneIncidencias
+                  ? (typeCount > 1 ? 'bg-warning-100 text-warning-700 border-warning-200'
+                    : hasFaltante    ? 'bg-danger-100 text-danger-700 border-danger-200'
+                    : hasAnormalidad ? 'bg-warning-100 text-warning-700 border-warning-200'
+                    : hasReparacion  ? 'bg-violet-100 text-violet-700 border-violet-200'
+                    : 'bg-sky-100 text-sky-700 border-sky-200')
+                  : 'bg-success-100 text-success-700 border-success-200'
+                return (
+                  <div className="rounded-xl bg-warm-50 border border-warm-100 px-3 py-2.5 flex items-center justify-between gap-3">
+                    <p className="text-[10px] text-warm-400 uppercase tracking-wide font-bold">{t('surtido.ordenes.panel.incidencias')}</p>
+                    <div className="flex items-center gap-1.5">
+                      {tieneIncidencias && (
+                        <>
+                          {hasFaltante    && <span className="w-1.5 h-1.5 rounded-full bg-danger-500 shrink-0" title={t('surtido.ordenes.box_status.faltante')} />}
+                          {hasAnormalidad && <span className="w-1.5 h-1.5 rounded-full bg-warning-500 shrink-0" title={t('surtido.ordenes.box_status.anormalidad')} />}
+                          {hasReparacion  && <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" title={t('surtido.ordenes.box_status.reparacion')} />}
+                          {hasRastreo     && <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" title={t('surtido.ordenes.box_status.rastreo')} />}
+                        </>
+                      )}
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${badgeCls}`}>
+                        {tieneIncidencias ? t('surtido.ordenes.panel.incidencias_si') : t('surtido.ordenes.panel.incidencias_no')}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Assign surtidor */}
               <div className="space-y-2">
@@ -675,12 +726,12 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
 
               {/* Notes */}
               <div className="space-y-2">
-                <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wider">Nota</p>
+                <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wider">{t('surtido.ordenes.panel.nota')}</p>
                 <textarea
                   rows={3}
                   value={localNotes}
                   onChange={e => setLocalNotes(e.target.value)}
-                  placeholder="Agregar nota sobre esta orden..."
+                  placeholder={t('surtido.ordenes.panel.nota_placeholder')}
                   className="w-full rounded-xl border border-warm-200 bg-warm-50 px-3 py-2.5 text-xs text-warm-700 outline-none resize-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all"
                 />
               </div>
@@ -700,7 +751,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                     onClick={() => { onClose(); navigate(`/Surtido/registros?obc=${encodeURIComponent(obc)}`) }}
                     className="flex-1 inline-flex items-center justify-center gap-1.5 h-10 rounded-xl border border-success-200 bg-white text-sm font-semibold text-success-700 hover:bg-success-50 hover:border-success-300 transition-colors"
                   >
-                    <BadgeCheck size={14} className="text-success-600" /> Ver Validación
+                    <BadgeCheck size={14} className="text-success-600" /> {t('surtido.ordenes.panel.ver_validacion')}
                   </button>
                 ) : (
                   <button
@@ -2205,10 +2256,18 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
       <td className="table-cell col-code">
         <div className="flex items-center gap-1.5">
           <CopyableObc obc={obc} />
-          {(tracking?.tiene_faltantes || tracking?.tiene_anormalidades) && (
+          {(tracking?.tiene_faltantes || tracking?.tiene_anormalidades || tracking?.tiene_reparacion || tracking?.tiene_rastreo) && (
             <span
-              className={`w-2 h-2 rounded-full shrink-0 ${tracking?.tiene_anormalidades ? 'bg-warning-500' : 'bg-danger-500'}`}
-              title={tracking?.tiene_anormalidades ? 'Con anormalidades' : 'Con faltantes'}
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                tracking?.tiene_anormalidades ? 'bg-warning-500' :
+                tracking?.tiene_faltantes    ? 'bg-danger-500' :
+                tracking?.tiene_reparacion   ? 'bg-violet-500' : 'bg-sky-500'
+              }`}
+              title={
+                tracking?.tiene_anormalidades ? 'Con anormalidades' :
+                tracking?.tiene_faltantes    ? 'Con faltantes' :
+                tracking?.tiene_reparacion   ? 'En reparación' : 'En rastreo'
+              }
             />
           )}
         </div>
@@ -2374,7 +2433,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
   const allChecked = sortedRecords.length > 0 && sortedRecords.every(r => selected.has(r.outboundOrderNo))
   const someChecked = selected.size > 0
   const allFilteredSelected = allFilteredObcs && selected.size === allFilteredObcs.length && allFilteredObcs.every(obc => selected.has(obc))
-  const canSelectAllFiltered = allChecked && allFilteredObcs && allFilteredObcs.length > sortedRecords.length && !allFilteredSelected
+  const canSelectAllFiltered = someChecked && allFilteredObcs && !allFilteredSelected
   const selectedRecords = sortedRecords.filter(r => selected.has(r.outboundOrderNo))
   const assignableSelected = selectedRecords.filter(r => !CLOSED_ORDER_STATUSES.has(trackingMap[r.outboundOrderNo]?.status || 'pending_assignment'))
   const assignableSelectedObcs = assignableSelected.map(r => r.outboundOrderNo)
@@ -2399,9 +2458,9 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
       {someChecked && (canExport || canAssign || canQuickEdit) && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100 flex-wrap">
           <span className="text-xs text-primary-700 font-semibold tabular-nums">
-            {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
+            {t('surtido.ordenes.bulk.n_selected').replace('{n}', selected.size)}
             {allFilteredSelected && allFilteredObcs && (
-              <span className="ml-1 text-primary-500 font-normal">(todos los {allFilteredObcs.length} del filtro)</span>
+              <span className="ml-1 text-primary-500 font-normal">{t('surtido.ordenes.bulk.all_filter_selected').replace('{n}', allFilteredObcs.length)}</span>
             )}
           </span>
           {canSelectAllFiltered && (
@@ -2627,7 +2686,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
   const allChecked = records.length > 0 && records.every(r => selected.has(r.outbound_order_no))
   const someChecked = selected.size > 0
   const allFilteredSelected = allFilteredObcs && selected.size === allFilteredObcs.length && allFilteredObcs.length > 0
-  const canSelectAllFiltered = allChecked && allFilteredObcs && allFilteredObcs.length > records.length && !allFilteredSelected
+  const canSelectAllFiltered = someChecked && allFilteredObcs && !allFilteredSelected
 
   const toggleAll = () => {
     setSelected(prev => {
@@ -2655,16 +2714,16 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
       {someChecked && (canUpdateStatus || canExport || canAssign) && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100 flex-wrap">
           <span className="text-xs text-primary-700 font-semibold tabular-nums">
-            {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
+            {t('surtido.ordenes.bulk.n_selected').replace('{n}', selected.size)}
             {allFilteredSelected && allFilteredObcs && (
-              <span className="ml-1 text-primary-500 font-normal">(todos los {allFilteredObcs.length} del filtro)</span>
+              <span className="ml-1 text-primary-500 font-normal">{t('surtido.ordenes.bulk.all_filter_selected').replace('{n}', allFilteredObcs.length)}</span>
             )}
           </span>
           {canSelectAllFiltered && (
             <button
               className="text-xs text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
               onClick={() => setSelected(new Set(allFilteredObcs))}>
-              Seleccionar todos ({allFilteredObcs.length})
+              {t('surtido.ordenes.bulk.select_all_filter').replace('{n}', allFilteredObcs.length)}
             </button>
           )}
           {canAssign && (
@@ -2747,10 +2806,18 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                   <td className="table-cell col-code">
                     <div className="flex items-center gap-1.5">
                       <CopyableObc obc={obc} />
-                      {(tr?.tiene_faltantes || tr?.tiene_anormalidades) && (
+                      {(tr?.tiene_faltantes || tr?.tiene_anormalidades || tr?.tiene_reparacion || tr?.tiene_rastreo) && (
                         <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${tr?.tiene_anormalidades ? 'bg-warning-500' : 'bg-danger-500'}`}
-                          title={tr?.tiene_anormalidades ? 'Con anormalidades' : 'Con faltantes'}
+                          className={`w-2 h-2 rounded-full shrink-0 ${
+                            tr?.tiene_anormalidades ? 'bg-warning-500' :
+                            tr?.tiene_faltantes    ? 'bg-danger-500' :
+                            tr?.tiene_reparacion   ? 'bg-violet-500' : 'bg-sky-500'
+                          }`}
+                          title={
+                            tr?.tiene_anormalidades ? 'Con anormalidades' :
+                            tr?.tiene_faltantes    ? 'Con faltantes' :
+                            tr?.tiene_reparacion   ? 'En reparación' : 'En rastreo'
+                          }
                         />
                       )}
                     </div>

@@ -17,8 +17,9 @@ import { fmtDateTime, getToday, subtractDays, fmtDate } from '../../../core/util
 import {
   getScanSessions, getScanSession, getOutboundList, getRecords,
   updateScanEvent, deleteScanEvent, addManualScanEvent, getManualEntryReasons, deleteScanSession,
-  getOrderTrackingByOBC,
+  getOrderTrackingByOBC, getBoxIncidents, getScanOperators,
 } from '../services/surtidoService'
+import MultiSelect from '../../../core/components/common/MultiSelect'
 import { normalizeCode, generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 
 const TH_CLASS = 'table-header whitespace-nowrap'
@@ -196,6 +197,24 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
     staleTime: 60000,
     retry: 0,
   })
+
+  const { data: incidenciasData } = useQuery({
+    queryKey: ['surtido-box-incidents', session.outbound_order_no],
+    queryFn: () => getBoxIncidents(session.outbound_order_no),
+    enabled: isOpen && !!session.outbound_order_no,
+    staleTime: 30000,
+    retry: 0,
+  })
+  const incidencias = incidenciasData?.data ?? []
+
+  // Build a map of box_code → matched_box_type from events for the Incidencias tab
+  const eventTypeMap = useMemo(() => {
+    const m = {}
+    events.forEach(e => {
+      if (e.normalized_code && e.matched_box_type) m[e.normalized_code] = e.matched_box_type
+    })
+    return m
+  }, [events])
 
   const validados  = events.filter(e => e.scan_result === 'ok')
   const rechazados = events.filter(e => e.scan_result !== 'ok')
@@ -394,6 +413,15 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
                 <span className="bg-danger-100 text-danger-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{rechazados.length}</span>
               )}
             </button>
+            <button onClick={() => setDetailTab('incidencias')}
+              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
+                detailTab === 'incidencias' ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
+              }`}>
+              <AlertTriangle size={12} /> Incidencias
+              {incidencias.length > 0 && (
+                <span className="bg-warning-100 text-warning-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{incidencias.length}</span>
+              )}
+            </button>
           </div>
 
           {/* Tab content */}
@@ -443,10 +471,71 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
               onDelete={(event) => canDelete && deleteMut.mutate(event.id)}
             />
           )}
+          {detailTab === 'incidencias' && (
+            <IncidenciasTable incidencias={incidencias} eventTypeMap={eventTypeMap} t={t} />
+          )}
 
         </div>
       )}
     </Modal>
+  )
+}
+
+const BOX_INCIDENCE_META = {
+  faltante:    { cls: 'bg-danger-100 text-danger-700',   dot: 'bg-danger-500' },
+  anormalidad: { cls: 'bg-warning-100 text-warning-700', dot: 'bg-warning-500' },
+  reparacion:  { cls: 'bg-violet-100 text-violet-700',   dot: 'bg-violet-500' },
+  rastreo:     { cls: 'bg-sky-100 text-sky-700',         dot: 'bg-sky-500' },
+}
+
+function IncidenciasTable({ incidencias, eventTypeMap, t }) {
+  if (incidencias.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-10 gap-2 text-warm-400">
+      <CheckCircle2 size={32} className="opacity-30" />
+      <p className="text-sm">{t('common.noData')}</p>
+    </div>
+  )
+  return (
+    <div className="max-h-80 overflow-y-auto rounded-xl border border-warm-100 scrollbar-thin">
+      <table className="w-full table-fixed text-xs">
+        <thead className="bg-warm-50 sticky top-0 z-10 border-b border-warm-100">
+          <tr>
+            <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Tipo Caja</span></th>
+            <th className={`${TH_CLASS} w-[30%]`}><span className={TH_TEXT}>Código Caja</span></th>
+            <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Estatus</span></th>
+            <th className={`${TH_CLASS} w-[22%]`}><span className={TH_TEXT}>Fecha Cambio</span></th>
+            <th className={`${TH_CLASS}`}><span className={TH_TEXT}>Usuario</span></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-warm-50">
+          {incidencias.map((inc, i) => {
+            const meta = BOX_INCIDENCE_META[inc.estado] ?? BOX_INCIDENCE_META.faltante
+            return (
+              <tr key={i} className="table-row">
+                <td className="px-3 py-2 text-warm-500 text-[11px]">
+                  {eventTypeMap[inc.box_code] || '—'}
+                </td>
+                <td className="px-3 py-2 font-mono font-semibold text-warm-700 truncate">
+                  {inc.box_code}
+                </td>
+                <td className="px-3 py-2">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.cls}`}>
+                    <span className={`w-1 h-1 rounded-full ${meta.dot}`} />
+                    {t(`surtido.ordenes.box_status.${inc.estado}`) || inc.estado}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-warm-500 tabular-nums text-[11px]">
+                  {inc.updated_at ? fmtDt(inc.updated_at) : '—'}
+                </td>
+                <td className="px-3 py-2 text-warm-600 text-[11px] truncate">
+                  {inc.updated_by || '—'}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -675,6 +764,7 @@ export default function SurtidoRegistros() {
   const [search, setSearch] = useState('')
   const searchDebounceRef = useRef(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [operatorFilter, setOperatorFilter] = useState([])
   const today = getToday()
   const thirtyDaysAgo = subtractDays(today, 30)
   const [dateFrom, setDateFrom] = useState(thirtyDaysAgo)
@@ -688,20 +778,30 @@ export default function SurtidoRegistros() {
   const [showQuickSearch, setShowQuickSearch] = useState(false)
   const handledDeepLinkRef = useRef('')
 
+  const obcActive = !!search.trim()
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['surtido-sessions', { page, pageSize, search: search.trim(), statusFilter, dateFrom, dateTo }],
+    queryKey: ['surtido-sessions', { page, pageSize, search: search.trim(), statusFilter, operatorFilter, dateFrom: obcActive ? null : dateFrom, dateTo: obcActive ? null : dateTo }],
     queryFn: () => getScanSessions({
       page,
       pageSize,
       outbound_order_no: search.trim() || undefined,
       status: statusFilter || undefined,
-      fecha_inicio: dateFrom || undefined,
-      fecha_fin: dateTo || undefined,
+      operator_ids: operatorFilter.length > 0 ? operatorFilter.join(',') : undefined,
+      fecha_inicio: obcActive ? undefined : (dateFrom || undefined),
+      fecha_fin: obcActive ? undefined : (dateTo || undefined),
     }),
     staleTime: 30000,
     retry: 0,
     enabled: backendOnline,
   })
+
+  const { data: operatorsData } = useQuery({
+    queryKey: ['scan-operators'],
+    queryFn: getScanOperators,
+    staleTime: 300000,
+    enabled: backendOnline,
+  })
+  const surtidoresOptions = (operatorsData?.data ?? []).map(s => ({ value: String(s.id), label: s.nombre || String(s.id) }))
 
   const records = getRecords(data)
   const total = data?.data?.total ?? 0
@@ -722,9 +822,11 @@ export default function SurtidoRegistros() {
     setSearchInput('')
     setSearch('')
     setStatusFilter('')
+    setOperatorFilter([])
     setDateFrom(thirtyDaysAgo)
     setDateTo(today)
     setDatePreset('30')
+    setPage(1)
   }
 
   const toggleSelect = (id) => setSelectedIds(prev => {
@@ -811,6 +913,9 @@ export default function SurtidoRegistros() {
     setSearchInput(obc)
     setSearch(obc)
     setPage(1)
+    setDateFrom('')
+    setDateTo('')
+    setDatePreset('')
 
     getScanSessions({ page: 1, pageSize: 1, outbound_order_no: obc })
       .then((payload) => {
@@ -904,6 +1009,17 @@ export default function SurtidoRegistros() {
             <option value="cancelled">{t('surtido.registros.status.cancelled')}</option>
           </select>
 
+          {surtidoresOptions.length > 0 && (
+            <MultiSelect
+              options={surtidoresOptions}
+              selected={operatorFilter}
+              onChange={v => { setOperatorFilter(v); setPage(1) }}
+              placeholder={t('surtido.registros.operator')}
+              icon={User}
+              className="min-w-[160px]"
+            />
+          )}
+
           <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 w-full max-w-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
             <ScanBarcode size={13} className="text-warm-400 shrink-0" />
             <input
@@ -912,17 +1028,23 @@ export default function SurtidoRegistros() {
               placeholder={t('surtido.registros.search_placeholder')}
               value={searchInput}
               onChange={e => {
-                setSearchInput(e.target.value)
+                const val = e.target.value
+                setSearchInput(val)
                 clearTimeout(searchDebounceRef.current)
                 searchDebounceRef.current = setTimeout(() => {
-                  setSearch(e.target.value)
+                  setSearch(val)
                   setPage(1)
+                  if (!val.trim()) {
+                    setDateFrom(thirtyDaysAgo)
+                    setDateTo(today)
+                    setDatePreset('30')
+                  }
                 }, 400)
               }}
             />
           </div>
 
-          {(searchInput || statusFilter || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
+          {(searchInput || statusFilter || operatorFilter.length > 0 || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
             <button
               onClick={clearFilters}
               className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors"

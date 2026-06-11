@@ -169,10 +169,12 @@ async function refreshPickSessionTotals(req, sessionId) {
 }
 
 const BOX_STATUS_TRANSITIONS = {
-  pendiente:   new Set(['faltante', 'anormalidad']),
+  pendiente:   new Set(['faltante', 'anormalidad', 'reparacion', 'rastreo']),
   validada:    new Set([]),
-  faltante:    new Set(['pendiente', 'anormalidad']),
-  anormalidad: new Set(['pendiente', 'faltante']),
+  faltante:    new Set(['pendiente', 'anormalidad', 'reparacion', 'rastreo']),
+  anormalidad: new Set(['pendiente', 'faltante', 'reparacion', 'rastreo']),
+  reparacion:  new Set(['pendiente', 'faltante', 'anormalidad', 'rastreo']),
+  rastreo:     new Set(['pendiente', 'faltante', 'anormalidad', 'reparacion']),
 }
 
 async function refreshOrderFlags(req, obc) {
@@ -185,6 +187,14 @@ async function refreshOrderFlags(req, obc) {
          tiene_anormalidades = EXISTS(
            SELECT 1 FROM pick_box_status
            WHERE tenant_id = $1 AND outbound_order_no = $2 AND estado = 'anormalidad'
+         ),
+         tiene_reparacion = EXISTS(
+           SELECT 1 FROM pick_box_status
+           WHERE tenant_id = $1 AND outbound_order_no = $2 AND estado = 'reparacion'
+         ),
+         tiene_rastreo = EXISTS(
+           SELECT 1 FROM pick_box_status
+           WHERE tenant_id = $1 AND outbound_order_no = $2 AND estado = 'rastreo'
          ),
          updated_at = now()
      WHERE tenant_id = $1 AND outbound_order_no = $2`,
@@ -459,7 +469,7 @@ router.get('/scan-sessions',
   ]),
   async (req, res) => {
     try {
-      const { page = 1, pageSize = 20, status, operator_id, fecha_inicio, fecha_fin, outbound_order_no } = req.query
+      const { page = 1, pageSize = 20, status, operator_id, operator_ids, fecha_inicio, fecha_fin, outbound_order_no } = req.query
       const tz = getTimezone(req)
       const limit = Math.min(parseInt(pageSize) || 20, 100)
       const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit
@@ -469,7 +479,11 @@ router.get('/scan-sessions',
       let p = 2
 
       if (status) { conditions.push(`s.status = $${p++}`); params.push(status) }
-      if (operator_id) { conditions.push(`s.operator_id = $${p++}`); params.push(parseInt(operator_id)) }
+      const opIds = operator_ids
+        ? operator_ids.split(',').map(Number).filter(Boolean)
+        : operator_id ? [parseInt(operator_id)] : []
+      if (opIds.length === 1) { conditions.push(`s.operator_id = $${p++}`); params.push(opIds[0]) }
+      else if (opIds.length > 1) { conditions.push(`s.operator_id = ANY($${p++})`); params.push(opIds) }
       if (fecha_inicio) { conditions.push(`${instantDateInTZ('s.started_at', tz)} >= $${p++}`); params.push(fecha_inicio) }
       if (fecha_fin) { conditions.push(`${instantDateInTZ('s.started_at', tz)} <= $${p++}`); params.push(fecha_fin) }
       if (outbound_order_no) { conditions.push(`s.outbound_order_no ILIKE $${p++}`); params.push(`%${outbound_order_no}%`) }
@@ -1634,6 +1648,29 @@ router.delete('/manual-entry-reasons/:id',
   }
 )
 
+router.get('/scan-operators',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'surtido.registros', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'ver' },
+  ]),
+  async (req, res) => {
+    try {
+      const rows = await req.tQuery(
+        `SELECT DISTINCT s.operator_id as id, u.nombre_completo as nombre
+         FROM pick_sessions s
+         LEFT JOIN usuarios u ON u.id = s.operator_id
+         WHERE s.tenant_id = $1 AND s.operator_id IS NOT NULL AND u.nombre_completo IS NOT NULL
+         ORDER BY u.nombre_completo ASC`,
+        [req.tenantId]
+      )
+      res.json({ success: true, data: rows.rows })
+    } catch (err) {
+      res.status(500).json({ success: false, error: 'Error obteniendo operadores' })
+    }
+  }
+)
+
 router.get('/surtidores',
   authenticateToken, loadFullUser,
   requirePermission('surtido.ordenes', 'ver'),
@@ -2275,7 +2312,7 @@ router.patch('/box-status/:obc/:code',
   async (req, res) => {
     try {
       const { estado, notas } = req.body
-      const validEstados = ['pendiente', 'validada', 'faltante', 'anormalidad']
+      const validEstados = ['pendiente', 'validada', 'faltante', 'anormalidad', 'reparacion', 'rastreo']
       if (!estado || !validEstados.includes(estado)) {
         return res.status(400).json({ success: false, error: 'Estado inválido' })
       }
@@ -2317,6 +2354,32 @@ router.patch('/box-status/:obc/:code',
     } catch (err) {
       console.error('PATCH box-status error:', err.message)
       res.status(500).json({ success: false, error: 'Error actualizando estado de caja' })
+    }
+  }
+)
+
+// GET /wmshub/box-status-incidents/:obc — returns incident records (non-normal estados) with date/user
+router.get('/box-status-incidents/:obc',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'ver' },
+  ]),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `SELECT box_code, estado, updated_by, updated_at
+         FROM pick_box_status
+         WHERE tenant_id = $1 AND outbound_order_no = $2
+           AND estado NOT IN ('pendiente', 'validada')
+         ORDER BY updated_at DESC`,
+        [req.tenantId, req.params.obc]
+      )
+      res.json({ success: true, data: result.rows })
+    } catch (err) {
+      console.error('GET box-status-incidents error:', err.message)
+      res.status(500).json({ success: false, error: 'Error obteniendo incidencias' })
     }
   }
 )

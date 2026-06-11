@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import Header from '../core/components/layout/Header'
@@ -916,8 +916,8 @@ function RoleFormModal({ isOpen, onClose, role }) {
               </thead>
               <tbody>
                 {MODULE_GROUPS.map(g => (
-                  <>
-                    <tr key={`g-${g.groupKey}`} className="bg-primary-50 border-y border-primary-100">
+                  <Fragment key={g.groupKey}>
+                    <tr className="bg-primary-50 border-y border-primary-100">
                       <td colSpan={5} className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-primary-600">
                         {t(g.groupKey) || g.group}
                       </td>
@@ -959,7 +959,7 @@ function RoleFormModal({ isOpen, onClose, role }) {
                         </tr>
                       )
                     })}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

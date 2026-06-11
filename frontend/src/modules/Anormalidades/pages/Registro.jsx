@@ -30,10 +30,10 @@ const NIVEL_META = {
 }
 
 const ESTADO_META = {
-  nuevo:      { label: 'Nuevo',      cls: 'bg-primary-100 text-primary-700 border-primary-200' },
-  en_proceso: { label: 'En proceso', cls: 'bg-accent-100 text-accent-700 border-accent-200' },
-  cerrado:    { label: 'Cerrado',    cls: 'bg-success-100 text-success-700 border-success-200' },
-  vencido:    { label: 'Vencido',    cls: 'bg-danger-100 text-danger-700 border-danger-200' },
+  nuevo:      { labelKey: 'anorm.estado.nuevo',      cls: 'bg-primary-100 text-primary-700 border-primary-200' },
+  en_proceso: { labelKey: 'anorm.estado.en_proceso', cls: 'bg-accent-100 text-accent-700 border-accent-200' },
+  cerrado:    { labelKey: 'anorm.estado.cerrado',    cls: 'bg-success-100 text-success-700 border-success-200' },
+  vencido:    { labelKey: 'anorm.estado.vencido',    cls: 'bg-danger-100 text-danger-700 border-danger-200' },
 }
 
 const PROCESOS = ['Recibo', 'Inventario', 'Picking', 'Salida', 'POD', 'Sistema']
@@ -54,10 +54,11 @@ function NivelChip({ nivel }) {
 }
 
 function EstadoChip({ estado }) {
+  const { t } = useI18nStore()
   const m = ESTADO_META[estado] || ESTADO_META.nuevo
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${m.cls}`}>
-      {m.label}
+      {t(m.labelKey)}
     </span>
   )
 }
@@ -213,7 +214,7 @@ export default function AnormalidadesRegistro() {
         Código: r.codigo,
         Nombre: r.nombre,
         Nivel: r.nivel,
-        Estado: ESTADO_META[r.estado]?.label || r.estado,
+        Estado: { nuevo: 'Nuevo', en_proceso: 'En Proceso', cerrado: 'Cerrado', vencido: 'Vencido' }[r.estado] || r.estado,
         Cliente: r.cliente || '',
         Responsable: r.responsable_nombre || '',
         'Días abierto': r.dias_abierto ? Math.floor(r.dias_abierto) : 0,
@@ -857,7 +858,7 @@ function CambiarEstadoModal({ estadoActual, onClose, onSubmit, loading }) {
           <select value={estado} onChange={e => setEstado(e.target.value)}
             className="w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300">
             <option value="">{t('common.select')}</option>
-            {NEXT_ESTADOS.map(e => <option key={e} value={e}>{ESTADO_META[e]?.label || e}</option>)}
+            {NEXT_ESTADOS.map(e => <option key={e} value={e}>{t(ESTADO_META[e]?.labelKey || e)}</option>)}
           </select>
         </div>
         <div>

@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { RefreshCw, CheckCircle2, XCircle, Loader2, Save, Link2, Wifi, WifiOff, Lock } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, Loader2, Save, Link2, Wifi, WifiOff, Lock, ShieldCheck } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useAuthStore } from '../../../core/stores/authStore'
+import { useWmsHubStore } from '../stores/wmsHubStore'
 import { fmtTime } from '../../../core/utils/dateFormat'
 import { getConfig, saveSheetConfig } from '../services/wmsHubService'
 import { testSheetUrl, invalidateUrlCache, getCacheTimestamp } from '../services/googleSheetsService'
@@ -18,9 +19,12 @@ export default function Configuracion() {
   const wmsLevel = getPermissionLevel('sistema.wms')
   const canEdit = ['actualizar', 'eliminar'].includes(wmsLevel)
 
+  const { sheetsValidated, setSheetsValidated, clearSheetsValidated } = useWmsHubStore()
+
   const [sheetInventoryUrl, setSheetInventoryUrl] = useState('')
   const [sheetOutboundUrl, setSheetOutboundUrl] = useState('')
   const [sheetTestResults, setSheetTestResults] = useState({})
+  const [validating, setValidating] = useState(false)
   const [invTs] = useState(() => getCacheTimestamp('inventory'))
   const [outTs] = useState(() => getCacheTimestamp('outbound'))
 
@@ -54,28 +58,51 @@ export default function Configuracion() {
     try {
       const result = await testSheetUrl(url, type)
       setSheetTestResults(prev => ({ ...prev, [type]: { ok: true, rowCount: result.rowCount, mappedFields: result.mappedFields } }))
+      return true
     } catch (err) {
       setSheetTestResults(prev => ({ ...prev, [type]: { ok: false, error: err.message } }))
+      return false
     }
+  }
+
+  async function handleValidateAll() {
+    if (!hasInventoryUrl && !hasOutboundUrl) return
+    setValidating(true)
+    const urls = [
+      hasInventoryUrl && { url: configData.data.sheet_inventory_url, type: 'inventory' },
+      hasOutboundUrl  && { url: configData.data.sheet_outbound_url,  type: 'outbound'  },
+    ].filter(Boolean)
+    const results = await Promise.all(urls.map(({ url, type }) => handleTestSheet(url, type)))
+    const allOk = results.every(Boolean)
+    setSheetsValidated(allOk)
+    setValidating(false)
   }
 
   const hasInventoryUrl = !!configData?.data?.sheet_inventory_url
   const hasOutboundUrl  = !!configData?.data?.sheet_outbound_url
   const hasAnyUrl       = hasInventoryUrl || hasOutboundUrl
-  const bothTested      = sheetTestResults.inventory?.ok && sheetTestResults.outbound?.ok
-  const anyFailed       = sheetTestResults.inventory?.ok === false || sheetTestResults.outbound?.ok === false
+  const sessionOk       = sheetTestResults.inventory?.ok && sheetTestResults.outbound?.ok
+  const sessionFailed   = sheetTestResults.inventory?.ok === false || sheetTestResults.outbound?.ok === false
+  const storedOk        = sheetsValidated?.ok === true
+  const storedFailed    = sheetsValidated?.ok === false
+  const isVerified      = sessionOk || storedOk
+  const hasFailed       = sessionFailed || storedFailed
+  const isPending       = hasAnyUrl && !isVerified && !hasFailed
+  const showValidateBtn = isPending && canEdit && !validating
 
   const statusColor = !hasAnyUrl
     ? { bg: 'bg-danger-50',  border: 'border-danger-200',  icon: 'text-danger-600',  dot: 'bg-danger-500',  label: 'text-danger-700' }
-    : bothTested
+    : isVerified && !sessionFailed
       ? { bg: 'bg-success-50', border: 'border-success-200', icon: 'text-success-600', dot: 'bg-success-500', label: 'text-success-700' }
-      : { bg: 'bg-primary-50', border: 'border-primary-200', icon: 'text-primary-600', dot: 'bg-primary-500', label: 'text-primary-700' }
+      : hasFailed
+        ? { bg: 'bg-danger-50',  border: 'border-danger-200',  icon: 'text-danger-600',  dot: 'bg-danger-500',  label: 'text-danger-700' }
+        : { bg: 'bg-primary-50', border: 'border-primary-200', icon: 'text-primary-600', dot: 'bg-primary-500', label: 'text-primary-700' }
 
   const statusText = !hasAnyUrl
     ? t('wmshub.config.status_no_url')
-    : bothTested
+    : isVerified && !sessionFailed
       ? t('wmshub.config.status_ok')
-      : anyFailed
+      : hasFailed
         ? t('wmshub.config.status_error')
         : t('wmshub.config.status_pending')
 
@@ -100,7 +127,9 @@ export default function Configuracion() {
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${statusColor.bg}`}>
                 {!hasAnyUrl
                   ? <WifiOff className={`w-4 h-4 ${statusColor.icon}`} />
-                  : <Wifi className={`w-4 h-4 ${statusColor.icon}`} />}
+                  : isVerified && !sessionFailed
+                    ? <ShieldCheck className={`w-4 h-4 ${statusColor.icon}`} />
+                    : <Wifi className={`w-4 h-4 ${statusColor.icon}`} />}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
@@ -111,6 +140,17 @@ export default function Configuracion() {
                 </div>
                 <p className={`text-xs mt-0.5 ${statusColor.label}`}>{statusText}</p>
               </div>
+              {showValidateBtn && (
+                <button
+                  className="btn-ghost text-xs shrink-0 inline-flex items-center gap-1.5"
+                  onClick={handleValidateAll}>
+                  <RefreshCw size={13} />
+                  {t('wmshub.config.sheet_validate_btn')}
+                </button>
+              )}
+              {validating && (
+                <Loader2 size={16} className="animate-spin text-primary-500 shrink-0" />
+              )}
             </div>
           </motion.div>
 
@@ -145,7 +185,7 @@ export default function Configuracion() {
                           className="input-field flex-1 text-xs font-mono"
                           placeholder={t('wmshub.config.sheet_placeholder')}
                           value={value}
-                          onChange={e => { set(e.target.value); setSheetTestResults(p => ({ ...p, [key]: null })) }}
+                          onChange={e => { set(e.target.value); setSheetTestResults(p => ({ ...p, [key]: null })); clearSheetsValidated() }}
                         />
                         <button
                           className="btn-ghost text-xs shrink-0 inline-flex items-center gap-1"

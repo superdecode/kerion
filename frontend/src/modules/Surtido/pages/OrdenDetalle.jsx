@@ -29,10 +29,12 @@ import {
 } from '../services/surtidoService'
 
 const BOX_STATUS_TRANSITIONS = {
-  pendiente:   ['faltante', 'anormalidad'],
+  pendiente:   ['faltante', 'anormalidad', 'reparacion', 'rastreo'],
   validada:    [],
-  faltante:    ['pendiente', 'anormalidad'],
-  anormalidad: ['pendiente', 'faltante'],
+  faltante:    ['pendiente', 'anormalidad', 'reparacion', 'rastreo'],
+  anormalidad: ['pendiente', 'faltante', 'reparacion', 'rastreo'],
+  reparacion:  ['pendiente', 'faltante', 'anormalidad', 'rastreo'],
+  rastreo:     ['pendiente', 'faltante', 'anormalidad', 'reparacion'],
 }
 
 const BOX_STATUS_META = {
@@ -40,6 +42,8 @@ const BOX_STATUS_META = {
   validada:    { cls: 'bg-success-100 text-success-700', dot: 'bg-success-500', locked: true },
   faltante:    { cls: 'bg-danger-100 text-danger-700',   dot: 'bg-danger-500' },
   anormalidad: { cls: 'bg-warning-100 text-warning-700', dot: 'bg-warning-500' },
+  reparacion:  { cls: 'bg-violet-100 text-violet-700',   dot: 'bg-violet-500' },
+  rastreo:     { cls: 'bg-sky-100 text-sky-700',         dot: 'bg-sky-500' },
 }
 
 function BoxStatusChip({ code, estado, onOpen, t, disabled }) {
@@ -81,7 +85,7 @@ function BoxStatusChangeModal({ isOpen, code, currentEstado, onClose, onConfirm,
         <div className="flex gap-3 justify-end">
           <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button
-            className={selected === 'faltante' ? 'btn-danger' : selected === 'anormalidad' ? 'btn-primary' : 'btn-ghost'}
+            className={selected === 'faltante' ? 'btn-danger' : selected ? 'btn-primary' : 'btn-ghost'}
             disabled={!selected || isPending}
             onClick={() => onConfirm(selected, notes)}
           >
