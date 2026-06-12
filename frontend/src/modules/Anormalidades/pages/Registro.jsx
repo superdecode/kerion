@@ -4,8 +4,8 @@ import * as XLSX from 'xlsx'
 import {
   Plus, Search, AlertTriangle, X,
   Download, Clock, CheckCircle2, AlertCircle,
-  Eye, Pencil, Trash2, Calendar, User, MoreHorizontal,
-  ChevronRight, FileText, History, Link2, RefreshCw, ArrowUpDown,
+  Eye, Edit3, Trash2, Loader2,
+  ChevronRight, FileText, History, Link2, RefreshCw, ArrowUpDown, Target,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -18,7 +18,8 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDateTime, fmtDate, getToday, subtractDays } from '../../../core/utils/dateFormat'
 import {
   listAnormalidades, getAnormalidad, createAnormalidad, updateAnormalidad,
-  deleteAnormalidad, changeEstado, getCodigos, getUsuarios,
+  deleteAnormalidad, changeEstado, getCodigos, getUsuarios, crearMejoraDesdeAnormalidad,
+  getProcesosConfig, getOrigenesConfig, getNivelesConfig,
 } from '../services/anormalidadesService'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -36,12 +37,28 @@ const ESTADO_META = {
   vencido:    { labelKey: 'anorm.estado.vencido',    cls: 'bg-danger-100 text-danger-700 border-danger-200' },
 }
 
-const PROCESOS = ['Recibo', 'Inventario', 'Picking', 'Salida', 'POD', 'Sistema']
-const ORIGENES = ['Operativo', 'Cliente', 'Sistema', 'Proceso', 'Transporte', 'Proveedor']
 const STATUS_TABS = ['todos', 'nuevo', 'en_proceso', 'cerrado', 'vencido']
 
 const TH = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500'
+
+function SectionBlock({ title, children }) {
+  return (
+    <div className="mb-6">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-warm-500 mb-3 pb-1 border-b border-warm-100">{title}</h3>
+      <div className="grid grid-cols-2 gap-3">{children}</div>
+    </div>
+  )
+}
+
+function Field({ label, span = 1, children }) {
+  return (
+    <div className={span === 2 ? 'col-span-2' : ''}>
+      <label className="block text-xs font-medium text-warm-700 mb-1">{label}</label>
+      {children}
+    </div>
+  )
+}
 
 function NivelChip({ nivel }) {
   const m = NIVEL_META[nivel] || NIVEL_META.L1
@@ -111,7 +128,11 @@ export default function AnormalidadesRegistro() {
   const [selectedProcesos, setSelectedProcesos] = useState([])
   const [selectedNiveles, setSelectedNiveles] = useState([])
   const [selectedResponsables, setSelectedResponsables] = useState([])
-  const [appliedFilters, setAppliedFilters] = useState({})
+  const [selectedOrigenes, setSelectedOrigenes] = useState([])
+  const [soloVencidas, setSoloVencidas] = useState(false)
+  const [sinResponsable, setSinResponsable] = useState(false)
+  const [selected, setSelected] = useState(new Set())
+  const [selectingAllFiltered, setSelectingAllFiltered] = useState(false)
 
   // Modal state
   const [createOpen, setCreateOpen] = useState(false)
@@ -123,8 +144,28 @@ export default function AnormalidadesRegistro() {
   const queryParams = useMemo(() => {
     const p = { page, limit: 20, search: search || undefined }
     if (activeTab !== 'todos') p.estado = activeTab
-    return { ...p, ...appliedFilters }
-  }, [page, search, activeTab, appliedFilters])
+    if (fechaDesde) p.fecha_desde = fechaDesde
+    if (fechaHasta) p.fecha_hasta = fechaHasta
+    if (selectedProcesos.length) p.proceso = selectedProcesos.join(',')
+    if (selectedNiveles.length) p.nivel = selectedNiveles.join(',')
+    if (selectedResponsables.length) p.responsable_id = selectedResponsables.join(',')
+    if (selectedOrigenes.length) p.origen = selectedOrigenes.join(',')
+    if (soloVencidas) p.solo_vencidas = true
+    if (sinResponsable) p.sin_responsable = true
+    return p
+  }, [
+    page,
+    search,
+    activeTab,
+    fechaDesde,
+    fechaHasta,
+    selectedProcesos,
+    selectedNiveles,
+    selectedResponsables,
+    selectedOrigenes,
+    soloVencidas,
+    sinResponsable,
+  ])
 
   const { data, isLoading } = useQuery({
     queryKey: ['anormalidades', queryParams],
@@ -135,12 +176,21 @@ export default function AnormalidadesRegistro() {
 
   const { data: codigosData } = useQuery({ queryKey: ['anorm-codigos'], queryFn: getCodigos, enabled: backendOnline })
   const { data: usuariosData } = useQuery({ queryKey: ['anorm-usuarios'], queryFn: getUsuarios, enabled: backendOnline })
+  const { data: procesosData } = useQuery({ queryKey: ['anorm-procesos-config'], queryFn: getProcesosConfig, enabled: backendOnline })
+  const { data: nivelesData } = useQuery({ queryKey: ['anorm-niveles-config'], queryFn: getNivelesConfig, enabled: backendOnline })
+  const { data: origenesData } = useQuery({ queryKey: ['anorm-origenes-config'], queryFn: getOrigenesConfig, enabled: backendOnline })
 
   const codigos = codigosData?.data || []
   const usuarios = usuariosData?.data || []
+  const procesos = (procesosData?.data || []).filter(item => item.activo)
+  const niveles = (nivelesData?.data || []).filter(item => item.activo)
+  const origenes = (origenesData?.data || []).filter(item => item.activo)
 
   const rows = data?.data || []
   const total = data?.total || 0
+  const allChecked = rows.length > 0 && rows.every(r => selected.has(r.id))
+  const someChecked = selected.size > 0
+  const allFilteredSelected = someChecked && total > 0 && selected.size === total
 
   // ── Detail query ────────────────────────────────────────────────────────────
   const { data: detailData, isLoading: detailLoading } = useQuery({
@@ -153,20 +203,20 @@ export default function AnormalidadesRegistro() {
   // ── Mutations ───────────────────────────────────────────────────────────────
   const createMut = useMutation({
     mutationFn: createAnormalidad,
-    onSuccess: () => { qc.invalidateQueries(['anormalidades']); setCreateOpen(false); toast.success('Anormalidad registrada') },
-    onError: (e) => toast.error(e?.response?.data?.error || 'Error al crear'),
+    onSuccess: () => { qc.invalidateQueries(['anormalidades']); setCreateOpen(false); toast.success(t('anorm.toast.created')) },
+    onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorCreate')),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => updateAnormalidad(id, data),
-    onSuccess: () => { qc.invalidateQueries(['anormalidades']); qc.invalidateQueries(['anormalidad-detail', editId]); setEditId(null); toast.success('Anormalidad actualizada') },
-    onError: (e) => toast.error(e?.response?.data?.error || 'Error al actualizar'),
+    onSuccess: () => { qc.invalidateQueries(['anormalidades']); qc.invalidateQueries(['anormalidad-detail', editId]); setEditId(null); toast.success(t('anorm.toast.updated')) },
+    onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorUpdate')),
   })
 
   const deleteMut = useMutation({
     mutationFn: deleteAnormalidad,
     onSuccess: () => { qc.invalidateQueries(['anormalidades']); setDeleteId(null); toast.success('Eliminado') },
-    onError: (e) => toast.error(e?.response?.data?.error || 'Error al eliminar'),
+    onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorDelete')),
   })
 
   const estadoMut = useMutation({
@@ -175,21 +225,19 @@ export default function AnormalidadesRegistro() {
       qc.invalidateQueries(['anormalidades'])
       qc.invalidateQueries(['anormalidad-detail', estadoModal?.id])
       setEstadoModal(null)
-      toast.success('Estado actualizado')
+      toast.success(t('anorm.toast.statusUpdated'))
     },
-    onError: (e) => toast.error(e?.response?.data?.error || 'Error'),
+    onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 
-  const applyFilters = () => {
-    const f = {}
-    if (fechaDesde) f.fecha_desde = fechaDesde
-    if (fechaHasta) f.fecha_hasta = fechaHasta
-    if (selectedProcesos.length) f.proceso = selectedProcesos.join(',')
-    if (selectedNiveles.length) f.nivel = selectedNiveles.join(',')
-    if (selectedResponsables.length) f.responsable_id = selectedResponsables.join(',')
-    setAppliedFilters(f)
-    setPage(1)
-  }
+  const crearMejoraMut = useMutation({
+    mutationFn: ({ id, payload }) => crearMejoraDesdeAnormalidad(id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries(['anormalidad-detail', detailId])
+      toast.success(t('anorm.toast.mejoraCreated'))
+    },
+    onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorCreateMejora')),
+  })
 
   const clearFilters = () => {
     setFechaDesde('')
@@ -197,33 +245,68 @@ export default function AnormalidadesRegistro() {
     setSelectedProcesos([])
     setSelectedNiveles([])
     setSelectedResponsables([])
-    setAppliedFilters({})
+    setSelectedOrigenes([])
+    setSoloVencidas(false)
+    setSinResponsable(false)
     setPage(1)
   }
 
-  const hasActiveFilters = Object.keys(appliedFilters).length > 0
+  const hasActiveFilters = !!(fechaDesde || fechaHasta || selectedProcesos.length || selectedNiveles.length || selectedResponsables.length || selectedOrigenes.length || soloVencidas || sinResponsable)
 
-  const exportXlsx = useCallback(async () => {
-    if (!canUpdate) return
+  const toggleAll = useCallback(() => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (allChecked) rows.forEach(r => next.delete(r.id))
+      else rows.forEach(r => next.add(r.id))
+      return next
+    })
+  }, [allChecked, rows])
+
+  const toggleRow = useCallback((id) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }, [])
+
+  const selectAllFiltered = useCallback(async () => {
+    try {
+      setSelectingAllFiltered(true)
+      const all = await listAnormalidades({ ...queryParams, page: 1, limit: 9999 })
+      setSelected(new Set((all.data || []).map(r => r.id)))
+    } catch {
+      toast.error(t('anorm.toast.errorSelectFiltered'))
+    } finally {
+      setSelectingAllFiltered(false)
+    }
+  }, [queryParams, toast])
+
+  const exportSelected = useCallback(async () => {
+    if (!canUpdate || selected.size === 0) return
     try {
       const all = await listAnormalidades({ ...queryParams, page: 1, limit: 9999 })
-      const ws = XLSX.utils.json_to_sheet((all.data || []).map(r => ({
-        Folio: r.folio,
-        Fecha: fmtDateTime(r.fecha_ocurrencia),
-        Proceso: r.proceso,
-        Código: r.codigo,
-        Nombre: r.nombre,
-        Nivel: r.nivel,
-        Estado: { nuevo: 'Nuevo', en_proceso: 'En Proceso', cerrado: 'Cerrado', vencido: 'Vencido' }[r.estado] || r.estado,
-        Cliente: r.cliente || '',
-        Responsable: r.responsable_nombre || '',
-        'Días abierto': r.dias_abierto ? Math.floor(r.dias_abierto) : 0,
+      const selectedRows = (all.data || []).filter(r => selected.has(r.id))
+      const ws = XLSX.utils.json_to_sheet(selectedRows.map(r => ({
+        [t('anorm.export.folio')]: r.folio,
+        [t('anorm.export.fecha')]: fmtDateTime(r.fecha_ocurrencia),
+        [t('anorm.export.proceso')]: r.proceso,
+        [t('anorm.export.codigo')]: r.codigo,
+        [t('anorm.export.nombre')]: r.nombre,
+        [t('anorm.export.nivel')]: r.nivel,
+        [t('anorm.export.estado')]: t(ESTADO_META[r.estado]?.labelKey || r.estado),
+        [t('anorm.export.cliente')]: r.cliente || '',
+        [t('anorm.export.responsable')]: r.responsable_nombre || '',
+        [t('anorm.export.diasAbierto')]: r.dias_abierto ? Math.floor(r.dias_abierto) : 0,
       })))
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Anormalidades')
-      XLSX.writeFile(wb, `anormalidades_${new Date().toISOString().slice(0, 10)}.xlsx`)
-    } catch { toast.error('Error al exportar') }
-  }, [queryParams, canUpdate])
+      XLSX.utils.book_append_sheet(wb, ws, t('anorm.export.sheet'))
+      XLSX.writeFile(wb, `${t('anorm.export.fileSelected')}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+      setSelected(new Set())
+    } catch {
+      toast.error(t('anorm.toast.errorExportSelected'))
+    }
+  }, [queryParams, selected, canUpdate, toast, t])
 
   return (
     <div className="flex flex-col h-full">
@@ -234,65 +317,83 @@ export default function AnormalidadesRegistro() {
       />
 
       {/* ── Sticky filter bar ─────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5 space-y-2">
-
-        {/* Row 1: date range + shortcuts + export + new */}
-        <div className="flex items-center gap-2 flex-wrap justify-between">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
-              <Clock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
-              <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)}
-                className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
-              <span className="text-warm-300 text-xs">→</span>
-              <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)}
-                className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
-            </div>
-            {[{ label: t('common.today'), d: 0 }, { label: t('common.last7Days'), d: 7 }, { label: t('common.last30Days'), d: 30 }].map(({ label, d }) => (
-              <button key={d}
-                onClick={() => { const today = getToday(); setFechaDesde(d === 0 ? today : subtractDays(today, d)); setFechaHasta(today) }}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors"
-              >{label}</button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {canUpdate && (
-              <button onClick={exportXlsx} className="btn-success flex items-center gap-1.5 text-xs py-2">
-                <Download className="w-3.5 h-3.5" />
-                {t('common.export')}
+      <div className="sticky top-[3.5rem] z-[20] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap justify-between">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
+                <Clock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+                <input type="date" value={fechaDesde} onChange={e => { setFechaDesde(e.target.value); setPage(1) }}
+                  className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
+                <span className="text-warm-300 text-xs">→</span>
+                <input type="date" value={fechaHasta} onChange={e => { setFechaHasta(e.target.value); setPage(1) }}
+                  className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
+              </div>
+              {[{ label: t('common.today'), d: 0 }, { label: t('common.last7Days'), d: 7 }, { label: t('common.last30Days'), d: 30 }].map(({ label, d }) => (
+                <button key={d}
+                  onClick={() => { const today = getToday(); setFechaDesde(d === 0 ? today : subtractDays(today, d)); setFechaHasta(today); setPage(1) }}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors"
+                >{label}</button>
+              ))}
+              <button
+                onClick={() => { setSoloVencidas(v => !v); setPage(1) }}
+                className={`h-10 px-3 rounded-xl border text-xs font-semibold transition-colors ${
+                  soloVencidas ? 'border-danger-300 bg-danger-50 text-danger-700' : 'border-warm-200 bg-white text-warm-600'
+                }`}
+              >
+                {t('anorm.registro.onlyOverdue')}
               </button>
-            )}
+              <button
+                onClick={() => { setSinResponsable(v => !v); setPage(1) }}
+                className={`h-10 px-3 rounded-xl border text-xs font-semibold transition-colors ${
+                  sinResponsable ? 'border-warning-300 bg-warning-50 text-warning-700' : 'border-warm-200 bg-white text-warm-600'
+                }`}
+              >
+                {t('anorm.registro.unassigned')}
+              </button>
+            </div>
             {canCreate && (
-              <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-1.5 text-xs py-2">
+              <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-1.5 text-xs h-10 ml-auto">
                 <Plus className="w-3.5 h-3.5" />
                 {t('anorm.registro.nueva')}
               </button>
             )}
           </div>
-        </div>
 
-        {/* Row 2: filters + search + apply */}
         <div className="flex items-center gap-2 flex-wrap">
           <MultiSelect
             placeholder={t('anorm.field.proceso')}
-            options={PROCESOS.map(p => ({ value: p, label: p }))}
+            options={procesos.map(item => ({ value: item.nombre, label: item.nombre }))}
             selected={selectedProcesos}
-            onChange={setSelectedProcesos}
+            onChange={(v) => { setSelectedProcesos(v); setPage(1) }}
           />
           <MultiSelect
             placeholder={t('anorm.field.nivel')}
-            options={['L1', 'L2', 'L3'].map(n => ({ value: n, label: n }))}
+            options={niveles.map(n => ({ value: n.codigo, label: n.nombre }))}
             selected={selectedNiveles}
-            onChange={setSelectedNiveles}
+            onChange={(v) => { setSelectedNiveles(v); setPage(1) }}
           />
           <MultiSelect
             placeholder={t('anorm.field.responsable')}
             options={usuarios.map(u => ({ value: String(u.id), label: u.nombre_completo }))}
             selected={selectedResponsables}
-            onChange={setSelectedResponsables}
+            onChange={(v) => { setSelectedResponsables(v); setPage(1) }}
+          />
+          <MultiSelect
+            placeholder={t('anorm.field.origen')}
+            options={origenes.map(item => ({ value: item.nombre, label: item.nombre }))}
+            selected={selectedOrigenes}
+            onChange={(v) => { setSelectedOrigenes(v); setPage(1) }}
           />
           <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[200px] focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
             <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
-            <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
+            <input
+              type="text"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') e.currentTarget.blur()
+              }}
               placeholder={t('anorm.registro.searchPlaceholder')}
               className="text-xs outline-none bg-transparent text-warm-700 flex-1" />
             {search && <button onClick={() => setSearch('')} className="text-warm-400 hover:text-warm-600"><X className="w-3 h-3" /></button>}
@@ -302,39 +403,80 @@ export default function AnormalidadesRegistro() {
               <X className="w-3 h-3" /> {t('common.clear')}
             </button>
           )}
-          <button onClick={applyFilters} className="btn-primary flex items-center gap-1.5 text-xs py-2 ml-auto">
-            {t('common.apply')}
-          </button>
+        </div>
         </div>
       </div>
 
       {/* ── Status tabs ───────────────────────────────────────────────────── */}
-      <div className="flex gap-0 border-b border-warm-100 bg-white px-5">
-        {STATUS_TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => { setActiveTab(tab); setPage(1) }}
-            className={`px-4 py-2.5 text-xs font-semibold transition-all border-b-2 -mb-px ${
-              activeTab === tab
-                ? 'border-primary-500 text-primary-700'
-                : 'border-transparent text-warm-500 hover:text-warm-700'
-            }`}
-          >
-            {t(`anorm.estado.${tab}`)}
-          </button>
-        ))}
+      <div className="sticky top-[8.6rem] z-[4] border-b border-warm-100 bg-white px-5">
+        <div className="flex gap-0">
+          {STATUS_TABS.map(tab => (
+            <button
+              key={tab}
+              onClick={() => { setActiveTab(tab); setPage(1) }}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all border-b-2 -mb-px ${
+                activeTab === tab
+                  ? 'border-primary-500 text-primary-700'
+                  : 'border-transparent text-warm-400 hover:text-warm-600'
+              }`}
+            >
+              {t(`anorm.estado.${tab}`)}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
+      <div className="flex-1 min-h-0 overflow-hidden p-4">
         {/* Table */}
         {isLoading ? (
           <div className="flex items-center justify-center py-16"><LoadingSpinner /></div>
         ) : (
-          <div className="bg-white rounded-2xl border border-warm-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="card overflow-hidden shadow-sm table-shell">
+            {someChecked && canUpdate && (
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100 flex-wrap">
+                <span className="text-xs text-primary-700 font-semibold tabular-nums">
+                  {t('anorm.registro.selectedCount').replace('{n}', selected.size)}
+                  {allFilteredSelected && total > 0 && (
+                    <span className="ml-1 text-primary-500 font-normal">{t('anorm.registro.allFiltered')}</span>
+                  )}
+                </span>
+                {!allFilteredSelected && total > selected.size && (
+                  <button
+                    className="text-xs text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
+                    onClick={selectAllFiltered}
+                    disabled={selectingAllFiltered}
+                  >
+                    {selectingAllFiltered ? t('anorm.registro.selecting') : t('anorm.registro.selectAllFiltered').replace('{n}', total)}
+                  </button>
+                )}
+                <button
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors"
+                  onClick={exportSelected}
+                >
+                  <Download size={12} /> {t('common.export')} ({selected.size})
+                </button>
+                <button
+                  className="inline-flex items-center gap-1 text-xs text-warm-500 hover:text-warm-700 transition-colors ml-auto"
+                  onClick={() => setSelected(new Set())}
+                >
+                  <X className="w-3 h-3" /> {t('common.clear')}
+                </button>
+              </div>
+            )}
+            <div className="overflow-x-auto table-scroll">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-warm-100">
+                  <tr className="bg-warm-50 border-b border-warm-100">
+                    <th className={`${TH} w-8`}>
+                      <input
+                        type="checkbox"
+                        checked={allChecked}
+                        ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
+                        onChange={toggleAll}
+                        className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                        onClick={e => e.stopPropagation()}
+                      />
+                    </th>
                     <th className={TH}><span className={TH_TEXT}>{t('anorm.field.folio')}</span></th>
                     <th className={TH}><span className={TH_TEXT}>{t('common.date')}</span></th>
                     <th className={TH}><span className={TH_TEXT}>{t('anorm.field.proceso')}</span></th>
@@ -348,46 +490,55 @@ export default function AnormalidadesRegistro() {
                 </thead>
                 <tbody className="divide-y divide-warm-50">
                   {rows.length === 0 ? (
-                    <tr><td colSpan={9} className="text-center py-16 text-warm-400 text-sm">{t('common.noData')}</td></tr>
+                    <tr><td colSpan={10} className="text-center py-16 text-warm-400 text-sm">{t('common.noData')}</td></tr>
                   ) : rows.map(row => (
                     <tr
                       key={row.id}
                       onClick={() => setDetailId(row.id)}
-                      className="hover:bg-primary-50/30 cursor-pointer transition-colors"
+                      className="table-row hover:bg-primary-50/30 cursor-pointer transition-colors"
                     >
-                      <td className="px-4 py-3">
+                      <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(row.id)}
+                          onChange={() => toggleRow(row.id)}
+                          className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                          onClick={e => e.stopPropagation()}
+                        />
+                      </td>
+                      <td className="table-cell">
                         <span className="font-mono text-xs font-semibold text-primary-700">{row.folio}</span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-warm-600">{fmtDateTime(row.fecha_ocurrencia)}</td>
-                      <td className="px-4 py-3 text-xs text-warm-700">{row.proceso}</td>
-                      <td className="px-4 py-3">
+                      <td className="table-cell text-xs text-warm-600">{fmtDateTime(row.fecha_ocurrencia)}</td>
+                      <td className="table-cell text-xs text-warm-700">{row.proceso}</td>
+                      <td className="table-cell">
                         <div className="text-xs font-medium text-warm-800">{row.codigo}</div>
                         <div className="text-[10px] text-warm-400 truncate max-w-[120px]">{row.nombre}</div>
                       </td>
-                      <td className="px-4 py-3"><NivelChip nivel={row.nivel} /></td>
-                      <td className="px-4 py-3">
+                      <td className="table-cell"><NivelChip nivel={row.nivel} /></td>
+                      <td className="table-cell">
                         <EstadoChip estado={row.vencido && row.estado !== 'cerrado' ? 'vencido' : row.estado} />
                       </td>
-                      <td className="px-4 py-3 text-xs text-warm-600">{row.responsable_nombre || <span className="text-warm-300">—</span>}</td>
-                      <td className="px-4 py-3">
+                      <td className="table-cell text-xs text-warm-600">{row.responsable_nombre || <span className="text-warm-300">—</span>}</td>
+                      <td className="table-cell">
                         <span className={`text-xs font-medium ${row.vencido && row.estado !== 'cerrado' ? 'text-danger-600' : 'text-warm-600'}`}>
                           {row.dias_abierto ? `${Math.floor(row.dias_abierto)}d` : '0d'}
                           {row.vencido && row.estado !== 'cerrado' && ' ⚠'}
                         </span>
                       </td>
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <td className="table-cell" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors" title={t('common.view')}>
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-4 h-4" />
                           </button>
                           {canCreate && (
                             <button onClick={() => setEditId(row.id)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors" title={t('common.edit')}>
-                              <Pencil className="w-3.5 h-3.5" />
+                              <Edit3 className="w-4 h-4" />
                             </button>
                           )}
                           {canDelete && (
                             <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg hover:bg-danger-100 text-warm-400 hover:text-danger-600 transition-colors" title={t('common.delete')}>
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -409,10 +560,14 @@ export default function AnormalidadesRegistro() {
 
       {/* Modal: create */}
       <AnormFormModal
+        key="anorm-create"
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
         codigos={codigos}
         usuarios={usuarios}
+        procesos={procesos}
+        niveles={niveles}
+        origenes={origenes}
         onSubmit={(data) => createMut.mutate(data)}
         loading={createMut.isPending}
         title={t('anorm.registro.nueva')}
@@ -421,9 +576,13 @@ export default function AnormalidadesRegistro() {
       {/* Modal: edit */}
       {editId && (
         <AnormEditModal
+          key={`anorm-edit-${editId}`}
           id={editId}
           codigos={codigos}
           usuarios={usuarios}
+          procesos={procesos}
+          niveles={niveles}
+          origenes={origenes}
           onClose={() => setEditId(null)}
           onSubmit={(data) => updateMut.mutate({ id: editId, data })}
           loading={updateMut.isPending}
@@ -432,6 +591,7 @@ export default function AnormalidadesRegistro() {
 
       {/* Modal: detail */}
       <AnormDetailModal
+        key={`anorm-detail-${detailId || 'none'}`}
         isOpen={!!detailId}
         onClose={() => setDetailId(null)}
         detail={detail}
@@ -440,6 +600,8 @@ export default function AnormalidadesRegistro() {
         canCreate={canCreate}
         onChangeEstado={(estado) => setEstadoModal({ id: detailId, estado_actual: detail?.estado })}
         onEdit={() => { setEditId(detailId); setDetailId(null) }}
+        onCrearMejora={() => crearMejoraMut.mutate({ id: detailId, payload: {} })}
+        creandoMejora={crearMejoraMut.isPending}
       />
 
       {/* Modal: cambiar estado */}
@@ -469,7 +631,7 @@ export default function AnormalidadesRegistro() {
 
 // ── AnormFormModal ─────────────────────────────────────────────────────────────
 
-function AnormFormModal({ isOpen, onClose, codigos, usuarios, onSubmit, loading, title, initialData }) {
+function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles, origenes, onSubmit, loading, title, initialData }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData || { ...FORM_EMPTY, fecha_ocurrencia: new Date().toISOString().slice(0, 16) })
 
@@ -490,7 +652,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, onSubmit, loading,
     if (found) {
       set('codigo_id', id)
       set('codigo', found.codigo)
-      set('nombre', found.nombre_es)
+      set('nombre', found.nombre)
       if (!form.nivel) set('nivel', found.nivel_sugerido)
     } else {
       set('codigo_id', '')
@@ -505,34 +667,20 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, onSubmit, loading,
     onSubmit(payload)
   }
 
-  const Section = ({ title: st, children }) => (
-    <div className="mb-6">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-warm-500 mb-3 pb-1 border-b border-warm-100">{st}</h3>
-      <div className="grid grid-cols-2 gap-3">{children}</div>
-    </div>
-  )
-
-  const Field = ({ label, span = 1, children }) => (
-    <div className={span === 2 ? 'col-span-2' : ''}>
-      <label className="block text-xs font-medium text-warm-700 mb-1">{label}</label>
-      {children}
-    </div>
-  )
-
   const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
   const sel = inp
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} icon={AlertTriangle} size="2xl">
       <form onSubmit={handleSubmit}>
-        <Section title={t('anorm.section.identificacion')}>
+        <SectionBlock title={t('anorm.section.identificacion')}>
           <Field label={t('anorm.field.fechaOcurrencia')}>
             <input type="datetime-local" value={form.fecha_ocurrencia} onChange={e => set('fecha_ocurrencia', e.target.value)} className={inp} required />
           </Field>
           <Field label={t('anorm.field.proceso')}>
             <select value={form.proceso} onChange={e => set('proceso', e.target.value)} className={sel} required>
               <option value="">{t('common.select')}</option>
-              {PROCESOS.map(p => <option key={p} value={p}>{p}</option>)}
+              {procesos.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
           </Field>
           <Field label={t('anorm.field.codigo')}>
@@ -540,7 +688,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, onSubmit, loading,
               <option value="">{t('common.select')}</option>
               {Object.entries(codigosPorProceso).map(([proc, codes]) => (
                 <optgroup key={proc} label={proc}>
-                  {codes.map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.nombre_es}</option>)}
+                  {codes.map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.nombre}</option>)}
                 </optgroup>
               ))}
             </select>
@@ -551,12 +699,12 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, onSubmit, loading,
           <Field label={t('anorm.field.nivel')}>
             <select value={form.nivel} onChange={e => set('nivel', e.target.value)} className={sel} required>
               <option value="">{t('common.select')}</option>
-              {['L1', 'L2', 'L3'].map(n => <option key={n} value={n}>{n} — {n === 'L1' ? t('anorm.nivel.l1') : n === 'L2' ? t('anorm.nivel.l2') : t('anorm.nivel.l3')}</option>)}
+              {niveles.map(n => <option key={n.codigo} value={n.codigo}>{n.nombre}</option>)}
             </select>
           </Field>
-        </Section>
+        </SectionBlock>
 
-        <Section title={t('anorm.section.contexto')}>
+        <SectionBlock title={t('anorm.section.contexto')}>
           <Field label={t('anorm.field.cliente')}>
             <input value={form.cliente} onChange={e => set('cliente', e.target.value)} className={inp} placeholder={t('anorm.field.clientePlaceholder')} />
           </Field>
@@ -573,17 +721,29 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, onSubmit, loading,
             <input value={form.ubicacion} onChange={e => set('ubicacion', e.target.value)} className={inp} />
           </Field>
           <Field label={t('anorm.field.cantidad')}>
-            <input type="number" min="0" value={form.cantidad_afectada} onChange={e => set('cantidad_afectada', e.target.value)} className={inp} />
+            <input
+              type="text"
+              inputMode="numeric"
+              value={form.cantidad_afectada}
+              onChange={e => set('cantidad_afectada', e.target.value.replace(/[^\d]/g, ''))}
+              className={inp}
+            />
           </Field>
           <Field label={t('anorm.field.monto')}>
-            <input type="number" min="0" step="0.01" value={form.monto_impacto} onChange={e => set('monto_impacto', e.target.value)} className={inp} />
+            <input
+              type="text"
+              inputMode="decimal"
+              value={form.monto_impacto}
+              onChange={e => set('monto_impacto', e.target.value.replace(/[^\d.]/g, ''))}
+              className={inp}
+            />
           </Field>
           <Field label={t('anorm.field.descripcion')} span={2}>
             <textarea value={form.descripcion} onChange={e => set('descripcion', e.target.value)} className={`${inp} resize-none`} rows={3} required />
           </Field>
-        </Section>
+        </SectionBlock>
 
-        <Section title={t('anorm.section.responsabilidad')}>
+        <SectionBlock title={t('anorm.section.responsabilidad')}>
           <Field label={t('anorm.field.detectadoPor')}>
             <select value={form.detectado_por_id} onChange={e => set('detectado_por_id', e.target.value)} className={sel}>
               <option value="">{t('common.select')}</option>
@@ -593,7 +753,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, onSubmit, loading,
           <Field label={t('anorm.field.origen')}>
             <select value={form.origen_responsabilidad} onChange={e => set('origen_responsabilidad', e.target.value)} className={sel}>
               <option value="">{t('common.select')}</option>
-              {ORIGENES.map(o => <option key={o} value={o}>{o}</option>)}
+              {origenes.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
           </Field>
           <Field label={t('anorm.field.responsableAsignado')} span={2}>
@@ -602,7 +762,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, onSubmit, loading,
               {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre_completo}</option>)}
             </select>
           </Field>
-        </Section>
+        </SectionBlock>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-warm-100">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
@@ -618,14 +778,14 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, onSubmit, loading,
 
 // ── AnormEditModal ─────────────────────────────────────────────────────────────
 
-function AnormEditModal({ id, codigos, usuarios, onClose, onSubmit, loading }) {
+function AnormEditModal({ id, codigos, usuarios, procesos, niveles, origenes, onClose, onSubmit, loading }) {
   const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
   const { data, isLoading } = useQuery({ queryKey: ['anormalidad-detail', id], queryFn: () => getAnormalidad(id), enabled: backendOnline && !!id })
   const d = data?.data
 
   if (isLoading || !d) return (
-    <Modal isOpen title={t('common.edit')} icon={Pencil} onClose={onClose} size="2xl">
+    <Modal isOpen title={t('common.edit')} icon={Edit3} onClose={onClose} size="2xl">
       <div className="flex justify-center py-12"><LoadingSpinner /></div>
     </Modal>
   )
@@ -661,6 +821,9 @@ function AnormEditModal({ id, codigos, usuarios, onClose, onSubmit, loading }) {
       onClose={onClose}
       codigos={codigos}
       usuarios={usuarios}
+      procesos={procesos}
+      niveles={niveles}
+      origenes={origenes}
       onSubmit={onSubmit}
       loading={loading}
       title={`${t('common.edit')} ${d.folio}`}
@@ -671,7 +834,7 @@ function AnormEditModal({ id, codigos, usuarios, onClose, onSubmit, loading }) {
 
 // ── AnormDetailModal ───────────────────────────────────────────────────────────
 
-function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canCreate, onChangeEstado, onEdit }) {
+function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canCreate, onChangeEstado, onEdit, onCrearMejora, creandoMejora }) {
   const [tab, setTab] = useState('detalle')
   const { t } = useI18nStore()
 
@@ -679,6 +842,7 @@ function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canC
     { id: 'detalle', label: t('anorm.tab.detalle'), icon: FileText },
     { id: 'resolucion', label: t('anorm.tab.resolucion'), icon: CheckCircle2 },
     { id: 'historial', label: t('anorm.tab.historial'), icon: History },
+    { id: 'mejoras', label: t('anorm.tab.mejoras'), icon: Target },
   ]
 
   if (!isOpen) return null
@@ -686,16 +850,22 @@ function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canC
   const headerAction = (
     <div className="flex items-center gap-2">
       {d && <NivelChip nivel={d.nivel} />}
-      {d && <EstadoChip estado={d.estado} />}
+      {d && <EstadoChip estado={d.vencido && d.estado !== 'cerrado' ? 'vencido' : d.estado} />}
       {canUpdate && d && (
         <button onClick={onChangeEstado} className="btn-secondary text-xs flex items-center gap-1.5">
           <ArrowUpDown className="w-3 h-3" />
           {t('anorm.action.cambiarEstado')}
         </button>
       )}
+      {d && onCrearMejora && (
+        <button onClick={onCrearMejora} disabled={creandoMejora} className="btn-success text-xs flex items-center gap-1.5">
+          {creandoMejora ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Target className="w-3 h-3" />}
+          {t('anorm.action.crearMejora')}
+        </button>
+      )}
       {canCreate && d && (
         <button onClick={onEdit} className="btn-ghost text-xs flex items-center gap-1.5">
-          <Pencil className="w-3 h-3" />
+          <Edit3 className="w-3 h-3" />
           {t('common.edit')}
         </button>
       )}
@@ -738,6 +908,7 @@ function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canC
           {tab === 'detalle' && <TabDetalle d={d} t={t} />}
           {tab === 'resolucion' && <TabResolucion d={d} t={t} />}
           {tab === 'historial' && <TabHistorial historial={d.historial || []} t={t} />}
+          {tab === 'mejoras' && <TabMejoras mejoras={d.mejoras_vinculadas || []} />}
         </>
       )}
     </Modal>
@@ -834,6 +1005,27 @@ function TabHistorial({ historial, t }) {
             </div>
             {h.nota && <p className="text-xs text-warm-500 mt-1">{h.nota}</p>}
             <p className="text-[10px] text-warm-400 mt-1">{fmtDateTime(h.created_at)}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TabMejoras({ mejoras }) {
+  if (!mejoras.length) return <p className="text-sm text-warm-400 text-center py-8">{useI18nStore.getState().t('anorm.mejoras.emptyLinked')}</p>
+  return (
+    <div className="space-y-2">
+      {mejoras.map((mejora) => (
+        <div key={mejora.mejora_id} className="flex items-start gap-3 p-3 bg-warm-50 rounded-xl border border-warm-100">
+          <div className="mt-0.5 w-8 h-8 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+            <Link2 className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-warm-800">{mejora.descripcion_problema}</p>
+            <div className="mt-2">
+              <EstadoChip estado={mejora.mejora_estado} />
+            </div>
           </div>
         </div>
       ))}

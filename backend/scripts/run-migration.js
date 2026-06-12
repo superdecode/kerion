@@ -7,7 +7,8 @@ import dotenv from 'dotenv'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-dotenv.config({ path: path.join(__dirname, '../.env.local') })
+const envFile = process.env.ENV_FILE || '.env.local'
+dotenv.config({ path: path.join(__dirname, '../', envFile) })
 
 const { Pool } = pg
 

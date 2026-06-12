@@ -21,9 +21,12 @@ const MODULE_ALIASES = {
 
 // Fallback keys: if primary lookup returns sin_acceso, try these alternate paths.
 // Handles tokens issued before migration 052 that used 'inventory' instead of 'inventario'.
+// Also handles FEP/folios that lives under dropscan after migration 048 (mig 011 used fep.folios).
 const MODULE_FALLBACKS = {
   'inventario.escaneo': 'inventory.escaneo',
   'inventario.registros': 'inventory.tarimas',
+  'fep.folios': 'dropscan.folios',
+  'dropscan.folios': 'fep.folios',
 }
 
 function normalizeLevel(level) {
@@ -81,7 +84,8 @@ function getModuleLevel(permisos, modulePath) {
 function isTenantAdmin(user) {
   if (!user) return false
   if (user.es_admin_tenant === true) return true
-  if (user.es_admin_tenant === undefined && user.rol_nombre === 'Administrador') return true
+  const roleName = String(user.rol_nombre || user.rol || '').trim().toLowerCase()
+  if (user.es_admin_tenant === undefined && ['administrador', 'admin', 'administrator'].includes(roleName)) return true
   return false
 }
 

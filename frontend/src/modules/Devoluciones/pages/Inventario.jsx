@@ -9,6 +9,7 @@ import {
 import { getToday, subtractDays } from '../../../core/utils/dateFormat'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
+import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -530,7 +531,7 @@ export default function Inventario() {
             {/* Tab: Stock activo */}
             {tab === 'actual' && (
               inventarioQuery.isLoading ? (
-                <div className="py-14 text-center text-sm text-warm-400">{t('dev.inventario.loading_inv')}</div>
+                <LoadingSpinner text={t('dev.inventario.loading_inv')} />
               ) : inventarioFiltrado.length === 0 ? (
                 <div className="flex flex-col items-center py-16 gap-3 text-warm-300">
                   <Boxes className="w-10 h-10" />
@@ -602,7 +603,7 @@ export default function Inventario() {
                               <span className="font-mono text-xs text-warm-700">{row.codigo_trazabilidad}</span>
                               <button
                                 onClick={() => copy(row.codigo_trazabilidad)}
-                                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-all"
+                                className="p-0.5 rounded hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-all"
                               >
                                 {copied === row.codigo_trazabilidad ? <Check className="w-3 h-3 text-success-500" /> : <Copy className="w-3 h-3" />}
                               </button>
@@ -654,7 +655,7 @@ export default function Inventario() {
             {/* Tab: Historial */}
             {tab === 'historial' && (
               historialQuery.isLoading ? (
-                <div className="py-14 text-center text-sm text-warm-400">{t('dev.inventario.loading_hist')}</div>
+                <LoadingSpinner text={t('dev.inventario.loading_hist')} />
               ) : movimientos.length === 0 ? (
                 <div className="py-14 text-center text-sm text-warm-400">{t('dev.inventario.sin_movimientos')}</div>
               ) : (

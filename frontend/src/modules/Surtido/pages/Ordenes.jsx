@@ -7,7 +7,7 @@ import {
   Search, UserCheck, Users, Plus, Trash2, X, ChevronDown, Play, Loader2,
   Package2, Truck, ScanBarcode, Copy, Check, Eye, ClipboardList,
   User, Clock, BarChart3, RefreshCw, Database, CheckCircle2,
-  MapPin, Timer, XCircle, AlertCircle, Pencil, BadgeCheck, Download,
+  MapPin, Timer, XCircle, AlertCircle, Edit3, BadgeCheck, Download,
   ListFilter, Filter, CalendarClock, Save, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Printer,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
@@ -464,7 +464,7 @@ function ManualReasonsModal({ isOpen, onClose, canUpdate, canDelete }) {
                     className="rounded-lg p-2 text-warm-400 hover:bg-warm-100 hover:text-primary-600"
                     onClick={() => { setEditingId(reason.id); setEditingName(reason.nombre) }}
                   >
-                    <Pencil size={14} />
+                    <Edit3 size={14} />
                   </button>
                 )
               )}
@@ -1984,7 +1984,10 @@ export default function Ordenes() {
                </div>
                {/* Spinner overlay */}
                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70 backdrop-blur-sm">
-                 <Loader2 size={36} className="animate-spin text-primary-400" />
+                 <div className="relative flex h-14 w-14 items-center justify-center rounded-[1.5rem] bg-primary-50 shadow-glow animate-bounce-soft">
+                   <div className="absolute inset-1 rounded-[1.15rem] bg-white/90" />
+                   <Loader2 size={20} className="relative z-10 animate-spin text-primary-500" />
+                 </div>
                  <p className="text-sm text-warm-500">{t('common.loading')}</p>
                </div>
              </motion.div>
@@ -2478,7 +2481,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
   }), [])
 
   return (
-    <motion.div className="card overflow-hidden table-shell h-full"
+    <motion.div className="card overflow-hidden table-shell"
       initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
 
@@ -2734,7 +2737,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
 
   return (
     <ModuleLimitBanner module="surtido" usage={moduleUsage?.surtido}>
-    <motion.div className="card overflow-hidden table-shell h-full"
+    <motion.div className="card overflow-hidden table-shell"
       initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
 
@@ -2898,7 +2901,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                             title="Editar estado"
                             onClick={e => { e.stopPropagation(); setEditStatusObc(obc) }}
                             className="opacity-0 group-hover/statusEdit:opacity-100 p-0.5 rounded text-warm-300 hover:text-warm-600 transition-all">
-                            <Pencil size={10} />
+                            <Edit3 size={10} />
                           </button>
                         )}
                       </div>

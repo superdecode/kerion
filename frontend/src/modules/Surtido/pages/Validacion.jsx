@@ -6,7 +6,7 @@ import {
   Search, CheckCircle2, XCircle, AlertCircle, Loader2, Wifi, WifiOff,
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
   ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck,
-  MapPin, XOctagon, Plus, Pencil, X, AlertTriangle, Copy, Check,
+  MapPin, XOctagon, Plus, Edit3, X, AlertTriangle, Copy, Check,
   PanelRightClose, PanelRightOpen, Save, PartyPopper,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
@@ -15,7 +15,7 @@ import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
-import { generateCodeVariations, normalizeCode } from '../../Shared/Wms/normalizeCode'
+import { generateCodeVariations, normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import {
   getOutboundList, getOutboundDetail,
@@ -42,30 +42,28 @@ function buildItemMaps(detailData) {
   packageList.forEach(p => {
     const codes = [p.customizeCode, p.boxType, p.boxCode].filter(Boolean)
     const expectedQty = p.quantity ?? p.totalPackageQty ?? p.qty ?? 1
-    // Find the primary displayCode (first valid normalized code)
     let primaryNorm = null
     for (const c of codes) {
-      const n = normalizeCode(c)
+      const n = normalizeCodeFast(c)
       if (n) { primaryNorm = n; break }
     }
     if (!primaryNorm) return
-    // All codes of the same package share one entry with the primary displayCode
     const entry = { ...p, expectedQty, scannedQty: 0, type: 'box', displayCode: primaryNorm }
     codes.forEach(c => {
-      const norm = normalizeCode(c)
+      const norm = normalizeCodeFast(c)
       if (!norm) return
-      for (const variant of generateCodeVariations(norm)) {
+      for (const variant of generateCodeVariations(norm, false)) {
         packageMap.set(variant, entry)
       }
     })
   })
   const productMap = new Map()
   productList.forEach(p => {
-    const norm = normalizeCode(p.sku || '')
+    const norm = normalizeCodeFast(p.sku || '')
     const expectedQty = p.quantity ?? p.qty ?? p.totalProductQty ?? 1
     if (!norm) return
     const entry = { ...p, expectedQty, scannedQty: 0, type: 'sku', displayCode: norm }
-    for (const variant of generateCodeVariations(norm)) {
+    for (const variant of generateCodeVariations(norm, false)) {
       productMap.set(variant, entry)
     }
   })
@@ -73,7 +71,7 @@ function buildItemMaps(detailData) {
 }
 
 function findMatchedItem(code, packageMap, productMap) {
-  for (const variant of generateCodeVariations(code)) {
+  for (const variant of generateCodeVariations(code, false)) {
     const matched = packageMap.get(variant) || productMap.get(variant)
     if (matched) return matched
   }
@@ -505,7 +503,7 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
   }, [isOpen])
 
   function doRecount(raw) {
-    const norm = normalizeCode(raw.trim())
+    const norm = normalizeCodeFast(raw.trim())
     if (!norm) return
     const alreadyInRecount = recountItems.some(r => r.code === norm)
     const alreadyInSession = sessionHistory.some(h => h.code === norm && h.result === 'ok')
@@ -1169,7 +1167,7 @@ const { data: reasonsData } = useQuery({
     mutationFn: addManualScanEvent,
     onSuccess: (result) => {
       const payload = result?.data
-      const norm = normalizeCode(payload?.normalized_code || manualEntry.code)
+      const norm = normalizeCodeFast(payload?.normalized_code || manualEntry.code)
       const matched = findMatchedItem(norm, packageMap, productMap)
       playSound('success')
       setLastScan({ code: norm, result: 'ok' })
@@ -1208,7 +1206,7 @@ const { data: reasonsData } = useQuery({
 
   const doScan = useCallback((rawCode) => {
     if (!canCreate || !rawCode.trim() || !sessionId) return
-    const norm = normalizeCode(rawCode)
+    const norm = normalizeCodeFast(rawCode)
     const isDup = history.some(h => h.code === norm && h.result === 'ok')
     if (isDup) {
       playSound('warning')
@@ -1243,15 +1241,18 @@ const { data: reasonsData } = useQuery({
   }, [sessionId, history, packageMap, productMap, addEventMut, t])
 
   function addCodeToSession(code) {
-    const norm = normalizeCode(code)
+    const norm = normalizeCodeFast(code)
     const matched = findMatchedItem(norm, packageMap, productMap)
+    if (!matched) {
+      playSound('error')
+      toast.error(t('surtido.validacion.not_in_bd') + ': ' + norm)
+      return
+    }
     playSound('success')
     setLastScan({ code: norm, result: 'ok' })
     setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h])
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
-    if (matched) {
-      setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
-    }
+    setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
     if (sessionId) {
       const ts = Date.now()
       addEventMut.mutate({ session_id: sessionId, scanned_code: code, normalized_code: norm, scan_result: 'ok', quantity: 1, _dedupeKey: `RC_${norm}_${ts}` })
@@ -1325,7 +1326,7 @@ const { data: reasonsData } = useQuery({
   }, [step, sessionId, totalExpected, counts.ok, showCompletionModal, finalizeMut.isPending]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const missingItems = allItems.filter(item => {
-    const normBoxType = normalizeCode(item.boxType || '')
+    const normBoxType = normalizeCodeFast(item.boxType || '')
     if (normBoxType && normBoxType === item.displayCode) return false
     return (itemCounts.get(item.displayCode) || 0) < (item.expectedQty || 1)
   })
@@ -1476,7 +1477,7 @@ const { data: reasonsData } = useQuery({
                       setLocationInputValue(selectedUbicacion || '')
                       setTimeout(() => locationRef.current?.focus(), 80)
                     }}>
-                    <Pencil size={10} />
+                    <Edit3 size={10} />
                   </button>
                 </motion.div>
               )}
@@ -1564,7 +1565,7 @@ const { data: reasonsData } = useQuery({
                 className="absolute right-4 top-0 z-10 inline-flex items-center gap-1.5 rounded-t-xl rounded-b-none border border-warm-200 border-b-0 bg-white px-3 py-1.5 text-[11px] font-semibold text-warm-600 shadow-sm transition-all hover:-translate-y-[1px] hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 whitespace-nowrap"
                 onClick={() => setShowManualEntry(true)}
               >
-                <Pencil size={12} /> {t('surtido.validacion.manual_entry')}
+                <Edit3 size={12} /> {t('surtido.validacion.manual_entry')}
               </button>
 
               {/* Scan input */}
@@ -1790,7 +1791,7 @@ const { data: reasonsData } = useQuery({
         isOpen={showManualEntry}
         onClose={() => setShowManualEntry(false)}
         title={t('surtido.validacion.manual_entry')}
-        icon={Pencil}
+        icon={Edit3}
         footer={
           <div className="flex gap-3 justify-end">
             <button className="btn-ghost" onClick={() => setShowManualEntry(false)}>Cancelar</button>
@@ -1799,15 +1800,19 @@ const { data: reasonsData } = useQuery({
               disabled={!manualEntry.code.trim() || !manualEntry.reasonId || addManualEventMut.isPending}
               onClick={() => {
                 if (!sessionId) { toast.error('Sesión no encontrada'); return }
-                const norm = normalizeCode(manualEntry.code.trim())
+                const norm = normalizeCodeFast(manualEntry.code.trim())
                 const matched = findMatchedItem(norm, packageMap, productMap)
+                if (!matched) {
+                  toast.error(t('surtido.validacion.not_in_bd') + ': ' + norm)
+                  return
+                }
                 const selectedReason = (getRecords(reasonsData)).find((reason) => String(reason.id) === manualEntry.reasonId)
                 addManualEventMut.mutate({
                   session_id: sessionId,
                   scanned_code: manualEntry.code.trim(),
                   normalized_code: norm,
-                  matched_sku: matched?.type === 'sku' ? matched.sku : null,
-                  matched_box_type: matched?.type === 'box' ? (matched.boxType || matched.boxCode) : null,
+                  matched_sku: matched.type === 'sku' ? matched.sku : null,
+                  matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null,
                   scan_result: 'ok',
                   quantity: 1,
                   manual_reason_id: Number(manualEntry.reasonId),

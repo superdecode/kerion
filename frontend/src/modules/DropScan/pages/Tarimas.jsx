@@ -8,6 +8,7 @@ import * as XLSX from 'xlsx'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import TablePagination from '../../../core/components/common/TablePagination'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -17,7 +18,7 @@ import { fmtTime, fmtTimeShort, fmtDate, fmtDateTime, getToday, subtractDays } f
 import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Eye, Trash2, Search, Download,
   Package, Clock, CheckCircle, ArrowUpDown, ArrowUp, ArrowDown, X,
-  RotateCcw, AlertTriangle, Copy, Pencil, Building2, Radio, Lock, Plus, ArrowRight, User
+  RotateCcw, AlertTriangle, Copy, Edit3, Building2, Radio, Lock, Plus, ArrowRight, User
 } from 'lucide-react'
 
 const calcDuration = (tarima) => {
@@ -666,7 +667,7 @@ export default function Tarimas() {
             {/* Table */}
             <motion.div
               data-tour="tarimas-tabla"
-              className="card overflow-hidden"
+              className="card overflow-hidden table-shell"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
@@ -676,7 +677,7 @@ export default function Tarimas() {
               ) : tarimas.length === 0 ? (
                 <div className="p-16 text-center text-sm text-warm-400">{t('history.noPalletsFound')}</div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto table-scroll">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="bg-warm-50 border-b border-warm-100">
@@ -769,7 +770,7 @@ export default function Tarimas() {
                                   onClick={() => handleOpenDetail(row.id, true)}
                                   className="p-2 rounded-xl hover:bg-warning-50 text-warm-400 hover:text-warning-500 transition-all"
                                   title="Editar">
-                                  <Pencil className="w-4 h-4" />
+                                  <Edit3 className="w-4 h-4" />
                                 </button>
                               )}
                               {canDelete('dropscan.tarimas') && (
@@ -791,47 +792,15 @@ export default function Tarimas() {
               )}
 
               {/* Pagination */}
-              <div className="flex items-center justify-between px-5 py-3 border-t border-warm-100 bg-warm-50/30">
-                <div className="flex items-center gap-3">
-                  <p className="text-xs text-warm-400 font-medium">
-                    {pagination.total === 0
-                      ? `0 ${t('common.records')}`
-                      : `${(page - 1) * pageLimit + 1}–${Math.min(page * pageLimit, pagination.total)} ${t('common.pagination.of')} ${pagination.total} ${t('common.records')}`}
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-warm-400">{t('common.show')}</span>
-                    <select value={pageLimit} onChange={e => { setPageLimit(parseInt(e.target.value)); setPage(1) }}
-                      className="px-2 py-1 rounded-lg border border-warm-200 text-xs text-warm-700 outline-none focus:border-primary-400 bg-white cursor-pointer">
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                      <option value={200}>200</option>
-                      <option value={500}>500</option>
-                    </select>
-                  </div>
-                </div>
-                {pagination.pages > 1 && (
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={() => setPage(1)} disabled={page === 1}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-warm-200 bg-white/90 text-warm-500 transition-all hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-warm-200 disabled:hover:bg-white/90 disabled:hover:text-warm-500">
-                      <ChevronsLeft className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-warm-200 bg-white/90 text-warm-500 transition-all hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-warm-200 disabled:hover:bg-white/90 disabled:hover:text-warm-500">
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full border border-primary-300 bg-white px-2.5 text-[11px] font-semibold text-primary-700 shadow-[0_0_0_3px_rgba(124,58,237,0.10)]">{page}</span>
-                    <button onClick={() => setPage(p => Math.min(pagination.pages, p + 1))} disabled={page === pagination.pages}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-warm-200 bg-white/90 text-warm-500 transition-all hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-warm-200 disabled:hover:bg-white/90 disabled:hover:text-warm-500">
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => setPage(pagination.pages)} disabled={page === pagination.pages}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-warm-200 bg-white/90 text-warm-500 transition-all hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-warm-200 disabled:hover:bg-white/90 disabled:hover:text-warm-500">
-                      <ChevronsRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
+              <TablePagination
+                page={page}
+                totalPages={pagination.pages}
+                pageSize={pageLimit}
+                totalItems={pagination.total}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => { setPageLimit(size); setPage(1) }}
+                itemLabel={t('common.records')}
+              />
             </motion.div>
           </div>
         </div>
@@ -890,7 +859,7 @@ export default function Tarimas() {
                 className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl font-semibold transition-all ${
                   editMode ? 'bg-warning-100 text-warning-700 hover:bg-warning-200' : 'bg-warm-100 text-warm-600 hover:bg-warm-200'
                 }`}>
-                <Pencil className="w-4 h-4" /> {editMode ? t('common.close') : t('common.edit')}
+                <Edit3 className="w-4 h-4" /> {editMode ? t('common.close') : t('common.edit')}
               </button>
             )}
           </>

@@ -1,17 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, RefreshCw, Target, CheckCircle2, Clock, Pencil, Eye, Link2, XCircle } from 'lucide-react'
+import { Plus, RefreshCw, Target, CheckCircle2, Clock, Edit3, Eye, Link2, XCircle, Search, AlertTriangle, X } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import Header from '../../../core/components/layout/Header'
+import MultiSelect from '../../../core/components/common/MultiSelect'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { fmtDate, fmtDateTime } from '../../../core/utils/dateFormat'
+import { fmtDate, fmtDateTime, getToday, subtractDays } from '../../../core/utils/dateFormat'
 import {
   listMejoras, getMejora, createMejora, updateMejora,
-  listAnormalidades, vincularMejora, getUsuarios,
+  listAnormalidades, vincularMejora, getUsuarios, getMejorasCandidatas,
+  getProcesosConfig, getOrigenesConfig,
 } from '../services/anormalidadesService'
 
 const ESTADO_META = {
@@ -29,6 +31,8 @@ function EstadoChip({ estado }) {
 const FORM_EMPTY = {
   descripcion_problema: '',
   ocurrencias: 1,
+  proceso: '',
+  origen: '',
   causa_raiz_principal: '',
   accion_mejora: '',
   responsable_id: '',
@@ -48,23 +52,59 @@ export default function AnormMejoras() {
 
   const [page, setPage] = useState(1)
   const [estadoFilter, setEstadoFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const [soloVencidas, setSoloVencidas] = useState(false)
+  const [soloVinculadas, setSoloVinculadas] = useState(false)
+  const [sinVinculos, setSinVinculos] = useState(false)
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
+  const [selectedProcesos, setSelectedProcesos] = useState([])
+  const [selectedOrigenes, setSelectedOrigenes] = useState([])
+  const [selectedResponsables, setSelectedResponsables] = useState([])
   const [createOpen, setCreateOpen] = useState(false)
   const [detailId, setDetailId] = useState(null)
   const [editId, setEditId] = useState(null)
   const [vincularMejoraId, setVincularMejoraId] = useState(null)
 
+  const queryParams = useMemo(() => {
+    const p = { page, limit: 20, search: search || undefined }
+    if (estadoFilter) p.estado = estadoFilter
+    if (soloVencidas) p.vencidas = true
+    if (soloVinculadas) p.vinculadas = true
+    if (sinVinculos) p.sin_vinculos = true
+    if (fechaDesde) p.fecha_desde = fechaDesde
+    if (fechaHasta) p.fecha_hasta = fechaHasta
+    if (selectedProcesos.length) p.proceso = selectedProcesos.join(',')
+    if (selectedOrigenes.length) p.origen = selectedOrigenes.join(',')
+    if (selectedResponsables.length) p.responsable_id = selectedResponsables.join(',')
+    return p
+  }, [page, search, estadoFilter, soloVencidas, soloVinculadas, sinVinculos, fechaDesde, fechaHasta, selectedProcesos, selectedOrigenes, selectedResponsables])
+
   const { data, isLoading } = useQuery({
-    queryKey: ['anorm-mejoras', page, estadoFilter],
-    queryFn: () => listMejoras({ page, limit: 20, estado: estadoFilter || undefined }),
+    queryKey: ['anorm-mejoras', queryParams],
+    queryFn: () => listMejoras(queryParams),
     keepPreviousData: true,
+    enabled: backendOnline,
+  })
+  const { data: candidatasData } = useQuery({
+    queryKey: ['anorm-mejoras-candidatas'],
+    queryFn: () => getMejorasCandidatas(),
     enabled: backendOnline,
   })
 
   const { data: usuariosData } = useQuery({ queryKey: ['anorm-usuarios'], queryFn: getUsuarios, enabled: backendOnline })
+  const { data: procesosData } = useQuery({ queryKey: ['anorm-procesos-config'], queryFn: getProcesosConfig, enabled: backendOnline })
+  const { data: origenesData } = useQuery({ queryKey: ['anorm-origenes-config'], queryFn: getOrigenesConfig, enabled: backendOnline })
   const usuarios = usuariosData?.data || []
+  const procesos = (procesosData?.data || []).filter(item => item.activo)
+  const origenes = (origenesData?.data || []).filter(item => item.activo)
+  const responsableOptions = usuarios.map(u => ({ value: String(u.id), label: u.nombre_completo }))
+  const procesoOptions = procesos.map(item => ({ value: item.nombre, label: item.nombre }))
+  const origenOptions = origenes.map(item => ({ value: item.nombre, label: item.nombre }))
 
   const rows = data?.data || []
   const total = data?.total || 0
+  const candidatas = candidatasData?.data || []
 
   const { data: detailData, isLoading: detailLoading } = useQuery({
     queryKey: ['anorm-mejora-detail', detailId],
@@ -76,53 +116,183 @@ export default function AnormMejoras() {
   const createMut = useMutation({
     mutationFn: createMejora,
     onSuccess: () => { qc.invalidateQueries(['anorm-mejoras']); setCreateOpen(false); toast.success(t('anorm.mejoras.created')) },
-    onError: e => toast.error(e?.response?.data?.error || 'Error'),
+    onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => updateMejora(id, data),
     onSuccess: () => { qc.invalidateQueries(['anorm-mejoras']); qc.invalidateQueries(['anorm-mejora-detail', editId]); setEditId(null); toast.success(t('common.saved')) },
-    onError: e => toast.error(e?.response?.data?.error || 'Error'),
+    onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 
   const vincularMut = useMutation({
     mutationFn: ({ mejora_id, anorm_id }) => vincularMejora(mejora_id, anorm_id),
     onSuccess: () => { qc.invalidateQueries(['anorm-mejora-detail', vincularMejoraId]); setVincularMejoraId(null); toast.success(t('anorm.mejoras.vinculado')) },
-    onError: e => toast.error(e?.response?.data?.error || 'Error'),
+    onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 
   const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
+  const hasFilters = !!(search || estadoFilter || soloVencidas || soloVinculadas || sinVinculos || fechaDesde || fechaHasta || selectedProcesos.length || selectedOrigenes.length || selectedResponsables.length)
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('anorm.mejoras.title')} subtitle={t('anorm.mejoras.subtitle')} icon={<Target className="w-5 h-5 text-accent-500" />} />
+      <Header
+        title={t('anorm.mejoras.title')}
+        subtitle={t('anorm.mejoras.subtitle')}
+        icon={<Target className="w-5 h-5 text-accent-500" />}
+      />
 
-      <div className="flex-1 overflow-auto px-6 py-4 space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1 bg-warm-100 rounded-xl p-1">
-            {['', 'nuevo', 'en_proceso', 'cerrado'].map(e => (
-              <button key={e} onClick={() => { setEstadoFilter(e); setPage(1) }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${estadoFilter === e ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-600 hover:text-warm-800'}`}>
-                {e ? t(ESTADO_META[e]?.labelKey || e) : t('common.all')}
+      <div className="sticky top-[3.5rem] z-[20] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
+              <Clock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+              <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)}
+                className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
+              <span className="text-warm-300 text-xs">→</span>
+              <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)}
+                className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
+            </div>
+            {[{ label: t('common.today'), d: 0 }, { label: t('common.last7Days'), d: 7 }, { label: t('common.last30Days'), d: 30 }].map(({ label, d }) => (
+              <button
+                key={d}
+                onClick={() => { const today = getToday(); setFechaDesde(d === 0 ? today : subtractDays(today, d)); setFechaHasta(today) }}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors"
+              >
+                {label}
               </button>
             ))}
-          </div>
-          {canUpdate && (
-            <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-1.5 text-xs ml-auto">
-              <Plus className="w-3.5 h-3.5" />
-              {t('anorm.mejoras.nueva')}
+            <button
+              onClick={() => { setSoloVencidas(v => !v); setPage(1) }}
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
+                soloVencidas ? 'border-danger-300 bg-danger-50 text-danger-700' : 'border-warm-200 bg-white text-warm-600'
+              }`}
+            >
+              {t('anorm.mejoras.onlyOverdue')}
             </button>
-          )}
+            <button
+              onClick={() => { setSoloVinculadas(v => !v); if (sinVinculos) setSinVinculos(false); setPage(1) }}
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
+                soloVinculadas ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-warm-200 bg-white text-warm-600'
+              }`}
+            >
+              {t('anorm.mejoras.withLinks')}
+            </button>
+            <button
+              onClick={() => { setSinVinculos(v => !v); if (soloVinculadas) setSoloVinculadas(false); setPage(1) }}
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
+                sinVinculos ? 'border-warning-300 bg-warning-50 text-warning-700' : 'border-warm-200 bg-white text-warm-600'
+              }`}
+            >
+              {t('anorm.mejoras.withoutLinks')}
+            </button>
+            {canUpdate && (
+              <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-1.5 text-xs ml-auto">
+                <Plus className="w-3.5 h-3.5" />
+                {t('anorm.mejoras.nueva')}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <MultiSelect
+              selected={selectedProcesos}
+              onChange={(v) => { setSelectedProcesos(v); setPage(1) }}
+              options={procesoOptions}
+              placeholder={t('anorm.field.proceso')}
+            />
+            <MultiSelect
+              selected={selectedOrigenes}
+              onChange={(v) => { setSelectedOrigenes(v); setPage(1) }}
+              options={origenOptions}
+              placeholder={t('anorm.field.origen')}
+            />
+            <MultiSelect
+              selected={selectedResponsables}
+              onChange={(v) => { setSelectedResponsables(v); setPage(1) }}
+              options={responsableOptions}
+              placeholder={t('anorm.field.responsable')}
+            />
+            <div className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-3 py-2 min-w-[240px] flex-1">
+              <Search className="w-3.5 h-3.5 text-warm-400" />
+              <input
+                value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1) }}
+                placeholder={t('anorm.mejoras.searchPlaceholder')}
+                className="w-full bg-transparent text-sm outline-none text-warm-700"
+              />
+            </div>
+            {hasFilters && (
+              <button
+                onClick={() => {
+                  setSearch('')
+                  setEstadoFilter('')
+                  setSoloVencidas(false)
+                  setSoloVinculadas(false)
+                  setSinVinculos(false)
+                  setFechaDesde('')
+                  setFechaHasta('')
+                  setSelectedProcesos([])
+                  setSelectedOrigenes([])
+                  setSelectedResponsables([])
+                  setPage(1)
+                }}
+                className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors"
+              >
+                <X className="w-3 h-3" /> {t('common.clear')}
+              </button>
+            )}
+          </div>
         </div>
+      </div>
+
+      <div className="sticky top-[7rem] z-[4] border-b border-warm-100 bg-white px-5">
+        <div className="flex gap-0">
+          {['', 'nuevo', 'en_proceso', 'cerrado'].map(e => (
+            <button
+              key={e}
+              onClick={() => { setEstadoFilter(e); setPage(1) }}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all border-b-2 -mb-px ${
+                estadoFilter === e
+                  ? 'border-primary-500 text-primary-700'
+                  : 'border-transparent text-warm-400 hover:text-warm-600'
+              }`}
+            >
+              {e ? t(ESTADO_META[e]?.labelKey || e) : t('common.all')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-hidden p-4 space-y-4">
+
+        {candidatas.length > 0 && (
+          <div className="card p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="w-4 h-4 text-warm-500" />
+              <h3 className="text-sm font-semibold text-warm-800">{t('anorm.mejoras.autoCandidates')}</h3>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+              {candidatas.slice(0, 4).map((item) => (
+                <div key={item.codigo} className="rounded-xl border border-warm-100 bg-warm-50 px-3 py-2">
+                  <p className="text-sm font-semibold text-warm-800">{item.codigo} · {item.nombre}</p>
+                  <p className="text-xs text-warm-500">
+                    {item.proceso} · {t('anorm.mejoras.occurrencesCount').replace('{n}', item.ocurrencias)} · {t('anorm.mejoras.withoutLinkedImprovement').replace('{n}', item.sin_mejora)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex justify-center py-16"><LoadingSpinner /></div>
         ) : (
-          <div className="bg-white rounded-2xl border border-warm-100 shadow-sm overflow-hidden">
+          <div className="card overflow-hidden shadow-sm table-shell">
+            <div className="overflow-x-auto table-scroll">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-warm-100">
-                  {[t('common.date'), t('anorm.mejoras.problema'), t('anorm.mejoras.ocurrencias'), t('anorm.field.responsable'), t('anorm.mejoras.fechaLimite'), t('common.status'), t('common.actions')].map(h => (
+                <tr className="bg-warm-50 border-b border-warm-100">
+                  {[t('common.date'), t('anorm.field.proceso'), t('anorm.field.origen'), t('anorm.mejoras.problema'), t('anorm.mejoras.ocurrencias'), t('anorm.field.responsable'), t('anorm.mejoras.fechaLimite'), t('common.status'), t('common.actions')].map(h => (
                     <th key={h} className="table-header">
                       <span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{h}</span>
                     </th>
@@ -131,30 +301,33 @@ export default function AnormMejoras() {
               </thead>
               <tbody className="divide-y divide-warm-50">
                 {rows.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-16 text-warm-400 text-sm">{t('common.noData')}</td></tr>
+                  <tr><td colSpan={9} className="text-center py-16 text-warm-400 text-sm">{t('common.noData')}</td></tr>
                 ) : rows.map(row => (
-                  <tr key={row.id} onClick={() => setDetailId(row.id)} className="hover:bg-primary-50/30 cursor-pointer transition-colors">
-                    <td className="px-4 py-3 text-xs text-warm-600">{fmtDate(row.created_at)}</td>
-                    <td className="px-4 py-3">
+                  <tr key={row.id} onClick={() => setDetailId(row.id)} className="table-row hover:bg-primary-50/30 cursor-pointer transition-colors">
+                    <td className="table-cell text-xs text-warm-600">{fmtDate(row.created_at)}</td>
+                    <td className="table-cell text-xs text-warm-700">{row.proceso || '—'}</td>
+                    <td className="table-cell text-xs text-warm-600">{row.origen || '—'}</td>
+                    <td className="table-cell">
                       <p className="text-sm font-medium text-warm-800 line-clamp-2 max-w-[240px]">{row.descripcion_problema}</p>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="table-cell text-center">
                       <span className="text-xs font-semibold text-accent-700">{row.ocurrencias}</span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-warm-600">{row.responsable_nombre || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-warm-600">{row.fecha_limite ? fmtDate(row.fecha_limite) : '—'}</td>
-                    <td className="px-4 py-3"><EstadoChip estado={row.estado} /></td>
-                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <td className="table-cell text-xs text-warm-600">{row.responsable_nombre || '—'}</td>
+                    <td className="table-cell text-xs text-warm-600">{row.fecha_limite ? fmtDate(row.fecha_limite) : '—'}</td>
+                    <td className="table-cell"><EstadoChip estado={row.estado} /></td>
+                    <td className="table-cell" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors"><Eye className="w-3.5 h-3.5" /></button>
-                        {canUpdate && <button onClick={() => setEditId(row.id)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>}
-                        {canUpdate && <button onClick={() => setVincularMejoraId(row.id)} className="p-1.5 rounded-lg hover:bg-success-100 text-warm-400 hover:text-success-600 transition-colors" title={t('anorm.mejoras.vincular')}><Link2 className="w-3.5 h-3.5" /></button>}
+                        <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors"><Eye className="w-4 h-4" /></button>
+                        {canUpdate && <button onClick={() => setEditId(row.id)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors"><Edit3 className="w-4 h-4" /></button>}
+                        {canUpdate && <button onClick={() => setVincularMejoraId(row.id)} className="p-1.5 rounded-lg hover:bg-success-100 text-warm-400 hover:text-success-600 transition-colors" title={t('anorm.mejoras.vincular')}><Link2 className="w-4 h-4" /></button>}
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
             <TablePagination page={page} limit={20} total={total} onPageChange={setPage} />
           </div>
         )}
@@ -165,6 +338,8 @@ export default function AnormMejoras() {
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
         usuarios={usuarios}
+        procesos={procesos}
+        origenes={origenes}
         onSubmit={d => createMut.mutate(d)}
         loading={createMut.isPending}
         title={t('anorm.mejoras.nueva')}
@@ -175,6 +350,8 @@ export default function AnormMejoras() {
         <MejoraEditModal
           id={editId}
           usuarios={usuarios}
+          procesos={procesos}
+          origenes={origenes}
           onClose={() => setEditId(null)}
           onSubmit={d => updateMut.mutate({ id: editId, data: d })}
           loading={updateMut.isPending}
@@ -188,6 +365,8 @@ export default function AnormMejoras() {
         ) : (
           <div className="space-y-4">
             <div className="flex items-center gap-2"><EstadoChip estado={detail.estado} /></div>
+            <InfoRow label={t('anorm.field.proceso')} value={detail.proceso || '—'} />
+            <InfoRow label={t('anorm.field.origen')} value={detail.origen || '—'} />
             <InfoRow label={t('anorm.mejoras.problema')} value={detail.descripcion_problema} />
             <InfoRow label={t('anorm.mejoras.ocurrencias')} value={detail.ocurrencias} />
             <InfoRow label={t('anorm.mejoras.causaRaiz')} value={detail.causa_raiz_principal || '—'} />
@@ -235,15 +414,35 @@ function InfoRow({ label, value }) {
   )
 }
 
-function MejoraFormModal({ isOpen, onClose, usuarios, onSubmit, loading, title, initialData }) {
+function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubmit, loading, title, initialData }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData || { ...FORM_EMPTY })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
 
+  useEffect(() => {
+    setForm(initialData || { ...FORM_EMPTY })
+  }, [initialData, isOpen])
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} icon={Target} size="lg">
       <form onSubmit={e => { e.preventDefault(); onSubmit(form) }} className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.proceso')} *</label>
+            <select value={form.proceso} onChange={e => set('proceso', e.target.value)} className={inp} required>
+              <option value="">{t('common.select')}</option>
+              {procesos.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.origen')}</label>
+            <select value={form.origen} onChange={e => set('origen', e.target.value)} className={inp}>
+              <option value="">{t('common.select')}</option>
+              {origenes.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+            </select>
+          </div>
+        </div>
         <div>
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.problema')} *</label>
           <textarea value={form.descripcion_problema} onChange={e => set('descripcion_problema', e.target.value)} className={`${inp} resize-none`} rows={3} required />
@@ -299,19 +498,21 @@ function MejoraFormModal({ isOpen, onClose, usuarios, onSubmit, loading, title, 
   )
 }
 
-function MejoraEditModal({ id, usuarios, onClose, onSubmit, loading }) {
+function MejoraEditModal({ id, usuarios, procesos, origenes, onClose, onSubmit, loading }) {
   const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
   const { data, isLoading } = useQuery({ queryKey: ['anorm-mejora-detail', id], queryFn: () => getMejora(id), enabled: backendOnline && !!id })
   const d = data?.data
   if (isLoading || !d) return (
-    <Modal isOpen title={t('common.edit')} icon={Pencil} onClose={onClose} size="lg">
+    <Modal isOpen title={t('common.edit')} icon={Edit3} onClose={onClose} size="lg">
       <div className="flex justify-center py-12"><LoadingSpinner /></div>
     </Modal>
   )
   const initial = {
     descripcion_problema: d.descripcion_problema || '',
     ocurrencias: d.ocurrencias || 1,
+    proceso: d.proceso || '',
+    origen: d.origen || '',
     causa_raiz_principal: d.causa_raiz_principal || '',
     accion_mejora: d.accion_mejora || '',
     responsable_id: d.responsable_id ? String(d.responsable_id) : '',
@@ -319,7 +520,7 @@ function MejoraEditModal({ id, usuarios, onClose, onSubmit, loading }) {
     estado: d.estado || 'nuevo',
     resultado_revision: d.resultado_revision || '',
   }
-  return <MejoraFormModal isOpen onClose={onClose} usuarios={usuarios} onSubmit={onSubmit} loading={loading} title={`${t('common.edit')} — ${t('anorm.mejoras.title')}`} initialData={initial} />
+  return <MejoraFormModal isOpen onClose={onClose} usuarios={usuarios} procesos={procesos} origenes={origenes} onSubmit={onSubmit} loading={loading} title={`${t('common.edit')} — ${t('anorm.mejoras.title')}`} initialData={initial} />
 }
 
 function VincularModal({ mejoraId, onClose, onVincular, loading }) {

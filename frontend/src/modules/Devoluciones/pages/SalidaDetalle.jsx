@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Plus, Trash2, Download, Printer, X, AlertTriangle, Search,
   ArrowRightFromLine, PackageCheck, Hash, Layers, User, CalendarDays,
-  Pencil, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Check, Save, LayoutGrid,
+  Edit3, ChevronsUpDown, ChevronUp, ChevronDown, Settings2, Check, Save, LayoutGrid,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -645,8 +645,8 @@ export default function SalidaDetalle() {
                 <p className="text-sm">{t('dev.salida_detalle.sin_resultados')} "{search}"</p>
               </div>
             ) : (
-              <>
-                <div className="overflow-x-auto">
+              <div className="table-shell">
+                <div className="overflow-x-auto table-scroll">
                   <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-wide text-warm-500 border-b border-warm-100 bg-warm-50/80">
@@ -691,14 +691,14 @@ export default function SalidaDetalle() {
                                 <button
                                   onClick={() => { setEditingLine(row); setEditQty(row.cantidad_solicitada) }}
                                   className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors">
-                                  <Pencil className="w-3.5 h-3.5" />
+                                  <Edit3 className="w-4 h-4" />
                                 </button>
                               )}
                               {canDelete && (
                                 <button
                                   onClick={() => setDeletingLineId(row.id)}
                                   className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors">
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               )}
                             </div>
@@ -718,7 +718,7 @@ export default function SalidaDetalle() {
                   onPageSizeChange={setPageSize}
                   itemLabel={t('dev.salida_detalle.lineas_label').toLowerCase()}
                 />
-              </>
+              </div>
             )}
 
             {/* Add-line form */}
@@ -883,7 +883,7 @@ export default function SalidaDetalle() {
         isOpen={!!editingLine}
         onClose={() => setEditingLine(null)}
         title={t('dev.salida_detalle.edit_qty.title')}
-        icon={Pencil}
+        icon={Edit3}
         size="sm"
         footer={
           <>

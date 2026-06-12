@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx'
 import {
   X, CheckCircle2, XCircle, AlertTriangle, Copy, Check,
   Clock, ScanBarcode, Package2, BadgeCheck, User, Timer,
-  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Pencil, Trash2, Search, ChevronRight,
+  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Edit3, Trash2, Search, ChevronRight,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -1100,7 +1100,10 @@ export default function SurtidoRegistros() {
               </table>
             </div>
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70 backdrop-blur-sm">
-              <Loader2 size={36} className="animate-spin text-primary-400" />
+              <div className="relative flex h-14 w-14 items-center justify-center rounded-[1.5rem] bg-primary-50 shadow-glow animate-bounce-soft">
+                <div className="absolute inset-1 rounded-[1.15rem] bg-white/90" />
+                <Loader2 size={20} className="relative z-10 animate-spin text-primary-500" />
+              </div>
               <p className="text-sm text-warm-500">{t('common.loading')}</p>
             </div>
           </div>
@@ -1246,7 +1249,7 @@ export default function SurtidoRegistros() {
                                 className="p-1.5 rounded-lg text-warm-400 hover:text-warning-600 hover:bg-warning-50 border border-transparent hover:border-warning-200 transition-all"
                                 onClick={e => { e.stopPropagation(); openDetail(r.id, 'validados') }}
                                 title={t('common.edit')}>
-                                <Pencil size={13} />
+                                <Edit3 size={13} />
                               </button>
                             )}
                             {canDelete && (

@@ -44,6 +44,7 @@ const MODULE_GROUPS = [
     modules: [
       { key: 'inventario.escaneo',   label: 'Escaneo',   labelKey: 'perm.sub.inventario.escaneo' },
       { key: 'inventario.registros', label: 'Registros', labelKey: 'perm.sub.inventario.registros' },
+      { key: 'inventario.rastreo',   label: 'Rastreo',   labelKey: 'perm.sub.inventario.rastreo' },
     ]
   },
   {

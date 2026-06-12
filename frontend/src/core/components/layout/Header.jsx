@@ -9,7 +9,7 @@ import api from '../../services/api'
 import { useToastStore } from '../../stores/toastStore'
 import {
   Search, X, User, LogOut, Key, Settings, Globe, ChevronDown,
-  Shield, Clock, Activity, HelpCircle, Pencil, Check
+  Shield, Clock, Activity, HelpCircle, Edit3, Check
 } from 'lucide-react'
 import { useTourStore } from '../../stores/tourStore'
 import { tourHelpVisible } from './OnboardingTour'
@@ -379,7 +379,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
                       className="mt-0.5 rounded-lg p-1.5 text-warm-300 transition-all hover:bg-primary-50 hover:text-primary-600"
                       title={t('auth.editName')}
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <Edit3 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 )}

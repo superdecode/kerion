@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Copy, Check, Download, PackageCheck,
-  Pencil, Trash2, AlertTriangle, X, Boxes, Save, Image as ImageIcon,
+  Edit3, Trash2, AlertTriangle, X, Boxes, Save, Image as ImageIcon,
   User, Hash, Layers, CalendarDays, Search,
   ChevronsUpDown, ChevronUp, ChevronDown, LayoutGrid,
 } from 'lucide-react'
@@ -483,8 +483,8 @@ export default function EntradaDetalle() {
                 <p className="text-sm">{t('dev.entrada_detalle.sin_resultados')} "{search}"</p>
               </div>
             ) : items.length > 0 && (
-              <>
-                <div className="overflow-x-auto">
+              <div className="table-shell">
+                <div className="overflow-x-auto table-scroll">
                   <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-wide text-warm-500 border-b border-warm-100 bg-warm-50/80">
@@ -650,12 +650,12 @@ export default function EntradaDetalle() {
                                 <button
                                   onClick={() => { setEditingItem(item); setExpandedRow(null) }}
                                   className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors">
-                                  <Pencil className="w-3.5 h-3.5" />
+                                  <Edit3 className="w-4 h-4" />
                                 </button>
                                 {canDelete && (
                                   <button onClick={() => setDeletingItemId(item.id)}
                                     className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors">
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-4 h-4" />
                                   </button>
                                 )}
                               </div>
@@ -697,7 +697,7 @@ export default function EntradaDetalle() {
                   onPageSizeChange={setPageSize}
                   itemLabel={t('dev.entrada_detalle.registros_label')}
                 />
-              </>
+              </div>
             )}
 
             {/* Inline form — inside the card, separated by a dashed border */}

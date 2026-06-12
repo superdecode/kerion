@@ -1,4 +1,4 @@
--- Migration 052: Normalize role permisos keys
+-- Migration 057: Normalize role permisos keys
 -- Renames legacy 'inventory' key to 'inventario' and backfills anormalidades + sistema
 -- for all existing Administrador, Jefe, Operador, Usuario roles.
 
@@ -34,5 +34,5 @@ WHERE nombre = 'Administrador'
 
 -- ── 7. Track migration ────────────────────────────────────────────────────
 INSERT INTO schema_migrations (version, description)
-VALUES ('052', 'normalize_role_permisos_keys')
+VALUES ('057', 'normalize_role_permisos_keys')
 ON CONFLICT (version) DO NOTHING;

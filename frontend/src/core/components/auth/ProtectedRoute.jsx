@@ -15,7 +15,7 @@ export default function ProtectedRoute({ children }) {
   return children
 }
 
-const PERM_TO_MODULE = {
+export const PERM_TO_MODULE = {
   dropscan: 'dropscan',
   fep: 'dropscan',
   inventario: 'inventario',

@@ -68,6 +68,47 @@ export default function Configuracion() {
   )
 }
 
+function ConfigHero({ icon: Icon, title, subtitle, search, onSearchChange, searchPlaceholder, action, maxWidth = 'max-w-6xl' }) {
+  return (
+    <div className={`${maxWidth} mx-auto mb-6`}>
+      <div className="rounded-3xl border border-warm-100 bg-gradient-to-br from-white via-white to-primary-50/35 p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-100 text-primary-700">
+              <Icon className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-warm-900">{title}</h2>
+              <p className="mt-1 text-sm text-warm-500">{subtitle}</p>
+            </div>
+          </div>
+          {(onSearchChange || action) && (
+            <div className="flex items-center gap-3">
+              {onSearchChange && (
+                <div className="relative min-w-[260px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
+                  <input
+                    value={search}
+                    onChange={e => onSearchChange(e.target.value)}
+                    placeholder={searchPlaceholder}
+                    className="input-field pl-10 pr-10 text-sm"
+                  />
+                  {search && (
+                    <button onClick={() => onSearchChange('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <X className="w-4 h-4 text-warm-400 hover:text-warm-600" />
+                    </button>
+                  )}
+                </div>
+              )}
+              {action}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ==================== EMPRESAS TAB ====================
 
 function EmpresasTab({ canEdit, canToggle, canRemove }) {
@@ -153,39 +194,21 @@ function EmpresasTab({ canEdit, canToggle, canRemove }) {
 
   return (
     <>
+      <ConfigHero
+        icon={Package}
+        title={t('config.companies')}
+        subtitle={t('config.companiesSubtitle')}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder={t('config.searchCompanies')}
+        action={canEdit ? (
+          <button onClick={() => handleOpenModal()} className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm">
+            <Plus className="w-4 h-4" /> {t('config.newCompany')}
+          </button>
+        ) : null}
+      />
+
       <div className="max-w-6xl mx-auto">
-        {/* Header actions */}
-        <motion.div
-          className="flex items-center gap-3 mb-6"
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('config.searchCompanies')}
-              className="input-field pl-10 pr-10 text-sm"
-            />
-            {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <X className="w-4 h-4 text-warm-400 hover:text-warm-600" />
-              </button>
-            )}
-          </div>
-          {canEdit && (
-            <motion.button
-              onClick={() => handleOpenModal()}
-              className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Plus className="w-4 h-4" /> {t('config.newCompany')}
-            </motion.button>
-          )}
-        </motion.div>
 
         {/* Empresas grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -197,26 +220,59 @@ function EmpresasTab({ canEdit, canToggle, canRemove }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05, duration: 0.3 }}
             >
-              <div className="flex items-start gap-3 mb-3">
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: empresa.color + '20' }}
-                >
-                  <Package className="w-6 h-6" style={{ color: empresa.color }} />
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: empresa.color + '20' }}
+                  >
+                    <Package className="w-6 h-6" style={{ color: empresa.color }} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-bold text-warm-800 truncate mb-1">{empresa.nombre}</h3>
+                    <span className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold bg-warm-100 text-warm-600">
+                      {empresa.codigo}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-base font-bold text-warm-800 truncate">{empresa.nombre}</h3>
+                {(canToggle || canEdit || canRemove) && (
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {canToggle && (
+                      <button
+                        onClick={() => toggleMutation.mutate(empresa.id)}
+                        className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
+                        title={empresa.activo ? t('config.deactivate') : t('config.activate')}
+                        disabled={toggleMutation.isPending}
+                      >
+                        {empresa.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        onClick={() => handleOpenModal(empresa)}
+                        className="p-1.5 rounded-lg hover:bg-accent-50 text-warm-400 hover:text-accent-600 transition-colors"
+                        title={t('common.edit')}
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canRemove && (
+                      <button
+                        onClick={() => handleDelete(empresa)}
+                        className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
+                        title={t('common.delete')}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
-                  <span className="inline-block px-2 py-0.5 rounded text-xs font-mono font-semibold bg-warm-100 text-warm-600">
-                    {empresa.codigo}
-                  </span>
-                </div>
+                )}
               </div>
 
-              <div className="flex items-center gap-4 text-xs text-warm-400 mb-3">
-                <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-1.5 text-xs text-warm-400">
                   <span>{t('config.color')}:</span>
                   <div
                     className="w-4 h-4 rounded border border-warm-200"
@@ -224,53 +280,14 @@ function EmpresasTab({ canEdit, canToggle, canRemove }) {
                   />
                   <span className="font-mono">{empresa.color}</span>
                 </div>
-              </div>
-
-              {/* Toggle active/inactive */}
-              <div className="flex items-center justify-between mb-3">
-                <span className={`text-xs font-semibold ${empresa.activo ? 'text-success-600' : 'text-warm-400'}`}>
+                <span className={`inline-flex items-center px-2.5 py-1 text-[11px] font-semibold rounded-full border ${
+                  empresa.activo
+                    ? 'border-success-200 bg-success-50 text-success-700'
+                    : 'border-warm-200 bg-warm-100 text-warm-500'
+                }`}>
                   {empresa.activo ? t('common.active') : t('common.inactive')}
                 </span>
-                {canToggle && (
-                  <button
-                    onClick={() => toggleMutation.mutate(empresa.id)}
-                    className={`p-1 rounded-lg transition-all ${
-                      empresa.activo
-                        ? 'text-success-500 hover:bg-success-50'
-                        : 'text-warm-400 hover:bg-warm-100'
-                    }`}
-                    title={empresa.activo ? t('config.deactivate') : t('config.activate')}
-                    disabled={toggleMutation.isPending}
-                  >
-                    {empresa.activo ? (
-                      <ToggleRight className="w-6 h-6" />
-                    ) : (
-                      <ToggleLeft className="w-6 h-6" />
-                    )}
-                  </button>
-                )}
               </div>
-
-              {(canEdit || canRemove) && (
-                <div className="flex items-center gap-1 pt-3 border-t border-warm-100">
-                  {canEdit && (
-                    <button
-                      onClick={() => handleOpenModal(empresa)}
-                      className="flex-1 p-2 rounded-xl hover:bg-primary-50 text-warm-500 hover:text-primary-600 transition-all text-sm font-medium"
-                    >
-                      <Edit3 className="w-4 h-4 inline mr-1" /> {t('common.edit')}
-                    </button>
-                  )}
-                  {canRemove && (
-                    <button
-                      onClick={() => handleDelete(empresa)}
-                      className="flex-1 p-2 rounded-xl hover:bg-danger-50 text-warm-500 hover:text-danger-500 transition-all text-sm font-medium"
-                    >
-                      <Trash2 className="w-4 h-4 inline mr-1" /> {t('common.delete')}
-                    </button>
-                  )}
-                </div>
-              )}
             </motion.div>
           ))}
 
@@ -513,39 +530,21 @@ function CanalesTab({ canEdit, canToggle, canRemove }) {
 
   return (
     <>
+      <ConfigHero
+        icon={Radio}
+        title={t('config.channels')}
+        subtitle={t('config.channelsSubtitle')}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder={t('config.searchChannels')}
+        action={canEdit ? (
+          <button onClick={() => handleOpenModal()} className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm">
+            <Plus className="w-4 h-4" /> {t('config.newChannel')}
+          </button>
+        ) : null}
+      />
+
       <div className="max-w-6xl mx-auto">
-        {/* Header actions */}
-        <motion.div
-          className="flex items-center gap-3 mb-6"
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('config.searchChannels')}
-              className="input-field pl-10 pr-10 text-sm"
-            />
-            {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <X className="w-4 h-4 text-warm-400 hover:text-warm-600" />
-              </button>
-            )}
-          </div>
-          {canEdit && (
-            <motion.button
-              onClick={() => handleOpenModal()}
-              className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Plus className="w-4 h-4" /> {t('config.newChannel')}
-            </motion.button>
-          )}
-        </motion.div>
 
         {/* Canales list */}
         <div className="grid gap-4">
@@ -565,17 +564,51 @@ function CanalesTab({ canEdit, canToggle, canRemove }) {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-base font-bold text-warm-800">{canal.nombre}</h3>
-                    {canal.es_default && (
-                      <span className="badge bg-primary-100 text-primary-700 text-xs">{t('config.default')}</span>
+                  <div className="flex items-start justify-between gap-3 mb-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <h3 className="text-base font-bold text-warm-800 truncate">{canal.nombre}</h3>
+                      {canal.es_default && (
+                        <span className="badge bg-primary-100 text-primary-700 text-xs shrink-0">{t('config.default')}</span>
+                      )}
+                    </div>
+                    {(canToggle || canEdit || canRemove) && (
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        {canToggle && (
+                          <button
+                            onClick={() => toggleMutation.mutate(canal.id)}
+                            className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
+                            title={canal.activo ? t('config.deactivate') : t('config.activate')}
+                            disabled={toggleMutation.isPending}
+                          >
+                            {canal.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button
+                            onClick={() => handleOpenModal(canal)}
+                            className="p-1.5 rounded-lg hover:bg-accent-50 text-warm-400 hover:text-accent-600 transition-colors"
+                            title={t('common.edit')}
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canRemove && !canal.es_default && (
+                          <button
+                            onClick={() => handleDelete(canal)}
+                            className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
+
                   {canal.descripcion && (
                     <p className="text-sm text-warm-500 mb-2">{canal.descripcion}</p>
                   )}
 
-                  {/* Linked empresas badges */}
                   {canal.empresas && canal.empresas.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
                       {canal.empresas.map(emp => (
@@ -587,72 +620,26 @@ function CanalesTab({ canEdit, canToggle, canRemove }) {
                             color: emp.color || '#6366f1'
                           }}
                         >
-                          <div
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: emp.color || '#6366f1' }}
-                          />
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: emp.color || '#6366f1' }} />
                           {emp.nombre}
                         </span>
                       ))}
                     </div>
                   )}
 
-                  <div className="flex items-center gap-4 text-xs text-warm-400">
-                    <span>{t('config.created')}: {fmtDate(canal.created_at)}</span>
-                    {canal.updated_at !== canal.created_at && (
-                      <span>{t('config.updated')}: {fmtDate(canal.updated_at)}</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {/* Toggle active/inactive */}
-                  <div className="flex flex-col items-center gap-1">
-                    <span className={`text-[10px] font-semibold ${canal.activo ? 'text-success-600' : 'text-warm-400'}`}>
-                      {canal.activo ? t('common.active') : t('common.inactive')}
-                    </span>
-                    {canToggle && (
-                      <button
-                        onClick={() => toggleMutation.mutate(canal.id)}
-                        className={`p-1 rounded-lg transition-all ${
-                          canal.activo
-                            ? 'text-success-500 hover:bg-success-50'
-                            : 'text-warm-400 hover:bg-warm-100'
-                        }`}
-                        title={canal.activo ? t('config.deactivate') : t('config.activate')}
-                        disabled={toggleMutation.isPending}
-                      >
-                        {canal.activo ? (
-                          <ToggleRight className="w-6 h-6" />
-                        ) : (
-                          <ToggleLeft className="w-6 h-6" />
-                        )}
-                      </button>
-                    )}
-                  </div>
-
-                  {(canEdit || canRemove) && (
-                    <div className="flex items-center gap-1 pl-2 border-l border-warm-100">
-                      {canEdit && (
-                        <button
-                          onClick={() => handleOpenModal(canal)}
-                          className="p-2 rounded-xl hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-all"
-                          title={t('common.edit')}
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                      )}
-                      {canRemove && !canal.es_default && (
-                        <button
-                          onClick={() => handleDelete(canal)}
-                          className="p-2 rounded-xl hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all"
-                          title={t('common.delete')}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                  <div className="flex items-center justify-between gap-4 mt-2">
+                    <div className="flex items-center gap-4 text-xs text-warm-400">
+                      <span>{t('config.created')}: {fmtDate(canal.created_at)}</span>
+                      {canal.updated_at !== canal.created_at && (
+                        <span>{t('config.updated')}: {fmtDate(canal.updated_at)}</span>
                       )}
                     </div>
-                  )}
+                    <span className={`inline-flex items-center px-2.5 py-1 text-[11px] font-semibold rounded-full border shrink-0 ${
+                      canal.activo ? 'border-success-200 bg-success-50 text-success-700' : 'border-warm-200 bg-warm-100 text-warm-500'
+                    }`}>
+                      {canal.activo ? t('common.active') : t('common.inactive')}
+                    </span>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -905,23 +892,19 @@ function ParametrosTab({ canEdit }) {
   if (isLoading) return <LoadingSpinner text={t('config.loadingParams')} />
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-5xl mx-auto">
+      <ConfigHero
+        icon={Sliders}
+        title={t('config.parameters')}
+        subtitle={t('config.parametersSubtitle')}
+        maxWidth="max-w-5xl"
+      />
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
         <div className="card p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-100 to-accent-100 flex items-center justify-center">
-              <Sliders className="w-5 h-5 text-primary-600" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-warm-800">{t('config.parameters')}</h3>
-              <p className="text-xs text-warm-500">{t('config.subtitle')}</p>
-            </div>
-          </div>
-
           <div className="space-y-6">
             {/* Guias por tarima */}
             <div className="p-4 rounded-xl border border-warm-200 bg-warm-50/50">
@@ -1026,6 +1009,7 @@ function OperadoresTab({ canEdit, canToggle, canRemove }) {
   const [showModal, setShowModal] = useState(false)
   const [editingOp, setEditingOp] = useState(null)
   const [showPinModal, setShowPinModal] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const queryClient = useQueryClient()
   const toast = useToastStore.getState()
   const { t } = useI18nStore()
@@ -1086,12 +1070,6 @@ function OperadoresTab({ canEdit, canToggle, canRemove }) {
     onError: (error) => toast.error(error.response?.data?.error || 'Error')
   })
 
-  const handleDelete = (op) => {
-    if (confirm(t('config.confirmDeleteOperator').replace('{name}', op.nombre))) {
-      deleteMutation.mutate(op.id)
-    }
-  }
-
   const filtered = operadores.filter(o =>
     o.nombre.toLowerCase().includes(search.toLowerCase())
   )
@@ -1100,38 +1078,21 @@ function OperadoresTab({ canEdit, canToggle, canRemove }) {
 
   return (
     <>
+      <ConfigHero
+        icon={Users}
+        title={t('config.internalUsers')}
+        subtitle={t('config.internalUsersDesc')}
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder={t('config.searchOperators')}
+        action={canEdit ? (
+          <button onClick={() => { setEditingOp(null); setShowModal(true) }} className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm">
+            <Plus className="w-4 h-4" /> {t('config.newOperator')}
+          </button>
+        ) : null}
+      />
+
       <div className="max-w-6xl mx-auto">
-        <motion.div
-          className="flex items-center gap-3 mb-6"
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={t('config.searchOperators')}
-              className="input-field pl-10 pr-10 text-sm"
-            />
-            {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <X className="w-4 h-4 text-warm-400 hover:text-warm-600" />
-              </button>
-            )}
-          </div>
-          {canEdit && (
-            <motion.button
-              onClick={() => { setEditingOp(null); setShowModal(true) }}
-              className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Plus className="w-4 h-4" /> {t('config.newOperator')}
-            </motion.button>
-          )}
-        </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((op, i) => (
@@ -1142,67 +1103,72 @@ function OperadoresTab({ canEdit, canToggle, canRemove }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05, duration: 0.3 }}
             >
-              <div className="flex items-start gap-3 mb-3">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                  op.activo ? 'bg-gradient-to-br from-primary-100 to-accent-100' : 'bg-warm-100'
-                }`}>
-                  <Users className={`w-6 h-6 ${op.activo ? 'text-primary-600' : 'text-warm-400'}`} />
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                    op.activo ? 'bg-gradient-to-br from-primary-100 to-accent-100' : 'bg-warm-100'
+                  }`}>
+                    <Users className={`w-6 h-6 ${op.activo ? 'text-primary-600' : 'text-warm-400'}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base font-bold text-warm-800 truncate">{op.nombre}</h3>
+                    <span className="text-xs text-warm-400">ID: {op.id}</span>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-bold text-warm-800 truncate">{op.nombre}</h3>
-                  <span className="text-xs text-warm-400">ID: {op.id}</span>
-                </div>
-              </div>
 
-              <div className="flex items-center justify-between mb-3">
-                <span className={`text-xs font-semibold ${op.activo ? 'text-success-600' : 'text-warm-400'}`}>
-                  {op.activo ? t('common.active') : t('common.inactive')}
-                </span>
-                {canToggle && (
-                  <button
-                    onClick={() => toggleMutation.mutate({ id: op.id, activo: !op.activo })}
-                    className={`p-1 rounded-lg transition-all ${
-                      op.activo ? 'text-success-500 hover:bg-success-50' : 'text-warm-400 hover:bg-warm-100'
-                    }`}
-                    disabled={toggleMutation.isPending}
-                  >
-                    {op.activo ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
-                  </button>
+                {(canToggle || canEdit || canRemove) && (
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {canToggle && (
+                      <button
+                        onClick={() => toggleMutation.mutate({ id: op.id, activo: !op.activo })}
+                        className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
+                        title={op.activo ? t('config.deactivate') : t('config.activate')}
+                        disabled={toggleMutation.isPending}
+                      >
+                        {op.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        onClick={() => { setEditingOp(op); setShowModal(true) }}
+                        className="p-1.5 rounded-lg hover:bg-accent-50 text-warm-400 hover:text-accent-600 transition-colors"
+                        title={t('common.edit')}
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        onClick={() => setShowPinModal(op)}
+                        className="p-1.5 rounded-lg hover:bg-accent-50 text-warm-400 hover:text-accent-600 transition-colors"
+                        title="PIN"
+                      >
+                        <KeyRound className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canRemove && (
+                      <button
+                        onClick={() => setDeleteTarget(op)}
+                        className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
+                        title={t('common.delete')}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
-              <div className="text-xs text-warm-400 mb-3">
-                {t('common.created')}: {fmtDate(op.created_at)}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-warm-400">
+                  {t('common.created')}: {fmtDate(op.created_at)}
+                </span>
+                <span className={`inline-flex items-center px-2.5 py-1 text-[11px] font-semibold rounded-full border ${
+                  op.activo ? 'border-success-200 bg-success-50 text-success-700' : 'border-warm-200 bg-warm-100 text-warm-500'
+                }`}>
+                  {op.activo ? t('common.active') : t('common.inactive')}
+                </span>
               </div>
-
-              {(canEdit || canRemove) && (
-                <div className="flex items-center gap-1 pt-3 border-t border-warm-100">
-                  {canEdit && (
-                    <button
-                      onClick={() => { setEditingOp(op); setShowModal(true) }}
-                      className="flex-1 p-2 rounded-xl hover:bg-primary-50 text-warm-500 hover:text-primary-600 transition-all text-sm font-medium"
-                    >
-                      <Edit3 className="w-4 h-4 inline mr-1" /> {t('common.edit')}
-                    </button>
-                  )}
-                  {canEdit && (
-                    <button
-                      onClick={() => setShowPinModal(op)}
-                      className="flex-1 p-2 rounded-xl hover:bg-accent-50 text-warm-500 hover:text-accent-600 transition-all text-sm font-medium"
-                    >
-                      <KeyRound className="w-4 h-4 inline mr-1" /> PIN
-                    </button>
-                  )}
-                  {canRemove && (
-                    <button
-                      onClick={() => handleDelete(op)}
-                      className="flex-1 p-2 rounded-xl hover:bg-danger-50 text-warm-500 hover:text-danger-500 transition-all text-sm font-medium"
-                    >
-                      <Trash2 className="w-4 h-4 inline mr-1" /> {t('common.delete')}
-                    </button>
-                  )}
-                </div>
-              )}
             </motion.div>
           ))}
 
@@ -1244,6 +1210,36 @@ function OperadoresTab({ canEdit, canToggle, canRemove }) {
           t={t}
         />
       )}
+
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title={t('common.delete')}
+        icon={Trash2}
+        size="sm"
+        footer={
+          <>
+            <button onClick={() => setDeleteTarget(null)} className="btn-ghost text-sm">
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={() => deleteTarget?.id && deleteMutation.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) })}
+              disabled={deleteMutation.isPending || !deleteTarget?.id}
+              className="btn-danger inline-flex items-center gap-2 text-sm"
+            >
+              {deleteMutation.isPending && <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-white/80 border-t-transparent animate-spin" />}
+              {t('common.delete')}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-warm-700">
+          {t('config.confirmDeleteOperator').replace('{name}', deleteTarget?.nombre || '')}
+        </p>
+        <p className="mt-2 text-xs text-warm-500">
+          Esta acción desactiva definitivamente el escaneador interno en la configuración actual.
+        </p>
+      </Modal>
     </>
   )
 }

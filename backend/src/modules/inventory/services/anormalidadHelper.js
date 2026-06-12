@@ -1,11 +1,12 @@
 import { format } from 'date-fns'
 import { query } from '../../../config/database.js'
+import { getNivelMeta } from '../../anormalidades/utils/niveles.js'
 
 export async function crearAnormalidadRastreo(tQuery, tenantId, { boxCode, ordenFolio, outboundOrderNo, userId, userName }) {
   try {
     // Lookup codigo_id for INV-07 without RLS (schema-level query)
     const codeRes = await query(
-      `SELECT id, nombre_es, nivel_sugerido FROM anormalidades_codigos
+      `SELECT id, nombre_es AS nombre, nivel_sugerido FROM anormalidades_codigos
        WHERE tenant_id = $1 AND codigo = 'INV-07' AND activo = true LIMIT 1`,
       [tenantId]
     )
@@ -23,15 +24,10 @@ export async function crearAnormalidadRastreo(tQuery, tenantId, { boxCode, orden
     const seq = parseInt(cntRes.rows[0].cnt, 10) + 1
     const folio = `INC-${today}-${String(seq).padStart(4, '0')}`
 
-    // Fetch SLA config
-    const cfgRes = await tQuery(
-      'SELECT horas_limite_l1, horas_limite_l2, horas_limite_l3 FROM anormalidades_config WHERE tenant_id = $1',
-      [tenantId]
-    )
-    const cfg = cfgRes.rows[0] || { horas_limite_l1: 48, horas_limite_l2: 24, horas_limite_l3: 4 }
     const nivel = codeRow.nivel_sugerido || 'L3'
-    const horasMap = { L1: cfg.horas_limite_l1, L2: cfg.horas_limite_l2, L3: cfg.horas_limite_l3 }
-    const fecha_limite = new Date(Date.now() + (horasMap[nivel] || 4) * 3600000)
+    const nivelMeta = await getNivelMeta(tQuery, tenantId, nivel)
+    const horas = Number(nivelMeta?.horas_limite || 4)
+    const fecha_limite = new Date(Date.now() + horas * 3600000)
 
     const insertRes = await tQuery(
       `INSERT INTO anormalidades
@@ -42,7 +38,7 @@ export async function crearAnormalidadRastreo(tQuery, tenantId, { boxCode, orden
        RETURNING id`,
       [
         tenantId, folio,
-        codeRow.id, codeRow.nombre_es, nivel,
+        codeRow.id, codeRow.nombre, nivel,
         outboundOrderNo || null,
         boxCode,
         `Caja ${boxCode} no localizada en rastreo ${ordenFolio}`,

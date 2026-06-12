@@ -2,8 +2,30 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { format } from 'date-fns'
+import { getNivelCriticoCodigo, getNivelMeta } from '../utils/niveles.js'
 
 const router = Router()
+
+const MUTABLE_ESTADOS = ['nuevo', 'en_proceso', 'cerrado']
+
+function coerceRangeStart(value) {
+  if (!value) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return `${value}T00:00:00.000`
+  return value
+}
+
+function coerceRangeEnd(value) {
+  if (!value) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return `${value}T23:59:59.999`
+  return value
+}
+
+async function buildFechaLimite(req, fechaOcurrencia, nivel) {
+  const fechaBase = fechaOcurrencia ? new Date(fechaOcurrencia) : new Date()
+  const meta = await getNivelMeta(req.tQuery, req.tenantId, nivel)
+  const horas = Number(meta?.horas_limite || 24)
+  return new Date(fechaBase.getTime() + horas * 3600000)
+}
 
 // ── Folio generator ──────────────────────────────────────────────────────────
 async function generateFolio(req) {
@@ -24,10 +46,11 @@ router.get('/',
   requirePermission('anormalidades.registro', 'ver'),
   async (req, res) => {
     try {
+      const criticalNivel = await getNivelCriticoCodigo(req.tQuery, req.tenantId)
       const {
         page = 1, limit = 20,
         search, estado, proceso, nivel, responsable_id,
-        fecha_desde, fecha_hasta,
+        fecha_desde, fecha_hasta, origen, cliente, sku, solo_vencidas, sin_responsable,
         sort = 'fecha_ocurrencia', dir = 'DESC',
       } = req.query
 
@@ -41,7 +64,14 @@ router.get('/',
       let p = 2
 
       if (search) {
-        where += ` AND (a.folio ILIKE $${p} OR a.nombre ILIKE $${p} OR a.codigo ILIKE $${p} OR a.cliente ILIKE $${p})`
+        where += ` AND (
+          a.folio ILIKE $${p}
+          OR a.nombre ILIKE $${p}
+          OR a.codigo ILIKE $${p}
+          OR a.cliente ILIKE $${p}
+          OR a.contenedor_orden ILIKE $${p}
+          OR a.sku ILIKE $${p}
+        )`
         params.push(`%${search}%`)
         p++
       }
@@ -66,12 +96,21 @@ router.get('/',
       if (responsable_id) {
         const vals = String(responsable_id).split(',').filter(Boolean)
         if (vals.length === 1) { where += ` AND a.responsable_id = $${p++}`; params.push(vals[0]) }
-        else if (vals.length > 1) { where += ` AND a.responsable_id = ANY($${p++}::uuid[])`; params.push(vals) }
+        else if (vals.length > 1) { where += ` AND a.responsable_id = ANY($${p++}::int[])`; params.push(vals.map(Number).filter(Number.isFinite)) }
       }
-      if (fecha_desde) { where += ` AND a.fecha_ocurrencia >= $${p++}`; params.push(fecha_desde) }
-      if (fecha_hasta) { where += ` AND a.fecha_ocurrencia <= $${p++}`; params.push(fecha_hasta) }
+      if (fecha_desde) { where += ` AND a.fecha_ocurrencia >= $${p++}`; params.push(coerceRangeStart(fecha_desde)) }
+      if (fecha_hasta) { where += ` AND a.fecha_ocurrencia <= $${p++}`; params.push(coerceRangeEnd(fecha_hasta)) }
+      if (origen) {
+        const vals = String(origen).split(',').filter(Boolean)
+        if (vals.length === 1) { where += ` AND a.origen_responsabilidad = $${p++}`; params.push(vals[0]) }
+        else if (vals.length > 1) { where += ` AND a.origen_responsabilidad = ANY($${p++})`; params.push(vals) }
+      }
+      if (cliente) { where += ` AND a.cliente ILIKE $${p++}`; params.push(`%${cliente}%`) }
+      if (sku) { where += ` AND a.sku ILIKE $${p++}`; params.push(`%${sku}%`) }
+      if (String(solo_vencidas) === 'true') where += ` AND a.estado NOT IN ('cerrado') AND a.fecha_limite < now()`
+      if (String(sin_responsable) === 'true') where += ' AND a.responsable_id IS NULL'
 
-      const [countRes, rowsRes] = await Promise.all([
+      const [countRes, rowsRes, resumenRes] = await Promise.all([
         req.tQuery(`SELECT COUNT(*) FROM anormalidades a ${where}`, params),
         req.tQuery(
           `SELECT a.*,
@@ -85,8 +124,19 @@ router.get('/',
            LEFT JOIN usuarios u2 ON a.detectado_por_id = u2.id
            ${where}
            ORDER BY a.${sortCol} ${sortDir}
-           LIMIT $${p} OFFSET $${p + 1}`,
+          LIMIT $${p} OFFSET $${p + 1}`,
           [...params, parseInt(limit), offset]
+        ),
+        req.tQuery(
+          `SELECT
+             COUNT(*) AS total,
+             COUNT(*) FILTER (WHERE a.estado NOT IN ('cerrado')) AS abiertas,
+             COUNT(*) FILTER (WHERE a.nivel = $${p} AND a.estado NOT IN ('cerrado')) AS l3_abiertas,
+             COUNT(*) FILTER (WHERE a.estado NOT IN ('cerrado') AND a.fecha_limite < now()) AS vencidas,
+             COUNT(*) FILTER (WHERE a.responsable_id IS NULL) AS sin_asignar
+           FROM anormalidades a
+           ${where}`,
+          [...params, criticalNivel]
         ),
       ])
 
@@ -96,6 +146,13 @@ router.get('/',
         total: parseInt(countRes.rows[0].count),
         page: parseInt(page),
         limit: parseInt(limit),
+        resumen: {
+          total: parseInt(resumenRes.rows[0].total || 0),
+          abiertas: parseInt(resumenRes.rows[0].abiertas || 0),
+          l3_abiertas: parseInt(resumenRes.rows[0].l3_abiertas || 0),
+          vencidas: parseInt(resumenRes.rows[0].vencidas || 0),
+          sin_asignar: parseInt(resumenRes.rows[0].sin_asignar || 0),
+        },
       })
     } catch (err) {
       console.error('[anorm.registro.list]', err.message)
@@ -127,9 +184,9 @@ router.get('/:id',
           `SELECT h.*, u.nombre_completo AS usuario_nombre_full
            FROM anormalidades_historial h
            LEFT JOIN usuarios u ON h.usuario_id = u.id
-           WHERE h.anormalidad_id = $1
+           WHERE h.anormalidad_id = $1 AND h.tenant_id = $2
            ORDER BY h.created_at DESC`,
-          [req.params.id]
+          [req.params.id, req.tenantId]
         ),
         req.tQuery(
           `SELECT v.mejora_id, m.descripcion_problema, m.estado AS mejora_estado
@@ -174,15 +231,8 @@ router.post('/',
       if (!proceso || !codigo || !nombre || !nivel)
         return res.status(400).json({ error: 'proceso, codigo, nombre y nivel son requeridos' })
 
-      // Calcular fecha_limite desde config
-      const configRes = await req.tQuery(
-        'SELECT horas_limite_l1, horas_limite_l2, horas_limite_l3 FROM anormalidades_config WHERE tenant_id = $1',
-        [req.tenantId]
-      )
-      const cfg = configRes.rows[0] || { horas_limite_l1: 48, horas_limite_l2: 24, horas_limite_l3: 4 }
-      const horasMap = { L1: cfg.horas_limite_l1, L2: cfg.horas_limite_l2, L3: cfg.horas_limite_l3 }
       const fechaBase = fecha_ocurrencia ? new Date(fecha_ocurrencia) : new Date()
-      const fecha_limite = new Date(fechaBase.getTime() + horasMap[nivel] * 3600000)
+      const fecha_limite = await buildFechaLimite(req, fechaBase, nivel)
 
       const folio = await generateFolio(req)
 
@@ -227,11 +277,11 @@ router.post('/',
 // ── PUT /api/anormalidades/:id — editar ──────────────────────────────────────
 router.put('/:id',
   authenticateToken, loadFullUser,
-  requirePermission('anormalidades.registro', 'crear'),
+  requirePermission('anormalidades.registro', 'actualizar'),
   async (req, res) => {
     try {
       const existing = await req.tQuery(
-        'SELECT id, estado FROM anormalidades WHERE id = $1 AND tenant_id = $2',
+        'SELECT id, estado, fecha_ocurrencia, nivel FROM anormalidades WHERE id = $1 AND tenant_id = $2',
         [req.params.id, req.tenantId]
       )
       if (!existing.rows.length) return res.status(404).json({ error: 'No encontrada' })
@@ -243,6 +293,10 @@ router.put('/:id',
         detectado_por_id, detectado_por_nombre, origen_responsabilidad,
         responsable_id, accion_inmediata, causa_raiz, accion_preventiva,
       } = req.body
+
+      const nextFecha = fecha_ocurrencia || existing.rows[0].fecha_ocurrencia
+      const nextNivel = nivel || existing.rows[0].nivel
+      const fecha_limite = await buildFechaLimite(req, nextFecha, nextNivel)
 
       const result = await req.tQuery(
         `UPDATE anormalidades SET
@@ -268,6 +322,7 @@ router.put('/:id',
            accion_inmediata     = COALESCE($22, accion_inmediata),
            causa_raiz           = COALESCE($23, causa_raiz),
            accion_preventiva    = COALESCE($24, accion_preventiva),
+           fecha_limite         = $25,
            updated_at           = now()
          WHERE id = $1 AND tenant_id = $2
          RETURNING *`,
@@ -292,6 +347,7 @@ router.put('/:id',
           accion_inmediata !== undefined ? accion_inmediata : null,
           causa_raiz !== undefined ? causa_raiz : null,
           accion_preventiva !== undefined ? accion_preventiva : null,
+          fecha_limite,
         ]
       )
 
@@ -311,8 +367,7 @@ router.post('/:id/estado',
   async (req, res) => {
     try {
       const { estado, nota } = req.body
-      const VALID = ['nuevo', 'en_proceso', 'cerrado', 'vencido']
-      if (!VALID.includes(estado)) return res.status(400).json({ error: 'Estado inválido' })
+      if (!MUTABLE_ESTADOS.includes(estado)) return res.status(400).json({ error: 'Estado inválido' })
 
       const existing = await req.tQuery(
         'SELECT estado FROM anormalidades WHERE id = $1 AND tenant_id = $2',
@@ -344,6 +399,64 @@ router.post('/:id/estado',
     } catch (err) {
       console.error('[anorm.registro.estado]', err.message)
       res.status(500).json({ error: 'Error al cambiar estado' })
+    }
+  }
+)
+
+// ── POST /api/anormalidades/:id/crear-mejora ────────────────────────────────
+router.post('/:id/crear-mejora',
+  authenticateToken, loadFullUser,
+  requirePermission('anormalidades.mejoras', 'actualizar'),
+  async (req, res) => {
+    try {
+      const existing = await req.tQuery(
+        `SELECT id, nombre, descripcion, causa_raiz, accion_preventiva, responsable_id
+         FROM anormalidades
+         WHERE id = $1 AND tenant_id = $2`,
+        [req.params.id, req.tenantId]
+      )
+      if (!existing.rows.length) return res.status(404).json({ error: 'No encontrada' })
+
+      const anorm = existing.rows[0]
+      const descripcionProblema = req.body?.descripcion_problema || anorm.descripcion || anorm.nombre
+      const accionMejora = req.body?.accion_mejora || anorm.accion_preventiva || `Definir accion preventiva para ${anorm.nombre}`
+      if (!descripcionProblema || !accionMejora) {
+        return res.status(400).json({ error: 'No hay suficiente informacion para generar mejora' })
+      }
+
+      const mejoraRes = await req.tQuery(
+        `INSERT INTO anormalidades_mejoras
+           (tenant_id, descripcion_problema, ocurrencias, causa_raiz_principal,
+            accion_mejora, responsable_id, fecha_limite, proceso, origen, created_by)
+         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9)
+         RETURNING *`,
+        [
+          req.tenantId,
+          descripcionProblema,
+          anorm.causa_raiz || null,
+          accionMejora,
+          req.body?.responsable_id || anorm.responsable_id || null,
+          req.body?.fecha_limite || null,
+          req.body?.proceso || anorm.proceso,
+          req.body?.origen || anorm.origen_responsabilidad || null,
+          req.userId,
+        ]
+      )
+
+      await req.tQuery(
+        `INSERT INTO anormalidades_mejoras_vinculos (mejora_id, anormalidad_id, tenant_id)
+         VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+        [mejoraRes.rows[0].id, req.params.id, req.tenantId]
+      )
+
+      await auditLog(req.tenantId, req.userId, 'CREATE', 'anormalidades_mejoras', String(mejoraRes.rows[0].id), {
+        desde_anormalidad_id: Number(req.params.id),
+      })
+
+      res.status(201).json({ success: true, data: mejoraRes.rows[0] })
+    } catch (err) {
+      console.error('[anorm.registro.crearMejora]', err.message)
+      res.status(500).json({ error: 'Error al crear mejora desde anormalidad' })
     }
   }
 )

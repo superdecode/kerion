@@ -8,6 +8,7 @@ import {
   Search, X, Clock, Eye, Trash2, AlertTriangle,
 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
+import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import Header from '../../../core/components/layout/Header'
 import MultiSelect from '../../../core/components/common/MultiSelect'
@@ -310,7 +311,7 @@ export default function Entradas() {
             initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
             {isLoading ? (
-              <div className="py-14 text-center text-sm text-warm-400">{t('dev.entradas.loading')}</div>
+              <LoadingSpinner text={t('dev.entradas.loading')} />
             ) : sesiones.length === 0 ? (
               <div className="flex flex-col items-center py-16 gap-3 text-warm-300">
                 <PackageCheck className="w-10 h-10" />
@@ -385,7 +386,7 @@ export default function Entradas() {
                               <div className="flex items-center gap-1.5">
                                 <span className="code-main">{row.codigo}</span>
                                 <button onClick={e => copy(row.codigo, e)}
-                                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-all">
+                                  className="p-0.5 rounded hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-all">
                                   {copied === row.codigo ? <Check className="w-3.5 h-3.5 text-success-500" /> : <Copy className="w-3.5 h-3.5" />}
                                 </button>
                               </div>
@@ -402,7 +403,7 @@ export default function Entradas() {
                               </span>
                             </td>
                             <td className="table-cell text-right" onClick={e => e.stopPropagation()}>
-                              <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex items-center justify-end gap-1">
                                 <button
                                   onClick={() => navigate(`/Devoluciones/entradas/${row.id}`)}
                                   title={t('dev.entradas.title.ver')}

@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx'
 import {
   Eye, Trash2, CheckCircle2, AlertTriangle, Ban, X, Package2, Loader2, AlertCircle,
   User, Timer, Clock, ScanBarcode, Boxes, ChevronDown, ChevronUp,
-  Search, XCircle, Download, Copy, Check, Pencil, LayoutGrid, MapPin,
+  Search, XCircle, Download, Copy, Check, Edit3, LayoutGrid, MapPin,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -436,7 +436,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
               <button
                 onClick={() => setIsReadOnly(false)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-warning-50 text-warning-700 rounded-lg hover:bg-warning-100 font-semibold transition-all border border-warning-200">
-                <Pencil className="w-3.5 h-3.5" /> {t('common.edit')}
+                <Edit3 className="w-3.5 h-3.5" /> {t('common.edit')}
               </button>
             )}
           </div>
@@ -1096,7 +1096,10 @@ export default function InventarioRegistros() {
                 </table>
               </div>
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70 backdrop-blur-sm">
-                <Loader2 size={36} className="animate-spin text-primary-400" />
+                <div className="relative flex h-14 w-14 items-center justify-center rounded-[1.5rem] bg-primary-50 shadow-glow animate-bounce-soft">
+                  <div className="absolute inset-1 rounded-[1.15rem] bg-white/90" />
+                  <Loader2 size={20} className="relative z-10 animate-spin text-primary-500" />
+                </div>
                 <p className="text-sm text-warm-500">{t('common.loading')}</p>
               </div>
             </div>
@@ -1224,7 +1227,7 @@ export default function InventarioRegistros() {
                                   className="p-1.5 rounded-lg hover:bg-warning-50 text-warm-400 hover:text-warning-600 transition-colors"
                                   onClick={e => { e.stopPropagation(); openDetail(r, 'detallado', false) }}
                                   title={t('common.edit')}>
-                                  <Pencil size={13} />
+                                  <Edit3 size={13} />
                                 </button>
                               )}
                               {canDelete && (

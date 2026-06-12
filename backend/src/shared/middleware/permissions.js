@@ -26,6 +26,13 @@ const MODULE_ALIASES = {
   'inventory.historial': 'inventory.tarimas',
 }
 
+// Fallback paths: if primary lookup returns sin_acceso, try the alternate path.
+// Handles roles created before/after FEP was merged into DropScan (mig 011 vs mig 048).
+const MODULE_FALLBACKS = {
+  'fep.folios': 'dropscan.folios',
+  'dropscan.folios': 'fep.folios',
+}
+
 function normalizeLevel(level) {
   if (!level) return 'sin_acceso'
   const lvl = String(level).toLowerCase()
@@ -59,13 +66,9 @@ function resolvePermission(level, action) {
   return currentIdx >= requiredIdx
 }
 
-function getPermissionLevel(permisos, modulePath) {
-  if (!permisos || !modulePath) return 'sin_acceso'
-
-  const resolvedModule = MODULE_ALIASES[modulePath] || modulePath
-  const parts = resolvedModule.split('.')
+function lookupPath(permisos, path) {
+  const parts = path.split('.')
   let current = permisos
-
   for (const part of parts) {
     if (current && typeof current === 'object' && part in current) {
       current = current[part]
@@ -73,8 +76,18 @@ function getPermissionLevel(permisos, modulePath) {
       return 'sin_acceso'
     }
   }
-
   return typeof current === 'string' ? normalizeLevel(current) : 'sin_acceso'
+}
+
+function getPermissionLevel(permisos, modulePath) {
+  if (!permisos || !modulePath) return 'sin_acceso'
+
+  const resolvedModule = MODULE_ALIASES[modulePath] || modulePath
+  const level = lookupPath(permisos, resolvedModule)
+  if (level !== 'sin_acceso') return level
+
+  const fallback = MODULE_FALLBACKS[modulePath]
+  return fallback ? lookupPath(permisos, fallback) : 'sin_acceso'
 }
 
 /**

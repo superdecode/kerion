@@ -1,59 +1,100 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
-  Crosshair, ArrowLeft, User, Package, MapPin, CheckCircle2,
-  XCircle, Clock, Loader2, AlertTriangle, FileText, History,
-  ChevronDown, Truck, Tag, Calendar,
+  Crosshair, ArrowLeft, User, Package, CheckCircle2, XCircle,
+  Clock, Loader2, AlertTriangle, History, MessageSquare,
+  Trash2, Search, X, ScanBarcode, ChevronUp, ChevronDown as ChevronDownIcon, Plus, Edit3, FileText,
 } from 'lucide-react'
-import { useAuthStore } from '../../../core/stores/authStore'
-import { useI18nStore } from '../../../core/stores/i18nStore'
+import Header from '../../../core/components/layout/Header'
+import Modal from '../../../core/components/common/Modal'
+import CopyableCell from '../../../core/components/common/CopyableCell'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import { useAuthStore } from '../../../core/stores/authStore'
+import { useToastStore } from '../../../core/stores/toastStore'
 import {
   getRastreoDetalle, updateRastreoOrden, updateRastreaoCaja,
-  deleteRastreoOrden, getRastreoUsuarios,
+  deleteRastreoOrden, getRastreoUsuarios, addCajaToOrden, deleteCaja,
 } from '../../../core/services/rastreoService'
 import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
+import RastreoSearchModal from '../components/RastreoSearchModal'
 
-const ESTADO_BADGE = {
-  abierta: 'bg-blue-100 text-blue-700',
-  en_proceso: 'bg-amber-100 text-amber-700',
-  resuelta: 'bg-green-100 text-green-700',
-  cerrada: 'bg-warm-100 text-warm-500',
+const ESTADO_META = {
+  abierta:    { cls: 'bg-primary-100 text-primary-700 border-primary-200', dot: 'bg-primary-500', label: 'Abierta' },
+  en_proceso: { cls: 'bg-warning-100 text-warning-700 border-warning-200', dot: 'bg-warning-500', label: 'En proceso' },
+  resuelta:   { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', label: 'Resuelta' },
+  cerrada:    { cls: 'bg-warm-100 text-warm-500 border-warm-200',          dot: 'bg-warm-400',    label: 'Cerrada' },
 }
 
-const CAJA_ESTADO_BADGE = {
-  pendiente: 'bg-warm-100 text-warm-500',
-  localizada: 'bg-green-100 text-green-700',
-  no_encontrada: 'bg-red-100 text-red-600',
+const CAJA_META = {
+  pendiente:     { cls: 'bg-warm-100 text-warm-600 border-warm-200',        dot: 'bg-warm-400',    label: 'Pendiente' },
+  localizada:    { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', label: 'Localizada' },
+  no_encontrada: { cls: 'bg-danger-100 text-danger-700 border-danger-200',  dot: 'bg-danger-500',  label: 'No encontrada' },
+  cancelada:     { cls: 'bg-warm-100 text-warm-400 border-warm-100',        dot: 'bg-warm-300',    label: 'Cancelada' },
 }
 
-const CAJA_ESTADO_LABELS = {
-  pendiente: 'Pendiente',
-  localizada: 'Localizada',
-  no_encontrada: 'No encontrada',
+const ACCION_LABELS = {
+  creada:             'Orden creada',
+  asignada:           'Asignada',
+  estado_cambiado:    'Estado cambiado',
+  caja_localizada:    'Caja localizada',
+  caja_no_encontrada: 'Caja no encontrada',
+  nota:               'Nota',
+  resuelta:           'Resuelta',
 }
 
-function InfoBlock({ icon: Icon, label, value, mono = false }) {
-  if (!value) return null
+const ACCION_DOT = {
+  nota:               'bg-primary-400 ring-primary-200',
+  caja_no_encontrada: 'bg-danger-400 ring-danger-200',
+  caja_localizada:    'bg-success-400 ring-success-200',
+  creada:             'bg-accent-400 ring-accent-200',
+}
+
+function EstadoChip({ estado }) {
+  const meta = ESTADO_META[estado] || ESTADO_META.abierta
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">{label}</span>
-      <span className={`text-sm text-warm-800 ${mono ? 'font-mono' : 'font-medium'}`}>{value}</span>
-    </div>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${meta.dot}`} />
+      {meta.label}
+    </span>
   )
 }
+
+function CajaChip({ estado }) {
+  const meta = CAJA_META[estado] || CAJA_META.pendiente
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${meta.dot}`} />
+      {meta.label}
+    </span>
+  )
+}
+
 
 function safeDate(raw) {
   if (!raw) return null
   try {
     const d = new Date(raw)
-    if (isNaN(d)) return raw
-    return d.toLocaleString('es-MX', {
-      day: '2-digit', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    })
+    return isNaN(d) ? raw : d.toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   } catch { return raw }
+}
+
+function elapsed(raw) {
+  if (!raw) return null
+  const h = Math.floor((Date.now() - new Date(raw)) / 3600000)
+  return h < 24 ? `${h}h` : h < 720 ? `${Math.floor(h / 24)}d` : `${Math.floor(h / 720)}m`
+}
+
+function SortHeader({ label, field, sort, onSort }) {
+  const active = sort.field === field
+  return (
+    <button onClick={() => onSort(field)} className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider leading-none text-warm-500 hover:text-warm-700 transition-colors">
+      {label}
+      {active
+        ? sort.dir === 'asc' ? <ChevronUp size={11} /> : <ChevronDownIcon size={11} />
+        : <ChevronDownIcon size={11} className="opacity-30" />}
+    </button>
+  )
 }
 
 export default function RastreoDetalle() {
@@ -61,23 +102,28 @@ export default function RastreoDetalle() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
-  const { t } = useI18nStore()
+  const toast = useToastStore()
 
   const [activeTab, setActiveTab] = useState('cajas')
-  const [editNotas, setEditNotas] = useState(false)
-  const [notasValue, setNotasValue] = useState('')
+  const [newNota, setNewNota] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [cajaConfirm, setCajaConfirm] = useState(null)
+  const [showSearch, setShowSearch] = useState(false)
+  const [cajaSearch, setCajaSearch] = useState('')
+  const [cajaSort, setCajaSort] = useState({ field: null, dir: 'asc' })
+  const [showAddCaja, setShowAddCaja] = useState(false)
+  const [newCajaCode, setNewCajaCode] = useState('')
+  const [cajaDeleteConfirm, setCajaDeleteConfirm] = useState(null)
+  const [cajaNota, setCajaNota] = useState('')
+  const [cajaNotaModal, setCajaNotaModal] = useState(null)
+  const [cajaNotaText, setCajaNotaText] = useState('')
 
-  const canEdit = hasPermission('inventario.rastreo', 'editar')
+  const canEdit   = hasPermission('inventario.rastreo', 'editar')
   const canDelete = hasPermission('inventario.rastreo', 'eliminar')
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['rastreo-detalle', folio],
     queryFn: () => getRastreoDetalle(folio),
-    onSuccess: d => {
-      if (d?.data?.orden?.notas) setNotasValue(d.data.orden.notas)
-    },
   })
 
   const { data: usersData } = useQuery({
@@ -87,7 +133,7 @@ export default function RastreoDetalle() {
   })
   const usuarios = usersData?.data || []
 
-  const { data: outboundData } = useQuery({
+  const { data: outboundData, isLoading: loadingObd } = useQuery({
     queryKey: ['outbound-detail', data?.data?.orden?.outbound_order_no],
     queryFn: () => getOutboundDetail(data.data.orden.outbound_order_no),
     enabled: !!data?.data?.orden?.outbound_order_no,
@@ -97,6 +143,7 @@ export default function RastreoDetalle() {
   const updateOrden = useMutation({
     mutationFn: ({ id, body }) => updateRastreoOrden(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['rastreo-detalle', folio] }),
+    onError: () => toast.error('Error al actualizar la orden'),
   })
 
   const updateCajaMutation = useMutation({
@@ -104,339 +151,764 @@ export default function RastreoDetalle() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rastreo-detalle', folio] })
       setCajaConfirm(null)
+      setCajaNota('')
+    },
+    onError: () => toast.error('Error al actualizar caja'),
+  })
+
+  const addCajaMutation = useMutation({
+    mutationFn: ({ orden_id, box_code }) => addCajaToOrden(orden_id, { box_code }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rastreo-detalle', folio] })
+      setNewCajaCode('')
+      setShowAddCaja(false)
+      toast.success('Caja agregada')
+    },
+    onError: (err) => toast.error(err?.response?.data?.error || 'Error al agregar caja'),
+  })
+
+  const deleteCajaMutation = useMutation({
+    mutationFn: (id) => deleteCaja(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rastreo-detalle', folio] })
+      setCajaDeleteConfirm(null)
+      toast.success('Caja eliminada')
+    },
+    onError: (err) => {
+      if (err?.response?.status === 404) {
+        qc.invalidateQueries({ queryKey: ['rastreo-detalle', folio] })
+        setCajaDeleteConfirm(null)
+        toast.error('La caja ya no existe en rastreo')
+        return
+      }
+      toast.error(err?.response?.data?.error || 'Error al eliminar caja')
     },
   })
 
   const deleteOrden = useMutation({
     mutationFn: (id) => deleteRastreoOrden(id),
-    onSuccess: () => navigate('/Inventario/rastreo'),
+    onSuccess: () => {
+      toast.success('Orden eliminada')
+      navigate('/Inventario/rastreo')
+    },
+    onError: (err) => toast.error(err?.response?.data?.error || 'Error al eliminar la orden'),
   })
 
-  if (isLoading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>
-  if (error || !data?.data) return (
-    <div className="flex flex-col items-center justify-center py-16 gap-3">
-      <AlertTriangle className="text-warm-300" size={32} />
-      <p className="text-warm-500 text-sm">Orden no encontrada</p>
-      <button onClick={() => navigate('/Inventario/rastreo')} className="btn btn-secondary text-xs">Volver</button>
-    </div>
-  )
-
-  const { orden, cajas, historial } = data.data
+  const orden = data?.data?.orden || null
+  const cajas = data?.data?.cajas || []
+  const historial = data?.data?.historial || []
   const od = outboundData?.data
+  const notas = historial.filter(h => h.accion === 'nota')
+
+  const cajasStats = {
+    total: cajas.length,
+    localizadas: cajas.filter(c => c.estado_caja === 'localizada').length,
+    no_encontradas: cajas.filter(c => c.estado_caja === 'no_encontrada').length,
+  }
 
   function handleEstadoChange(e) {
     updateOrden.mutate({ id: orden.id, body: { estado: e.target.value } })
   }
 
-  function handleAsignadoChange(e) {
+  function handleResponsableChange(e) {
     updateOrden.mutate({ id: orden.id, body: { asignado_a: e.target.value || null } })
   }
 
-  function saveNotas() {
-    updateOrden.mutate({ id: orden.id, body: { notas: notasValue } })
-    setEditNotas(false)
+  function submitNota() {
+    if (!newNota.trim()) return
+    updateOrden.mutate(
+      { id: orden.id, body: { agregar_nota: newNota.trim() } },
+      { onSuccess: () => setNewNota('') }
+    )
   }
 
   function handleCajaEstado(caja, nuevoEstado) {
-    if (nuevoEstado === 'no_encontrada' && !caja.anormalidad_id) {
+    if (nuevoEstado === 'no_encontrada') {
       setCajaConfirm({ caja, nuevoEstado })
       return
     }
     updateCajaMutation.mutate({ id: caja.id, body: { estado_caja: nuevoEstado } })
   }
 
+  function confirmCajaNoEncontrada() {
+    updateCajaMutation.mutate({
+      id: cajaConfirm.caja.id,
+      body: { estado_caja: 'no_encontrada', ...(cajaNota.trim() ? { nota: cajaNota.trim() } : {}) },
+    })
+  }
+
+  function toggleSort(field) {
+    setCajaSort(prev =>
+      prev.field === field
+        ? { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { field, dir: 'asc' }
+    )
+  }
+
+  const filteredCajas = useMemo(() => {
+    let list = cajas
+    if (cajaSearch.trim()) {
+      const q = cajaSearch.trim().toLowerCase()
+      list = list.filter(c =>
+        c.box_code?.toLowerCase().includes(q) ||
+        c.ubicacion?.toLowerCase().includes(q) ||
+        c.producto?.toLowerCase().includes(q)
+      )
+    }
+    if (cajaSort.field) {
+      list = [...list].sort((a, b) => {
+        const av = (a[cajaSort.field] ?? '').toString().toLowerCase()
+        const bv = (b[cajaSort.field] ?? '').toString().toLowerCase()
+        return cajaSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+      })
+    }
+    return list
+  }, [cajas, cajaSearch, cajaSort])
+
+  const tabs = [
+    { key: 'cajas',    label: `Cajas (${cajas.length})`,   icon: Package },
+    { key: 'notas',    label: `Notas (${notas.length})`,   icon: MessageSquare },
+    { key: 'historial',label: 'Historial',                 icon: History },
+  ]
+
+  if (isLoading) return (
+    <>
+      <Header title="Rastreo" subtitle="Detalle de orden" />
+      <div className="flex justify-center py-16"><LoadingSpinner /></div>
+    </>
+  )
+
+  if (error || !orden) return (
+    <>
+      <Header title="Rastreo" subtitle="Detalle de orden" />
+      <div className="flex flex-col items-center justify-center py-16 gap-3">
+        <AlertTriangle className="text-warm-300" size={32} />
+        <p className="text-warm-500 text-sm">Orden no encontrada</p>
+        <button onClick={() => navigate('/Inventario/rastreo')} className="btn btn-secondary text-xs">Volver</button>
+      </div>
+    </>
+  )
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-5 pt-5 pb-3 border-b border-warm-100">
-        <button
-          onClick={() => navigate('/Inventario/rastreo')}
-          className="flex items-center gap-1.5 text-xs text-warm-400 hover:text-warm-700 mb-3 transition-colors"
-        >
-          <ArrowLeft size={13} />
-          Órdenes de rastreo
-        </button>
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <Crosshair size={18} className="text-primary-600 flex-shrink-0" />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-semibold text-xl text-primary-700">{orden.folio}</span>
-                <span className={`badge text-[11px] font-semibold ${ESTADO_BADGE[orden.estado] || ''}`}>
-                  {orden.estado}
-                </span>
-              </div>
-              {orden.outbound_order_no && (
-                <p className="text-xs text-warm-500 mt-0.5 font-mono">{orden.outbound_order_no}</p>
-              )}
-            </div>
+    <>
+      <Header
+        title={orden.folio}
+        subtitle="Orden de rastreo"
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSearch(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 transition-all text-xs font-medium"
+            >
+              <Crosshair size={13} />
+              Rastrear caja
+            </button>
+            {canDelete && (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="h-9 px-3 flex items-center gap-1.5 text-xs rounded-xl border border-danger-200 text-danger-600 hover:bg-danger-50 transition-colors"
+              >
+                <Trash2 size={13} />
+                Eliminar
+              </button>
+            )}
           </div>
+        }
+      />
 
-          {canEdit && (
-            <div className="flex items-center gap-2">
-              <select
-                className="input text-xs py-1.5"
-                value={orden.estado}
-                onChange={handleEstadoChange}
-              >
-                <option value="abierta">Abierta</option>
-                <option value="en_proceso">En proceso</option>
-                <option value="resuelta">Resuelta</option>
-                <option value="cerrada">Cerrada</option>
-              </select>
-              <select
-                className="input text-xs py-1.5"
-                value={orden.asignado_a || ''}
-                onChange={handleAsignadoChange}
-              >
-                <option value="">Sin asignar</option>
-                {usuarios.map(u => (
-                  <option key={u.id} value={u.id}>{u.nombre_completo}</option>
-                ))}
-              </select>
-              {canDelete && (
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  className="btn text-xs py-1.5 text-red-500 border border-red-200 hover:bg-red-50"
-                >
-                  Eliminar
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Outbound summary */}
-      {orden.outbound_order_no ? (
-        <div className="mx-5 mt-4 rounded-xl border border-warm-200 bg-warm-50 p-4">
-          <p className="text-[10px] uppercase tracking-wider font-semibold text-warm-400 mb-3">Resumen de orden de salida</p>
-          {od ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3">
-              <InfoBlock icon={User} label="Cliente" value={od.customerCode || od.customerName} />
-              <InfoBlock icon={User} label="Receptor" value={od.receiverName} />
-              <InfoBlock icon={Calendar} label="Fecha entrega" value={safeDate(od.outboundTime || od.expectedTime)} />
-              <InfoBlock icon={Truck} label="Canal logístico" value={od.logisticsChannel} />
-              <InfoBlock icon={Tag} label="Tracking" value={od.logisticsTrackNo || od.trackingNo} mono />
-              <InfoBlock icon={Tag} label="Ref. externa" value={od.thirdOrderNo} mono />
-              <InfoBlock icon={Package} label="Total cajas" value={od.outboundBoxCount ? String(od.outboundBoxCount) : null} />
-              <InfoBlock icon={MapPin} label="Almacén" value={od.whCode} />
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 text-xs text-warm-400">
-              <Loader2 size={12} className="animate-spin" />
-              Cargando datos de la orden...
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="mx-5 mt-4 rounded-xl border border-warm-100 bg-warm-50 px-4 py-3">
-          <p className="text-xs text-warm-400 italic">Rastreo sin orden de salida vinculada</p>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="flex border-b border-warm-200 px-5 mt-4">
-        {[
-          { key: 'cajas', label: `Cajas (${cajas.length})`, icon: Package },
-          { key: 'notas', label: 'Notas', icon: FileText },
-          { key: 'historial', label: 'Historial', icon: History },
-        ].map(tab => (
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-5 pt-4">
           <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
-              ${activeTab === tab.key
-                ? 'border-primary-500 text-primary-700'
-                : 'border-transparent text-warm-400 hover:text-warm-700'}`}
+            onClick={() => navigate('/Inventario/rastreo')}
+            className="flex items-center gap-1.5 text-xs text-warm-400 hover:text-warm-700 mb-4 transition-colors"
           >
-            <tab.icon size={13} />
-            {tab.label}
+            <ArrowLeft size={13} />
+            Órdenes de rastreo
           </button>
-        ))}
-      </div>
+        </div>
 
-      {/* Tab content */}
-      <div className="flex-1 overflow-y-auto px-5 py-4">
-        {activeTab === 'cajas' && (
-          <div className="rounded-xl border border-warm-200 overflow-hidden shadow-sm">
-            <table className="w-full text-sm">
-              <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
-                <tr>
-                  <th className="table-header whitespace-nowrap"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500">Código</span></th>
-                  <th className="table-header whitespace-nowrap"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500">Estado</span></th>
-                  <th className="table-header whitespace-nowrap"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500">Ubicación</span></th>
-                  <th className="table-header whitespace-nowrap"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500">Producto</span></th>
-                  <th className="table-header whitespace-nowrap"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500">Validada Surtido</span></th>
-                  <th className="table-header whitespace-nowrap"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500">Anormalidad</span></th>
-                  {canEdit && <th className="table-header whitespace-nowrap"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500">Acción</span></th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-warm-100">
-                {cajas.map(c => (
-                  <tr key={c.id} className="hover:bg-warm-50/40 transition-colors">
-                    <td className="px-3 py-2.5">
-                      <span className="font-mono text-xs text-warm-600">{c.box_code}</span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={`badge text-[11px] font-semibold ${CAJA_ESTADO_BADGE[c.estado_caja] || ''}`}>
-                        {CAJA_ESTADO_LABELS[c.estado_caja] || c.estado_caja}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-xs text-warm-600 font-mono">{c.ubicacion || '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-xs text-warm-700 font-medium">{c.producto || '—'}</span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {c.validada_en_surtido
-                        ? <CheckCircle2 size={14} className="text-green-500 mx-auto" />
-                        : <XCircle size={14} className="text-warm-300 mx-auto" />}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {c.anormalidad_folio
-                        ? <span className="font-mono text-xs text-red-600">{c.anormalidad_folio}</span>
-                        : <span className="text-xs text-warm-300">—</span>}
-                    </td>
-                    {canEdit && (
-                      <td className="px-3 py-2.5">
-                        {c.estado_caja === 'pendiente' && (
-                          <div className="flex gap-1.5">
-                            <button
-                              onClick={() => handleCajaEstado(c, 'localizada')}
-                              disabled={updateCajaMutation.isLoading}
-                              className="text-xs px-2 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
-                            >
-                              Localizar
-                            </button>
-                            <button
-                              onClick={() => handleCajaEstado(c, 'no_encontrada')}
-                              disabled={updateCajaMutation.isLoading}
-                              className="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
-                            >
-                              No encontrada
-                            </button>
-                          </div>
-                        )}
-                        {c.estado_caja !== 'pendiente' && (
-                          <button
-                            onClick={() => handleCajaEstado(c, 'pendiente')}
-                            className="text-xs px-2 py-1 rounded border border-warm-200 text-warm-500 hover:bg-warm-50 transition-colors"
-                          >
-                            Reabrir
-                          </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))}
-                {cajas.length === 0 && (
-                  <tr><td colSpan={7} className="py-8 text-center text-xs text-warm-400">Sin cajas registradas</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {/* Header card: integrated summary + order detail */}
+        <div className="px-5 mb-4">
+          <div className="overflow-hidden rounded-[28px] border border-warm-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_30%),linear-gradient(135deg,_rgba(255,255,255,0.99),_rgba(248,250,252,0.97))] shadow-[0_16px_44px_-34px_rgba(15,23,42,0.24)]">
+            <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_340px]">
 
-        {activeTab === 'notas' && (
-          <div className="max-w-2xl">
-            {editNotas ? (
-              <div className="space-y-2">
-                <textarea
-                  className="input w-full min-h-[120px] text-sm resize-y"
-                  value={notasValue}
-                  onChange={e => setNotasValue(e.target.value)}
-                  placeholder="Escribe notas sobre esta orden..."
-                />
-                <div className="flex gap-2">
-                  <button onClick={saveNotas} className="btn btn-primary text-xs">Guardar</button>
-                  <button onClick={() => setEditNotas(false)} className="btn btn-secondary text-xs">Cancelar</button>
+              <div className="bg-white px-6 py-6 sm:px-7 sm:py-7">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary-500">Informacion general</p>
+
+                  <div className="mt-3 flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/90 shadow-sm text-primary-600">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">Orden de salida</p>
+                      {orden.outbound_order_no ? (
+                        <CopyableCell text={orden.outbound_order_no} className="mt-1 font-mono text-base font-black text-warm-900" />
+                      ) : (
+                        <span className="mt-1 block text-xs italic text-warm-400">Sin orden vinculada</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl border border-warm-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm text-primary-600">
+                          <Package className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">Cajas rastreo</p>
+                          <p className="mt-1 text-sm font-bold text-warm-800">{cajasStats.total}</p>
+                          <p className="text-[10px] text-warm-400">{cajasStats.localizadas} loc. • {cajasStats.no_encontradas} NE</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-primary-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 shadow-sm text-primary-600">
+                          <Package className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600/70">Cajas orden</p>
+                          <p className="mt-1 text-sm font-bold text-warm-800">{od?.packageList?.length ?? '—'}</p>
+                          <p className="text-[10px] text-warm-400">Cantidad declarada en la orden</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-primary-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm text-primary-600">
+                          <Clock className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600/70">Fecha</p>
+                          <p className="mt-1 text-xs font-bold text-warm-800">
+                            {new Date(orden.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                          <p className="text-[10px] text-warm-400">Hace {elapsed(orden.created_at)}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-warm-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)] sm:col-span-2 xl:col-span-1">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm text-primary-600">
+                          <Crosshair className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">Pendientes</p>
+                          <p className="mt-1 text-sm font-bold text-warm-800">{Math.max(cajasStats.total - cajasStats.localizadas - cajasStats.no_encontradas, 0)}</p>
+                          <p className="text-[10px] text-warm-400">Cajas aun sin resolver</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {orden.outbound_order_no && (
+                    <div className="mt-5 rounded-2xl border border-warm-100 bg-white p-4 shadow-[0_12px_24px_-28px_rgba(15,23,42,0.18)]">
+                      <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">
+                        Resumen de orden de salida
+                      </p>
+                      {loadingObd ? (
+                        <div className="flex items-center gap-2 text-xs text-warm-400">
+                          <Loader2 size={12} className="animate-spin" />
+                          Cargando datos...
+                        </div>
+                      ) : od ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3">
+                          {[
+                            { label: 'Cliente', value: od.customerCode },
+                            { label: 'Receptor', value: od.receiverName },
+                            { label: 'Fecha entrega', value: safeDate(od.outboundTime || od.expectedTime) },
+                            { label: 'Canal logístico', value: od.logisticsChannel },
+                          ].filter(f => f.value).map(f => (
+                            <div key={f.label} className="flex flex-col gap-0.5">
+                              <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">{f.label}</span>
+                              <span className="text-xs text-warm-700 font-medium">{f.value}</span>
+                            </div>
+                          ))}
+                          {(od.logisticsTrackNo || od.trackingNo) && (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">Tracking</span>
+                              <CopyableCell text={od.logisticsTrackNo || od.trackingNo} className="font-mono text-xs text-warm-600" />
+                            </div>
+                          )}
+                          {od.thirdOrderNo && (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">Ref. externa</span>
+                              <CopyableCell text={od.thirdOrderNo} className="font-mono text-xs text-warm-600" />
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-warm-400">No se pudieron cargar los datos de la orden</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="rounded-xl border border-warm-200 p-4 bg-warm-50 min-h-[80px]">
-                {orden.notas ? (
-                  <p className="text-sm text-warm-700 whitespace-pre-wrap">{orden.notas}</p>
-                ) : (
-                  <p className="text-xs text-warm-400 italic">Sin notas</p>
-                )}
+
+              <div className="border-t border-warm-200/80 bg-white px-6 py-6 lg:border-l lg:border-t-0">
+                <div className="flex h-full flex-col gap-4">
+                  <div className="rounded-2xl border border-warm-200 bg-white p-4 shadow-[0_14px_30px_-30px_rgba(15,23,42,0.28)]">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-warm-400">Estado de la orden</p>
+                      {!canEdit && <EstadoChip estado={orden.estado} />}
+                    </div>
+                    {canEdit ? (
+                      <div className="flex items-center gap-2">
+                        <select
+                          className="h-9 flex-1 rounded-xl border border-warm-200 bg-white px-3 text-xs font-medium text-warm-700 transition-all focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                          value={orden.estado}
+                          onChange={handleEstadoChange}
+                          disabled={updateOrden.isLoading}
+                        >
+                          <option value="abierta">Abierta</option>
+                          <option value="en_proceso">En proceso</option>
+                          <option value="resuelta">Resuelta</option>
+                          <option value="cerrada">Cerrada</option>
+                        </select>
+                        {updateOrden.isLoading && <Loader2 size={14} className="animate-spin text-warm-300 flex-shrink-0" />}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-2xl border border-warm-200 bg-white p-4 shadow-[0_14px_30px_-30px_rgba(15,23,42,0.28)]">
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-warm-400">Responsable</p>
+                    {canEdit ? (
+                      <select
+                        className="h-9 w-full rounded-xl border border-warm-200 bg-white px-3 text-xs font-medium text-warm-700 transition-all focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                        value={orden.asignado_a || ''}
+                        onChange={handleResponsableChange}
+                        disabled={updateOrden.isLoading}
+                      >
+                        <option value="">Sin responsable</option>
+                        {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre_completo}</option>)}
+                      </select>
+                    ) : (
+                      <div className="flex items-center gap-3 rounded-xl bg-warm-50 px-3 py-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-100 text-primary-600">
+                          <User size={15} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-warm-800">{orden.asignado_nombre || 'Sin responsable'}</p>
+                          <p className="text-[11px] text-warm-400">Seguimiento actual de la orden</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        {/* Tab bar */}
+        <div className="px-5">
+          <div className="flex rounded-t-2xl border border-warm-200 border-b-0 bg-white px-2 pt-2 shadow-[0_16px_30px_-34px_rgba(15,23,42,0.22)]">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-1.5 rounded-t-xl px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+                ${activeTab === tab.key
+                  ? 'border-primary-500 bg-primary-50/70 text-primary-700'
+                  : 'border-transparent text-warm-400 hover:bg-warm-50 hover:text-warm-700'}`}
+            >
+              <tab.icon size={13} />
+              {tab.label}
+            </button>
+          ))}
+          </div>
+        </div>
+
+        {/* Tab content */}
+        <div className="px-5 pb-4">
+          <div className="rounded-b-2xl border border-warm-200 bg-white px-4 py-4 shadow-[0_22px_38px_-36px_rgba(15,23,42,0.22)] sm:px-5">
+          {activeTab === 'cajas' && (
+            <div>
+              {/* Cajas table toolbar */}
+              <div className="mb-3 flex items-center gap-2 flex-wrap rounded-2xl border border-warm-100 bg-warm-50/70 px-3 py-3">
+                <div className="flex items-center gap-1.5 bg-white border border-warm-200 rounded-xl px-3 h-9 min-w-[200px] max-w-[260px] focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
+                  <Search size={12} className="text-warm-400 shrink-0" />
+                  <input
+                    className="text-xs outline-none bg-transparent text-warm-700 flex-1 min-w-0"
+                    placeholder="Buscar código, ubicación..."
+                    value={cajaSearch}
+                    onChange={e => setCajaSearch(e.target.value)}
+                  />
+                  {cajaSearch && (
+                    <button onClick={() => setCajaSearch('')}>
+                      <X size={11} className="text-warm-400" />
+                    </button>
+                  )}
+                </div>
                 {canEdit && (
-                  <button onClick={() => { setNotasValue(orden.notas || ''); setEditNotas(true) }} className="mt-3 text-xs text-primary-600 hover:underline">
-                    Editar notas
+                  <button
+                    onClick={() => setShowAddCaja(v => !v)}
+                    className="flex items-center gap-1.5 ml-auto px-3 py-2 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 text-xs font-medium transition-colors"
+                  >
+                    <Plus size={12} />
+                    Agregar caja
                   </button>
                 )}
               </div>
-            )}
-          </div>
-        )}
 
-        {activeTab === 'historial' && (
-          <div className="max-w-2xl space-y-2">
-            {historial.length === 0 && <p className="text-xs text-warm-400 py-4">Sin historial</p>}
-            {historial.map(h => (
-              <div key={h.id} className="flex gap-3 items-start">
-                <div className="mt-1.5 w-2 h-2 rounded-full bg-warm-300 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-semibold text-warm-700">{h.accion}</span>
-                    {h.actor_nombre && (
-                      <span className="text-xs text-warm-400">por {h.actor_nombre}</span>
-                    )}
-                    <span className="ml-auto text-[11px] text-warm-300">
-                      {safeDate(h.created_at)}
-                    </span>
-                  </div>
-                  {h.descripcion && <p className="text-xs text-warm-600 mt-0.5">{h.descripcion}</p>}
+              {/* Add caja input row */}
+              {showAddCaja && canEdit && (
+                <div className="flex items-center gap-2 mb-3 px-3 py-2.5 rounded-xl bg-primary-50 border border-primary-100">
+                  <ScanBarcode size={13} className="text-primary-500 flex-shrink-0" />
+                  <input
+                    autoFocus
+                    className="text-xs flex-1 outline-none bg-transparent text-warm-800 placeholder-warm-400"
+                    placeholder="Código de caja + Enter para agregar"
+                    value={newCajaCode}
+                    onChange={e => setNewCajaCode(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && newCajaCode.trim())
+                        addCajaMutation.mutate({ orden_id: orden.id, box_code: newCajaCode.trim().toUpperCase() })
+                      if (e.key === 'Escape') { setShowAddCaja(false); setNewCajaCode('') }
+                    }}
+                  />
+                  {addCajaMutation.isLoading && <Loader2 size={12} className="animate-spin text-primary-400" />}
+                  <button onClick={() => { setShowAddCaja(false); setNewCajaCode('') }}>
+                    <X size={12} className="text-warm-400" />
+                  </button>
                 </div>
+              )}
+
+              <div className="overflow-hidden rounded-2xl border border-warm-200 bg-white shadow-[0_14px_28px_-30px_rgba(15,23,42,0.22)]">
+                <table className="w-full text-sm">
+                  <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
+                    <tr>
+                      <th className="table-header w-9 text-center">#</th>
+                      <th className="table-header whitespace-nowrap">
+                        <SortHeader label="Código" field="box_code" sort={cajaSort} onSort={toggleSort} />
+                      </th>
+                      <th className="table-header whitespace-nowrap">
+                        <SortHeader label="Estado" field="estado_caja" sort={cajaSort} onSort={toggleSort} />
+                      </th>
+                      <th className="table-header whitespace-nowrap">
+                        <SortHeader label="Ubicación" field="ubicacion" sort={cajaSort} onSort={toggleSort} />
+                      </th>
+                      <th className="table-header whitespace-nowrap">Producto</th>
+                      <th className="table-header whitespace-nowrap text-center">Surtido</th>
+                      <th className="table-header whitespace-nowrap">Anormalidad</th>
+                      <th className="table-header whitespace-nowrap">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-warm-100">
+                    {filteredCajas.map((c, idx) => (
+                      <tr key={c.id} className="hover:bg-primary-50/20 transition-colors">
+                        <td className="px-3 py-2.5 text-center text-[11px] text-warm-300 font-mono">{idx + 1}</td>
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={c.box_code} className="font-mono text-xs text-warm-600" />
+                        </td>
+                        {/* Estado caja — interactive select */}
+                        <td className="px-3 py-2.5">
+                          {canEdit && c.estado_caja !== 'cancelada' ? (
+                            <select
+                              className="text-xs rounded-lg border border-warm-200 bg-white px-2 py-1 cursor-pointer focus:outline-none focus:border-primary-400 w-[130px]"
+                              value={c.estado_caja}
+                              onChange={e => handleCajaEstado(c, e.target.value)}
+                              disabled={updateCajaMutation.isLoading}
+                            >
+                              <option value="pendiente">Pendiente</option>
+                              <option value="localizada">Localizada</option>
+                              <option value="no_encontrada">No encontrada</option>
+                            </select>
+                          ) : (
+                            <CajaChip estado={c.estado_caja} />
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="font-mono text-xs text-warm-500">{c.ubicacion || '—'}</span>
+                        </td>
+                        <td className="px-3 py-2.5 max-w-[180px]">
+                          <span className="text-xs text-warm-700 font-medium truncate block">{c.producto || '—'}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          {c.validada_en_surtido
+                            ? <CheckCircle2 size={14} className="text-success-500 mx-auto" />
+                            : <XCircle size={14} className="text-warm-300 mx-auto" />}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {c.anormalidad_folio
+                            ? <CopyableCell text={c.anormalidad_folio} className="font-mono text-xs text-danger-600" />
+                            : <span className="text-xs text-warm-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-1">
+                            {canEdit && (
+                              <button
+                                onClick={() => { setCajaNotaModal(c); setCajaNotaText('') }}
+                                className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-300 hover:text-primary-500 transition-colors"
+                                title="Agregar nota"
+                              >
+                                <Edit3 size={12} />
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                onClick={() => setCajaDeleteConfirm(c)}
+                                className="p-1.5 rounded-lg hover:bg-danger-100 text-warm-300 hover:text-danger-600 transition-colors"
+                                title="Eliminar caja"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredCajas.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-xs text-warm-400">
+                          {cajaSearch ? 'Sin resultados para esa búsqueda' : 'Sin cajas registradas'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            ))}
+            </div>
+          )}
+
+          {activeTab === 'notas' && (
+            <div className="max-w-2xl space-y-4">
+              {canEdit && (
+                <div className="rounded-2xl border border-warm-200 bg-white p-4 shadow-[0_14px_28px_-30px_rgba(15,23,42,0.22)]">
+                  <label className="block text-xs font-semibold text-warm-600 mb-2">Agregar nota</label>
+                  <textarea
+                    className="w-full min-h-[90px] resize-y rounded-xl border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-800 placeholder-warm-300 focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-colors"
+                    placeholder="Escribe una nota sobre esta orden..."
+                    value={newNota}
+                    onChange={e => setNewNota(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) submitNota() }}
+                  />
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-[11px] text-warm-300">Ctrl+Enter para guardar</span>
+                    <button
+                      onClick={submitNota}
+                      disabled={!newNota.trim() || updateOrden.isLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-40 transition-colors"
+                    >
+                      {updateOrden.isLoading ? <Loader2 size={12} className="animate-spin" /> : <MessageSquare size={12} />}
+                      Guardar nota
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {notas.length === 0 ? (
+                <div className="rounded-2xl border border-warm-100 bg-warm-50/60 py-10 text-center">
+                  <MessageSquare size={20} className="text-warm-300 mx-auto mb-2" />
+                  <p className="text-xs text-warm-400">Sin notas todavía</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notas.map((nota, i) => (
+                    <div key={nota.id || i} className="rounded-2xl border border-warm-100 bg-white p-4 shadow-[0_14px_28px_-30px_rgba(15,23,42,0.18)]">
+                      <div className="flex items-center justify-between gap-2 mb-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                            <User size={11} className="text-primary-600" />
+                          </div>
+                          <span className="text-xs font-semibold text-warm-700">{nota.actor_nombre || 'Usuario'}</span>
+                        </div>
+                        <span className="text-[11px] text-warm-300 flex items-center gap-1 flex-shrink-0">
+                          <Clock size={10} />
+                          {safeDate(nota.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-warm-700 leading-relaxed whitespace-pre-wrap pl-8">
+                        {nota.descripcion}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'historial' && (
+            <div className="max-w-2xl">
+              {historial.length === 0 ? (
+                <div className="rounded-2xl border border-warm-100 bg-warm-50/60 px-4 py-8 text-center text-xs text-warm-400">Sin historial</div>
+              ) : (
+                <div className="relative rounded-2xl border border-warm-100 bg-white px-4 py-4 shadow-[0_14px_28px_-30px_rgba(15,23,42,0.18)]">
+                  <div className="absolute left-[6px] top-3 bottom-3 w-px bg-warm-100" />
+                  <div className="space-y-4">
+                    {historial.map((h, i) => {
+                      const dotCls = ACCION_DOT[h.accion] || 'bg-warm-300 ring-warm-100'
+                      return (
+                        <div key={h.id || i} className="flex gap-3 items-start">
+                          <div className={`mt-1.5 w-3 h-3 rounded-full flex-shrink-0 ring-2 ${dotCls}`} />
+                          <div className="flex-1 min-w-0 pb-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-semibold text-warm-700">
+                                {ACCION_LABELS[h.accion] || h.accion}
+                              </span>
+                              {h.actor_nombre && (
+                                <span className="text-xs text-warm-400">por {h.actor_nombre}</span>
+                              )}
+                              <span className="ml-auto text-[11px] text-warm-300 whitespace-nowrap">
+                                {safeDate(h.created_at)}
+                              </span>
+                            </div>
+                            {h.descripcion && (
+                              <p className="text-xs text-warm-600 mt-0.5 leading-relaxed">{h.descripcion}</p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Confirm delete dialog */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <AlertTriangle className="text-red-400 mb-3" size={28} />
-            <h3 className="font-semibold text-warm-900 mb-1">¿Eliminar orden {orden.folio}?</h3>
-            <p className="text-xs text-warm-500 mb-4">Esta acción no se puede deshacer. Se eliminarán las cajas y el historial.</p>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setConfirmDelete(false)} className="btn btn-secondary text-xs">Cancelar</button>
-              <button onClick={() => deleteOrden.mutate(orden.id)} className="btn text-xs bg-red-600 text-white hover:bg-red-700">
-                {deleteOrden.isLoading ? <Loader2 size={12} className="animate-spin" /> : 'Eliminar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Rastrear caja modal */}
+      <RastreoSearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} />
 
-      {/* Confirm no_encontrada dialog */}
-      {cajaConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-            <AlertTriangle className="text-amber-400 mb-3" size={28} />
-            <h3 className="font-semibold text-warm-900 mb-1">Confirmar: caja no encontrada</h3>
-            <p className="text-xs text-warm-500 mb-1">
-              Caja: <span className="font-mono font-semibold">{cajaConfirm.caja.box_code}</span>
-            </p>
-            <p className="text-xs text-warm-500 mb-4">
-              Se generará automáticamente una anormalidad INV-07 para esta caja.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button onClick={() => setCajaConfirm(null)} className="btn btn-secondary text-xs">Cancelar</button>
-              <button
-                onClick={() => updateCajaMutation.mutate({ id: cajaConfirm.caja.id, body: { estado_caja: 'no_encontrada' } })}
-                className="btn text-xs bg-red-600 text-white hover:bg-red-700 flex items-center gap-1.5"
-              >
-                {updateCajaMutation.isLoading && <Loader2 size={12} className="animate-spin" />}
-                Confirmar
-              </button>
-            </div>
+      {/* Delete orden modal */}
+      <Modal
+        isOpen={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="Eliminar orden de rastreo"
+        icon={AlertTriangle}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setConfirmDelete(false)} className="btn-ghost text-xs">Cancelar</button>
+            <button
+              onClick={() => deleteOrden.mutate(orden.id)}
+              disabled={deleteOrden.isPending}
+              className="btn-danger text-xs !bg-danger-600 !text-white hover:!bg-danger-700 inline-flex items-center gap-1.5"
+            >
+              {deleteOrden.isPending && <Loader2 size={12} className="animate-spin" />}
+              Eliminar
+            </button>
           </div>
-        </div>
-      )}
-    </div>
+        }
+      >
+        <p className="text-sm text-warm-700 mb-1">
+          ¿Eliminar la orden <span className="font-mono font-semibold text-warm-900">{orden.folio}</span>?
+        </p>
+        <p className="text-xs text-warm-500">Esta acción no se puede deshacer. Se eliminarán las cajas y el historial.</p>
+      </Modal>
+
+      {/* No encontrada confirm modal */}
+      <Modal
+        isOpen={!!cajaConfirm}
+        onClose={() => { setCajaConfirm(null); setCajaNota('') }}
+        title="Confirmar: caja no encontrada"
+        icon={AlertTriangle}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => { setCajaConfirm(null); setCajaNota('') }} className="btn-ghost text-xs">Cancelar</button>
+            <button
+              onClick={confirmCajaNoEncontrada}
+              disabled={updateCajaMutation.isPending}
+              className="btn-danger text-xs !bg-danger-600 !text-white hover:!bg-danger-700 inline-flex items-center gap-1.5"
+            >
+              {updateCajaMutation.isPending && <Loader2 size={12} className="animate-spin" />}
+              Confirmar
+            </button>
+          </div>
+        }
+      >
+        <p className="text-xs text-warm-500 mb-3">
+          Caja: <span className="font-mono font-semibold text-warm-900">{cajaConfirm?.caja.box_code}</span>
+        </p>
+        <p className="text-xs text-warm-500 mb-3">
+          Se generará automáticamente una anormalidad <span className="font-semibold">INV-07</span> para esta caja.
+        </p>
+        <textarea
+          className="w-full min-h-[70px] resize-y rounded-xl border border-warm-200 bg-warm-50 px-3 py-2 text-xs text-warm-800 placeholder-warm-300 focus:outline-none focus:border-primary-400 transition-colors"
+          placeholder="Nota opcional sobre la caja no encontrada..."
+          value={cajaNota}
+          onChange={e => setCajaNota(e.target.value)}
+        />
+      </Modal>
+
+      {/* Delete caja confirm */}
+      <Modal
+        isOpen={!!cajaDeleteConfirm}
+        onClose={() => setCajaDeleteConfirm(null)}
+        title="Eliminar caja"
+        icon={Trash2}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setCajaDeleteConfirm(null)} className="btn-ghost text-xs">Cancelar</button>
+            <button
+              onClick={() => cajaDeleteConfirm?.id && deleteCajaMutation.mutate(cajaDeleteConfirm.id)}
+              disabled={deleteCajaMutation.isPending || !cajaDeleteConfirm?.id}
+              className="btn-danger text-xs !bg-danger-600 !text-white hover:!bg-danger-700 inline-flex items-center gap-1.5"
+            >
+              {deleteCajaMutation.isPending && <Loader2 size={12} className="animate-spin" />}
+              Eliminar
+            </button>
+          </div>
+        }
+      >
+        <p className="text-xs text-warm-500">
+          ¿Eliminar la caja <span className="font-mono font-semibold text-warm-900">{cajaDeleteConfirm?.box_code}</span>?
+          Si tiene historial de estados, se marcará como cancelada en lugar de eliminarse.
+        </p>
+      </Modal>
+
+      {/* Caja nota modal */}
+      <Modal
+        isOpen={!!cajaNotaModal}
+        onClose={() => setCajaNotaModal(null)}
+        title="Agregar nota a caja"
+        icon={Edit3}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setCajaNotaModal(null)} className="btn btn-secondary text-xs">Cancelar</button>
+            <button
+              onClick={() => {
+                if (!cajaNotaText.trim()) return
+                updateOrden.mutate(
+                  { id: orden.id, body: { agregar_nota: `[${cajaNotaModal.box_code}] ${cajaNotaText.trim()}` } },
+                  { onSuccess: () => setCajaNotaModal(null) }
+                )
+              }}
+              disabled={!cajaNotaText.trim() || updateOrden.isLoading}
+              className="btn btn-primary text-xs flex items-center gap-1.5"
+            >
+              {updateOrden.isLoading && <Loader2 size={12} className="animate-spin" />}
+              Guardar
+            </button>
+          </div>
+        }
+      >
+        <p className="text-xs text-warm-500 mb-3">
+          Caja: <span className="font-mono font-semibold text-warm-900">{cajaNotaModal?.box_code}</span>
+        </p>
+        <textarea
+          autoFocus
+          className="w-full min-h-[80px] resize-y rounded-xl border border-warm-200 bg-warm-50 px-3 py-2 text-xs text-warm-800 placeholder-warm-300 focus:outline-none focus:border-primary-400 transition-colors"
+          placeholder="Escribe una nota sobre esta caja..."
+          value={cajaNotaText}
+          onChange={e => setCajaNotaText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey && cajaNotaText.trim()) {
+            updateOrden.mutate({ id: orden.id, body: { agregar_nota: `[${cajaNotaModal.box_code}] ${cajaNotaText.trim()}` } }, { onSuccess: () => setCajaNotaModal(null) })
+          }}}
+        />
+        <p className="text-[11px] text-warm-300 mt-1">Ctrl+Enter para guardar</p>
+      </Modal>
+    </>
   )
 }

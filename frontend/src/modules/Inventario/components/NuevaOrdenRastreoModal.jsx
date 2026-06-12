@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react'
 import Modal from '../../../core/components/common/Modal'
-import { Crosshair, Search, X, ScanBarcode, Loader2, CheckSquare, Square } from 'lucide-react'
-import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
-import { getInventoryList } from '../../WmsHub/services/googleSheetsService'
+import {
+  Crosshair, Search, X, ScanBarcode, Loader2, CheckSquare, Square,
+  FileSearch, Truck, User, FileText, Package,
+} from 'lucide-react'
+import { getOutboundDetail, getInventoryList } from '../../WmsHub/services/googleSheetsService'
 import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import { createRastreoOrden } from '../../../core/services/rastreoService'
 
@@ -22,7 +24,6 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
   const [error, setError] = useState('')
   const scanRef = useRef(null)
 
-  // Load GS inventory map once when modal opens
   useEffect(() => {
     if (!isOpen || invMap) return
     setLoadingInv(true)
@@ -59,10 +60,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     setSelectedBoxes(new Set())
     try {
       const res = await getOutboundDetail(obc.trim().toUpperCase())
-      if (!res?.data) {
-        setError('Orden no encontrada en el sistema')
-        return
-      }
+      if (!res?.data) { setError('Orden no encontrada en el sistema'); return }
       setOutboundDetail(res.data)
       const allCodes = new Set((res.data.packageList || []).map(b => b.customizeCode).filter(Boolean))
       setSelectedBoxes(allCodes)
@@ -85,10 +83,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     if (e.key !== 'Enter') return
     const code = scanInput.trim().toUpperCase()
     if (!code) return
-    if (manualCajas.find(c => c.box_code === code)) {
-      setScanInput('')
-      return
-    }
+    if (manualCajas.find(c => c.box_code === code)) { setScanInput(''); return }
     const normalized = normalizeCodeFast(code)
     const gsItem = invMap?.[normalized]
     setManualCajas(prev => [...prev, {
@@ -106,8 +101,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
 
   function buildCajasPayload() {
     if (tab === 'con_orden') {
-      const packages = outboundDetail?.packageList || []
-      return packages
+      return (outboundDetail?.packageList || [])
         .filter(b => selectedBoxes.has(b.customizeCode))
         .map(b => {
           const normalized = normalizeCodeFast(b.customizeCode || '')
@@ -126,10 +120,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
   async function handleSubmit() {
     setError('')
     const cajas = buildCajasPayload()
-    if (!cajas.length) {
-      setError('Selecciona al menos una caja')
-      return
-    }
+    if (!cajas.length) { setError('Selecciona al menos una caja'); return }
     setSubmitting(true)
     try {
       const body = {
@@ -153,6 +144,11 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
   const canSubmit = tab === 'con_orden'
     ? selectedBoxes.size > 0 && outboundDetail
     : manualCajas.length > 0
+
+  const TABS = [
+    { key: 'con_orden', label: 'Con orden de salida', icon: FileSearch },
+    { key: 'sin_orden', label: 'Sin orden (flexible)', icon: ScanBarcode },
+  ]
 
   return (
     <Modal
@@ -179,107 +175,129 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
       }
     >
       {/* Tab bar */}
-      <div className="flex border-b border-warm-200 mb-4">
-        {[
-          { key: 'con_orden', label: 'Con orden de salida' },
-          { key: 'sin_orden', label: 'Sin orden (flexible)' },
-        ].map(t => (
+      <div className="flex border-b border-warm-200 mb-4 -mx-1">
+        {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors
               ${tab === t.key
                 ? 'border-primary-500 text-primary-700'
-                : 'border-transparent text-warm-500 hover:text-warm-700'}`}
+                : 'border-transparent text-warm-400 hover:text-warm-700'}`}
           >
+            <t.icon size={14} />
             {t.label}
           </button>
         ))}
       </div>
 
       <div className="space-y-4">
-        {/* Con orden mode */}
         {tab === 'con_orden' && (
           <>
-            <div className="flex gap-2">
-              <input
-                className="input flex-1"
-                placeholder="Número de orden (OBC)"
-                value={obc}
-                onChange={e => setObc(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleLoadObc()}
-              />
-              <button onClick={handleLoadObc} disabled={loadingDetail || !obc.trim()} className="btn btn-secondary flex items-center gap-1.5">
-                {loadingDetail ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                Cargar
-              </button>
+            <div>
+              <label className="block text-xs font-semibold text-warm-600 mb-1.5 flex items-center gap-1.5">
+                <Truck size={12} className="text-warm-400" />
+                Número de orden de salida (OBC)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  className="input flex-1"
+                  placeholder="Ej: OBC-20240611-001"
+                  value={obc}
+                  onChange={e => setObc(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleLoadObc()}
+                />
+                <button
+                  onClick={handleLoadObc}
+                  disabled={loadingDetail || !obc.trim()}
+                  className="btn btn-secondary flex items-center gap-1.5"
+                >
+                  {loadingDetail ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                  Cargar
+                </button>
+              </div>
             </div>
 
             {outboundDetail && (
-              <div className="rounded-lg border border-warm-200 overflow-hidden">
-                <div className="bg-warm-50 px-3 py-2 border-b border-warm-200 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-warm-700">
-                    {outboundDetail.packageList?.length || 0} caja(s) — {outboundDetail.customerCode || '—'}
-                  </span>
-                  <span className="text-xs text-warm-400">{selectedBoxes.size} seleccionadas</span>
+              <div className="rounded-xl border border-warm-200 overflow-hidden">
+                <div className="bg-warm-50 px-3 py-2.5 border-b border-warm-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Package size={13} className="text-warm-400" />
+                    <span className="text-xs font-semibold text-warm-700">
+                      {outboundDetail.packageList?.length || 0} cajas
+                      {outboundDetail.customerCode && ` — ${outboundDetail.customerCode}`}
+                    </span>
+                  </div>
+                  <span className="text-xs text-primary-600 font-semibold">{selectedBoxes.size} seleccionadas</span>
                 </div>
                 <div className="max-h-[220px] overflow-y-auto divide-y divide-warm-100">
-                  {(outboundDetail.packageList || []).map((b, i) => (
-                    <button
-                      key={i}
-                      onClick={() => toggleBox(b.customizeCode)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-warm-50 transition-colors"
-                    >
-                      {selectedBoxes.has(b.customizeCode)
-                        ? <CheckSquare size={15} className="text-primary-600 flex-shrink-0" />
-                        : <Square size={15} className="text-warm-300 flex-shrink-0" />}
-                      <span className="font-mono text-xs text-warm-700">{b.customizeCode}</span>
-                      {invMap?.[normalizeCodeFast(b.customizeCode || '')] && (
-                        <span className="ml-auto text-xs text-warm-400">
-                          {invMap[normalizeCodeFast(b.customizeCode)]?.cellNo || '—'}
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                  {(outboundDetail.packageList || []).map((b, i) => {
+                    const gsItem = invMap?.[normalizeCodeFast(b.customizeCode || '')]
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => toggleBox(b.customizeCode)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-warm-50 transition-colors"
+                      >
+                        {selectedBoxes.has(b.customizeCode)
+                          ? <CheckSquare size={15} className="text-primary-600 flex-shrink-0" />
+                          : <Square size={15} className="text-warm-300 flex-shrink-0" />}
+                        <span className="font-mono text-xs text-warm-700 flex-1">{b.customizeCode}</span>
+                        {gsItem?.cellNo && (
+                          <span className="text-xs text-warm-400">{gsItem.cellNo}</span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
           </>
         )}
 
-        {/* Sin orden mode */}
         {tab === 'sin_orden' && (
           <>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
+            <div>
+              <label className="block text-xs font-semibold text-warm-600 mb-1.5 flex items-center gap-1.5">
+                <ScanBarcode size={12} className="text-warm-400" />
+                Escanear código de caja
+              </label>
+              <div className="relative">
                 <ScanBarcode size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400" />
                 <input
                   ref={scanRef}
                   className="input pl-9"
-                  placeholder="Escanear o ingresar código de caja + Enter"
+                  placeholder="Escanear o ingresar + Enter"
                   value={scanInput}
                   onChange={e => setScanInput(e.target.value)}
                   onKeyDown={handleScanKeyDown}
                   autoFocus
                 />
               </div>
+              {loadingInv && (
+                <p className="mt-1.5 text-xs text-warm-400 flex items-center gap-1.5">
+                  <Loader2 size={11} className="animate-spin" />
+                  Cargando inventario...
+                </p>
+              )}
             </div>
-            {loadingInv && (
-              <p className="text-xs text-warm-400 flex items-center gap-1.5">
-                <Loader2 size={12} className="animate-spin" /> Cargando inventario...
-              </p>
-            )}
+
             {manualCajas.length > 0 && (
-              <div className="rounded-lg border border-warm-200 overflow-hidden">
-                <div className="bg-warm-50 px-3 py-2 border-b border-warm-200">
-                  <span className="text-xs font-semibold text-warm-700">{manualCajas.length} caja(s)</span>
+              <div className="rounded-xl border border-warm-200 overflow-hidden">
+                <div className="bg-warm-50 px-3 py-2.5 border-b border-warm-100 flex items-center gap-2">
+                  <Package size={13} className="text-warm-400" />
+                  <span className="text-xs font-semibold text-warm-700">{manualCajas.length} caja{manualCajas.length !== 1 ? 's' : ''} agregadas</span>
                 </div>
                 <div className="max-h-[200px] overflow-y-auto divide-y divide-warm-100">
                   {manualCajas.map(c => (
-                    <div key={c.box_code} className="flex items-center gap-3 px-3 py-2">
+                    <div key={c.box_code} className="flex items-center gap-3 px-3 py-2.5">
                       <span className="font-mono text-xs text-warm-700 flex-1">{c.box_code}</span>
                       {c.ubicacion && <span className="text-xs text-warm-400">{c.ubicacion}</span>}
-                      <button onClick={() => removeManualCaja(c.box_code)} className="p-0.5 rounded hover:bg-warm-100 text-warm-400">
+                      {c.producto && <span className="text-xs text-warm-400 truncate max-w-[120px]">{c.producto}</span>}
+                      <button
+                        onClick={() => removeManualCaja(c.box_code)}
+                        className="p-1 rounded-lg hover:bg-warm-100 text-warm-300 hover:text-warm-600 transition-colors"
+                      >
                         <X size={12} />
                       </button>
                     </div>
@@ -293,7 +311,10 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
         {/* Common fields */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-warm-600 mb-1">Asignar a</label>
+            <label className="block text-xs font-semibold text-warm-600 mb-1.5 flex items-center gap-1.5">
+              <User size={12} className="text-warm-400" />
+              Asignar a
+            </label>
             <select className="input" value={asignadoA} onChange={e => setAsignadoA(e.target.value)}>
               <option value="">Sin asignar</option>
               {usuarios.map(u => (
@@ -302,10 +323,13 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-warm-600 mb-1">Notas</label>
+            <label className="block text-xs font-semibold text-warm-600 mb-1.5 flex items-center gap-1.5">
+              <FileText size={12} className="text-warm-400" />
+              Notas iniciales
+            </label>
             <input
               className="input"
-              placeholder="Notas opcionales"
+              placeholder="Opcional"
               value={notas}
               onChange={e => setNotas(e.target.value)}
             />

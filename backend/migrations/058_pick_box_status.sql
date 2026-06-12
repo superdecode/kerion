@@ -1,4 +1,4 @@
--- ── pick_box_status: per-box incidence tracking ──────────────────────────────
+-- Migration 058: pick_box_status per-box incidence tracking ──────────────────
 CREATE TABLE IF NOT EXISTS pick_box_status (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID REFERENCES tenants(id) NOT NULL,
@@ -20,3 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_pick_box_status_order
 ALTER TABLE pick_order_tracking
   ADD COLUMN IF NOT EXISTS tiene_faltantes     BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS tiene_anormalidades BOOLEAN NOT NULL DEFAULT false;
+
+INSERT INTO schema_migrations (version, description)
+VALUES ('058', 'pick_box_status_incidence_tracking')
+ON CONFLICT (version) DO NOTHING;

@@ -18,7 +18,7 @@ import {
   ScanBarcode, Play, Square, Package, Trash2, Search,
   CheckCircle, XCircle, Volume2, VolumeX,
   PanelRightClose, PanelRightOpen, Clock, Ban, AlertTriangle, Plus, X, Building2, Radio, RotateCcw,
-  Download, Pencil, Lock, ShieldAlert, Timer, Zap
+  Download, Edit3, Lock, ShieldAlert, Timer, Zap
 } from 'lucide-react'
 import { scoreTrackingCode } from '../utils/trackingValidator'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
@@ -1522,7 +1522,7 @@ export default function Escaneo() {
                 className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl font-semibold transition-all ${
                   panelEditMode ? 'bg-warning-100 text-warning-700 hover:bg-warning-200' : 'bg-warm-100 text-warm-600 hover:bg-warm-200'
                 }`}>
-                <Pencil className="w-4 h-4" /> {panelEditMode ? 'Finalizar edición' : 'Editar'}
+                <Edit3 className="w-4 h-4" /> {panelEditMode ? 'Finalizar edición' : 'Editar'}
               </button>
             )}
           </>

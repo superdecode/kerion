@@ -8,7 +8,7 @@ import {
   Loader2, Wifi, WifiOff, Trash2, ArrowRight, MoveRight,
   Square, AlertCircle, ScanBarcode, Clock, Timer,
   RefreshCw, PanelRightClose, PanelRightOpen, Search, Maximize2,
-  MapPin, Pencil, ChevronDown, ChevronUp, Calendar, Hash, Layers, List,
+  MapPin, Edit3, ChevronDown, ChevronUp, Calendar, Hash, Layers, List,
   Copy, Check,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
@@ -426,7 +426,7 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
             )}
             <button className="ml-auto p-1 rounded-lg hover:bg-accent-200 text-accent-400 hover:text-accent-700 transition-colors"
               onClick={onChangeUbicacion} title={t('inventario.escaneo.ubicacion_edit')}>
-              <Pencil size={10} />
+              <Edit3 size={10} />
             </button>
           </div>
         ) : (
@@ -1257,7 +1257,7 @@ function ClasificacionPanel({
                       className="ml-auto p-0.5 rounded hover:bg-accent-200 text-accent-400 transition-colors shrink-0"
                       title={t('inventario.escaneo.ubicacion_edit')}
                     >
-                      <Pencil size={9} />
+                      <Edit3 size={9} />
                     </button>
                   </div>
                   <button

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
+import { PERM_TO_MODULE } from '../components/auth/ProtectedRoute'
 
 const MODULE_ROUTES = [
   { module: 'global.inicio', path: '/' },
@@ -78,10 +79,11 @@ export function usePermissionSync() {
 
     if (!currentRoute) return
 
-    // Check both permission and module enablement
-    const moduleCode = currentRoute.module.split('.')[0]
+    // Resolve permission prefix → actual module code (fep → dropscan, etc.)
+    const permPrefix = currentRoute.module.split('.')[0]
+    const moduleCode = PERM_TO_MODULE[permPrefix] ?? permPrefix
     const hasPermission = canView(currentRoute.module)
-    const isModuleActive = ['admin', 'super-admin'].includes(moduleCode) || isModuleEnabled(moduleCode)
+    const isModuleActive = ['admin', 'super-admin', 'global', 'sistema'].includes(permPrefix) || isModuleEnabled(moduleCode)
 
     if (!hasPermission || !isModuleActive) {
       // User lost access/module disabled, redirect to allowed route

@@ -189,6 +189,20 @@ export async function provisionTenant(requestId, approvedByAdminId) {
 
   // ── Step 2.6: seed_anormalidades_codigos ──────────────────────────────────────
   try {
+    const nivelesBase = [
+      { codigo: 'L1', nombre: 'L1', prioridad: 1, horas_limite: 48, descripcion: 'Nivel operativo base' },
+      { codigo: 'L2', nombre: 'L2', prioridad: 2, horas_limite: 24, descripcion: 'Nivel de atención intermedia' },
+      { codigo: 'L3', nombre: 'L3', prioridad: 3, horas_limite: 4, descripcion: 'Nivel crítico' },
+    ]
+    for (const nivel of nivelesBase) {
+      await query(
+        `INSERT INTO configuraciones (tenant_id, modulo, tipo, codigo, nombre, descripcion, activo, config_json)
+         VALUES ($1,'anormalidades','nivel',$2,$3,$4,true,$5::jsonb)
+         ON CONFLICT (tenant_id, modulo, tipo, codigo) DO NOTHING`,
+        [tenantId, nivel.codigo, nivel.nombre, nivel.descripcion, JSON.stringify({ prioridad: nivel.prioridad, horas_limite: nivel.horas_limite })]
+      )
+    }
+
     const CODIGOS_BASE = [
       ['IN-01','Recibo incorrecto','收货错误','Recibo','L2'],
       ['IN-02','Daño en recibo','收货损坏','Recibo','L2'],
