@@ -11,7 +11,8 @@ import { normalizeCode, generateCodeVariations } from './normalizeCode'
  */
 export function findCodeInInventory(rawCode, inventory) {
   const normalized = normalizeCode(rawCode)
-  const variations = generateCodeVariations(normalized)
+  // normalize=false: code is already through the full scanner normalizer above
+  const variations = generateCodeVariations(normalized, false)
 
   for (const variant of variations) {
     const item = inventory.get(variant)

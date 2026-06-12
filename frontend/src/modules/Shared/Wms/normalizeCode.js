@@ -69,32 +69,14 @@ export function normalizeCode(rawCode) {
 }
 
 /**
- * Fast normalization for bulk data loading (no complex pattern extraction).
- * Must match normalizeCode's character substitutions so inventory codes are consistent.
+ * Fast normalization for bulk data loading (Google Sheets / WMS exports).
+ * Intentionally minimal — preserves the exact code format from the source system.
+ * Only normalizes Unicode variants of - and / to their ASCII counterparts.
  */
 export function normalizeCodeFast(rawCode) {
   if (!rawCode) return ''
   let code = String(rawCode).trim()
-
-  // Unicode dash/slash normalization
-  code = code.replace(/／/g, '/')
-  code = code.replace(/[－‒–—―]/g, '-')
-
-  // Character substitutions — same as normalizeCode to ensure consistency
-  code = code.replace(/ö/gi, 'o')
-  code = code.replace(/ï/gi, 'i')
-  code = code.replace(/Ñ/g, ':')
-  code = code.replace(/ñ/g, ':')
-  code = code.replace(/\^/g, '')
-  code = code.replace(/¨/g, '"')
-  code = code.replace(/\[/g, '"')
-  code = code.replace(/\]/g, '"')
-  code = code.replace(/\'/g, '/') // Apóstrofes → slashes
-  code = code.replace(/\*/g, '')
-  code = code.replace(/&/g, '/')
-  code = code.replace(/[""«»„‟‚‛''¨]/g, '"')
-  code = code.replace(/\?/g, '_')
-
+  code = code.replace(/／/g, '/').replace(/[－‒–—―]/g, '-')
   return code.toUpperCase().replace(/[^A-Z0-9\-\/]/g, '')
 }
 
@@ -115,9 +97,14 @@ export function extractBaseCode(code) {
  * Generates lookup-safe code variations following the shared WMS rules.
  * Only slash/dash swaps are allowed. We intentionally do not collapse to
  * a "base code" because caja numbering is part of the unique identifier.
+ *
+ * When called with a scanner rawCode, pass normalize=true to apply full
+ * scanner normalization first. When called with an already-clean code
+ * (e.g. from Google Sheets via normalizeCodeFast), pass normalize=false
+ * to avoid running scanner-specific transforms on WMS data.
  */
-export function generateCodeVariations(rawCode) {
-  const code = normalizeCode(rawCode)
+export function generateCodeVariations(rawCode, normalize = true) {
+  const code = normalize ? normalizeCode(rawCode) : String(rawCode || '').toUpperCase()
   if (!code) return []
 
   const variations = [code]
