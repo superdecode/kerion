@@ -435,9 +435,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
             {!isLoading && isReadOnly && (canEditScans || canDeleteScans) && (
               <button
                 onClick={() => setIsReadOnly(false)}
-                className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors"
-                title={t('common.edit')}>
-                <Edit3 className="w-5 h-5" />
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-accent-700 bg-accent-50 hover:bg-accent-100 rounded-lg border border-accent-200 transition-colors">
+                <Edit3 className="w-3.5 h-3.5" />
+                {t('common.edit')}
               </button>
             )}
           </div>

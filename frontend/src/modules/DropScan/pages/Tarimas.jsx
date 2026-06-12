@@ -81,11 +81,10 @@ export default function Tarimas() {
   const [sortDir, setSortDir] = useState('desc')
   const [detailTab, setDetailTab] = useState('guias')
   const [newGuiaCode, setNewGuiaCode] = useState('')
-  const { canDelete, canView, hasPermission, user, getPermissionLevel } = useAuthStore()
+  const { canDelete, canView, hasPermission, user } = useAuthStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
   const canViewDetails = canView('dropscan.tarimas')           // ver+
-  const tarimasLevel = getPermissionLevel('dropscan.tarimas')
-  const canManageStatus = user.rol_nombre === 'Administrador' || tarimasLevel === 'actualizar'  // ONLY actualizar role
+  const canManageStatus = hasPermission('dropscan.tarimas', 'actualizar')
   const canExportTarimas = hasPermission('dropscan.tarimas', 'exportar') // actualizar+
   const canDeleteFolio = hasPermission('fep.folios', 'eliminar')
   const toast = useToastStore.getState()
