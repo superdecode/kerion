@@ -249,7 +249,8 @@ export default function RastreoDetalle() {
       })
 
       for (const row of targetRows) {
-        if (row.caja.estado_caja === row.nextEstado) continue
+        const shouldEnsureAnormalidad = row.nextEstado === 'no_encontrada' && !row.caja.anormalidad_id
+        if (row.caja.estado_caja === row.nextEstado && !shouldEnsureAnormalidad) continue
         await updateRastreaoCaja(row.caja.id, { estado_caja: row.nextEstado })
       }
 

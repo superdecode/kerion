@@ -33,6 +33,13 @@ function normalizeEstado(raw) {
   return STATUS_ALIASES[raw] || raw
 }
 
+function persistEstado(raw) {
+  const normalized = normalizeEstado(raw)
+  if (normalized === 'completada') return 'resuelta'
+  if (normalized === 'cancelada') return 'cerrada'
+  return normalized
+}
+
 function expandEstadoValues(raw) {
   const normalized = normalizeEstado(raw)
   if (normalized === 'completada') return ['completada', 'resuelta']
@@ -312,8 +319,19 @@ router.get('/',
       } = req.query
 
       const offset = (parseInt(page) - 1) * parseInt(limit)
-      const ALLOWED_SORT = new Set(['created_at', 'folio', 'estado', 'updated_at'])
-      const sortCol = ALLOWED_SORT.has(sort) ? `ro.${sort}` : 'ro.created_at'
+      const SORT_COLUMNS = {
+        created_at: 'ro.created_at',
+        updated_at: 'ro.updated_at',
+        folio: 'ro.folio',
+        outbound_order_no: 'ro.outbound_order_no',
+        customer_code: 'ro.customer_code',
+        estado: 'ro.estado',
+        total_cajas: 'total_cajas',
+        cajas_localizadas: 'cajas_localizadas',
+        cajas_no_encontradas: 'cajas_no_encontradas',
+        asignado_nombre: 'asignado_nombre',
+      }
+      const sortCol = SORT_COLUMNS[sort] || 'ro.created_at'
       const sortDir = dir === 'ASC' ? 'ASC' : 'DESC'
 
       let where = 'WHERE ro.tenant_id = $1'
@@ -366,11 +384,21 @@ router.get('/',
 
       // Filter by caja estado
       if (estado_caja) {
-        where += ` AND EXISTS (
-          SELECT 1 FROM rastreo_cajas rc2
-          WHERE rc2.rastreo_orden_id = ro.id AND rc2.estado_caja = $${p++}
-        )`
-        params.push(estado_caja)
+        const estadosCaja = estado_caja.split(',').map(v => v.trim()).filter(Boolean)
+        if (estadosCaja.length === 1) {
+          where += ` AND EXISTS (
+            SELECT 1 FROM rastreo_cajas rc2
+            WHERE rc2.rastreo_orden_id = ro.id AND rc2.estado_caja = $${p++}
+          )`
+          params.push(estadosCaja[0])
+        } else if (estadosCaja.length > 1) {
+          const placeholders = estadosCaja.map(() => `$${p++}`).join(',')
+          where += ` AND EXISTS (
+            SELECT 1 FROM rastreo_cajas rc2
+            WHERE rc2.rastreo_orden_id = ro.id AND rc2.estado_caja IN (${placeholders})
+          )`
+          params.push(...estadosCaja)
+        }
       }
 
       const [countRes, rowsRes] = await Promise.all([
@@ -440,7 +468,7 @@ router.post('/bulk/estado',
       await req.tQuery(
         `UPDATE rastreo_ordenes SET estado = $1, updated_at = now()
          WHERE tenant_id = $2 AND id IN (${ids.map((_, i) => `$${i + 3}`).join(',')})`,
-        [normalizedEstado, req.tenantId, ...ids]
+        [persistEstado(normalizedEstado), req.tenantId, ...ids]
       )
       for (const id of ids) {
         await req.tQuery(
@@ -682,7 +710,7 @@ router.patch('/:id',
         if (!VALID_ESTADOS.includes(normalizedEstado) || !canTransitionEstado(currentEstado, normalizedEstado)) {
           return res.status(400).json({ error: 'Transición de estado no permitida' })
         }
-        values.push(normalizedEstado)
+        values.push(persistEstado(normalizedEstado))
         updates.push(`estado = $${values.length + 2}`)
         historyEntries.push({
           accion: 'estado_cambiado',

@@ -24,6 +24,23 @@ const ORDER_STATUS_LABELS = {
   cancelada: 'rastreo.estado.cancelada',
 }
 
+const INVENTORY_STATUS_LABELS = {
+  OK: 'rastreo.searchModal.status.ok',
+  BLOCKED: 'rastreo.searchModal.status.blocked',
+}
+
+const SCAN_RESULT_LABELS = {
+  ok: 'rastreo.searchModal.result.ok',
+  duplicate: 'rastreo.searchModal.result.duplicate',
+  rejected: 'rastreo.searchModal.result.rejected',
+}
+
+const SCAN_STATUS_LABELS = {
+  ok: 'rastreo.searchModal.status.ok',
+  blocked: 'rastreo.searchModal.status.blocked',
+  nowms: 'rastreo.searchModal.status.nowms',
+}
+
 function SectionHeader({ icon: Icon, title, count, color, open, onToggle }) {
   return (
     <button
@@ -90,7 +107,7 @@ function InventarioSection({ records, open, onToggle }) {
                           {r.status && (
                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold
                               ${r.status === 'OK' ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-600'}`}>
-                              {r.status}
+                              {t(INVENTORY_STATUS_LABELS[r.status] || 'common.status')}
                             </span>
                           )}
                         </td>
@@ -276,7 +293,7 @@ function ValidacionSection({ records, open, onToggle }) {
                           <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold
                             ${r.scan_result === 'ok' ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-600'}`}>
                             {r.scan_result === 'ok' ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
-                            {r.scan_result}
+                            {t(SCAN_RESULT_LABELS[r.scan_result] || 'common.status')}
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-warm-600">{r.operador || '—'}</td>
@@ -323,7 +340,7 @@ function InventarioRegistrosSection({ records, open, onToggle }) {
                 <table className="w-full text-xs">
                   <thead className="bg-sky-50/70 border-b border-sky-100">
                     <tr>
-                      {[t('rastreo.detalle.col.codigo'), 'Code2', t('rastreo.detalle.col.ubicacion'), t('common.status'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
+                      {[t('rastreo.detalle.col.codigo'), t('rastreo.searchModal.col.code2'), t('rastreo.detalle.col.ubicacion'), t('common.status'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-sky-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -344,7 +361,7 @@ function InventarioRegistrosSection({ records, open, onToggle }) {
                               : r.scan_status === 'blocked' ? 'bg-warning-100 text-warning-700'
                                 : 'bg-danger-100 text-danger-600'
                           }`}>
-                            {r.scan_status || '—'}
+                            {r.scan_status ? t(SCAN_STATUS_LABELS[r.scan_status] || 'common.status') : '—'}
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-warm-600">{r.operator_nombre || '—'}</td>

@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Plus, LayoutList, LayoutGrid, Users, Search,
   Eye, Trash2, X, Package, User, Crosshair,
-  Calendar, ChevronDown, RefreshCw, FileDown,
+  Calendar, ChevronDown, RefreshCw, FileDown, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import MultiSelect from '../../../core/components/common/MultiSelect'
@@ -64,6 +64,24 @@ function EstadoChip({ estado, t }) {
   )
 }
 
+function SortableHeader({ label, sortKey, currentKey, currentDir, onSort }) {
+  const active = currentKey === sortKey
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 transition-colors ${active ? 'text-primary-700' : 'text-warm-500 hover:text-warm-700'}`}
+    >
+      <span className="text-xs font-semibold uppercase tracking-wider leading-none">{label}</span>
+      {active ? (
+        currentDir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />
+      ) : (
+        <ArrowUpDown size={11} className="opacity-60" />
+      )}
+    </button>
+  )
+}
+
 function getEstadoOptionsForRow(estado) {
   switch (estado) {
     case 'abierta':
@@ -102,6 +120,8 @@ export default function Rastreo() {
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
   const [datePreset, setDatePreset] = useState('')
+  const [sortKey, setSortKey] = useState('created_at')
+  const [sortDir, setSortDir] = useState('desc')
 
   // Modals
   const [showModal, setShowModal] = useState(false)
@@ -142,6 +162,8 @@ export default function Rastreo() {
     estado_caja: estadoCajaFilter.length ? estadoCajaFilter.join(',') : undefined,
     fecha_desde: fechaDesde || undefined,
     fecha_hasta: fechaHasta || undefined,
+    sort: sortKey,
+    dir: sortDir.toUpperCase(),
   }
 
   const { data, isLoading, isFetching } = useQuery({
@@ -157,6 +179,18 @@ export default function Rastreo() {
     estado_caja: estadoCajaFilter.length ? estadoCajaFilter.join(',') : undefined,
     fecha_desde: fechaDesde || undefined,
     fecha_hasta: fechaHasta || undefined,
+    sort: sortKey,
+    dir: sortDir.toUpperCase(),
+  }
+
+  function handleSort(nextKey) {
+    if (sortKey === nextKey) {
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(nextKey)
+      setSortDir('asc')
+    }
+    setPage(1)
   }
 
   const { data: allData } = useQuery({
@@ -391,7 +425,7 @@ export default function Rastreo() {
         {/* Row 2: filters + search + view toggles */}
         <div className="flex items-center gap-2 flex-wrap">
           <MultiSelect
-            placeholder={t('rastreo.col.estado')}
+            placeholder={t('rastreo.filter.orderStatus')}
             options={Object.entries(ESTADO_META).map(([k, m]) => ({ value: k, label: t(m.labelKey) }))}
             selected={estadosFilter}
             onChange={setFilter(setEstadosFilter)}
@@ -399,7 +433,7 @@ export default function Rastreo() {
           />
 
           <MultiSelect
-            placeholder={t('rastreo.col.responsable')}
+            placeholder={t('rastreo.filter.responsable')}
             icon={User}
             options={usuarios.map(u => ({ value: String(u.id), label: u.nombre_completo }))}
             selected={responsableFilter}
@@ -408,7 +442,7 @@ export default function Rastreo() {
           />
 
           <MultiSelect
-            placeholder={t('rastreo.detalle.col.estadoCaja')}
+            placeholder={t('rastreo.filter.boxStatus')}
             icon={Package}
             options={Object.entries(ESTADO_CAJA_META).map(([k, m]) => ({ value: k, label: t(m.labelKey) }))}
             selected={estadoCajaFilter}
@@ -570,13 +604,13 @@ export default function Rastreo() {
                         className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
                       />
                     </th>
-                    <th className={TH}><span className={TH_TEXT}>{t('rastreo.col.folio')}</span></th>
-                    <th className={TH}><span className={TH_TEXT}>{t('rastreo.col.ordenSalida')}</span></th>
-                    <th className={TH}><span className={TH_TEXT}>{t('rastreo.col.creado')}</span></th>
-                    <th className={TH}><span className={TH_TEXT}>{t('rastreo.col.cliente')}</span></th>
-                    <th className={TH}><span className={TH_TEXT}>{t('rastreo.col.cajas')}</span></th>
-                    <th className={TH}><span className={TH_TEXT}>{t('rastreo.col.estado')}</span></th>
-                    <th className={TH}><span className={TH_TEXT}>{t('rastreo.col.responsable')}</span></th>
+                    <th className={TH}><SortableHeader label={t('rastreo.col.folio')} sortKey="folio" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
+                    <th className={TH}><SortableHeader label={t('rastreo.col.ordenSalida')} sortKey="outbound_order_no" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
+                    <th className={TH}><SortableHeader label={t('rastreo.col.creado')} sortKey="created_at" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
+                    <th className={TH}><SortableHeader label={t('rastreo.col.cliente')} sortKey="customer_code" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
+                    <th className={TH}><SortableHeader label={t('rastreo.col.cajas')} sortKey="total_cajas" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
+                    <th className={TH}><SortableHeader label={t('rastreo.col.estado')} sortKey="estado" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
+                    <th className={TH}><SortableHeader label={t('rastreo.col.responsable')} sortKey="asignado_nombre" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
                     <th className={TH}><span className={TH_TEXT}>{t('rastreo.col.acciones')}</span></th>
                   </tr>
                 </thead>

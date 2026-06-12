@@ -15,7 +15,7 @@ import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
-import { generateCodeVariations, normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
+import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import {
   getOutboundList, getOutboundDetail,
@@ -503,7 +503,7 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
   }, [isOpen])
 
   function doRecount(raw) {
-    const norm = normalizeCodeFast(raw.trim())
+    const norm = normalizeScanCode(raw.trim())
     if (!norm) return
     const alreadyInRecount = recountItems.some(r => r.code === norm)
     const alreadyInSession = sessionHistory.some(h => h.code === norm && h.result === 'ok')
@@ -1206,7 +1206,7 @@ const { data: reasonsData } = useQuery({
 
   const doScan = useCallback((rawCode) => {
     if (!canCreate || !rawCode.trim() || !sessionId) return
-    const norm = normalizeCodeFast(rawCode)
+    const norm = normalizeScanCode(rawCode)
     const isDup = history.some(h => h.code === norm && h.result === 'ok')
     if (isDup) {
       playSound('warning')
@@ -1241,7 +1241,7 @@ const { data: reasonsData } = useQuery({
   }, [sessionId, history, packageMap, productMap, addEventMut, t])
 
   function addCodeToSession(code) {
-    const norm = normalizeCodeFast(code)
+    const norm = normalizeScanCode(code)
     const matched = findMatchedItem(norm, packageMap, productMap)
     if (!matched) {
       playSound('error')
