@@ -754,7 +754,7 @@ function NivelFormModal({ isOpen, onClose, title, initialData, onSubmit, loading
           <div className="flex gap-3">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
             {!isEditing && !isCreateMode ? (
-              <button type="button" onClick={() => setIsEditing(true)} className="btn-primary text-sm inline-flex items-center gap-2">
+              <button type="button" onClick={() => setIsEditing(true)} className="btn-accent text-sm inline-flex items-center gap-2">
                 <Edit3 className="w-3.5 h-3.5" />
                 {t('common.edit')}
               </button>
@@ -851,7 +851,7 @@ function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, load
           <div className="flex gap-3">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
             {!isEditing && !isCreateMode ? (
-              <button type="button" onClick={() => setIsEditing(true)} className="btn-primary text-sm inline-flex items-center gap-2">
+              <button type="button" onClick={() => setIsEditing(true)} className="btn-accent text-sm inline-flex items-center gap-2">
                 <Edit3 className="w-3.5 h-3.5" />
                 {t('common.edit')}
               </button>
@@ -939,7 +939,7 @@ function CodigoFormModal({ isOpen, onClose, title, initialData, onSubmit, loadin
           <div className="flex gap-3">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
             {!isEditing && !isCreateMode ? (
-              <button type="button" onClick={() => setIsEditing(true)} className="btn-primary text-sm inline-flex items-center gap-2">
+              <button type="button" onClick={() => setIsEditing(true)} className="btn-accent text-sm inline-flex items-center gap-2">
                 <Edit3 className="w-3.5 h-3.5" />
                 {t('common.edit')}
               </button>

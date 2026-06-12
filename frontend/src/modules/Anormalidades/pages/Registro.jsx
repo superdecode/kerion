@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
@@ -634,6 +634,13 @@ export default function AnormalidadesRegistro() {
 function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles, origenes, onSubmit, loading, title, initialData }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData || { ...FORM_EMPTY, fecha_ocurrencia: new Date().toISOString().slice(0, 16) })
+  const [isEditing, setIsEditing] = useState(!initialData)
+  const isCreateMode = !initialData
+
+  useEffect(() => {
+    setForm(initialData || { ...FORM_EMPTY, fecha_ocurrencia: new Date().toISOString().slice(0, 16) })
+    setIsEditing(!initialData)
+  }, [initialData, isOpen])
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -669,22 +676,23 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
 
   const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
   const sel = inp
+  const disabledInput = `${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} icon={AlertTriangle} size="2xl">
       <form onSubmit={handleSubmit}>
         <SectionBlock title={t('anorm.section.identificacion')}>
           <Field label={t('anorm.field.fechaOcurrencia')}>
-            <input type="datetime-local" value={form.fecha_ocurrencia} onChange={e => set('fecha_ocurrencia', e.target.value)} className={inp} required />
+            <input type="datetime-local" value={form.fecha_ocurrencia} onChange={e => set('fecha_ocurrencia', e.target.value)} disabled={!isEditing} className={disabledInput} required />
           </Field>
           <Field label={t('anorm.field.proceso')}>
-            <select value={form.proceso} onChange={e => set('proceso', e.target.value)} className={sel} required>
+            <select value={form.proceso} onChange={e => set('proceso', e.target.value)} disabled={!isEditing} className={disabledInput} required>
               <option value="">{t('common.select')}</option>
               {procesos.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
           </Field>
           <Field label={t('anorm.field.codigo')}>
-            <select value={form.codigo_id} onChange={handleCodigoChange} className={sel}>
+            <select value={form.codigo_id} onChange={handleCodigoChange} disabled={!isEditing} className={disabledInput}>
               <option value="">{t('common.select')}</option>
               {Object.entries(codigosPorProceso).map(([proc, codes]) => (
                 <optgroup key={proc} label={proc}>
@@ -694,10 +702,10 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
             </select>
           </Field>
           <Field label={t('anorm.field.nombre')}>
-            <input value={form.nombre} onChange={e => set('nombre', e.target.value)} className={inp} required placeholder={t('anorm.field.nombrePlaceholder')} />
+            <input value={form.nombre} onChange={e => set('nombre', e.target.value)} disabled={!isEditing} className={disabledInput} required placeholder={t('anorm.field.nombrePlaceholder')} />
           </Field>
           <Field label={t('anorm.field.nivel')}>
-            <select value={form.nivel} onChange={e => set('nivel', e.target.value)} className={sel} required>
+            <select value={form.nivel} onChange={e => set('nivel', e.target.value)} disabled={!isEditing} className={disabledInput} required>
               <option value="">{t('common.select')}</option>
               {niveles.map(n => <option key={n.codigo} value={n.codigo}>{n.nombre}</option>)}
             </select>
@@ -706,19 +714,19 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
 
         <SectionBlock title={t('anorm.section.contexto')}>
           <Field label={t('anorm.field.cliente')}>
-            <input value={form.cliente} onChange={e => set('cliente', e.target.value)} className={inp} placeholder={t('anorm.field.clientePlaceholder')} />
+            <input value={form.cliente} onChange={e => set('cliente', e.target.value)} disabled={!isEditing} className={disabledInput} placeholder={t('anorm.field.clientePlaceholder')} />
           </Field>
           <Field label={t('anorm.field.almacen')}>
-            <input value={form.almacen} onChange={e => set('almacen', e.target.value)} className={inp} />
+            <input value={form.almacen} onChange={e => set('almacen', e.target.value)} disabled={!isEditing} className={disabledInput} />
           </Field>
           <Field label={t('anorm.field.contenedor')}>
-            <input value={form.contenedor_orden} onChange={e => set('contenedor_orden', e.target.value)} className={inp} />
+            <input value={form.contenedor_orden} onChange={e => set('contenedor_orden', e.target.value)} disabled={!isEditing} className={disabledInput} />
           </Field>
           <Field label={t('anorm.field.sku')}>
-            <input value={form.sku} onChange={e => set('sku', e.target.value)} className={inp} />
+            <input value={form.sku} onChange={e => set('sku', e.target.value)} disabled={!isEditing} className={disabledInput} />
           </Field>
           <Field label={t('anorm.field.ubicacion')}>
-            <input value={form.ubicacion} onChange={e => set('ubicacion', e.target.value)} className={inp} />
+            <input value={form.ubicacion} onChange={e => set('ubicacion', e.target.value)} disabled={!isEditing} className={disabledInput} />
           </Field>
           <Field label={t('anorm.field.cantidad')}>
             <input
@@ -726,7 +734,8 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
               inputMode="numeric"
               value={form.cantidad_afectada}
               onChange={e => set('cantidad_afectada', e.target.value.replace(/[^\d]/g, ''))}
-              className={inp}
+              disabled={!isEditing}
+              className={disabledInput}
             />
           </Field>
           <Field label={t('anorm.field.monto')}>
@@ -735,29 +744,30 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
               inputMode="decimal"
               value={form.monto_impacto}
               onChange={e => set('monto_impacto', e.target.value.replace(/[^\d.]/g, ''))}
-              className={inp}
+              disabled={!isEditing}
+              className={disabledInput}
             />
           </Field>
           <Field label={t('anorm.field.descripcion')} span={2}>
-            <textarea value={form.descripcion} onChange={e => set('descripcion', e.target.value)} className={`${inp} resize-none`} rows={3} required />
+            <textarea value={form.descripcion} onChange={e => set('descripcion', e.target.value)} disabled={!isEditing} className={`${disabledInput} resize-none`} rows={3} required />
           </Field>
         </SectionBlock>
 
         <SectionBlock title={t('anorm.section.responsabilidad')}>
           <Field label={t('anorm.field.detectadoPor')}>
-            <select value={form.detectado_por_id} onChange={e => set('detectado_por_id', e.target.value)} className={sel}>
+            <select value={form.detectado_por_id} onChange={e => set('detectado_por_id', e.target.value)} disabled={!isEditing} className={disabledInput}>
               <option value="">{t('common.select')}</option>
               {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre_completo}</option>)}
             </select>
           </Field>
           <Field label={t('anorm.field.origen')}>
-            <select value={form.origen_responsabilidad} onChange={e => set('origen_responsabilidad', e.target.value)} className={sel}>
+            <select value={form.origen_responsabilidad} onChange={e => set('origen_responsabilidad', e.target.value)} disabled={!isEditing} className={disabledInput}>
               <option value="">{t('common.select')}</option>
               {origenes.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
           </Field>
           <Field label={t('anorm.field.responsableAsignado')} span={2}>
-            <select value={form.responsable_id} onChange={e => set('responsable_id', e.target.value)} className={sel}>
+            <select value={form.responsable_id} onChange={e => set('responsable_id', e.target.value)} disabled={!isEditing} className={disabledInput}>
               <option value="">{t('anorm.field.sinAsignar')}</option>
               {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre_completo}</option>)}
             </select>
@@ -766,10 +776,17 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
 
         <div className="flex justify-end gap-3 pt-2 border-t border-warm-100">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
-          <button type="submit" disabled={loading} className="btn-primary text-sm flex items-center gap-2">
-            {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-            {t('common.save')}
-          </button>
+          {!isEditing && !isCreateMode ? (
+            <button type="button" onClick={() => setIsEditing(true)} className="btn-accent text-sm inline-flex items-center gap-2">
+              <Edit3 className="w-3.5 h-3.5" />
+              {t('common.edit')}
+            </button>
+          ) : (
+            <button type="submit" disabled={loading} className="btn-primary text-sm flex items-center gap-2">
+              {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              {t('common.save')}
+            </button>
+          )}
         </div>
       </form>
     </Modal>

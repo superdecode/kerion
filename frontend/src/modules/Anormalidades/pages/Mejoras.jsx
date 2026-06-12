@@ -500,7 +500,7 @@ function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubm
         <div className="flex justify-end gap-3 pt-2 border-t border-warm-100">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
           {!isEditing && !isCreateMode ? (
-            <button type="button" onClick={() => setIsEditing(true)} className="btn-primary text-sm flex items-center gap-2">
+            <button type="button" onClick={() => setIsEditing(true)} className="btn-accent text-sm flex items-center gap-2">
               <Edit3 className="w-3.5 h-3.5" />
               {t('common.edit')}
             </button>
