@@ -48,6 +48,7 @@ export default function AnormMejoras() {
   const { t } = useI18nStore()
   const qc = useQueryClient()
 
+  const canCreate = hasPermission('anormalidades.mejoras', 'crear')
   const canUpdate = hasPermission('anormalidades.mejoras', 'actualizar')
 
   const [page, setPage] = useState(1)
@@ -186,7 +187,7 @@ export default function AnormMejoras() {
             >
               {t('anorm.mejoras.withoutLinks')}
             </button>
-            {canUpdate && (
+            {canCreate && (
               <button onClick={() => setCreateOpen(true)} className="btn-primary flex items-center gap-1.5 text-xs ml-auto">
                 <Plus className="w-3.5 h-3.5" />
                 {t('anorm.mejoras.nueva')}

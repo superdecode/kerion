@@ -404,13 +404,15 @@ export default function Inventario() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={exportInventario}
-                    title="Exportar CSV"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" /> {t('dev.inventario.exportar')}
-                  </button>
+                  {canManage && (
+                    <button
+                      onClick={exportInventario}
+                      title="Exportar CSV"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" /> {t('dev.inventario.exportar')}
+                    </button>
+                  )}
 
                   {canManage && (
                     <button
@@ -474,15 +476,17 @@ export default function Inventario() {
                     30 días
                   </button>
 
-                  <div className="ml-auto flex items-center gap-2">
-                    <button
-                      onClick={exportHistorial}
-                      title="Exportar CSV"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors"
-                    >
-                      <Download className="w-3.5 h-3.5" /> {t('dev.inventario.exportar')}
-                    </button>
-                  </div>
+                  {canManage && (
+                    <div className="ml-auto flex items-center gap-2">
+                      <button
+                        onClick={exportHistorial}
+                        title="Exportar CSV"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" /> {t('dev.inventario.exportar')}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">

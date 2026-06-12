@@ -11,6 +11,7 @@ import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { useAuthStore } from '../../../core/stores/authStore'
 import {
   getCodigos, createCodigo, updateCodigo, deleteCodigo,
   getProcesosConfig, createProcesoConfig, updateProcesoConfig, deleteProcesoConfig,
@@ -48,8 +49,13 @@ function getNivelMeta(prioridad) {
 export default function AnormConfiguracion() {
   const toast = useToastStore()
   const { t } = useI18nStore()
+  const { hasPermission } = useAuthStore()
   const qc = useQueryClient()
   const [tab, setTab] = useState('niveles')
+
+  const canCreate = hasPermission('anormalidades.configuracion', 'crear')
+  const canUpdate = hasPermission('anormalidades.configuracion', 'actualizar')
+  const canDelete = hasPermission('anormalidades.configuracion', 'eliminar')
   const [procesoFilter, setProcesoFilter] = useState('')
   const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
 
@@ -181,6 +187,9 @@ export default function AnormConfiguracion() {
               emptyLabel={t('anorm.config.emptyProcesos')}
               createLabel={t('anorm.config.nuevoProceso')}
               inp={inp}
+              canCreate={canCreate}
+              canUpdate={canUpdate}
+              canDelete={canDelete}
               onCreate={data => createProcesoMut.mutate(data)}
               onUpdate={(id, data) => updateProcesoMut.mutate({ id, data })}
               onDelete={id => deleteProcesoMut.mutate(id)}
@@ -200,6 +209,9 @@ export default function AnormConfiguracion() {
               emptyLabel={t('anorm.config.emptyOrigenes')}
               createLabel={t('anorm.config.nuevoOrigen')}
               inp={inp}
+              canCreate={canCreate}
+              canUpdate={canUpdate}
+              canDelete={canDelete}
               onCreate={data => createOrigenMut.mutate(data)}
               onUpdate={(id, data) => updateOrigenMut.mutate({ id, data })}
               onDelete={id => deleteOrigenMut.mutate(id)}
@@ -213,6 +225,9 @@ export default function AnormConfiguracion() {
               inp={inp}
               niveles={niveles}
               loading={loadingNiveles}
+              canCreate={canCreate}
+              canUpdate={canUpdate}
+              canDelete={canDelete}
               onCreate={data => createNivelMut.mutate(data)}
               onUpdate={(codigo, data) => updateNivelMut.mutate({ codigo, data })}
               onDelete={codigo => deleteNivelMut.mutate(codigo)}
@@ -229,6 +244,9 @@ export default function AnormConfiguracion() {
               procesoFilter={procesoFilter}
               setProcesoFilter={setProcesoFilter}
               loading={loadingCodigos}
+              canCreate={canCreate}
+              canUpdate={canUpdate}
+              canDelete={canDelete}
               onCreate={data => createCodigoMut.mutate(data)}
               onUpdate={(id, data) => updateCodigoMut.mutate({ id, data })}
               onDelete={id => deleteCodigoMut.mutate(id)}
@@ -242,7 +260,7 @@ export default function AnormConfiguracion() {
   )
 }
 
-function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyLabel, createLabel, inp, onCreate, onUpdate, onDelete, onToggle, busy, tipo }) {
+function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyLabel, createLabel, inp, onCreate, onUpdate, onDelete, onToggle, busy, tipo, canCreate, canUpdate, canDelete }) {
   const { t } = useI18nStore()
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
@@ -278,10 +296,12 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
                 <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-warm-400" />
                 <input value={search} onChange={e => setSearch(e.target.value)} className={`${inp} pl-10`} placeholder={t('common.search')} />
               </div>
-              <button onClick={() => setCreateOpen(true)} className="btn-primary inline-flex items-center gap-2 text-sm">
-                <Plus className="w-4 h-4" />
-                {createLabel}
-              </button>
+              {canCreate && (
+                <button onClick={() => setCreateOpen(true)} className="btn-primary inline-flex items-center gap-2 text-sm">
+                  <Plus className="w-4 h-4" />
+                  {createLabel}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -305,7 +325,7 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
                         <p className="mt-0.5 font-mono text-[11px] text-primary-700">{item.codigo}</p>
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0">
-                        {onToggle && (
+                        {onToggle && canUpdate && (
                           <button
                             onClick={() => onToggle(item)}
                             className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
@@ -314,20 +334,24 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
                             {item.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
                           </button>
                         )}
-                        <button
-                          onClick={() => setEditItem(item)}
-                          className="p-1.5 rounded-lg hover:bg-accent-50 text-warm-400 hover:text-accent-600 transition-colors"
-                          title={t('common.edit')}
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteItem(item)}
-                          className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
-                          title={t('common.delete')}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canUpdate && (
+                          <button
+                            onClick={() => setEditItem(item)}
+                            className="p-1.5 rounded-lg hover:bg-accent-50 text-warm-400 hover:text-accent-600 transition-colors"
+                            title={t('common.edit')}
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => setDeleteItem(item)}
+                            className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-end justify-between gap-3 mt-1">
@@ -381,7 +405,7 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
   )
 }
 
-function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilter, loading, onCreate, onUpdate, onDelete, busy, inp }) {
+function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilter, loading, onCreate, onUpdate, onDelete, busy, inp, canCreate, canUpdate, canDelete }) {
   const { t } = useI18nStore()
   const [createOpen, setCreateOpen] = useState(false)
   const [editCodigo, setEditCodigo] = useState(null)
@@ -444,10 +468,12 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
               <Search className="absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-warm-400" />
               <input value={search} onChange={e => setSearch(e.target.value)} className={`${inp} pl-10`} placeholder={t('common.search')} />
             </div>
-            <button onClick={() => setCreateOpen(true)} className="btn-primary inline-flex items-center gap-2 text-sm" disabled={!procesos.length}>
-              <Plus className="w-4 h-4" />
-              {t('anorm.config.nuevoCodigo')}
-            </button>
+            {canCreate && (
+              <button onClick={() => setCreateOpen(true)} className="btn-primary inline-flex items-center gap-2 text-sm" disabled={!procesos.length}>
+                <Plus className="w-4 h-4" />
+                {t('anorm.config.nuevoCodigo')}
+              </button>
+            )}
           </div>
         </div>
 
@@ -505,32 +531,38 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => onUpdate(c.id, { activo: !c.activo })}
-                          className={`p-1.5 rounded-lg transition-colors ${
-                            c.activo
-                              ? 'text-success-500 hover:bg-success-50'
-                              : 'text-warm-400 hover:bg-warm-100'
-                          }`}
-                          title={c.activo ? t('config.deactivate') : t('config.activate')}
-                        >
-                          {c.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                        </button>
-                        <button onClick={() => setEditCodigo(c)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors">
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => !c.es_default && setDeleteCod(c)}
-                          className={`p-1.5 rounded-lg transition-colors ${
-                            c.es_default
-                              ? 'text-warm-200 cursor-not-allowed'
-                              : 'hover:bg-danger-100 text-warm-400 hover:text-danger-600'
-                          }`}
-                          title={c.es_default ? 'Código base no eliminable' : t('common.delete')}
-                          disabled={c.es_default}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canUpdate && (
+                          <button
+                            onClick={() => onUpdate(c.id, { activo: !c.activo })}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              c.activo
+                                ? 'text-success-500 hover:bg-success-50'
+                                : 'text-warm-400 hover:bg-warm-100'
+                            }`}
+                            title={c.activo ? t('config.deactivate') : t('config.activate')}
+                          >
+                            {c.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                          </button>
+                        )}
+                        {canUpdate && (
+                          <button onClick={() => setEditCodigo(c)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors">
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => !c.es_default && setDeleteCod(c)}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              c.es_default
+                                ? 'text-warm-200 cursor-not-allowed'
+                                : 'hover:bg-danger-100 text-warm-400 hover:text-danger-600'
+                            }`}
+                            title={c.es_default ? 'Código base no eliminable' : t('common.delete')}
+                            disabled={c.es_default}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -577,7 +609,7 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
   )
 }
 
-function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp }) {
+function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp, canCreate, canUpdate, canDelete }) {
   const { t } = useI18nStore()
   const [createOpen, setCreateOpen] = useState(false)
   const [editNivel, setEditNivel] = useState(null)
@@ -591,10 +623,12 @@ function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp 
             <h2 className="text-lg font-semibold text-warm-900">{t('anorm.config.nivelesTitle')}</h2>
             <p className="mt-1 text-sm text-warm-500">{t('anorm.config.nivelesSubtitle')}</p>
           </div>
-          <button onClick={() => setCreateOpen(true)} className="btn-primary inline-flex items-center gap-2 text-sm">
-            <Plus className="w-4 h-4" />
-            {t('anorm.config.nuevoNivel')}
-          </button>
+          {canCreate && (
+            <button onClick={() => setCreateOpen(true)} className="btn-primary inline-flex items-center gap-2 text-sm">
+              <Plus className="w-4 h-4" />
+              {t('anorm.config.nuevoNivel')}
+            </button>
+          )}
         </div>
       </div>
 
@@ -618,27 +652,33 @@ function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp 
                         <p className="mt-0.5 font-mono text-[11px] text-primary-700">{nivel.codigo}</p>
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0">
-                        <button
-                          onClick={() => onUpdate(nivel.codigo, { ...nivel, activo: !nivel.activo })}
-                          className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
-                          title={nivel.activo ? t('config.deactivate') : t('config.activate')}
-                        >
-                          {nivel.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                        </button>
-                        <button
-                          onClick={() => setEditNivel(nivel)}
-                          className="p-1.5 rounded-lg hover:bg-accent-50 text-warm-400 hover:text-accent-600 transition-colors"
-                          title={t('common.edit')}
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteNivel(nivel)}
-                          className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
-                          title={t('common.delete')}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canUpdate && (
+                          <button
+                            onClick={() => onUpdate(nivel.codigo, { ...nivel, activo: !nivel.activo })}
+                            className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
+                            title={nivel.activo ? t('config.deactivate') : t('config.activate')}
+                          >
+                            {nivel.activo ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                          </button>
+                        )}
+                        {canUpdate && (
+                          <button
+                            onClick={() => setEditNivel(nivel)}
+                            className="p-1.5 rounded-lg hover:bg-accent-50 text-warm-400 hover:text-accent-600 transition-colors"
+                            title={t('common.edit')}
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => setDeleteNivel(nivel)}
+                            className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="mt-2 space-y-1 text-sm text-warm-600 mb-4">

@@ -398,8 +398,8 @@ export default function OrdenDetalle() {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
-  const { user } = useAuthStore()
-  const isAdmin = user?.rol_nombre === 'Administrador'
+  const { hasPermission } = useAuthStore()
+  const canForceValidate = hasPermission('surtido.ordenes', 'eliminar')
 
   const [copied, setCopied] = useState(false)
   const [showAssign, setShowAssign] = useState(false)
@@ -560,7 +560,7 @@ export default function OrdenDetalle() {
                 {t('surtido.ordenes.validate_btn')}
               </button>
             )}
-            {isAdmin && !isClosedOrder && (
+            {canForceValidate && !isClosedOrder && (
               <button
                 className="btn-ghost text-sm flex items-center gap-1.5 text-danger-600 border-danger-200 hover:bg-danger-50"
                 onClick={() => { setShowForceValidate(true); setForceReason('') }}>

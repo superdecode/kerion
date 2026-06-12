@@ -43,6 +43,7 @@ function KanbanCard({ orden }) {
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
     opacity: isDragging ? 0.35 : 1,
+    zIndex: isDragging ? 1000 : 'auto',
   } : {}
 
   const borderCls = CARD_BORDER[orden.estado] || CARD_BORDER.cancelada
@@ -51,7 +52,7 @@ function KanbanCard({ orden }) {
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white/90 rounded-xl border p-3 shadow-sm transition-all ${isDragging ? 'scale-[1.02] rotate-[0.3deg] shadow-lg' : ''} ${borderCls}`}
+      className={`bg-white/90 rounded-xl border p-3 shadow-sm transition-all ${isDragging ? 'scale-[1.02] rotate-[0.3deg] shadow-2xl cursor-grabbing' : 'cursor-grab'} ${borderCls}`}
     >
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <div className="flex items-start gap-2 min-w-0">
@@ -100,7 +101,7 @@ function getInitials(name) {
 
 function KanbanColumn({ column, ordenes }) {
   const { t } = useI18nStore()
-  const { setNodeRef, isOver } = useDroppable({ id: column.id })
+  const { setNodeRef, isOver, active } = useDroppable({ id: column.id })
 
   return (
     <div className="flex-1 min-w-[200px] max-w-[280px]">
@@ -121,11 +122,20 @@ function KanbanColumn({ column, ordenes }) {
       </div>
       <div
         ref={setNodeRef}
-        className={`min-h-[120px] rounded-xl p-2 flex flex-col gap-2 transition-all
+        className={`min-h-[120px] rounded-xl p-2 flex flex-col gap-2 transition-all relative
           ${isOver
             ? 'bg-primary-50 border-2 border-dashed border-primary-300 shadow-inner'
             : 'bg-gradient-to-b from-warm-50/70 to-white/40 border border-warm-200/70'}`}
       >
+        {/* Visual drop indicators when dragging over */}
+        {active && isOver && (
+          <div className="absolute inset-0 flex items-center justify-center gap-3 pointer-events-none">
+            <span className="w-2 h-2 rounded-full bg-primary-400 opacity-60" />
+            <span className="w-2 h-2 rounded-full bg-primary-400 opacity-60" />
+            <span className="w-2 h-2 rounded-full bg-primary-400 opacity-60" />
+          </div>
+        )}
+
         {ordenes.map(o => <KanbanCard key={o.id} orden={o} />)}
         {ordenes.length === 0 && (
           <div className="flex-1 flex items-center justify-center text-xs text-warm-300 py-6">
