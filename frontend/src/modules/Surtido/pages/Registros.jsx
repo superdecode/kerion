@@ -125,16 +125,16 @@ function ScanTable({ events, showType = false, t, editable = false, editingId, e
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-1">
                     {editingId === e.id ? (
-                      <button className="rounded-lg bg-primary-600 px-2 py-1 text-[10px] font-semibold text-white" onClick={() => onSaveEdit(e)}>
-                        Guardar
+                      <button className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 hover:text-primary-700 transition-colors" onClick={() => onSaveEdit(e)} title="Guardar">
+                        <CheckCircle2 className="w-4 h-4" />
                       </button>
                     ) : (
-                      <button className="rounded-lg bg-warm-100 px-2 py-1 text-[10px] font-semibold text-warm-700" onClick={() => onStartEdit(e)}>
-                        Editar
+                      <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => onStartEdit(e)} title="Editar">
+                        <Edit3 className="w-4 h-4" />
                       </button>
                     )}
-                    <button className="rounded-lg bg-danger-50 px-2 py-1 text-[10px] font-semibold text-danger-700" onClick={() => onDelete(e)}>
-                      Eliminar
+                    <button className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors" onClick={() => onDelete(e)} title="Eliminar">
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </td>
@@ -152,6 +152,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const [detailTab, setDetailTab] = useState('validados')
+  const [isReadOnly, setIsReadOnly] = useState(true)
   const [editingId, setEditingId] = useState(null)
   const [editingCode, setEditingCode] = useState('')
   const [newCode, setNewCode] = useState('')
@@ -267,6 +268,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
 
   useEffect(() => {
     setDetailTab(initialTab)
+    setIsReadOnly(true)
     setEditingId(null)
     setEditingCode('')
   }, [initialTab, isOpen])
@@ -324,7 +326,17 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
         </button>
       )}
       footer={
-        <div className="flex justify-end">
+        <div className="flex justify-between items-center">
+          <div>
+            {!isLoading && isReadOnly && (canEdit || canDelete) && (
+              <button
+                onClick={() => setIsReadOnly(false)}
+                className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors"
+                title={t('common.edit')}>
+                <Edit3 className="w-5 h-5" />
+              </button>
+            )}
+          </div>
           <button className="btn-secondary" onClick={handleClose}>{t('common.close')}</button>
         </div>
       }
@@ -430,15 +442,15 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
               <ScanTable
                 events={validados}
                 t={t}
-                editable={editableSession && canEdit}
+                editable={!isReadOnly && editableSession && canEdit}
                 editingId={editingId}
                 editingCode={editingCode}
                 onEditCodeChange={setEditingCode}
                 onStartEdit={(event) => { setEditingId(event.id); setEditingCode(event.normalized_code || event.scanned_code || '') }}
                 onSaveEdit={(event) => updateMut.mutate({ id: event.id, code: editingCode.trim() })}
-                onDelete={(event) => canDelete && deleteMut.mutate(event.id)}
+                onDelete={(event) => !isReadOnly && canDelete && deleteMut.mutate(event.id)}
               />
-              {editableSession && canEdit && (
+              {!isReadOnly && editableSession && canEdit && (
                 <div className="grid grid-cols-[minmax(0,1fr)_12rem_auto] gap-2 rounded-xl border border-warm-100 bg-warm-50/70 p-3">
                   <input
                     className="input-field text-sm font-mono"
@@ -462,13 +474,13 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
               events={rechazados}
               t={t}
               showType
-              editable={editableSession && canEdit}
+              editable={!isReadOnly && editableSession && canEdit}
               editingId={editingId}
               editingCode={editingCode}
               onEditCodeChange={setEditingCode}
               onStartEdit={(event) => { setEditingId(event.id); setEditingCode(event.normalized_code || event.scanned_code || '') }}
               onSaveEdit={(event) => updateMut.mutate({ id: event.id, code: editingCode.trim() })}
-              onDelete={(event) => canDelete && deleteMut.mutate(event.id)}
+              onDelete={(event) => !isReadOnly && canDelete && deleteMut.mutate(event.id)}
             />
           )}
           {detailTab === 'incidencias' && (

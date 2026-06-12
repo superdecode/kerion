@@ -435,8 +435,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
             {!isLoading && isReadOnly && (canEditScans || canDeleteScans) && (
               <button
                 onClick={() => setIsReadOnly(false)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-warning-50 text-warning-700 rounded-lg hover:bg-warning-100 font-semibold transition-all border border-warning-200">
-                <Edit3 className="w-3.5 h-3.5" /> {t('common.edit')}
+                className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors"
+                title={t('common.edit')}>
+                <Edit3 className="w-5 h-5" />
               </button>
             )}
           </div>
@@ -674,7 +675,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                               <div className="flex items-center gap-1">
                                 {canEditScans && editingScanId === sc.id ? (
                                   <button
-                                    className="rounded-lg bg-primary-600 px-2 py-1 text-[10px] font-semibold text-white"
+                                    className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 hover:text-primary-700 transition-colors"
                                     onClick={() => {
                                       const nextCode = editingCode.trim()
                                       if (!nextCode) return
@@ -685,17 +686,17 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                                         onAccept: () => updateScanMut.mutate({ id: sc.id, code: nextCode }),
                                       })
                                     }}
-                                  >
-                                    Guardar
+                                    title="Guardar">
+                                    <CheckCircle2 className="w-4 h-4" />
                                   </button>
                                 ) : canEditScans ? (
-                                  <button className="rounded-lg bg-warm-100 px-2 py-1 text-[10px] font-semibold text-warm-700" onClick={() => { setEditingScanId(sc.id); setEditingCode(sc.normalized_code || sc.scanned_code || '') }}>
-                                    Editar
+                                  <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => { setEditingScanId(sc.id); setEditingCode(sc.normalized_code || sc.scanned_code || '') }} title="Editar">
+                                    <Edit3 className="w-4 h-4" />
                                   </button>
                                 ) : null}
                                 {canDeleteScans && (
-                                  <button className="rounded-lg bg-danger-50 px-2 py-1 text-[10px] font-semibold text-danger-700" onClick={() => deleteScanMut.mutate(sc.id)}>
-                                    Eliminar
+                                  <button className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors" onClick={() => deleteScanMut.mutate(sc.id)} title="Eliminar">
+                                    <Trash2 className="w-4 h-4" />
                                   </button>
                                 )}
                               </div>

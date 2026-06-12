@@ -744,19 +744,18 @@ function NivelFormModal({ isOpen, onClose, title, initialData, onSubmit, loading
                 type="button"
                 onClick={onDelete}
                 disabled={loading}
-                className="btn-danger text-sm inline-flex items-center gap-2"
+                className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors"
+                title={t('common.delete')}
               >
-                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                {t('common.delete')}
+                {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
               </button>
             )}
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
             {!isEditing && !isCreateMode ? (
-              <button type="button" onClick={() => setIsEditing(true)} className="btn-accent text-sm inline-flex items-center gap-2">
-                <Edit3 className="w-3.5 h-3.5" />
-                {t('common.edit')}
+              <button type="button" onClick={() => setIsEditing(true)} className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" title={t('common.edit')}>
+                <Edit3 className="w-5 h-5" />
               </button>
             ) : (
               <button type="submit" disabled={loading} className="btn-primary text-sm inline-flex items-center gap-2">
@@ -841,19 +840,18 @@ function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, load
                 type="button"
                 onClick={onDelete}
                 disabled={loading}
-                className="btn-danger text-sm inline-flex items-center gap-2"
+                className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors"
+                title={t('common.delete')}
               >
-                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                {t('common.delete')}
+                {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
               </button>
             )}
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
             {!isEditing && !isCreateMode ? (
-              <button type="button" onClick={() => setIsEditing(true)} className="btn-accent text-sm inline-flex items-center gap-2">
-                <Edit3 className="w-3.5 h-3.5" />
-                {t('common.edit')}
+              <button type="button" onClick={() => setIsEditing(true)} className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" title={t('common.edit')}>
+                <Edit3 className="w-5 h-5" />
               </button>
             ) : (
               <button type="submit" disabled={loading} className="btn-primary text-sm inline-flex items-center gap-2">
@@ -929,19 +927,18 @@ function CodigoFormModal({ isOpen, onClose, title, initialData, onSubmit, loadin
                 type="button"
                 onClick={onDelete}
                 disabled={loading}
-                className="btn-danger text-sm inline-flex items-center gap-2"
+                className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors"
+                title={t('common.delete')}
               >
-                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                {t('common.delete')}
+                {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
               </button>
             )}
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
             {!isEditing && !isCreateMode ? (
-              <button type="button" onClick={() => setIsEditing(true)} className="btn-accent text-sm inline-flex items-center gap-2">
-                <Edit3 className="w-3.5 h-3.5" />
-                {t('common.edit')}
+              <button type="button" onClick={() => setIsEditing(true)} className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" title={t('common.edit')}>
+                <Edit3 className="w-5 h-5" />
               </button>
             ) : (
               <button type="submit" disabled={loading} className="btn-primary text-sm inline-flex items-center gap-2">
