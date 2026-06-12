@@ -265,7 +265,6 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const [deleteItem, setDeleteItem] = useState(null)
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -343,15 +342,6 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
                             <Edit3 className="w-4 h-4" />
                           </button>
                         )}
-                        {canDelete && (
-                          <button
-                            onClick={() => setDeleteItem(item)}
-                            className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
-                            title={t('common.delete')}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
                       </div>
                     </div>
                     <div className="flex items-end justify-between gap-3 mt-1">
@@ -380,27 +370,24 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
         tipo={tipo}
         onSubmit={data => { onCreate(data); setCreateOpen(false) }}
         loading={busy}
+        canDelete={canDelete}
+        onDelete={() => {}}
       />
 
       {editItem && (
         <CatalogoFormModal
           isOpen
           onClose={() => setEditItem(null)}
-          title={`${t('common.edit')} ${editItem.nombre}`}
+          title={editItem.nombre}
           initialData={editItem}
           inp={inp}
           tipo={tipo}
           onSubmit={data => { onUpdate(editItem.id, data); setEditItem(null) }}
           loading={busy}
+          canDelete={canDelete}
+          onDelete={() => { onDelete(editItem.id); setEditItem(null) }}
         />
       )}
-
-      <DeleteConfirmModal
-        item={deleteItem}
-        onClose={() => setDeleteItem(null)}
-        onConfirm={() => { onDelete(deleteItem.id); setDeleteItem(null) }}
-        loading={busy}
-      />
     </>
   )
 }
@@ -409,7 +396,6 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
   const { t } = useI18nStore()
   const [createOpen, setCreateOpen] = useState(false)
   const [editCodigo, setEditCodigo] = useState(null)
-  const [deleteCod, setDeleteCod] = useState(null)
   const [search, setSearch] = useState('')
   const [nivelFilter, setNivelFilter] = useState('')
   const [sortKey, setSortKey] = useState('codigo')
@@ -549,20 +535,7 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
                             <Edit3 className="w-4 h-4" />
                           </button>
                         )}
-                        {canDelete && (
-                          <button
-                            onClick={() => !c.es_default && setDeleteCod(c)}
-                            className={`p-1.5 rounded-lg transition-colors ${
-                              c.es_default
-                                ? 'text-warm-200 cursor-not-allowed'
-                                : 'hover:bg-danger-100 text-warm-400 hover:text-danger-600'
-                            }`}
-                            title={c.es_default ? 'Código base no eliminable' : t('common.delete')}
-                            disabled={c.es_default}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        {}
                       </div>
                     </td>
                   </tr>
@@ -582,29 +555,25 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
         onSubmit={data => { onCreate(data); setCreateOpen(false) }}
         loading={busy}
         inp={inp}
+        canDelete={canDelete}
+        onDelete={() => {}}
       />
 
       {editCodigo && (
         <CodigoFormModal
           isOpen
           onClose={() => setEditCodigo(null)}
-          title={`${t('common.edit')} ${editCodigo.codigo}`}
+          title={editCodigo.codigo}
           initialData={{ ...editCodigo }}
           procesos={procesos}
           niveles={niveles}
           onSubmit={data => { onUpdate(editCodigo.id, data); setEditCodigo(null) }}
           loading={busy}
           inp={inp}
+          canDelete={canDelete && !editCodigo.es_default}
+          onDelete={() => { onDelete(editCodigo.id); setEditCodigo(null) }}
         />
       )}
-
-      <DeleteConfirmModal
-        item={deleteCod}
-        onClose={() => setDeleteCod(null)}
-        onConfirm={() => { onDelete(deleteCod.id); setDeleteCod(null) }}
-        loading={busy}
-        warning={t('anorm.config.deleteCodigoWarning')}
-      />
     </>
   )
 }
@@ -613,7 +582,6 @@ function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp,
   const { t } = useI18nStore()
   const [createOpen, setCreateOpen] = useState(false)
   const [editNivel, setEditNivel] = useState(null)
-  const [deleteNivel, setDeleteNivel] = useState(null)
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -670,15 +638,6 @@ function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp,
                             <Edit3 className="w-4 h-4" />
                           </button>
                         )}
-                        {canDelete && (
-                          <button
-                            onClick={() => setDeleteNivel(nivel)}
-                            className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
-                            title={t('common.delete')}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
                       </div>
                     </div>
                     <div className="mt-2 space-y-1 text-sm text-warm-600 mb-4">
@@ -703,36 +662,43 @@ function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp,
         </div>
       )}
 
-      <NivelFormModal isOpen={createOpen} onClose={() => setCreateOpen(false)} title={t('anorm.config.nuevoNivel')} inp={inp} onSubmit={data => { onCreate(data); setCreateOpen(false) }} loading={busy} />
-      {editNivel && <NivelFormModal isOpen onClose={() => setEditNivel(null)} title={`${t('common.edit')} ${editNivel.codigo}`} initialData={editNivel} inp={inp} onSubmit={data => { onUpdate(editNivel.codigo, data); setEditNivel(null) }} loading={busy} />}
-      <DeleteConfirmModal item={deleteNivel} onClose={() => setDeleteNivel(null)} onConfirm={() => { onDelete(deleteNivel.codigo); setDeleteNivel(null) }} loading={busy} />
+      <NivelFormModal isOpen={createOpen} onClose={() => setCreateOpen(false)} title={t('anorm.config.nuevoNivel')} inp={inp} onSubmit={data => { onCreate(data); setCreateOpen(false) }} loading={busy} canDelete={canDelete} onDelete={() => {}} />
+      {editNivel && <NivelFormModal isOpen onClose={() => setEditNivel(null)} title={editNivel.codigo} initialData={editNivel} inp={inp} onSubmit={data => { onUpdate(editNivel.codigo, data); setEditNivel(null) }} loading={busy} canDelete={canDelete} onDelete={() => { onDelete(editNivel.codigo); setEditNivel(null) }} />}
     </div>
   )
 }
 
-function NivelFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp }) {
+function NivelFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, canDelete, onDelete }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData ? { ...initialData } : { ...NIVEL_EMPTY })
+  const [isEditing, setIsEditing] = useState(!initialData)
+  const isCreateMode = !initialData
 
   useEffect(() => {
     setForm(initialData ? { ...initialData } : { ...NIVEL_EMPTY })
-  }, [initialData])
+    setIsEditing(!initialData)
+  }, [initialData, isOpen])
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
   const isActive = form.activo !== false
 
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSubmit({ ...form, activo: isActive, prioridad: Number(form.prioridad || 1), horas_limite: Number(form.horas_limite || 24) })
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} icon={SlidersHorizontal} size="lg">
-      <form onSubmit={e => { e.preventDefault(); onSubmit({ ...form, activo: isActive, prioridad: Number(form.prioridad || 1), horas_limite: Number(form.horas_limite || 24) }) }} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-br from-white via-white to-primary-50/25 p-4 shadow-[0_18px_38px_-28px_rgba(15,23,42,0.28)]">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.codigo')} *</label>
-              <input value={form.codigo} onChange={e => set('codigo', e.target.value.toUpperCase())} className={inp} required />
+              <input value={form.codigo} onChange={e => set('codigo', e.target.value.toUpperCase())} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} required />
             </div>
             <div>
               <label className="block text-xs font-medium text-warm-700 mb-1">{t('common.name')} *</label>
-              <input value={form.nombre} onChange={e => set('nombre', e.target.value)} className={inp} required />
+              <input value={form.nombre} onChange={e => set('nombre', e.target.value)} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} required />
             </div>
           </div>
         </div>
@@ -740,72 +706,105 @@ function NivelFormModal({ isOpen, onClose, title, initialData, onSubmit, loading
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.config.prioridad')}</label>
-              <input type="number" min="1" value={form.prioridad} onChange={e => set('prioridad', e.target.value)} className={inp} />
+              <input type="number" min="1" value={form.prioridad} onChange={e => set('prioridad', e.target.value)} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} />
               <p className="mt-1 text-xs text-warm-500">Numero mas alto = mayor prioridad y mayor severidad.</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.config.horasLimite')}</label>
-              <input type="number" min="1" value={form.horas_limite} onChange={e => set('horas_limite', e.target.value)} className={inp} />
+              <input type="number" min="1" value={form.horas_limite} onChange={e => set('horas_limite', e.target.value)} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} />
             </div>
           </div>
         </div>
         <div className="rounded-2xl border border-warm-100/80 bg-white p-4 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.24)]">
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('common.description')}</label>
-          <textarea value={form.descripcion || ''} onChange={e => set('descripcion', e.target.value)} className={`${inp} resize-none`} rows={3} />
+          <textarea value={form.descripcion || ''} onChange={e => set('descripcion', e.target.value)} disabled={!isEditing} className={`${inp} resize-none disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} rows={3} />
         </div>
         <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-r from-white via-white to-success-50/40 p-4 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.24)]">
           <label className="block text-xs font-medium text-warm-700 mb-2">{t('common.status')}</label>
           <button
             type="button"
             onClick={() => set('activo', !isActive)}
+            disabled={!isEditing}
             className={`inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              isActive
-                ? 'bg-success-100 text-success-700 ring-1 ring-success-300 hover:bg-success-200'
-                : 'bg-warm-100 text-warm-500 ring-1 ring-warm-200 hover:bg-warm-200'
+              isEditing
+                ? isActive
+                  ? 'bg-success-100 text-success-700 ring-1 ring-success-300 hover:bg-success-200 cursor-pointer'
+                  : 'bg-warm-100 text-warm-500 ring-1 ring-warm-200 hover:bg-warm-200 cursor-pointer'
+                : 'opacity-60 cursor-not-allowed'
             }`}
           >
             {isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
             {isActive ? t('common.active') : t('common.inactive')}
           </button>
         </div>
-        <div className="flex justify-end gap-3 pt-3 border-t border-warm-100">
-          <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
-          <button type="submit" disabled={loading} className="btn-primary text-sm inline-flex items-center gap-2">
-            {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-            {t('common.save')}
-          </button>
+        <div className="flex justify-between gap-3 pt-3 border-t border-warm-100">
+          <div>
+            {isEditing && !isCreateMode && canDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={loading}
+                className="btn-danger text-sm inline-flex items-center gap-2"
+              >
+                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                {t('common.delete')}
+              </button>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
+            {!isEditing && !isCreateMode ? (
+              <button type="button" onClick={() => setIsEditing(true)} className="btn-primary text-sm inline-flex items-center gap-2">
+                <Edit3 className="w-3.5 h-3.5" />
+                {t('common.edit')}
+              </button>
+            ) : (
+              <button type="submit" disabled={loading} className="btn-primary text-sm inline-flex items-center gap-2">
+                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                {t('common.save')}
+              </button>
+            )}
+          </div>
         </div>
       </form>
     </Modal>
   )
 }
 
-function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, tipo }) {
+function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, tipo, canDelete, onDelete }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData ? { ...initialData } : { ...CATALOGO_EMPTY })
+  const [isEditing, setIsEditing] = useState(!initialData)
   const isProceso = tipo === 'proceso'
+  const isCreateMode = !initialData
 
   useEffect(() => {
     setForm(initialData ? { ...initialData } : { ...CATALOGO_EMPTY })
-  }, [initialData])
+    setIsEditing(!initialData)
+  }, [initialData, isOpen])
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
   const isActive = form.activo !== false
 
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSubmit({ ...form, activo: isActive })
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} icon={Settings} size="lg">
-      <form onSubmit={e => { e.preventDefault(); onSubmit({ ...form, activo: isActive }) }} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-br from-white via-white to-primary-50/25 p-4 shadow-[0_18px_38px_-28px_rgba(15,23,42,0.28)]">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-warm-400">General</p>
           <div className="mt-4 space-y-4">
             <div>
               <label className="block text-xs font-medium text-warm-700 mb-1">{t('common.name')} *</label>
-              <input value={form.nombre} onChange={e => set('nombre', e.target.value)} className={inp} required />
+              <input value={form.nombre} onChange={e => set('nombre', e.target.value)} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} required />
             </div>
             {isProceso && (
               <div>
                 <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.codigo')} *</label>
-                <input value={form.codigo} onChange={e => set('codigo', e.target.value.toUpperCase())} className={inp} required maxLength={24} />
+                <input value={form.codigo} onChange={e => set('codigo', e.target.value.toUpperCase())} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} required maxLength={24} />
               </div>
             )}
           </div>
@@ -813,7 +812,7 @@ function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, load
 
         <div className="rounded-2xl border border-warm-100/80 bg-white p-4 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.24)]">
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('common.description')}</label>
-          <textarea value={form.descripcion || ''} onChange={e => set('descripcion', e.target.value)} className={`${inp} resize-none`} rows={3} />
+          <textarea value={form.descripcion || ''} onChange={e => set('descripcion', e.target.value)} disabled={!isEditing} className={`${inp} resize-none disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} rows={3} />
         </div>
 
         <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-r from-white via-white to-success-50/40 p-4 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.24)]">
@@ -821,10 +820,13 @@ function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, load
           <button
             type="button"
             onClick={() => set('activo', !isActive)}
+            disabled={!isEditing}
             className={`inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              isActive
-                ? 'bg-success-100 text-success-700 ring-1 ring-success-300 hover:bg-success-200'
-                : 'bg-warm-100 text-warm-500 ring-1 ring-warm-200 hover:bg-warm-200'
+              isEditing
+                ? isActive
+                  ? 'bg-success-100 text-success-700 ring-1 ring-success-300 hover:bg-success-200 cursor-pointer'
+                  : 'bg-warm-100 text-warm-500 ring-1 ring-warm-200 hover:bg-warm-200 cursor-pointer'
+                : 'opacity-60 cursor-not-allowed'
             }`}
           >
             {isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
@@ -832,41 +834,71 @@ function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, load
           </button>
         </div>
 
-        <div className="flex justify-end gap-3 pt-3 border-t border-warm-100">
-          <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
-          <button type="submit" disabled={loading} className="btn-primary text-sm inline-flex items-center gap-2">
-            {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-            {t('common.save')}
-          </button>
+        <div className="flex justify-between gap-3 pt-3 border-t border-warm-100">
+          <div>
+            {isEditing && !isCreateMode && canDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={loading}
+                className="btn-danger text-sm inline-flex items-center gap-2"
+              >
+                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                {t('common.delete')}
+              </button>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
+            {!isEditing && !isCreateMode ? (
+              <button type="button" onClick={() => setIsEditing(true)} className="btn-primary text-sm inline-flex items-center gap-2">
+                <Edit3 className="w-3.5 h-3.5" />
+                {t('common.edit')}
+              </button>
+            ) : (
+              <button type="submit" disabled={loading} className="btn-primary text-sm inline-flex items-center gap-2">
+                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                {t('common.save')}
+              </button>
+            )}
+          </div>
         </div>
       </form>
     </Modal>
   )
 }
 
-function CodigoFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, procesos, niveles = [] }) {
+function CodigoFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, procesos, niveles = [], canDelete, onDelete }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData || { ...CODIGO_EMPTY })
+  const [isEditing, setIsEditing] = useState(!initialData)
+  const isCreateMode = !initialData
 
   useEffect(() => {
     setForm(initialData || { ...CODIGO_EMPTY })
-  }, [initialData])
+    setIsEditing(!initialData)
+  }, [initialData, isOpen])
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
 
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSubmit(form)
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} icon={Settings} size="lg">
-      <form onSubmit={e => { e.preventDefault(); onSubmit(form) }} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-br from-white via-white to-primary-50/25 p-4 shadow-[0_18px_38px_-28px_rgba(15,23,42,0.28)]">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-warm-400">General</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.codigo')} *</label>
-              <input value={form.codigo} onChange={e => set('codigo', e.target.value.toUpperCase())} className={inp} required maxLength={20} />
+              <input value={form.codigo} onChange={e => set('codigo', e.target.value.toUpperCase())} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} required maxLength={20} />
             </div>
             <div>
               <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.proceso')} *</label>
-              <select value={form.proceso} onChange={e => set('proceso', e.target.value)} className={inp} required>
+              <select value={form.proceso} onChange={e => set('proceso', e.target.value)} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} required>
                 <option value="">{t('common.select')}</option>
                 {procesos.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
               </select>
@@ -875,27 +907,49 @@ function CodigoFormModal({ isOpen, onClose, title, initialData, onSubmit, loadin
         </div>
         <div className="rounded-2xl border border-warm-100/80 bg-white p-4 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.24)]">
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('common.name')} *</label>
-          <input value={form.nombre || ''} onChange={e => set('nombre', e.target.value)} className={inp} required />
+          <input value={form.nombre || ''} onChange={e => set('nombre', e.target.value)} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} required />
         </div>
         <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-r from-white via-white to-accent-50/30 p-4 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.24)] space-y-4">
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.nivel')}</label>
-            <select value={form.nivel_sugerido} onChange={e => set('nivel_sugerido', e.target.value)} className={inp}>
+            <select value={form.nivel_sugerido} onChange={e => set('nivel_sugerido', e.target.value)} disabled={!isEditing} className={`${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`}>
               <option value="">{t('common.select')}</option>
               {niveles.map(n => <option key={n.codigo} value={n.codigo}>{n.nombre}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('common.description')}</label>
-            <textarea value={form.descripcion || ''} onChange={e => set('descripcion', e.target.value)} className={`${inp} resize-none`} rows={2} />
+            <textarea value={form.descripcion || ''} onChange={e => set('descripcion', e.target.value)} disabled={!isEditing} className={`${inp} resize-none disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`} rows={2} />
           </div>
         </div>
-        <div className="flex justify-end gap-3 pt-3 border-t border-warm-100">
-          <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
-          <button type="submit" disabled={loading} className="btn-primary text-sm inline-flex items-center gap-2">
-            {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-            {t('common.save')}
-          </button>
+        <div className="flex justify-between gap-3 pt-3 border-t border-warm-100">
+          <div>
+            {isEditing && !isCreateMode && canDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={loading}
+                className="btn-danger text-sm inline-flex items-center gap-2"
+              >
+                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                {t('common.delete')}
+              </button>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
+            {!isEditing && !isCreateMode ? (
+              <button type="button" onClick={() => setIsEditing(true)} className="btn-primary text-sm inline-flex items-center gap-2">
+                <Edit3 className="w-3.5 h-3.5" />
+                {t('common.edit')}
+              </button>
+            ) : (
+              <button type="submit" disabled={loading} className="btn-primary text-sm inline-flex items-center gap-2">
+                {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                {t('common.save')}
+              </button>
+            )}
+          </div>
         </div>
       </form>
     </Modal>

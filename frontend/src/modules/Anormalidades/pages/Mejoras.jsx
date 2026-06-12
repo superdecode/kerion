@@ -418,27 +418,37 @@ function InfoRow({ label, value }) {
 function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubmit, loading, title, initialData }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData || { ...FORM_EMPTY })
+  const [isEditing, setIsEditing] = useState(!initialData)
+  const isCreateMode = !initialData
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
 
   useEffect(() => {
     setForm(initialData || { ...FORM_EMPTY })
+    setIsEditing(!initialData)
   }, [initialData, isOpen])
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSubmit(form)
+  }
+
+  const disabledInput = `${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} icon={Target} size="lg">
-      <form onSubmit={e => { e.preventDefault(); onSubmit(form) }} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.proceso')} *</label>
-            <select value={form.proceso} onChange={e => set('proceso', e.target.value)} className={inp} required>
+            <select value={form.proceso} onChange={e => set('proceso', e.target.value)} disabled={!isEditing} className={disabledInput} required>
               <option value="">{t('common.select')}</option>
               {procesos.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.origen')}</label>
-            <select value={form.origen} onChange={e => set('origen', e.target.value)} className={inp}>
+            <select value={form.origen} onChange={e => set('origen', e.target.value)} disabled={!isEditing} className={disabledInput}>
               <option value="">{t('common.select')}</option>
               {origenes.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
@@ -446,37 +456,37 @@ function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubm
         </div>
         <div>
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.problema')} *</label>
-          <textarea value={form.descripcion_problema} onChange={e => set('descripcion_problema', e.target.value)} className={`${inp} resize-none`} rows={3} required />
+          <textarea value={form.descripcion_problema} onChange={e => set('descripcion_problema', e.target.value)} disabled={!isEditing} className={`${disabledInput} resize-none`} rows={3} required />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.ocurrencias')}</label>
-            <input type="number" min="1" value={form.ocurrencias} onChange={e => set('ocurrencias', e.target.value)} className={inp} />
+            <input type="number" min="1" value={form.ocurrencias} onChange={e => set('ocurrencias', e.target.value)} disabled={!isEditing} className={disabledInput} />
           </div>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.fechaLimite')}</label>
-            <input type="date" value={form.fecha_limite} onChange={e => set('fecha_limite', e.target.value)} className={inp} />
+            <input type="date" value={form.fecha_limite} onChange={e => set('fecha_limite', e.target.value)} disabled={!isEditing} className={disabledInput} />
           </div>
         </div>
         <div>
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.causaRaiz')}</label>
-          <textarea value={form.causa_raiz_principal} onChange={e => set('causa_raiz_principal', e.target.value)} className={`${inp} resize-none`} rows={2} />
+          <textarea value={form.causa_raiz_principal} onChange={e => set('causa_raiz_principal', e.target.value)} disabled={!isEditing} className={`${disabledInput} resize-none`} rows={2} />
         </div>
         <div>
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.accion')} *</label>
-          <textarea value={form.accion_mejora} onChange={e => set('accion_mejora', e.target.value)} className={`${inp} resize-none`} rows={3} required />
+          <textarea value={form.accion_mejora} onChange={e => set('accion_mejora', e.target.value)} disabled={!isEditing} className={`${disabledInput} resize-none`} rows={3} required />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.responsable')}</label>
-            <select value={form.responsable_id} onChange={e => set('responsable_id', e.target.value)} className={inp}>
+            <select value={form.responsable_id} onChange={e => set('responsable_id', e.target.value)} disabled={!isEditing} className={disabledInput}>
               <option value="">{t('anorm.field.sinAsignar')}</option>
               {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre_completo}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('common.status')}</label>
-            <select value={form.estado} onChange={e => set('estado', e.target.value)} className={inp}>
+            <select value={form.estado} onChange={e => set('estado', e.target.value)} disabled={!isEditing} className={disabledInput}>
               {['nuevo', 'en_proceso', 'cerrado'].map(e => <option key={e} value={e}>{t(ESTADO_META[e]?.labelKey || e)}</option>)}
             </select>
           </div>
@@ -484,15 +494,22 @@ function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubm
         {form.estado === 'cerrado' && (
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.resultado')}</label>
-            <textarea value={form.resultado_revision} onChange={e => set('resultado_revision', e.target.value)} className={`${inp} resize-none`} rows={2} />
+            <textarea value={form.resultado_revision} onChange={e => set('resultado_revision', e.target.value)} disabled={!isEditing} className={`${disabledInput} resize-none`} rows={2} />
           </div>
         )}
         <div className="flex justify-end gap-3 pt-2 border-t border-warm-100">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
-          <button type="submit" disabled={loading} className="btn-primary text-sm flex items-center gap-2">
-            {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-            {t('common.save')}
-          </button>
+          {!isEditing && !isCreateMode ? (
+            <button type="button" onClick={() => setIsEditing(true)} className="btn-primary text-sm flex items-center gap-2">
+              <Edit3 className="w-3.5 h-3.5" />
+              {t('common.edit')}
+            </button>
+          ) : (
+            <button type="submit" disabled={loading} className="btn-primary text-sm flex items-center gap-2">
+              {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              {t('common.save')}
+            </button>
+          )}
         </div>
       </form>
     </Modal>
