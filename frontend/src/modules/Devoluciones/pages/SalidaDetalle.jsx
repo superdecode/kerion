@@ -28,6 +28,10 @@ const ESTADO_COLORS = {
   completado: 'bg-success-100 text-success-700',
   cancelado:  'bg-danger-100 text-danger-600',
 }
+const ESTADO_LABELS = {
+  borrador: 'Borrador', pendiente: 'Pendiente', en_proceso: 'En proceso',
+  completado: 'Completado', cancelado: 'Cancelado',
+}
 // Columns that participate in grouping key (identifying fields)
 const PRINT_EXTRA_COLS = [
   { id: 'descripcion', label: 'Descripción',       field: 'descripcion',          isKey: true },
