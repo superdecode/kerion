@@ -81,10 +81,10 @@ export default function Header({ title, subtitle, actions, showSearch = false })
     setSavingProfile(true)
     try {
       await updateProfile(profileDraft)
-      useToastStore.getState().success('Perfil actualizado')
+      useToastStore.getState().success(t('profile.updated'))
       setEditingName(false)
     } catch (err) {
-      useToastStore.getState().error(err?.response?.data?.error || 'Error actualizando perfil')
+      useToastStore.getState().error(err?.response?.data?.error || t('profile.updateError'))
     } finally {
       setSavingProfile(false)
     }
@@ -177,7 +177,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
           <AnimatePresence>
           {userMenuOpen && (
             <motion.div
-              className="absolute right-0 top-full mt-2 w-72 bg-white/95 backdrop-blur-xl rounded-2xl shadow-depth border border-white/60 overflow-hidden z-50"
+              className="absolute right-0 top-full mt-2 w-72 bg-white/95 backdrop-blur-xl rounded-2xl shadow-depth border border-white/60 overflow-hidden z-[140]"
               initial={{ opacity: 0, scale: 0.95, y: -5 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -5 }}

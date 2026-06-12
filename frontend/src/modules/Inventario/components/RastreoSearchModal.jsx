@@ -6,8 +6,23 @@ import {
 } from 'lucide-react'
 import CopyableCell from '../../../core/components/common/CopyableCell'
 import { buscarCaja } from '../../../core/services/rastreoService'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getInventoryList, getOutboundList } from '../../WmsHub/services/googleSheetsService'
 import { normalizeCodeFast, extractBaseCode } from '../../Shared/Wms/normalizeCode'
+
+const BOX_STATUS_LABELS = {
+  pendiente: 'rastreo.caja.pendiente',
+  localizada: 'rastreo.caja.localizada',
+  no_encontrada: 'rastreo.caja.no_encontrada',
+  cancelada: 'rastreo.caja.cancelada',
+}
+
+const ORDER_STATUS_LABELS = {
+  abierta: 'rastreo.estado.abierta',
+  en_proceso: 'rastreo.estado.en_proceso',
+  completada: 'rastreo.estado.completada',
+  cancelada: 'rastreo.estado.cancelada',
+}
 
 function SectionHeader({ icon: Icon, title, count, color, open, onToggle }) {
   return (
@@ -30,11 +45,12 @@ function SectionHeader({ icon: Icon, title, count, color, open, onToggle }) {
 }
 
 function InventarioSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
   return (
     <div>
       <SectionHeader
         icon={Package}
-        title="BD Stock — Inventario Actual"
+        title={t('rastreo.searchModal.section.invActual')}
         count={records?.length}
         color={{ border: 'border-primary-200', bg: 'bg-primary-50/50', icon: 'bg-primary-100 text-primary-600', badge: 'bg-primary-100 text-primary-700' }}
         open={open}
@@ -50,12 +66,12 @@ function InventarioSection({ records, open, onToggle }) {
           >
             <div className="mt-2 rounded-xl border border-primary-100 overflow-hidden">
               {!records?.length ? (
-                <p className="px-4 py-3 text-xs text-warm-400">Sin coincidencias en inventario actual</p>
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.invActual')}</p>
               ) : (
                 <table className="w-full text-xs">
                   <thead className="bg-primary-50/60 border-b border-primary-100">
                     <tr>
-                      {['Código Caja', 'Ubicación', 'Disponible', 'Bloqueado', 'Producto', 'Estado'].map(h => (
+                      {[t('rastreo.searchModal.col.codigoCaja'), t('rastreo.searchModal.col.ubicacion'), t('rastreo.searchModal.col.disponible'), t('rastreo.searchModal.col.bloqueado'), t('rastreo.searchModal.col.producto'), t('common.status')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-primary-600 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -92,11 +108,12 @@ function InventarioSection({ records, open, onToggle }) {
 }
 
 function SurtidoSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
   return (
     <div>
       <SectionHeader
         icon={ShoppingCart}
-        title="OBC BD — Órdenes de Salida"
+        title={t('rastreo.searchModal.section.ordenesSalida')}
         count={records?.length}
         color={{ border: 'border-accent-200', bg: 'bg-accent-50/50', icon: 'bg-accent-100 text-accent-600', badge: 'bg-accent-100 text-accent-700' }}
         open={open}
@@ -112,12 +129,12 @@ function SurtidoSection({ records, open, onToggle }) {
           >
             <div className="mt-2 rounded-xl border border-accent-100 overflow-hidden">
               {!records?.length ? (
-                <p className="px-4 py-3 text-xs text-warm-400">Sin coincidencias en órdenes de salida</p>
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.ordenesSalida')}</p>
               ) : (
                 <table className="w-full text-xs">
                   <thead className="bg-accent-50/60 border-b border-accent-100">
                     <tr>
-                      {['Código Caja', 'Número Orden', 'Destinatario', 'Fecha Entrega', 'Referencia', 'Servicio'].map(h => (
+                      {[t('rastreo.searchModal.col.codigoCaja'), t('rastreo.searchModal.col.numeroOrden'), t('rastreo.searchModal.col.destinatario'), t('rastreo.searchModal.col.fechaEntrega'), t('rastreo.searchModal.col.referencia'), t('rastreo.searchModal.col.servicio')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-accent-600 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -153,11 +170,12 @@ function SurtidoSection({ records, open, onToggle }) {
 }
 
 function EscaneoSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
   return (
     <div>
       <SectionHeader
         icon={BarChart2}
-        title="Inventario Escaneo — Movimientos"
+        title={t('rastreo.searchModal.section.invEscaneo')}
         count={records?.length}
         color={{ border: 'border-warning-200', bg: 'bg-warning-50/50', icon: 'bg-warning-100 text-warning-600', badge: 'bg-warning-100 text-warning-700' }}
         open={open}
@@ -173,12 +191,12 @@ function EscaneoSection({ records, open, onToggle }) {
           >
             <div className="mt-2 rounded-xl border border-warning-100 overflow-hidden">
               {!records?.length ? (
-                <p className="px-4 py-3 text-xs text-warm-400">Sin movimientos de escaneo registrados</p>
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.invEscaneo')}</p>
               ) : (
                 <table className="w-full text-xs">
                   <thead className="bg-warning-50/60 border-b border-warning-100">
                     <tr>
-                      {['Código', 'Ubicación', 'Estado', 'Operador', 'Fecha'].map(h => (
+                      {[t('rastreo.detalle.col.codigo'), t('rastreo.detalle.col.ubicacion'), t('common.status'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-warning-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -214,11 +232,12 @@ function EscaneoSection({ records, open, onToggle }) {
 }
 
 function ValidacionSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
   return (
     <div>
       <SectionHeader
         icon={CheckCircle2}
-        title="Surtido Validación — Escaneos"
+        title={t('rastreo.searchModal.section.validacion')}
         count={records?.length}
         color={{ border: 'border-success-200', bg: 'bg-success-50/50', icon: 'bg-success-100 text-success-600', badge: 'bg-success-100 text-success-700' }}
         open={open}
@@ -234,12 +253,12 @@ function ValidacionSection({ records, open, onToggle }) {
           >
             <div className="mt-2 rounded-xl border border-success-100 overflow-hidden">
               {!records?.length ? (
-                <p className="px-4 py-3 text-xs text-warm-400">Sin registros de validación en surtido</p>
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.validacion')}</p>
               ) : (
                 <table className="w-full text-xs">
                   <thead className="bg-success-50/60 border-b border-success-100">
                     <tr>
-                      {['Código Escaneado', 'Orden Salida', 'Resultado', 'Operador', 'Fecha'].map(h => (
+                      {[t('rastreo.searchModal.col.codigoEscaneado'), t('rastreo.col.ordenSalida'), t('rastreo.searchModal.col.resultado'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-success-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -278,11 +297,12 @@ function ValidacionSection({ records, open, onToggle }) {
 }
 
 function InventarioRegistrosSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
   return (
     <div>
       <SectionHeader
         icon={ClipboardList}
-        title="Inventario Registros — Escaneos"
+        title={t('rastreo.searchModal.section.invRegistros')}
         count={records?.length}
         color={{ border: 'border-sky-200', bg: 'bg-sky-50/60', icon: 'bg-sky-100 text-sky-600', badge: 'bg-sky-100 text-sky-700' }}
         open={open}
@@ -298,12 +318,12 @@ function InventarioRegistrosSection({ records, open, onToggle }) {
           >
             <div className="mt-2 rounded-xl border border-sky-100 overflow-hidden">
               {!records?.length ? (
-                <p className="px-4 py-3 text-xs text-warm-400">Sin registros en inventario</p>
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.invRegistros')}</p>
               ) : (
                 <table className="w-full text-xs">
                   <thead className="bg-sky-50/70 border-b border-sky-100">
                     <tr>
-                      {['Código', 'Code2', 'Ubicación', 'Estado', 'Operador', 'Fecha'].map(h => (
+                      {[t('rastreo.detalle.col.codigo'), 'Code2', t('rastreo.detalle.col.ubicacion'), t('common.status'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-sky-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -345,11 +365,12 @@ function InventarioRegistrosSection({ records, open, onToggle }) {
 }
 
 function RastreoSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
   return (
     <div>
       <SectionHeader
         icon={Crosshair}
-        title="Rastreo — Cajas Registradas"
+        title={t('rastreo.searchModal.section.rastreo')}
         count={records?.length}
         color={{ border: 'border-rose-200', bg: 'bg-rose-50/60', icon: 'bg-rose-100 text-rose-600', badge: 'bg-rose-100 text-rose-700' }}
         open={open}
@@ -365,12 +386,12 @@ function RastreoSection({ records, open, onToggle }) {
           >
             <div className="mt-2 rounded-xl border border-rose-100 overflow-hidden">
               {!records?.length ? (
-                <p className="px-4 py-3 text-xs text-warm-400">Sin registros en rastreo</p>
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.rastreo')}</p>
               ) : (
                 <table className="w-full text-xs">
                   <thead className="bg-rose-50/70 border-b border-rose-100">
                     <tr>
-                      {['Caja', 'Folio', 'Orden Salida', 'Estado Caja', 'Ubicación', 'Estado Orden'].map(h => (
+                      {[t('rastreo.searchModal.col.caja'), t('rastreo.col.folio'), t('rastreo.col.ordenSalida'), t('rastreo.searchModal.col.estadoCaja'), t('rastreo.detalle.col.ubicacion'), t('rastreo.searchModal.col.estadoOrden')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-rose-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -387,9 +408,9 @@ function RastreoSection({ records, open, onToggle }) {
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.outbound_order_no || '—'} className="font-mono text-warm-600" />
                         </td>
-                        <td className="px-3 py-2.5 text-warm-700">{r.estado_caja || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-700">{r.estado_caja ? t(BOX_STATUS_LABELS[r.estado_caja] || 'rastreo.detalle.col.estadoCaja') : '—'}</td>
                         <td className="px-3 py-2.5 font-mono text-warm-600">{r.ubicacion || '—'}</td>
-                        <td className="px-3 py-2.5 text-warm-500">{r.orden_estado || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-500">{r.orden_estado ? t(ORDER_STATUS_LABELS[r.orden_estado] || 'rastreo.col.estado') : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -404,6 +425,7 @@ function RastreoSection({ records, open, onToggle }) {
 }
 
 export default function RastreoSearchModal({ isOpen, onClose }) {
+  const { t } = useI18nStore()
   const [query, setQuery] = useState('')
   const [searchMode, setSearchMode] = useState('exact')
   const [loading, setLoading] = useState(false)
@@ -524,8 +546,8 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
               <Search size={16} className="text-primary-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-base font-semibold text-warm-900">Rastreo de Caja</h2>
-              <p className="text-[11px] text-warm-400">Busca en inventario actual, escaneos, surtido y rastreo</p>
+              <h2 className="text-base font-semibold text-warm-900">{t('rastreo.searchModal.title')}</h2>
+              <p className="text-[11px] text-warm-400">{t('rastreo.searchModal.subtitle')}</p>
             </div>
             <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors">
               <X size={16} />
@@ -533,18 +555,18 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
           </div>
 
           <div className="px-5 pt-3 shrink-0">
-            <div className="inline-flex rounded-xl border border-warm-200 bg-warm-50 p-1">
+            <div className="inline-flex rounded-2xl border border-primary-200/70 bg-gradient-to-b from-primary-50 to-white p-1 shadow-[0_16px_28px_-24px_rgba(59,130,246,0.45)]">
               {[
-                { key: 'exact', label: 'Exacta' },
-                { key: 'flexible', label: 'Flexible' },
+                { key: 'exact', label: t('rastreo.searchModal.exacta') },
+                { key: 'flexible', label: t('rastreo.searchModal.flexible') },
               ].map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => setSearchMode(tab.key)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
                     searchMode === tab.key
-                      ? 'bg-white text-primary-700 shadow-sm'
-                      : 'text-warm-500 hover:text-warm-700'
+                      ? 'border-primary-200 bg-white text-primary-700 shadow-[0_10px_24px_-18px_rgba(37,99,235,0.65)]'
+                      : 'border-transparent text-warm-500 hover:border-primary-100 hover:bg-white/80 hover:text-warm-700'
                   }`}
                 >
                   {tab.label}
@@ -553,8 +575,8 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
             </div>
             <p className="mt-2 text-[11px] text-warm-400">
               {searchMode === 'exact'
-                ? 'Busca solo coincidencias exactas del codigo.'
-                : 'Busca coincidencias por codigo base y variantes relacionadas.'}
+                ? t('rastreo.searchModal.exactaHint')
+                : t('rastreo.searchModal.flexibleHint')}
             </p>
           </div>
 
@@ -567,7 +589,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                   ref={inputRef}
                   autoFocus
                   className="w-full h-11 pl-10 pr-4 rounded-xl border border-warm-300 text-sm bg-warm-50 focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:bg-white transition-all"
-                  placeholder="Ingresa código de caja o número de orden..."
+                  placeholder={t('rastreo.searchModal.placeholder')}
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
@@ -579,18 +601,18 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                 className="btn btn-primary h-11 px-5 flex items-center gap-2"
               >
                 {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                Buscar
+                {t('common.search')}
               </button>
               {results && (
                 <button onClick={() => { setQuery(''); setResults(null); setGsInv(null); setGsSurtido(null) }} className="btn btn-secondary h-11 px-4">
-                  Limpiar
+                  {t('common.clear')}
                 </button>
               )}
             </div>
             <p className="text-[11px] text-warm-400 mt-1.5">
               {searchMode === 'exact'
-                ? 'Tip: usa el codigo completo exacto para devolver solo coincidencias directas.'
-                : 'Tip: usa una variante del codigo para encontrar coincidencias por codigo base.'}
+                ? t('rastreo.searchModal.tipExacta')
+                : t('rastreo.searchModal.tipFlexible')}
             </p>
           </div>
 
@@ -599,14 +621,14 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
             {!results && !loading && (
               <div className="flex flex-col items-center justify-center py-12 gap-2 text-warm-300">
                 <Search size={32} />
-                <p className="text-sm">Ingresa un código para comenzar la búsqueda</p>
+                <p className="text-sm">{t('rastreo.searchModal.emptyIdle')}</p>
               </div>
             )}
 
             {loading && (
               <div className="flex flex-col items-center justify-center py-12 gap-3">
                 <Loader2 size={24} className="animate-spin text-primary-400" />
-                <p className="text-sm text-warm-400">Consultando bases de datos...</p>
+                <p className="text-sm text-warm-400">{t('rastreo.searchModal.loading')}</p>
               </div>
             )}
 
@@ -615,7 +637,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                 {totalResults === 0 && (
                   <div className="flex flex-col items-center justify-center py-10 gap-2">
                     <AlertCircle size={28} className="text-warm-300" />
-                    <p className="text-sm text-warm-500">Sin resultados para <span className="font-mono font-semibold">"{query}"</span></p>
+                    <p className="text-sm text-warm-500">{t('rastreo.searchModal.emptyQuery')} <span className="font-mono font-semibold">"{query}"</span></p>
                   </div>
                 )}
 
@@ -664,7 +686,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                 {searchMode === 'flexible' && results.meta?.used_base_code && (
                   <div className="flex justify-end pt-1">
                     <span className="inline-flex items-center rounded-full border border-primary-200 bg-primary-50 px-3 py-1 text-[11px] font-semibold text-primary-700">
-                      Búsqueda por código base{results.meta?.base_code ? `: ${results.meta.base_code}` : ''}
+                      {t('rastreo.searchModal.baseChip')}{results.meta?.base_code ? `: ${results.meta.base_code}` : ''}
                     </span>
                   </div>
                 )}

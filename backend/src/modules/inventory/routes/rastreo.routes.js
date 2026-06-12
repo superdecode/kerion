@@ -7,6 +7,47 @@ import { crearAnormalidadRastreo } from '../services/anormalidadHelper.js'
 
 const router = Router()
 
+const STATUS_ALIASES = {
+  resuelta: 'completada',
+  cerrada: 'cancelada',
+}
+
+const VALID_ESTADOS = ['abierta', 'en_proceso', 'completada', 'cancelada']
+
+const ESTADO_LABELS = {
+  abierta: 'Abierta',
+  en_proceso: 'En proceso',
+  completada: 'Completada',
+  cancelada: 'Cancelada',
+}
+
+const ESTADO_TRANSITIONS = {
+  abierta: new Set(['en_proceso', 'completada', 'cancelada']),
+  en_proceso: new Set(['completada', 'cancelada']),
+  completada: new Set(['cancelada']),
+  cancelada: new Set(['completada']),
+}
+
+function normalizeEstado(raw) {
+  if (!raw) return raw
+  return STATUS_ALIASES[raw] || raw
+}
+
+function expandEstadoValues(raw) {
+  const normalized = normalizeEstado(raw)
+  if (normalized === 'completada') return ['completada', 'resuelta']
+  if (normalized === 'cancelada') return ['cancelada', 'cerrada']
+  return [normalized]
+}
+
+function canTransitionEstado(currentRaw, nextRaw) {
+  const current = normalizeEstado(currentRaw)
+  const next = normalizeEstado(nextRaw)
+  if (!current || !next) return false
+  if (current === next) return true
+  return ESTADO_TRANSITIONS[current]?.has(next) || false
+}
+
 function normalizeCode(raw) {
   return (raw || '').toUpperCase().replace(/[^A-Z0-9\-/]/g, '')
 }
@@ -287,14 +328,22 @@ router.get('/',
 
       // Support comma-separated estados
       if (estado) {
-        const estados = estado.split(',').map(e => e.trim()).filter(Boolean)
+        const estados = estado.split(',').map(e => normalizeEstado(e.trim())).filter(Boolean)
         if (estados.length === 1) {
-          where += ` AND ro.estado = $${p++}`
-          params.push(estados[0])
+          const variants = expandEstadoValues(estados[0])
+          if (variants.length === 1) {
+            where += ` AND ro.estado = $${p++}`
+            params.push(variants[0])
+          } else {
+            const placeholders = variants.map(() => `$${p++}`).join(',')
+            where += ` AND ro.estado IN (${placeholders})`
+            params.push(...variants)
+          }
         } else if (estados.length > 1) {
-          const placeholders = estados.map(() => `$${p++}`).join(',')
+          const variants = [...new Set(estados.flatMap(expandEstadoValues))]
+          const placeholders = variants.map(() => `$${p++}`).join(',')
           where += ` AND ro.estado IN (${placeholders})`
-          params.push(...estados)
+          params.push(...variants)
         }
       }
 
@@ -343,9 +392,14 @@ router.get('/',
         ),
       ])
 
+      const normalizedRows = rowsRes.rows.map((row) => ({
+        ...row,
+        estado: normalizeEstado(row.estado),
+      }))
+
       res.json({
         success: true,
-        data: rowsRes.rows,
+        data: normalizedRows,
         meta: {
           total: parseInt(countRes.rows[0].count),
           page: parseInt(page),
@@ -367,23 +421,32 @@ router.post('/bulk/estado',
   async (req, res) => {
     try {
       const { ids, estado } = req.body
-      const VALID_ESTADOS = ['abierta', 'en_proceso', 'resuelta', 'cerrada']
-      if (!ids?.length || !VALID_ESTADOS.includes(estado)) {
+      const normalizedEstado = normalizeEstado(estado)
+      if (!ids?.length || !VALID_ESTADOS.includes(normalizedEstado) || normalizedEstado === 'abierta') {
         return res.status(400).json({ error: 'Datos inválidos' })
       }
       const userId = req.fullUser.id
-      const placeholders = ids.map((_, i) => `$${i + 3}`).join(',')
+      const placeholders = ids.map((_, i) => `$${i + 2}`).join(',')
+      const currentRes = await req.tQuery(
+        `SELECT id, estado FROM rastreo_ordenes
+         WHERE tenant_id = $1 AND id IN (${placeholders})`,
+        [req.tenantId, ...ids]
+      )
+      for (const row of currentRes.rows) {
+        if (!canTransitionEstado(row.estado, normalizedEstado)) {
+          return res.status(400).json({ error: `Transición inválida para la orden ${row.id}` })
+        }
+      }
       await req.tQuery(
         `UPDATE rastreo_ordenes SET estado = $1, updated_at = now()
-         WHERE tenant_id = $2 AND id IN (${placeholders})`,
-        [estado, req.tenantId, ...ids]
+         WHERE tenant_id = $2 AND id IN (${ids.map((_, i) => `$${i + 3}`).join(',')})`,
+        [normalizedEstado, req.tenantId, ...ids]
       )
-      // Insert historial for each
       for (const id of ids) {
         await req.tQuery(
           `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, accion, descripcion, actor_id)
            VALUES ($1,$2,'estado_cambiado',$3,$4)`,
-          [req.tenantId, id, `Estado cambiado masivo a: ${estado}`, userId]
+          [req.tenantId, id, `Cambio masivo de estado a: ${ESTADO_LABELS[normalizedEstado] || normalizedEstado}`, userId]
         )
       }
       res.json({ success: true, updated: ids.length })
@@ -469,7 +532,10 @@ router.get('/:folio',
       res.json({
         success: true,
         data: {
-          orden: ordenRes.rows[0],
+          orden: {
+            ...ordenRes.rows[0],
+            estado: normalizeEstado(ordenRes.rows[0].estado),
+          },
           cajas: cajasRes.rows,
           historial: histRes.rows,
         },
@@ -592,30 +658,69 @@ router.patch('/:id',
     try {
       const { estado, asignado_a, notas, agregar_nota } = req.body
       const userId = req.fullUser.id
+      const normalizedEstado = estado !== undefined ? normalizeEstado(estado) : undefined
 
       const existing = await req.tQuery(
-        'SELECT id, estado, asignado_a, folio FROM rastreo_ordenes WHERE id = $1 AND tenant_id = $2',
+        `SELECT ro.id, ro.estado, ro.asignado_a, ro.folio, ro.notas,
+                u.nombre_completo AS asignado_nombre
+         FROM rastreo_ordenes ro
+         LEFT JOIN usuarios u ON u.id = ro.asignado_a AND u.tenant_id = ro.tenant_id
+         WHERE ro.id = $1 AND ro.tenant_id = $2`,
         [req.params.id, req.tenantId]
       )
       if (!existing.rows.length) return res.status(404).json({ error: 'Orden no encontrada' })
 
       const row = existing.rows[0]
+      const currentEstado = normalizeEstado(row.estado)
       const updates = []
-      const params = [req.params.id, req.tenantId]
-      let p = 3
+      const values = []
+      const historyEntries = []
+      let nextAsignadoId = row.asignado_a
+      let nextAsignadoNombre = row.asignado_nombre || null
 
-      if (estado && estado !== row.estado) {
-        updates.push(`estado = $${p++}`)
-        params.splice(p - 2, 0, estado)
+      if (normalizedEstado && normalizedEstado !== currentEstado) {
+        if (!VALID_ESTADOS.includes(normalizedEstado) || !canTransitionEstado(currentEstado, normalizedEstado)) {
+          return res.status(400).json({ error: 'Transición de estado no permitida' })
+        }
+        values.push(normalizedEstado)
+        updates.push(`estado = $${values.length + 2}`)
+        historyEntries.push({
+          accion: 'estado_cambiado',
+          descripcion: `Cambio de estado: ${ESTADO_LABELS[currentEstado] || currentEstado} -> ${ESTADO_LABELS[normalizedEstado] || normalizedEstado}`,
+        })
       }
       if (asignado_a !== undefined) {
-        const newVal = asignado_a ? parseInt(asignado_a) : null
-        updates.push(`asignado_a = $${p++}`)
-        params.splice(p - 2, 0, newVal)
+        nextAsignadoId = asignado_a ? parseInt(asignado_a) : null
+        if ((row.asignado_a || null) !== (nextAsignadoId || null)) {
+          if (nextAsignadoId) {
+            const userRes = await req.tQuery(
+              `SELECT nombre_completo
+               FROM usuarios
+               WHERE id = $1 AND tenant_id = $2 AND estado = 'ACTIVO'
+               LIMIT 1`,
+              [nextAsignadoId, req.tenantId]
+            )
+            nextAsignadoNombre = userRes.rows[0]?.nombre_completo || null
+          } else {
+            nextAsignadoNombre = null
+          }
+          historyEntries.push({
+            accion: 'asignada',
+            descripcion: `Responsable: ${row.asignado_nombre || 'Sin responsable'} -> ${nextAsignadoNombre || 'Sin responsable'}`,
+          })
+        }
+        values.push(nextAsignadoId)
+        updates.push(`asignado_a = $${values.length + 2}`)
       }
       if (notas !== undefined) {
-        updates.push(`notas = $${p++}`)
-        params.splice(p - 2, 0, notas)
+        values.push(notas)
+        updates.push(`notas = $${values.length + 2}`)
+        if ((row.notas || '') !== (notas || '')) {
+          historyEntries.push({
+            accion: 'actualizada',
+            descripcion: 'Notas generales actualizadas',
+          })
+        }
       }
 
       if (agregar_nota) {
@@ -633,20 +738,16 @@ router.patch('/:id',
 
       await req.tQuery(
         `UPDATE rastreo_ordenes SET ${updates.join(', ')} WHERE id = $1 AND tenant_id = $2`,
-        params
+        [req.params.id, req.tenantId, ...values]
       )
 
-      const histDesc = estado && estado !== row.estado
-        ? `Estado cambiado: ${row.estado} → ${estado}`
-        : 'Orden actualizada'
-
-      await req.tQuery(
-        `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, accion, descripcion, actor_id)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [req.tenantId, req.params.id,
-         estado ? 'estado_cambiado' : 'asignada',
-         histDesc, userId]
-      )
+      for (const entry of historyEntries) {
+        await req.tQuery(
+          `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, accion, descripcion, actor_id)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [req.tenantId, req.params.id, entry.accion, entry.descripcion, userId]
+        )
+      }
 
       res.json({ success: true })
     } catch (err) {
@@ -712,7 +813,7 @@ router.post('/cajas/add',
       await req.tQuery(
         `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, rastreo_caja_id, accion, descripcion, actor_id)
          VALUES ($1,$2,$3,'creada',$4,$5)`,
-        [req.tenantId, orden_id, cajaRes.rows[0].id, `Caja agregada: ${box_code}`, req.fullUser.id]
+        [req.tenantId, orden_id, cajaRes.rows[0].id, `Registro agregado: ${box_code}`, req.fullUser.id]
       )
 
       res.status(201).json({ success: true, data: { id: cajaRes.rows[0].id } })
@@ -733,7 +834,7 @@ router.patch('/cajas/:id',
       const userId = req.fullUser.id
 
       const cajaRes = await req.tQuery(
-        `SELECT rc.*, ro.folio AS orden_folio, ro.outbound_order_no, ro.id AS orden_id
+        `SELECT rc.*, ro.folio AS orden_folio, ro.outbound_order_no, ro.id AS orden_id, ro.estado AS orden_estado
          FROM rastreo_cajas rc
          JOIN rastreo_ordenes ro ON ro.id = rc.rastreo_orden_id
          WHERE rc.id = $1 AND rc.tenant_id = $2`,
@@ -742,6 +843,7 @@ router.patch('/cajas/:id',
       if (!cajaRes.rows.length) return res.status(404).json({ error: 'Caja no encontrada' })
 
       const caja = cajaRes.rows[0]
+      const currentOrdenEstado = normalizeEstado(caja.orden_estado)
 
       const updates = [`estado_caja = $3`, `updated_at = now()`]
       const params = [req.params.id, req.tenantId, estado_caja]
@@ -771,6 +873,21 @@ router.patch('/cajas/:id',
         `UPDATE rastreo_cajas SET ${updates.join(', ')} WHERE id = $1 AND tenant_id = $2`,
         params
       )
+
+      if (currentOrdenEstado === 'abierta') {
+        await req.tQuery(
+          `UPDATE rastreo_ordenes
+           SET estado = 'en_proceso', updated_at = now()
+           WHERE id = $1 AND tenant_id = $2`,
+          [caja.orden_id, req.tenantId]
+        )
+        await req.tQuery(
+          `INSERT INTO rastreo_historial
+             (tenant_id, rastreo_orden_id, accion, descripcion, actor_id)
+           VALUES ($1,$2,'estado_cambiado',$3,$4)`,
+          [req.tenantId, caja.orden_id, 'Cambio de estado: Abierta -> En proceso', userId]
+        )
+      }
 
       const accion = estado_caja === 'localizada' ? 'caja_localizada'
         : estado_caja === 'no_encontrada' ? 'caja_no_encontrada'
@@ -824,11 +941,17 @@ router.delete('/cajas/:id',
         )
         await req.tQuery(
           `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, rastreo_caja_id, accion, descripcion, actor_id)
-           VALUES ($1,$2,$3,'estado_cambiado','Caja cancelada (tiene historial)',$4)`,
-          [req.tenantId, caja.orden_id, caja.id, req.fullUser.id]
+           VALUES ($1,$2,$3,'actualizada',$4,$5)`,
+          [req.tenantId, caja.orden_id, caja.id, `Registro cancelado: ${caja.box_code} (con historial previo)`, req.fullUser.id]
         )
         return res.json({ success: true, cancelled: true })
       }
+
+      await req.tQuery(
+        `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, accion, descripcion, actor_id)
+         VALUES ($1,$2,'actualizada',$3,$4)`,
+        [req.tenantId, caja.orden_id, `Registro eliminado: ${caja.box_code}`, req.fullUser.id]
+      )
 
       await req.tQuery(
         'DELETE FROM rastreo_cajas WHERE id = $1 AND tenant_id = $2',

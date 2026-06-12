@@ -27,7 +27,7 @@ export default function TablePagination({
   const label = itemLabel ?? t('common.pagination.records')
 
   return (
-    <div className="shrink-0 flex flex-col gap-1 border-t border-warm-100 bg-warm-50/30 px-3.5 py-1.5 md:flex-row md:items-center md:justify-between">
+    <div className="shrink-0 flex flex-col gap-0.5 border-t border-warm-100 bg-white/96 px-3.5 py-1 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-wrap items-center gap-2.5 text-[11px] text-warm-500">
         <span className="font-medium">{start}–{end} {t('common.pagination.of')} {safeTotalItems} {label}</span>
         <label className="flex items-center gap-1.5">

@@ -6,35 +6,38 @@ import {
 import { useDroppable } from '@dnd-kit/core'
 import { useDraggable } from '@dnd-kit/core'
 import { useNavigate } from 'react-router-dom'
-import { User, Package, ExternalLink } from 'lucide-react'
+import { User, Package, ExternalLink, GripVertical } from 'lucide-react'
 import { updateRastreoOrden } from '../../../core/services/rastreoService'
+import { useI18nStore } from '../../../core/stores/i18nStore'
+import { useToastStore } from '../../../core/stores/toastStore'
 
 const ESTADO_META = {
-  abierta:    { cls: 'bg-primary-100 text-primary-700 border-primary-200', dot: 'bg-primary-500', label: 'Abierta' },
-  en_proceso: { cls: 'bg-warning-100 text-warning-700 border-warning-200', dot: 'bg-warning-500', label: 'En proceso' },
-  resuelta:   { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', label: 'Resuelta' },
-  cerrada:    { cls: 'bg-warm-100 text-warm-500 border-warm-200', dot: 'bg-warm-400', label: 'Cerrada' },
+  abierta:    { cls: 'bg-primary-100 text-primary-700 border-primary-200', dot: 'bg-primary-500', labelKey: 'rastreo.estado.abierta' },
+  en_proceso: { cls: 'bg-warning-100 text-warning-700 border-warning-200', dot: 'bg-warning-500', labelKey: 'rastreo.estado.en_proceso' },
+  completada: { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', labelKey: 'rastreo.estado.completada' },
+  cancelada:  { cls: 'bg-warm-100 text-warm-500 border-warm-200', dot: 'bg-warm-400', labelKey: 'rastreo.estado.cancelada' },
 }
 
 const CARD_BORDER = {
   abierta:    'border-primary-200/60 hover:border-primary-300 hover:shadow-[0_4px_12px_-4px_rgba(99,102,241,0.15)]',
   en_proceso: 'border-warning-200/60 hover:border-warning-300 hover:shadow-[0_4px_12px_-4px_rgba(245,158,11,0.15)]',
-  resuelta:   'border-success-200/60 hover:border-success-300 hover:shadow-[0_4px_12px_-4px_rgba(34,197,94,0.15)]',
-  cerrada:    'border-warm-200/60 hover:border-warm-300 hover:shadow-[0_4px_12px_-4px_rgba(120,113,108,0.10)]',
+  completada: 'border-success-200/60 hover:border-success-300 hover:shadow-[0_4px_12px_-4px_rgba(34,197,94,0.15)]',
+  cancelada:  'border-warm-200/60 hover:border-warm-300 hover:shadow-[0_4px_12px_-4px_rgba(120,113,108,0.10)]',
 }
 
-function EstadoChip({ estado }) {
+function EstadoChip({ estado, t }) {
   const meta = ESTADO_META[estado] || ESTADO_META.abierta
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${meta.cls}`}>
       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${meta.dot}`} />
-      {meta.label}
+      {t(meta.labelKey)}
     </span>
   )
 }
 
 function KanbanCard({ orden }) {
   const navigate = useNavigate()
+  const { t } = useI18nStore()
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: orden.id })
 
   const style = transform ? {
@@ -42,19 +45,29 @@ function KanbanCard({ orden }) {
     opacity: isDragging ? 0.35 : 1,
   } : {}
 
-  const borderCls = CARD_BORDER[orden.estado] || CARD_BORDER.cerrada
+  const borderCls = CARD_BORDER[orden.estado] || CARD_BORDER.cancelada
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
-      {...attributes}
-      className={`bg-white/90 rounded-xl border p-3 shadow-sm cursor-grab active:cursor-grabbing transition-all ${borderCls}`}
+      className={`bg-white/90 rounded-xl border p-3 shadow-sm transition-all ${isDragging ? 'scale-[1.02] rotate-[0.3deg] shadow-lg' : ''} ${borderCls}`}
     >
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <span className="font-mono text-xs font-semibold text-primary-700 leading-tight">{orden.folio}</span>
-        <EstadoChip estado={orden.estado} />
+        <div className="flex items-start gap-2 min-w-0">
+          <button
+            type="button"
+            {...listeners}
+            {...attributes}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg text-warm-300 transition-all hover:bg-primary-50 hover:text-primary-600 cursor-grab active:cursor-grabbing"
+            title={t('rastreo.kanban.drag')}
+          >
+            <GripVertical size={13} />
+          </button>
+          <span className="font-mono text-xs font-semibold text-primary-700 leading-tight">{orden.folio}</span>
+        </div>
+        <EstadoChip estado={orden.estado} t={t} />
       </div>
       {orden.outbound_order_no && (
         <p className="text-xs text-warm-600 font-mono truncate mb-1">{orden.outbound_order_no}</p>
@@ -65,12 +78,13 @@ function KanbanCard({ orden }) {
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-warm-100/60">
         <span className="flex items-center gap-1 text-xs text-warm-400">
           <Package size={11} />
-          {orden.total_cajas || 0} caja{orden.total_cajas !== 1 ? 's' : ''}
+          {orden.total_cajas || 0} {t('rastreo.items.cajas')}
         </span>
         <button
           onPointerDown={e => e.stopPropagation()}
           onClick={() => navigate(`/Inventario/rastreo/${orden.folio}`)}
           className="p-1 rounded-lg hover:bg-primary-50 text-warm-300 hover:text-primary-600 transition-colors"
+          title={t('rastreo.action.verDetalle')}
         >
           <ExternalLink size={12} />
         </button>
@@ -85,6 +99,7 @@ function getInitials(name) {
 }
 
 function KanbanColumn({ column, ordenes }) {
+  const { t } = useI18nStore()
   const { setNodeRef, isOver } = useDroppable({ id: column.id })
 
   return (
@@ -101,7 +116,7 @@ function KanbanColumn({ column, ordenes }) {
         )}
         <div className="min-w-0">
           <p className="text-xs font-semibold text-warm-800 truncate">{column.label}</p>
-          <p className="text-[11px] text-warm-400">{ordenes.length} orden{ordenes.length !== 1 ? 'es' : ''}</p>
+          <p className="text-[11px] text-warm-400">{ordenes.length} {t('rastreo.items.ordenes')}</p>
         </div>
       </div>
       <div
@@ -114,7 +129,7 @@ function KanbanColumn({ column, ordenes }) {
         {ordenes.map(o => <KanbanCard key={o.id} orden={o} />)}
         {ordenes.length === 0 && (
           <div className="flex-1 flex items-center justify-center text-xs text-warm-300 py-6">
-            Sin órdenes
+            {t('rastreo.noOrdenes')}
           </div>
         )}
       </div>
@@ -123,17 +138,19 @@ function KanbanColumn({ column, ordenes }) {
 }
 
 export default function RastreoKanban({ ordenes, usuarios, onReassigned }) {
+  const { t } = useI18nStore()
+  const toast = useToastStore()
   const [activeId, setActiveId] = useState(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
 
   const columns = useMemo(() => {
     const assignedUserIds = new Set(ordenes.map(o => o.asignado_a ? String(o.asignado_a) : null).filter(Boolean))
-    const cols = [{ id: 'ninguno', label: 'Sin asignar', userId: null }]
+    const cols = [{ id: 'ninguno', label: t('rastreo.kanban.sinAsignar'), userId: null }]
     usuarios
       .filter(u => assignedUserIds.has(String(u.id)))
       .forEach(u => cols.push({ id: String(u.id), label: u.nombre_completo, userId: u.id }))
     return cols
-  }, [usuarios, ordenes])
+  }, [usuarios, ordenes, t])
 
   const columnMap = useMemo(() => {
     const map = {}
@@ -160,8 +177,10 @@ export default function RastreoKanban({ ordenes, usuarios, onReassigned }) {
 
     try {
       await updateRastreoOrden(orden.id, { asignado_a: newAsignado })
+      toast.success(t('rastreo.toast.responsableActualizado'))
       onReassigned?.()
     } catch {
+      toast.error(t('rastreo.toast.errorActualizarResponsable'))
       onReassigned?.()
     }
   }

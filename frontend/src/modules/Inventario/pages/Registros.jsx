@@ -714,6 +714,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                           <input className="input-field h-8 text-xs font-mono" value={newScan.scanned_code} onChange={(event) => setNewScan((prev) => ({ ...prev, scanned_code: event.target.value }))} />
                         </td>
                         <td className="table-cell"><span className="text-warm-300">—</span></td>
+                        <td className="table-cell"><span className="text-warm-300">—</span></td>
                         <td className="table-cell">
                           <select className="input-field h-8 text-xs" value={newScan.scan_status} onChange={(event) => setNewScan((prev) => ({ ...prev, scan_status: event.target.value }))}>
                             <option value="ok">Disponible</option>

@@ -1,11 +1,12 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Package, User, ChevronRight } from 'lucide-react'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 const ESTADO_GROUPS = [
   {
     key: 'abierta',
-    label: 'Abiertas',
+    labelKey: 'rastreo.group.abierta',
     headerCls: 'bg-gradient-to-r from-primary-500 to-primary-600 text-white',
     bodyCls: 'bg-primary-50/25 border-primary-200/50',
     dotCls: 'bg-primary-500',
@@ -13,23 +14,23 @@ const ESTADO_GROUPS = [
   },
   {
     key: 'en_proceso',
-    label: 'En proceso',
+    labelKey: 'rastreo.group.en_proceso',
     headerCls: 'bg-gradient-to-r from-amber-400 to-orange-400 text-white',
     bodyCls: 'bg-amber-50/25 border-amber-200/50',
     dotCls: 'bg-amber-400',
     cardHover: 'hover:border-amber-300/60 hover:shadow-[0_4px_12px_-4px_rgba(245,158,11,0.12)]',
   },
   {
-    key: 'resuelta',
-    label: 'Resueltas',
+    key: 'completada',
+    labelKey: 'rastreo.group.completada',
     headerCls: 'bg-gradient-to-r from-success-500 to-emerald-500 text-white',
     bodyCls: 'bg-success-50/25 border-success-200/50',
     dotCls: 'bg-success-500',
     cardHover: 'hover:border-success-300/60 hover:shadow-[0_4px_12px_-4px_rgba(34,197,94,0.12)]',
   },
   {
-    key: 'cerrada',
-    label: 'Cerradas',
+    key: 'cancelada',
+    labelKey: 'rastreo.group.cancelada',
     headerCls: 'bg-gradient-to-r from-warm-400 to-warm-500 text-white',
     bodyCls: 'bg-warm-50/50 border-warm-200/50',
     dotCls: 'bg-warm-400',
@@ -39,6 +40,7 @@ const ESTADO_GROUPS = [
 
 function OrdenCard({ orden, cardHover }) {
   const navigate = useNavigate()
+  const { t } = useI18nStore()
 
   return (
     <button
@@ -58,7 +60,7 @@ function OrdenCard({ orden, cardHover }) {
       <div className="flex items-center justify-between pt-1.5 border-t border-warm-100/60">
         <span className="flex items-center gap-1 text-xs text-warm-400">
           <Package size={10} />
-          {orden.total_cajas || 0}
+          {orden.total_cajas || 0} {t('rastreo.items.cajas')}
         </span>
         {orden.asignado_nombre && (
           <span className="flex items-center gap-1 text-xs text-warm-400 truncate max-w-[110px]">
@@ -72,6 +74,7 @@ function OrdenCard({ orden, cardHover }) {
 }
 
 export default function RastreoCards({ ordenes }) {
+  const { t } = useI18nStore()
   const grouped = {}
   ordenes.forEach(o => {
     if (!grouped[o.estado]) grouped[o.estado] = []
@@ -85,7 +88,7 @@ export default function RastreoCards({ ordenes }) {
           <div className={`px-4 py-3 flex items-center justify-between ${group.headerCls}`}>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-white/40" />
-              <span className="text-sm font-semibold">{group.label}</span>
+              <span className="text-sm font-semibold">{t(group.labelKey)}</span>
             </div>
             <span className="text-xs font-bold bg-white/20 px-2 py-0.5 rounded-full">
               {(grouped[group.key] || []).length}
@@ -98,7 +101,7 @@ export default function RastreoCards({ ordenes }) {
             {!grouped[group.key]?.length && (
               <div className="flex flex-col items-center justify-center py-6 gap-1.5">
                 <div className={`w-2 h-2 rounded-full opacity-30 ${group.dotCls}`} />
-                <p className="text-xs text-warm-300">Sin órdenes</p>
+                <p className="text-xs text-warm-300">{t('rastreo.noOrdenes')}</p>
               </div>
             )}
           </div>

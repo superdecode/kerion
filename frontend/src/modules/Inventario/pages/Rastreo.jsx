@@ -44,8 +44,8 @@ function subtractDays(isoDate, days) {
 const ESTADO_META = {
   abierta:    { cls: 'bg-primary-100 text-primary-700 border-primary-200', dot: 'bg-primary-400', labelKey: 'rastreo.estado.abierta' },
   en_proceso: { cls: 'bg-warning-100 text-warning-700 border-warning-200', dot: 'bg-warning-500', labelKey: 'rastreo.estado.en_proceso' },
-  resuelta:   { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', labelKey: 'rastreo.estado.resuelta' },
-  cerrada:    { cls: 'bg-warm-100 text-warm-500 border-warm-200',          dot: 'bg-warm-400',    labelKey: 'rastreo.estado.cerrada' },
+  completada: { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', labelKey: 'rastreo.estado.completada' },
+  cancelada:  { cls: 'bg-warm-100 text-warm-500 border-warm-200',          dot: 'bg-warm-400',    labelKey: 'rastreo.estado.cancelada' },
 }
 
 const ESTADO_CAJA_META = {
@@ -62,6 +62,21 @@ function EstadoChip({ estado, t }) {
       {t ? t(m.labelKey) : m.labelKey.split('.').pop()}
     </span>
   )
+}
+
+function getEstadoOptionsForRow(estado) {
+  switch (estado) {
+    case 'abierta':
+      return ['abierta', 'en_proceso', 'completada', 'cancelada']
+    case 'en_proceso':
+      return ['en_proceso', 'completada', 'cancelada']
+    case 'completada':
+      return ['completada', 'cancelada']
+    case 'cancelada':
+      return ['cancelada', 'completada']
+    default:
+      return ['abierta', 'en_proceso', 'completada', 'cancelada']
+  }
 }
 
 
@@ -167,7 +182,7 @@ export default function Rastreo() {
       o.outbound_order_no || '',
       o.customer_code || '',
       o.total_cajas || 0,
-      ESTADO_META[o.estado]?.label || o.estado,
+      t(ESTADO_META[o.estado]?.labelKey || 'rastreo.col.estado'),
       o.asignado_nombre || '',
       new Date(o.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }),
     ])]
@@ -246,13 +261,19 @@ export default function Rastreo() {
 
   const inlineEstadoMutation = useMutation({
     mutationFn: ({ id, estado }) => updateRastreoOrden(id, { estado }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rastreo-ordenes'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rastreo-ordenes'] })
+      toast.success(t('rastreo.toast.estadoActualizado'))
+    },
     onError: () => toast.error(t('toast.error')),
   })
 
   const inlineResponsableMutation = useMutation({
     mutationFn: ({ id, asignado_a }) => updateRastreoOrden(id, { asignado_a }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['rastreo-ordenes'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rastreo-ordenes'] })
+      toast.success(t('rastreo.toast.responsableActualizado'))
+    },
     onError: () => toast.error(t('toast.error')),
   })
 
@@ -260,7 +281,7 @@ export default function Rastreo() {
     mutationFn: ({ ids, estado }) => bulkUpdateEstado(ids, estado),
     onSuccess: (_, { ids }) => {
       qc.invalidateQueries({ queryKey: ['rastreo-ordenes'] })
-      toast.success(`${ids.length} ${t('rastreo.selected')}`)
+      toast.success(`${ids.length} ${t('rastreo.toast.estadoActualizadoMultiple')}`)
       setSelected(new Set())
       setBulkEstadoOpen(false)
     },
@@ -271,7 +292,7 @@ export default function Rastreo() {
     mutationFn: ({ ids, asignado_a }) => bulkUpdateResponsable(ids, asignado_a),
     onSuccess: (_, { ids }) => {
       qc.invalidateQueries({ queryKey: ['rastreo-ordenes'] })
-      toast.success(`${ids.length} ${t('rastreo.selected')}`)
+      toast.success(`${ids.length} ${t('rastreo.toast.responsableActualizadoMultiple')}`)
       setSelected(new Set())
       setBulkResponsableOpen(false)
     },
@@ -471,7 +492,7 @@ export default function Rastreo() {
                     </button>
                     {bulkEstadoOpen && (
                       <div className="absolute z-20 top-full right-0 mt-0.5 bg-white rounded-xl border border-warm-200 shadow-lg overflow-hidden min-w-[150px]">
-                        {Object.entries(ESTADO_META).map(([key, m]) => (
+                        {Object.entries(ESTADO_META).filter(([key]) => key !== 'abierta').map(([key, m]) => (
                           <button
                             key={key}
                             onClick={() => bulkEstadoMutation.mutate({ ids: [...selected], estado: key })}
@@ -635,7 +656,7 @@ export default function Rastreo() {
                               onChange={e => { inlineEstadoMutation.mutate({ id: o.id, estado: e.target.value }); setInlineEstadoId(null) }}
                               onBlur={() => setInlineEstadoId(null)}
                             >
-                              {Object.entries(ESTADO_META).map(([k, m]) => <option key={k} value={k}>{t(m.labelKey)}</option>)}
+                              {getEstadoOptionsForRow(o.estado).map((k) => <option key={k} value={k}>{t(ESTADO_META[k].labelKey)}</option>)}
                             </select>
                           ) : (
                             <button onClick={() => setInlineEstadoId(o.id)} className="hover:opacity-75 transition-opacity">
@@ -679,7 +700,7 @@ export default function Rastreo() {
                           <button
                             onClick={() => navigate(`/Inventario/rastreo/${o.folio}`)}
                             className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors"
-                            title="Ver"
+                            title={t('rastreo.action.ver')}
                           >
                             <Eye size={14} />
                           </button>
@@ -687,7 +708,7 @@ export default function Rastreo() {
                             <button
                               onClick={() => setDeleteTarget(o)}
                               className="p-1.5 rounded-lg hover:bg-danger-100 text-warm-400 hover:text-danger-600 transition-colors"
-                              title="Eliminar"
+                              title={t('rastreo.action.eliminar')}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -710,7 +731,7 @@ export default function Rastreo() {
                   totalItems={total}
                   onPageChange={setPage}
                   onPageSizeChange={size => { setPageSize(size); setPage(1) }}
-                  itemLabel="órdenes"
+                  itemLabel={t('rastreo.items.ordenes')}
                 />
               </div>
             )}
@@ -756,10 +777,10 @@ export default function Rastreo() {
             </button>
             <button
               onClick={() => deleteMutation.mutate(deleteTarget.id)}
-              disabled={deleteMutation.isLoading}
+              disabled={deleteMutation.isPending}
               className="btn text-sm bg-danger-600 text-white hover:bg-danger-700 flex items-center gap-1.5"
             >
-              {deleteMutation.isLoading && <RefreshCw size={12} className="animate-spin" />}
+              {deleteMutation.isPending && <RefreshCw size={12} className="animate-spin" />}
               {t('common.delete')}
             </button>
           </div>

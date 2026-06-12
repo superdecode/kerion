@@ -53,6 +53,10 @@ const STATUS_FILTER_KEYS = ['pending_assignment', 'sorting', 'validating', 'comp
 const CLOSED_ORDER_STATUSES = new Set(['complete', 'partial'])
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
+
+function getStatusMeta(status) {
+  return STATUS_META[status] ?? STATUS_META.pending_assignment
+}
 function parseBulkCodes(text) {
   return Array.from(new Set(
     String(text || '')
@@ -792,9 +796,9 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
 }
 
 const SESSION_STATUS = {
-  complete:           { cls: 'bg-success-100 text-success-700',  label: 'Completa' },
-  with_discrepancies: { cls: 'bg-warning-100 text-warning-700',  label: 'Con diferencias' },
-  validating:         { cls: 'bg-primary-100 text-primary-700',  label: 'En curso' },
+  complete:           { cls: 'bg-success-100 text-success-700',  labelKey: 'surtido.ordenes.session_status.complete' },
+  with_discrepancies: { cls: 'bg-warning-100 text-warning-700',  labelKey: 'surtido.ordenes.session_status.with_discrepancies' },
+  validating:         { cls: 'bg-primary-100 text-primary-700',  labelKey: 'surtido.ordenes.session_status.validating' },
 }
 
 function fmtDateTime(value) {
@@ -833,8 +837,8 @@ function EventsTable({ events, t, showResult = false }) {
           <tr>
             <th className="table-header">#</th>
             <th className="table-header">{t('surtido.validacion.code_header')}</th>
-            {showResult && <th className="table-header">Tipo</th>}
-            <th className="table-header text-right">Hora escaneo</th>
+            {showResult && <th className="table-header">{t('surtido.ordenes.events.type')}</th>}
+            <th className="table-header text-right">{t('surtido.ordenes.events.scan_time')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-warm-50">
@@ -1488,7 +1492,7 @@ export default function Ordenes() {
         tr.total_scanned ?? 0,
         r.outboundTime || '',
         tr.surtidor_nombre || '',
-        tr.status || 'pending_assignment',
+        t(getStatusMeta(tr.status || 'pending_assignment').labelKey),
         r.orderCreateTime || '',
       ]
     })
@@ -1505,7 +1509,7 @@ export default function Ordenes() {
         wms.outboundTime || '',
         tr.total_scanned ?? 0,
         tr.total_expected ?? '',
-        tr.status || '',
+        t(getStatusMeta(tr.status || 'pending_assignment').labelKey),
         tr.updated_at || '',
       ]
     })
@@ -2258,7 +2262,7 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
   const is100Percent = expected > 0 && scanned >= expected
   const rawStatus = tracking?.status || 'pending_assignment'
   const displayStatus = (is100Percent && rawStatus !== 'complete' && rawStatus !== 'partial' && rawStatus !== 'cancelled') ? 'complete' : rawStatus
-  const meta = STATUS_META[displayStatus] ?? STATUS_META.pending_assignment
+  const meta = getStatusMeta(displayStatus)
   const noSurtidor = !tracking?.surtidor_nombre
   const isClosedOrder = CLOSED_ORDER_STATUSES.has(displayStatus)
   const cliente = r.customerCode || r.customerNo || r.customerName || '—'
@@ -2294,9 +2298,9 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
                 tracking?.tiene_reparacion   ? 'bg-violet-500' : 'bg-sky-500'
               }`}
               title={
-                tracking?.tiene_anormalidades ? 'Con anormalidades' :
-                tracking?.tiene_faltantes    ? 'Con faltantes' :
-                tracking?.tiene_reparacion   ? 'En reparación' : 'En rastreo'
+                tracking?.tiene_anormalidades ? t('surtido.ordenes.indicator.anormalidades') :
+                tracking?.tiene_faltantes    ? t('surtido.ordenes.indicator.faltantes') :
+                tracking?.tiene_reparacion   ? t('surtido.ordenes.indicator.reparacion') : t('surtido.ordenes.indicator.rastreo')
               }
             />
           )}
@@ -2389,7 +2393,7 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
             <Eye size={13} />
           </button>
           {canQuickEdit && (
-            <button title="Edición rápida"
+            <button title={t('surtido.ordenes.quickEdit')}
               className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
               onClick={e => { e.stopPropagation(); onQuickEdit(obc) }}>
               <ClipboardList size={13} />
@@ -2397,7 +2401,7 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
           )}
           {canValidate && (
             isClosedOrder ? (
-              <button title="Ver Registros"
+              <button title={t('surtido.ordenes.viewRecords')}
                 className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-warm-500 hover:text-warm-700 hover:bg-warm-100 border border-transparent transition-all"
                 onClick={e => { e.stopPropagation(); onView(obc) }}>
                 <Database size={13} />
@@ -2603,7 +2607,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
               <th className={`${TH_CLASS} col-status`}>
                 <SortableHeader label={t('surtido.ordenes.status')} sortKey="status" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
               </th>
-              <th className={`${TH_CLASS} col-actions text-right`}><span className={TH_TEXT}>Acciones</span></th>
+              <th className={`${TH_CLASS} col-actions text-right`}><span className={TH_TEXT}>{t('common.actions')}</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
@@ -2659,7 +2663,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
         <div className="space-y-3">
           <p className="text-sm text-warm-600">{assignableSelectedObcs.length} {t('surtido.ordenes.bulk_affected')}</p>
           {assignableSelectedObcs.length < selected.size && (
-            <p className="text-xs text-warning-600">Las órdenes completadas o parciales no permiten cambio de surtidor.</p>
+            <p className="text-xs text-warning-600">{t('surtido.ordenes.bulk.assignDisabledHint')}</p>
           )}
           <select className="input-field w-full text-sm" value={bulkSurtidorId} onChange={(e) => setBulkSurtidorId(e.target.value)}>
             <option value="">{t('surtido.ordenes.no_surtidor')}</option>
@@ -2692,7 +2696,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
         <div className="space-y-3">
           <p className="text-sm text-warm-600">{statusEditableSelectedObcs.length} {t('surtido.ordenes.bulk_affected')}</p>
           {statusEditableSelectedObcs.length < selected.size && (
-            <p className="text-xs text-warning-600">Las órdenes completadas o parciales no permiten cambio de estatus.</p>
+            <p className="text-xs text-warning-600">{t('surtido.ordenes.bulk.statusDisabledHint')}</p>
           )}
           <select className="input-field w-full text-sm" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
             {STATUS_FILTER_KEYS.map((key) => <option key={key} value={key}>{t(STATUS_META[key].labelKey)}</option>)}
@@ -2803,7 +2807,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
               <th className={`${TH_CLASS} col-name`}><span className={TH_TEXT}>{t('surtido.ordenes.surtidor')}</span></th>
               <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.escaneo.scanned')}</span></th>
               <th className={`${TH_CLASS} col-status`}><span className={TH_TEXT}>{t('surtido.ordenes.status')}</span></th>
-              <th className={`${TH_CLASS} col-actions text-right`}><span className={TH_TEXT}>Acciones</span></th>
+              <th className={`${TH_CLASS} col-actions text-right`}><span className={TH_TEXT}>{t('common.actions')}</span></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
@@ -2811,7 +2815,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
               const obc = tr.outbound_order_no
               const wms = wmsMap[obc]
               const status = tr.status || 'pending_assignment'
-              const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
+              const meta = getStatusMeta(status)
               const total_expected = wms?.outboundBoxCount ?? wms?.packageCount ?? wms?.totalQty ?? tr.total_expected ?? '?'
               const scanned = tr.total_scanned ?? 0
               const pct = total_expected !== '?' && total_expected > 0
@@ -2844,9 +2848,9 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                             tr?.tiene_reparacion   ? 'bg-violet-500' : 'bg-sky-500'
                           }`}
                           title={
-                            tr?.tiene_anormalidades ? 'Con anormalidades' :
-                            tr?.tiene_faltantes    ? 'Con faltantes' :
-                            tr?.tiene_reparacion   ? 'En reparación' : 'En rastreo'
+                            tr?.tiene_anormalidades ? t('surtido.ordenes.indicator.anormalidades') :
+                            tr?.tiene_faltantes    ? t('surtido.ordenes.indicator.faltantes') :
+                            tr?.tiene_reparacion   ? t('surtido.ordenes.indicator.reparacion') : t('surtido.ordenes.indicator.rastreo')
                           }
                         />
                       )}
@@ -2866,7 +2870,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                   <td className="table-cell col-name">
                     <span className="text-warm-700 text-xs flex items-center gap-1">
                       <User size={10} className="text-warm-300" />
-                      {tr.surtidor_nombre || '—'}
+                      {tr.surtidor_nombre || t('surtido.ordenes.no_surtidor')}
                     </span>
                   </td>
                   <td className="table-cell text-right">
@@ -2898,7 +2902,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                         <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
                         {canUpdateStatus && (
                           <button
-                            title="Editar estado"
+                            title={t('surtido.ordenes.editStatus')}
                             onClick={e => { e.stopPropagation(); setEditStatusObc(obc) }}
                             className="opacity-0 group-hover/statusEdit:opacity-100 p-0.5 rounded text-warm-300 hover:text-warm-600 transition-all">
                             <Edit3 size={10} />
@@ -2915,7 +2919,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                         <Eye size={13} />
                       </button>
                       {canQuickEdit && (
-                        <button title="Edición rápida"
+                        <button title={t('surtido.ordenes.quickEdit')}
                           className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
                           onClick={e => { e.stopPropagation(); onQuickEdit(obc) }}>
                           <ClipboardList size={13} />
