@@ -134,7 +134,7 @@ export async function provisionTenant(requestId, approvedByAdminId) {
             global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
             dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
             fep: { folios: 'eliminar' },
-            inventario: { escaneo: 'eliminar', registros: 'eliminar' },
+            inventario: { escaneo: 'eliminar', registros: 'eliminar', rastreo: 'eliminar' },
             devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
             surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
             anormalidades: { registro: 'eliminar', dashboard: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },

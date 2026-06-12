@@ -1142,6 +1142,12 @@ const translations = {
     // ── Nav additions ─────────────────────────────────────────────────────
     'nav.inv.escaneo':   '扫描',
     'nav.inv.registros': '记录',
+    'nav.inv.rastreo':   '追踪',
+
+    // ── Rastreo module (zh) ──────────────────────────────────────────────────
+    'rastreo.titulo': '箱追踪',
+    'rastreo.nuevaOrden': '新追踪单',
+
     'nav.sur.escaneo':   '复核',
     'nav.sur.validacion': '复核',
     'nav.sur.registros':  '记录',
@@ -3434,6 +3440,11 @@ const translations = {
     // ── Nav additions ─────────────────────────────────────────────────────
     'nav.inv.escaneo':   'Escaneo',
     'nav.inv.registros': 'Registros',
+    'nav.inv.rastreo':   'Rastreo',
+
+    // ── Rastreo module (es) ──────────────────────────────────────────────────
+    'rastreo.titulo': 'Rastreo de Cajas',
+    'rastreo.nuevaOrden': 'Nueva orden',
     'nav.sur.escaneo':   'Validar',
     'nav.sur.validacion': 'Validar',
     'nav.sur.registros':  'Registros',

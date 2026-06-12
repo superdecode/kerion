@@ -31,6 +31,7 @@ import operadoresRoutes from './modules/dropscan/routes/operadores.routes.js'
 // Inventory module routes
 import invScanRoutes from './modules/inventory/routes/scan.routes.js'
 import invTarimasRoutes from './modules/inventory/routes/tarimas.routes.js'
+import rastreoRoutes from './modules/inventory/routes/rastreo.routes.js'
 
 // FEP module routes
 import fepFoliosRoutes from './modules/fep/routes/folios.routes.js'
@@ -155,6 +156,9 @@ app.use('/api/dropscan/operadores', tenantContext, tenantDB, moduleGuard('dropsc
 app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventario'), invScanRoutes)
 app.use('/api/inventory/tarimas', tenantContext, tenantDB, moduleGuard('inventario'), invTarimasRoutes)
 app.use('/api/inventory/historial', tenantContext, tenantDB, moduleGuard('inventario'), invTarimasRoutes)
+
+// Rastreo (submodule of inventario)
+app.use('/api/rastreo', tenantContext, tenantDB, moduleGuard('inventario'), rastreoRoutes)
 
 // FEP — require dropscan module (FEP is part of dropscan)
 app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)

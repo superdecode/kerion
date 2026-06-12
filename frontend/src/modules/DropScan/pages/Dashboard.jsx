@@ -240,7 +240,7 @@ export default function DropScanDashboard() {
                     </ResponsiveContainer>
                     <div className="flex-1 space-y-2">
                       {empresaData.map((e, i) => (
-                        <div key={e.codigo} className="flex items-center gap-2 group">
+                        <div key={e.codigo ?? e.empresa ?? i} className="flex items-center gap-2 group">
                           <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                           <span className="text-xs text-warm-600 flex-1 truncate group-hover:text-warm-800 transition-colors">{e.empresa}</span>
                           <span className="text-xs font-bold text-warm-700 bg-warm-50 px-2 py-0.5 rounded-md">{e.guias}</span>
@@ -295,7 +295,7 @@ export default function DropScanDashboard() {
                 {operatorData.length > 0 ? (
                   <div className="space-y-2">
                     {operatorData.map((op, i) => (
-                      <div key={op.codigo} className="flex items-center gap-3 p-3 rounded-xl hover:bg-warm-50 transition-colors">
+                      <div key={op.codigo ?? op.operador ?? i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-warm-50 transition-colors">
                         <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-bold
                           ${i === 0 ? 'bg-gradient-to-br from-yellow-300 to-yellow-500 text-yellow-900 shadow-sm' :
                             i === 1 ? 'bg-gradient-to-br from-warm-200 to-warm-300 text-warm-700' :

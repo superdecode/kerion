@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   TrendingUp,
   Target,
+  Crosshair,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
@@ -53,6 +54,7 @@ const getNavItems = (t) => [
     items: [
       { path: '/Inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode,   permission: 'inventario.escaneo' },
       { path: '/Inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: Package,       permission: 'inventario.registros' },
+      { path: '/Inventario/rastreo',   tourId: 'nav-inv-rastreo',   label: t('nav.inv.rastreo'),   icon: Crosshair,     permission: 'inventario.rastreo' },
     ],
   },
   {

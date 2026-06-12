@@ -50,6 +50,8 @@ import SalidaDetalle from './modules/Devoluciones/pages/SalidaDetalle'
 // Inventario Module
 import InventarioRegistros from './modules/Inventario/pages/Registros'
 import InventarioEscaneo from './modules/Inventario/pages/Escaneo'
+import InventarioRastreo from './modules/Inventario/pages/Rastreo'
+import InventarioRastreoDetalle from './modules/Inventario/pages/RastreoDetalle'
 
 // Surtido Module
 import SurtidoOrdenes from './modules/Surtido/pages/Ordenes'
@@ -235,6 +237,12 @@ function AppRoutes() {
         } />
         <Route path="inventario/stock" element={<Navigate to="/Inventario/registros" replace />} />
         <Route path="inventario/historial" element={<Navigate to="/Inventario/registros" replace />} />
+        <Route path="inventario/rastreo" element={
+          <PermissionRoute module="inventario.rastreo"><ErrorBoundary><InventarioRastreo /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="inventario/rastreo/:folio" element={
+          <PermissionRoute module="inventario.rastreo"><ErrorBoundary><InventarioRastreoDetalle /></ErrorBoundary></PermissionRoute>
+        } />
 
         {/* Surtido Module */}
         <Route path="surtido" element={
