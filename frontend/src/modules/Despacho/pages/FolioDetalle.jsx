@@ -82,7 +82,7 @@ export default function FolioDetalle() {
   function handlePrint() {
     if (!folio) return
     const result = printFolio({ folio, orders })
-    if (!result.success) addToast({ type: 'error', message: result.message })
+    if (!result.success) addToast(result.message, 'error')
   }
 
   const { mutate: doUpdate, isPending: updatingFolio } = useMutation({
