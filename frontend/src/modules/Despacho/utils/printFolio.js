@@ -1,12 +1,22 @@
 // frontend/src/modules/Despacho/utils/printFolio.js
 
+function esc(str) {
+  if (str == null) return ''
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function fmtPrint(dt) {
   if (!dt) return '—'
   return new Date(dt).toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
 export function printFolio({ folio, orders }) {
-  if (!orders.length) return { success: false, message: 'No hay órdenes para imprimir' }
+  if (!folio || !orders?.length) return { success: false, message: 'No hay órdenes para imprimir' }
 
   const totalBultos = orders.reduce((s, o) => s + (Number(o.bultos) || 0), 0)
   const totalPeso   = orders.reduce((s, o) => s + (Number(o.peso_kg) || 0), 0)
@@ -14,11 +24,11 @@ export function printFolio({ folio, orders }) {
   const orderRows = orders.map((o, i) => `
     <tr>
       <td class="col-num">${i + 1}</td>
-      <td class="col-mono">${o.outbound_order_no || '—'}</td>
-      <td>${o.cliente || '—'}</td>
+      <td class="col-mono">${esc(o.outbound_order_no) || '—'}</td>
+      <td>${esc(o.cliente) || '—'}</td>
       <td class="col-center">${o.bultos ?? '—'}</td>
       <td class="col-center">${o.peso_kg != null ? Number(o.peso_kg).toFixed(2) : '—'}</td>
-      <td>${o.estado || 'pendiente'}</td>
+      <td>${esc(o.estado) || 'pendiente'}</td>
     </tr>`).join('')
 
   const rejectionRows = Array.from({ length: 16 }, (_, i) => `
@@ -31,7 +41,7 @@ export function printFolio({ folio, orders }) {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Folio ${folio.folio_numero}</title>
+  <title>Folio ${esc(folio.folio_numero)}</title>
   <style>
     @page { size: letter; margin: 15mm; }
     body { font-family: 'Segoe UI', sans-serif; font-size: 10pt; color: #334155; }
@@ -67,14 +77,14 @@ export function printFolio({ folio, orders }) {
   <div class="header">
     <div class="header-title">FOLIO DE DESPACHO</div>
     <div class="header-row">
-      <div class="header-cell"><span class="header-label">Folio</span><span class="header-value">${folio.folio_numero}</span></div>
-      <div class="header-cell"><span class="header-label">Conductor</span><span class="header-value">${folio.conductor_nombre || '—'}</span></div>
-      <div class="header-cell"><span class="header-label">Unidad</span><span class="header-value">${folio.unidad_placa || '—'}</span></div>
+      <div class="header-cell"><span class="header-label">Folio</span><span class="header-value">${esc(folio.folio_numero)}</span></div>
+      <div class="header-cell"><span class="header-label">Conductor</span><span class="header-value">${esc(folio.conductor_nombre) || '—'}</span></div>
+      <div class="header-cell"><span class="header-label">Unidad</span><span class="header-value">${esc(folio.unidad_placa) || '—'}</span></div>
     </div>
     <div class="header-row">
       <div class="header-cell"><span class="header-label">Fecha Salida</span><span class="header-value">${fmtPrint(folio.fecha_salida)}</span></div>
-      <div class="header-cell"><span class="header-label">Operador</span><span class="header-value">${folio.operador_nombre || '—'}</span></div>
-      <div class="header-cell"><span class="header-label">Estado</span><span class="header-value">${folio.estado}</span></div>
+      <div class="header-cell"><span class="header-label">Operador</span><span class="header-value">${esc(folio.operador_nombre) || '—'}</span></div>
+      <div class="header-cell"><span class="header-label">Estado</span><span class="header-value">${esc(folio.estado)}</span></div>
     </div>
   </div>
 
@@ -114,7 +124,7 @@ export function printFolio({ folio, orders }) {
   </table>
 
   <div class="firmas">
-    <div class="firma"><div class="firma-line"></div><div class="firma-label">Conductor — ${folio.conductor_nombre || ''}</div></div>
+    <div class="firma"><div class="firma-line"></div><div class="firma-label">Conductor — ${esc(folio.conductor_nombre) || ''}</div></div>
     <div class="firma"><div class="firma-line"></div><div class="firma-label">Recibe</div></div>
   </div>
 
