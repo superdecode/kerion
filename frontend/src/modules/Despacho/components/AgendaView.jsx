@@ -3,6 +3,15 @@ import { useState, useMemo } from 'react'
 import { ArrowLeft, Printer, CalendarDays, Package, Search, X } from 'lucide-react'
 import { fmtDate, fmtTimeShort } from '../../../core/utils/dateFormat'
 
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 const DISPATCH_LABEL = {
   pendiente:  'Pendiente',
   cargado:    'Cargado',
@@ -51,24 +60,24 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
   function printAgenda() {
     const rows = groups.map(g => `
       <div class="group">
-        <div class="group-header">DESTINO: ${g.customer}</div>
+        <div class="group-header">DESTINO: ${escapeHtml(g.customer)}</div>
         <table>
           <thead><tr><th>Horario</th><th>Orden</th><th>Bultos</th><th>Estado</th></tr></thead>
           <tbody>
             ${g.rows.map(o => {
               const orderNo  = o.outboundOrderNo || o.order_no || ''
               const dispatch = dispatchMap?.get(orderNo)
-              const estado   = dispatch ? DISPATCH_LABEL[dispatch.order_estado] ?? dispatch.order_estado : 'Sin folio'
+              const estado   = dispatch ? DISPATCH_LABEL[dispatch.order_estado] ?? escapeHtml(dispatch.order_estado) : 'Sin folio'
               const time     = o.outboundTime || o.expectedTime || ''
               return `<tr>
                 <td>${time ? new Date(time).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                <td class="mono">${orderNo}</td>
-                <td class="center">${o.outboundBoxCount ?? '—'}</td>
+                <td class="mono">${escapeHtml(orderNo)}</td>
+                <td class="center">${escapeHtml(o.outboundBoxCount ?? '—')}</td>
                 <td>${estado}</td>
               </tr>`
             }).join('')}
           </tbody>
-          <tfoot><tr><td colspan="4">Subtotal ${g.customer}: ${g.rows.length} orden${g.rows.length !== 1 ? 'es' : ''} · ${g.totalBultos} bultos</td></tr></tfoot>
+          <tfoot><tr><td colspan="4">Subtotal ${escapeHtml(g.customer)}: ${g.rows.length} orden${g.rows.length !== 1 ? 'es' : ''} · ${g.totalBultos} bultos</td></tr></tfoot>
         </table>
       </div>`).join('')
 
@@ -91,7 +100,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
       </style></head><body>
       <div class="header">
         <h1>Agenda de Despacho</h1>
-        <p>${dateFrom} → ${dateTo} · ${totalOrders} órdenes · ${totalBultos} bultos</p>
+        <p>${escapeHtml(dateFrom)} → ${escapeHtml(dateTo)} · ${totalOrders} órdenes · ${totalBultos} bultos</p>
       </div>
       ${rows}
     </body></html>`
