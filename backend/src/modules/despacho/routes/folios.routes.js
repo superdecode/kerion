@@ -223,7 +223,7 @@ router.post('/:id/orders',
         constraint: error.constraint,
         table: error.table,
       })
-      res.status(500).json({ error: 'Error agregando orden al folio', detail: error.message })
+      res.status(500).json({ error: 'Error agregando orden al folio' })
     }
   }
 )
