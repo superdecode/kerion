@@ -166,7 +166,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
 
             {/* Table */}
             <table className="w-full text-sm">
-              <thead className="bg-warm-50/60">
+              <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                 <tr>
                   <th className="table-header">Horario</th>
                   <th className="table-header">Orden</th>
