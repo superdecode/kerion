@@ -23,6 +23,10 @@ export default function ScanDispatchModal({ isOpen, onClose, filteredOrders = []
     }
   }, [isOpen])
 
+  useEffect(() => {
+    return () => clearTimeout(debounceRef.current)
+  }, [])
+
   const search = useCallback(async (q) => {
     const raw = q.trim().toUpperCase()
     if (!raw) { setStatus(IDLE); return }
