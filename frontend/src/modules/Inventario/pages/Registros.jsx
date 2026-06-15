@@ -464,7 +464,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                 <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1.5">
                   <card.Icon className="w-3 h-3" /> {card.label}
                 </p>
-                <p className={`${card.label.includes('Fecha') ? 'font-mono text-xs font-medium text-warm-600' : 'text-sm font-semibold text-warm-700'} truncate`}>{card.value}</p>
+                <p className={card.label.includes('Fecha') ? 'font-mono text-xs font-medium text-warm-600' : 'text-sm font-semibold text-warm-700 truncate'}>{card.value}</p>
               </div>
             ))}
           </div>

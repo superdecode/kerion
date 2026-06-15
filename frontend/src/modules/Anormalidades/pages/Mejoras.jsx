@@ -116,19 +116,19 @@ export default function AnormMejoras() {
 
   const createMut = useMutation({
     mutationFn: createMejora,
-    onSuccess: () => { qc.invalidateQueries(['anorm-mejoras']); setCreateOpen(false); toast.success(t('anorm.mejoras.created')) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['anorm-mejoras'] }); setCreateOpen(false); toast.success(t('anorm.mejoras.created')) },
     onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => updateMejora(id, data),
-    onSuccess: () => { qc.invalidateQueries(['anorm-mejoras']); qc.invalidateQueries(['anorm-mejora-detail', editId]); setEditId(null); toast.success(t('common.saved')) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['anorm-mejoras'] }); qc.invalidateQueries({ queryKey: ['anorm-mejora-detail', editId] }); setEditId(null); toast.success(t('common.saved')) },
     onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 
   const vincularMut = useMutation({
     mutationFn: ({ mejora_id, anorm_id }) => vincularMejora(mejora_id, anorm_id),
-    onSuccess: () => { qc.invalidateQueries(['anorm-mejora-detail', vincularMejoraId]); setVincularMejoraId(null); toast.success(t('anorm.mejoras.vinculado')) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['anorm-mejora-detail', vincularMejoraId] }); setVincularMejoraId(null); toast.success(t('anorm.mejoras.vinculado')) },
     onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 

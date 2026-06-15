@@ -96,8 +96,8 @@ export default function Ordenes() {
 
   const [searchInput, setSearchInput]   = useState('')
   const [search, setSearch]             = useState('')
-  const [dateFrom, setDateFrom]         = useState('')
-  const [dateTo, setDateTo]             = useState('')
+  const [dateFrom, setDateFrom]         = useState(() => getDespachoDates()?.dateFrom ?? '')
+  const [dateTo, setDateTo]             = useState(() => getDespachoDates()?.dateTo   ?? '')
   const [statusFilter, setStatusFilter] = useState([])
   const [dispatchFilter, setDispatchFilter] = useState([])
   const [tab, setTab]       = useState('all')
@@ -120,6 +120,7 @@ export default function Ordenes() {
     queryFn: getOutboundList,
     staleTime: 60000,
     refetchOnWindowFocus: false,
+    refetchInterval: (query) => query.state.data?.data?.partial ? 5000 : false,
   })
 
   const { data: dispatchData } = useQuery({
@@ -226,13 +227,7 @@ export default function Ordenes() {
   useEffect(() => { setPage(1) }, [search, dateFrom, dateTo, statusFilter, dispatchFilter, tab])
 
   useEffect(() => {
-    const saved = getDespachoDates()
-    if (saved) {
-      setDateFrom(saved.dateFrom)
-      setDateTo(saved.dateTo)
-    } else {
-      setShowIniciarDespacho(true)
-    }
+    setShowIniciarDespacho(true)
   }, [])
 
   function handleSort(field) {
@@ -312,16 +307,6 @@ export default function Ordenes() {
         subtitle="Órdenes de salida disponibles para embarque"
         actions={
           <div className="flex items-center gap-2">
-            {canDispatch && (
-              <button
-                onClick={() => setShowScan(true)}
-                disabled={!allOrders.length}
-                className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <ScanLine className="w-3.5 h-3.5" />
-                Iniciar Despacho
-              </button>
-            )}
             <button
               onClick={() => setShowAgenda(true)}
               disabled={!filtered.length}
@@ -342,14 +327,6 @@ export default function Ordenes() {
                 </button>
               </>
             )}
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing || loadingSheets}
-              className="btn-ghost text-xs flex items-center gap-1.5"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              Actualizar
-            </button>
           </div>
         }
       />
@@ -357,35 +334,50 @@ export default function Ordenes() {
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-[100] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 pt-2.5 space-y-2">
 
-          {/* Row 1 — date range + presets */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
-              <Clock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
-              <input
-                type="date" value={dateFrom}
-                onChange={e => handleDateFromChange(e.target.value)}
-                className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0" />
-              <span className="text-warm-300 text-xs">→</span>
-              <input
-                type="date" value={dateTo}
-                onChange={e => handleDateToChange(e.target.value)}
-                className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0" />
+          {/* Row 1 — date range + presets + actions */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
+                <Clock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+                <input
+                  type="date" value={dateFrom}
+                  onChange={e => handleDateFromChange(e.target.value)}
+                  className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0" />
+                <span className="text-warm-300 text-xs">→</span>
+                <input
+                  type="date" value={dateTo}
+                  onChange={e => handleDateToChange(e.target.value)}
+                  className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0" />
+              </div>
+              {DATE_PRESETS.map(({ label, d }) => (
+                <button key={label}
+                  onClick={() => {
+                    const today = new Date().toISOString().slice(0, 10)
+                    const from  = d === 0 ? today : new Date(Date.now() - d * 864e5).toISOString().slice(0, 10)
+                    setDateFrom(from)
+                    setDateTo(today)
+                    setDespachoDates(from, today)
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors"
+                >{label}</button>
+              ))}
+              {isPartial && (
+                <span className="text-[11px] text-warning-600 font-medium ml-1">Cargando datos...</span>
+              )}
             </div>
-            {DATE_PRESETS.map(({ label, d }) => (
-              <button key={label}
-                onClick={() => {
-                  const today = new Date().toISOString().slice(0, 10)
-                  const from  = d === 0 ? today : new Date(Date.now() - d * 864e5).toISOString().slice(0, 10)
-                  setDateFrom(from)
-                  setDateTo(today)
-                  setDespachoDates(from, today)
-                }}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors"
-              >{label}</button>
-            ))}
-            {isPartial && (
-              <span className="text-[11px] text-warning-600 font-medium ml-1">Cargando datos...</span>
-            )}
+
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {canDispatch && (
+                <button
+                  onClick={() => setShowScan(true)}
+                  disabled={!allOrders.length}
+                  className="btn-primary text-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ScanLine className="w-3.5 h-3.5" />
+                  Iniciar Despacho
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Row 2 — MultiSelects + search + apply */}
@@ -569,6 +561,8 @@ export default function Ordenes() {
       {/* Date gate modal (non-dismissable) */}
       <IniciarDespachoModal
         isOpen={showIniciarDespacho}
+        initialFrom={dateFrom || undefined}
+        initialTo={dateTo || undefined}
         onConfirm={(from, to) => {
           setDateFrom(from)
           setDateTo(to)

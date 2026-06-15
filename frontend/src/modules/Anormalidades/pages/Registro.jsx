@@ -22,6 +22,14 @@ import {
   getProcesosConfig, getOrigenesConfig, getNivelesConfig,
 } from '../services/anormalidadesService'
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function toLocalDatetimeString() {
+  const d = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const NIVEL_META = {
@@ -203,27 +211,27 @@ export default function AnormalidadesRegistro() {
   // ── Mutations ───────────────────────────────────────────────────────────────
   const createMut = useMutation({
     mutationFn: createAnormalidad,
-    onSuccess: () => { qc.invalidateQueries(['anormalidades']); setCreateOpen(false); toast.success(t('anorm.toast.created')) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['anormalidades'] }); setCreateOpen(false); toast.success(t('anorm.toast.created')) },
     onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorCreate')),
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => updateAnormalidad(id, data),
-    onSuccess: () => { qc.invalidateQueries(['anormalidades']); qc.invalidateQueries(['anormalidad-detail', editId]); setEditId(null); toast.success(t('anorm.toast.updated')) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['anormalidades'] }); qc.invalidateQueries({ queryKey: ['anormalidad-detail', editId] }); setEditId(null); toast.success(t('anorm.toast.updated')) },
     onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorUpdate')),
   })
 
   const deleteMut = useMutation({
     mutationFn: deleteAnormalidad,
-    onSuccess: () => { qc.invalidateQueries(['anormalidades']); setDeleteId(null); toast.success('Eliminado') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['anormalidades'] }); setDeleteId(null); toast.success('Eliminado') },
     onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorDelete')),
   })
 
   const estadoMut = useMutation({
     mutationFn: ({ id, estado, nota }) => changeEstado(id, { estado, nota }),
     onSuccess: () => {
-      qc.invalidateQueries(['anormalidades'])
-      qc.invalidateQueries(['anormalidad-detail', estadoModal?.id])
+      qc.invalidateQueries({ queryKey: ['anormalidades'] })
+      qc.invalidateQueries({ queryKey: ['anormalidad-detail', estadoModal?.id] })
       setEstadoModal(null)
       toast.success(t('anorm.toast.statusUpdated'))
     },
@@ -233,7 +241,7 @@ export default function AnormalidadesRegistro() {
   const crearMejoraMut = useMutation({
     mutationFn: ({ id, payload }) => crearMejoraDesdeAnormalidad(id, payload),
     onSuccess: () => {
-      qc.invalidateQueries(['anormalidad-detail', detailId])
+      qc.invalidateQueries({ queryKey: ['anormalidad-detail', detailId] })
       toast.success(t('anorm.toast.mejoraCreated'))
     },
     onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorCreateMejora')),
@@ -633,12 +641,12 @@ export default function AnormalidadesRegistro() {
 
 function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles, origenes, onSubmit, loading, title, initialData }) {
   const { t } = useI18nStore()
-  const [form, setForm] = useState(initialData || { ...FORM_EMPTY, fecha_ocurrencia: new Date().toISOString().slice(0, 16) })
+  const [form, setForm] = useState(initialData || { ...FORM_EMPTY, fecha_ocurrencia: toLocalDatetimeString() })
   const [isEditing, setIsEditing] = useState(!initialData)
   const isCreateMode = !initialData
 
   useEffect(() => {
-    setForm(initialData || { ...FORM_EMPTY, fecha_ocurrencia: new Date().toISOString().slice(0, 16) })
+    setForm(initialData || { ...FORM_EMPTY, fecha_ocurrencia: toLocalDatetimeString() })
     setIsEditing(!initialData)
   }, [initialData, isOpen])
 
@@ -660,7 +668,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
       set('codigo_id', id)
       set('codigo', found.codigo)
       set('nombre', found.nombre)
-      if (!form.nivel) set('nivel', found.nivel_sugerido)
+      if (!form.nivel) set('nivel', found.nivel_sugerido || '')
     } else {
       set('codigo_id', '')
     }
@@ -880,17 +888,24 @@ function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canC
           {t('anorm.action.crearMejora')}
         </button>
       )}
-      {canCreate && d && (
-        <button onClick={onEdit} className="btn-ghost text-xs flex items-center gap-1.5">
-          <Edit3 className="w-3 h-3" />
-          {t('common.edit')}
-        </button>
-      )}
     </div>
   )
 
   return (
-    <Modal isOpen onClose={onClose} title={d?.folio || '...'} icon={AlertTriangle} size="2xl" headerAction={headerAction}>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={d?.folio || '...'}
+      icon={AlertTriangle}
+      size="xl"
+      headerAction={headerAction}
+      footer={canCreate && d ? (
+        <button onClick={onEdit} className="btn-ghost text-xs flex items-center gap-1.5">
+          <Edit3 className="w-3 h-3" />
+          {t('common.edit')}
+        </button>
+      ) : null}
+    >
       {loading || !d ? (
         <div className="flex justify-center py-12"><LoadingSpinner /></div>
       ) : (

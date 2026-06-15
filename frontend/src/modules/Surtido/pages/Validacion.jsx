@@ -423,7 +423,7 @@ function RejectedTable({ items, t }) {
               <th className="table-header w-10">#</th>
               <th className="table-header">{t('surtido.validacion.code_header')}</th>
               <th className="table-header">{t('common.status')}</th>
-              <th className="table-header text-right">Hora</th>
+              <th className="table-header text-right">{t('surtido.validacion.created_at')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
@@ -440,7 +440,7 @@ function RejectedTable({ items, t }) {
                     {e.result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{fmtTimeShort(e.ts)}</td>
+                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{fmtDateTime(e.ts)}</td>
               </tr>
             ))}
           </tbody>
@@ -466,7 +466,7 @@ function ScanFeedTable({ items, t }) {
             <tr>
               <th className="table-header w-10">#</th>
               <th className="table-header">{t('surtido.validacion.code_header')}</th>
-              <th className="table-header text-right">Hora</th>
+              <th className="table-header text-right">{t('surtido.validacion.created_at')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
@@ -481,7 +481,7 @@ function ScanFeedTable({ items, t }) {
                     {e.code}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{fmtTimeShort(e.ts)}</td>
+                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{fmtDateTime(e.ts)}</td>
               </tr>
             ))}
           </tbody>
@@ -1082,7 +1082,7 @@ const { data: reasonsData } = useQuery({
       onCancel:   canDelete && !sessionCompleteLocked ? handleCancel : null,
       onFinalize: canUpdate && !sessionCompleteLocked && totalExpected > 0 && counts.ok < totalExpected ? () => setShowFinalize(true) : null,
     })
-  }, [step, isActive, pendingSync.length, isSyncing, sessionCompleteLocked, totalExpected, counts.ok, canDelete, canUpdate]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, isActive, pendingSync.length, isSyncing, sessionCompleteLocked, totalExpected, counts.ok, counts.rejected, canDelete, canUpdate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const interval = setInterval(async () => {
