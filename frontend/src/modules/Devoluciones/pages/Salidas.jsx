@@ -359,7 +359,7 @@ export default function Salidas() {
                       <tr className="bg-warm-50 border-b border-warm-100">
                         <th className="table-header w-8">
                           <input type="checkbox" checked={allChecked} ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
-                            onChange={toggleAll} className="w-3.5 h-3.5 accent-primary-600 cursor-pointer" />
+                            onChange={toggleAll} className="cb" />
                         </th>
                         <th className="table-header">{t('dev.salidas.col.codigo')}</th>
                         <th className="table-header">{t('dev.salidas.col.fecha')}</th>
@@ -379,7 +379,7 @@ export default function Salidas() {
                           onClick={() => navigate(`/Devoluciones/salidas/${row.id}`)}>
                           <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
                             <input type="checkbox" checked={isSelected} onChange={() => toggleRow(row.id)}
-                              className="w-3.5 h-3.5 accent-primary-600 cursor-pointer" />
+                              className="cb" />
                           </td>
                           <td className="table-cell">
                             <div className="flex items-center gap-1.5">

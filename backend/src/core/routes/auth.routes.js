@@ -20,6 +20,11 @@ function normalizePermisos(obj) {
 
 const router = Router()
 
+function isLocalDevHost(host) {
+  const withoutPort = String(host || '').split(':')[0].trim().toLowerCase()
+  return withoutPort === 'localhost' || withoutPort === '127.0.0.1' || withoutPort === '0.0.0.0'
+}
+
 async function resolveTenantIdFromRequest(req) {
   // x-forwarded-host takes priority (Vercel sets this to the public hostname)
   const rawHost = req.headers['x-forwarded-host'] || req.headers['host'] || ''
@@ -30,7 +35,7 @@ async function resolveTenantIdFromRequest(req) {
   let slug = null
   if (withoutPort.endsWith(`.${baseDomain}`)) {
     slug = withoutPort.slice(0, -(baseDomain.length + 1))
-  } else if (env.NODE_ENV !== 'production' && req.headers['x-tenant-slug']) {
+  } else if (env.NODE_ENV !== 'production' && isLocalDevHost(host) && req.headers['x-tenant-slug']) {
     slug = req.headers['x-tenant-slug']
   }
 
@@ -148,7 +153,7 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN })
 
-    auditLog(req, 'LOGIN', 'usuario', user.id, { email: user.email, rol: user.rol_nombre, tenant_id: tenant.id })
+    await auditLog(req, 'LOGIN', 'usuario', user.id, { email: user.email, rol: user.rol_nombre, tenant_id: tenant.id })
 
     res.json({
       success: true,
@@ -184,6 +189,8 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/me
 router.get('/me', authenticateToken, async (req, res) => {
   try {
+    if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
+
     const [result, tenantRes, modulesRes] = await Promise.all([
       query(
         `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id, u.estado,
@@ -192,8 +199,8 @@ router.get('/me', authenticateToken, async (req, res) => {
                 r.nombre as rol_nombre, r.permisos as rol_permisos
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id
-         WHERE u.id = $1`,
-        [req.user.id]
+         WHERE u.id = $1 AND u.tenant_id = $2`,
+        [req.user.id, req.user.tenant_id]
       ),
       req.user.tenant_id
         ? query(`SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email, zona_horaria FROM tenants WHERE id = $1`, [req.user.tenant_id])
@@ -249,7 +256,12 @@ router.post('/change-password', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' })
     }
 
-    const userRes = await query('SELECT password_hash FROM usuarios WHERE id = $1', [req.user.id])
+    if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
+
+    const userRes = await query(
+      'SELECT password_hash FROM usuarios WHERE id = $1 AND tenant_id = $2',
+      [req.user.id, req.user.tenant_id]
+    )
     if (userRes.rows.length === 0) {
       return res.status(404).json({ error: 'Usuario no encontrado' })
     }
@@ -260,8 +272,11 @@ router.post('/change-password', authenticateToken, async (req, res) => {
     }
 
     const newHash = await bcrypt.hash(new_password, 12)
-    await query('UPDATE usuarios SET password_hash = $1 WHERE id = $2', [newHash, req.user.id])
-    auditLog(req, 'CHANGE_PASSWORD', 'usuario', req.user.id, null)
+    await query(
+      'UPDATE usuarios SET password_hash = $1 WHERE id = $2 AND tenant_id = $3',
+      [newHash, req.user.id, req.user.tenant_id]
+    )
+    await auditLog(req, 'CHANGE_PASSWORD', 'usuario', req.user.id, null)
     res.json({ success: true })
   } catch (error) {
     console.error('Change password error:', error)
@@ -272,6 +287,8 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 // PUT /api/auth/preferences
 router.put('/preferences', authenticateToken, async (req, res) => {
   try {
+    if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
+
     const { zona_horaria } = req.body
     if (!zona_horaria || typeof zona_horaria !== 'string') {
       return res.status(400).json({ error: 'zona_horaria es requerida' })
@@ -283,8 +300,8 @@ router.put('/preferences', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Zona horaria inválida' })
     }
     await query(
-      'UPDATE usuarios SET zona_horaria = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [zona_horaria, req.user.id]
+      'UPDATE usuarios SET zona_horaria = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND tenant_id = $3',
+      [zona_horaria, req.user.id, req.user.tenant_id]
     )
     res.json({ success: true, zona_horaria })
   } catch (error) {
@@ -296,6 +313,8 @@ router.put('/preferences', authenticateToken, async (req, res) => {
 // PUT /api/auth/profile
 router.put('/profile', authenticateToken, async (req, res) => {
   try {
+    if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
+
     const { nombre, apellido } = req.body
     const safeNombre = String(nombre || '').trim()
     const safeApellido = String(apellido || '').trim()
@@ -308,16 +327,16 @@ router.put('/profile', authenticateToken, async (req, res) => {
     const result = await query(
       `UPDATE usuarios
        SET nombre_completo = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2
+       WHERE id = $2 AND tenant_id = $3
        RETURNING id, codigo, nombre_completo, email, rol_id, estado, avatar_url, zona_horaria`,
-      [nombreCompleto, req.user.id]
+      [nombreCompleto, req.user.id, req.user.tenant_id]
     )
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Usuario no encontrado' })
     }
 
-    auditLog(req, 'UPDATE_PROFILE', 'usuario', req.user.id, { nombre_completo: nombreCompleto })
+    await auditLog(req, 'UPDATE_PROFILE', 'usuario', req.user.id, { nombre_completo: nombreCompleto })
     res.json({ success: true, user: result.rows[0] })
   } catch (error) {
     console.error('Profile update error:', error)
@@ -381,7 +400,7 @@ router.post('/logout', authenticateToken, async (req, res) => {
     if (Math.random() < 0.1) {
       query('DELETE FROM token_blacklist WHERE expires_at < CURRENT_TIMESTAMP').catch(() => {})
     }
-    auditLog(req, 'LOGOUT', 'usuario', req.user.id, null)
+    await auditLog(req, 'LOGOUT', 'usuario', req.user.id, null)
     res.json({ success: true, message: 'Sesión cerrada' })
   } catch (error) {
     console.error('Logout error:', error)

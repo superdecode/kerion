@@ -4,7 +4,7 @@ import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { generateDevCodigo, generateItemTrazabilidad } from '../utils/codigos.js'
 import { uploadEvidence, deleteEvidence, getEvidencePublicUrl } from '../utils/storage.js'
 import { instantDateInTZ } from '../../../shared/utils/dateUtils.js'
-import { usageGuard } from '../../middleware/usageGuard.js'
+import { checkModuleLimitForUpdate } from '../../middleware/usageGuard.js'
 
 const DEVOLUCIONES_COUNT_QUERY = `SELECT COUNT(*) FROM dev_sesiones WHERE tenant_id = $1 AND estado = 'confirmado' AND confirmado_at >= date_trunc('month', now())`
 
@@ -221,7 +221,6 @@ router.put('/:id',
 router.post('/:id/confirmar',
   authenticateToken, loadFullUser,
   requirePermission('devoluciones.entradas', 'actualizar'),
-  usageGuard({ limitField: 'devoluciones_limit', countQuery: DEVOLUCIONES_COUNT_QUERY, errorCode: 'DEVOLUCIONES_LIMIT_REACHED' }),
   async (req, res) => {
     let client
     try {
@@ -234,6 +233,23 @@ router.post('/:id/confirmar',
       if (!sesion) return res.status(404).json({ error: 'Entrada no encontrada' })
       if (sesion.estado === 'confirmado') return res.status(409).json({ error: 'La entrada ya fue confirmada' })
       if (sesion.estado === 'cancelado') return res.status(409).json({ error: 'La entrada esta cancelada' })
+
+      const limitCheck = await checkModuleLimitForUpdate(
+        client,
+        req.tenantId,
+        'devoluciones_limit',
+        DEVOLUCIONES_COUNT_QUERY,
+        1
+      )
+      if (limitCheck.limited) {
+        await client.query('ROLLBACK')
+        return res.status(402).json({
+          error: 'Límite mensual del plan alcanzado para este módulo.',
+          code: 'DEVOLUCIONES_LIMIT_REACHED',
+          used: limitCheck.used,
+          limit: limitCheck.limit,
+        })
+      }
 
       const itemsRes = await client.query(
         `SELECT * FROM dev_items WHERE sesion_id = $1 AND tenant_id = $2 ORDER BY created_at ASC`,

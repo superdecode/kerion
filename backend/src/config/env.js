@@ -29,6 +29,8 @@ const env = {
   TENANT_BASE_DOMAIN: process.env.TENANT_BASE_DOMAIN || 'localhost',
   SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL || '',
   LEGACY_TENANT_ID: process.env.LEGACY_TENANT_ID || '',
+  ALLOW_SETUP_ROUTE: process.env.ALLOW_SETUP_ROUTE === 'true',
+  INITIAL_ADMIN_PASSWORD: process.env.INITIAL_ADMIN_PASSWORD || '',
   // Email
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   EMAIL_FROM: process.env.EMAIL_FROM || 'noreply@kerion.app',

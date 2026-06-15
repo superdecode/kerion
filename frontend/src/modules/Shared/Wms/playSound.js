@@ -42,6 +42,13 @@ export function playSound(type) {
       osc.frequency.setValueAtTime(600, audioContext.currentTime)
       osc.start()
       osc.stop(audioContext.currentTime + 0.1)
+    } else if (type === 'reject') {
+      osc.type = 'sawtooth'
+      gain.gain.setValueAtTime(0.45, audioContext.currentTime)
+      osc.frequency.setValueAtTime(240, audioContext.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(90, audioContext.currentTime + 0.45)
+      osc.start()
+      osc.stop(audioContext.currentTime + 0.45)
     }
   } catch {
     // Ignore audio errors

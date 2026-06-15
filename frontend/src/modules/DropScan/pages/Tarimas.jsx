@@ -683,7 +683,7 @@ export default function Tarimas() {
                         {selectMode && (
                           <th className="table-header w-10 text-center">
                             <input type="checkbox" checked={selectedIds.size === tarimas.length && tarimas.length > 0}
-                              onChange={toggleSelectAll} className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                              onChange={toggleSelectAll} className="cb" />
                           </th>
                         )}
                         <th className="table-header" onClick={() => handleSort('codigo')}>
@@ -718,7 +718,7 @@ export default function Tarimas() {
                           {selectMode && (
                             <td className="table-cell text-center">
                               <input type="checkbox" checked={selectedIds.has(row.id)}
-                                onChange={() => toggleSelect(row.id)} className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                                onChange={() => toggleSelect(row.id)} className="cb" />
                             </td>
                           )}
                           <td className="table-cell tarima-code-cell" data-column="tarima-code">

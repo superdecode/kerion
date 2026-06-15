@@ -200,7 +200,7 @@ function MultiSelect({ value, onChange, options, placeholder }) {
                 className="flex items-center gap-2.5 px-3 py-2 text-sm text-warm-700 hover:bg-warm-50 cursor-pointer"
                 onMouseDown={e => { e.preventDefault(); toggle(opt) }}
               >
-                <input type="checkbox" checked={value.includes(opt)} readOnly className="rounded border-warm-300 text-primary-600 pointer-events-none" />
+                <input type="checkbox" checked={value.includes(opt)} readOnly className="cb pointer-events-none" />
                 <span className="truncate">{opt}</span>
               </label>
             ))}
@@ -1147,7 +1147,7 @@ export default function InventarioRegistros() {
                         <input type="checkbox"
                           checked={selectedIds.size === filteredRecords.length && filteredRecords.length > 0}
                           onChange={toggleSelectAll}
-                          className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                          className="cb" />
                       </th>
                       <th className={TH_CLASS}><span className={TH_TEXT}>Sección</span></th>
                       <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.type')}</span></th>
@@ -1170,7 +1170,7 @@ export default function InventarioRegistros() {
                           <td className="table-cell text-center" onClick={e => { e.stopPropagation(); toggleSelect(r.id) }}>
                             <input type="checkbox" checked={isSelected}
                               onChange={() => toggleSelect(r.id)}
-                              className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                              className="cb" />
                           </td>
                           <td className="table-cell">
                             <div className="flex min-w-0 items-center gap-1.5">

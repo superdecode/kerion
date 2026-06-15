@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import env from '../../config/env.js'
-import { query } from '../../config/database.js'
+import { query, tenantQuery } from '../../config/database.js'
 
 export async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization']
@@ -64,7 +64,12 @@ export async function loadFullUser(req, res, next) {
     // Scope to the tenant from the JWT claim so a token from tenant A cannot
     // load a user from tenant B even if both have the same numeric user id.
     const tenantId = req.user.tenant_id || req.tenantId
-    const result = await query(
+
+    // Use tenantQuery so that SET LOCAL app.tenant_id is applied within the
+    // transaction — required because usuarios and roles have FORCE ROW LEVEL
+    // SECURITY with a policy that reads current_setting('app.tenant_id').
+    const result = await tenantQuery(
+      tenantId,
       `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos,
               t.zona_horaria as tenant_zona_horaria
        FROM usuarios u
@@ -94,6 +99,7 @@ export async function loadFullUser(req, res, next) {
     }
     next()
   } catch (err) {
+    console.error('[loadFullUser] error:', err.message)
     return res.status(500).json({ error: 'Error cargando usuario' })
   }
 }

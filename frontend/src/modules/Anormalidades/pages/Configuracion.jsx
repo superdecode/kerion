@@ -265,6 +265,7 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
+  const [deleteItem, setDeleteItem] = useState(null)
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -342,6 +343,15 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
                             <Edit3 className="w-4 h-4" />
                           </button>
                         )}
+                        {canDelete && (
+                          <button
+                            onClick={() => setDeleteItem(item)}
+                            className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-end justify-between gap-3 mt-1">
@@ -382,12 +392,20 @@ function CatalogoConfigTab({ title, subtitle, icon: Icon, items, loading, emptyL
           initialData={editItem}
           inp={inp}
           tipo={tipo}
+          defaultEditing
           onSubmit={data => { onUpdate(editItem.id, data); setEditItem(null) }}
           loading={busy}
           canDelete={canDelete}
           onDelete={() => { onDelete(editItem.id); setEditItem(null) }}
         />
       )}
+
+      <DeleteConfirmModal
+        item={deleteItem}
+        onClose={() => setDeleteItem(null)}
+        onConfirm={() => { onDelete(deleteItem.id); setDeleteItem(null) }}
+        loading={busy}
+      />
     </>
   )
 }
@@ -396,6 +414,7 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
   const { t } = useI18nStore()
   const [createOpen, setCreateOpen] = useState(false)
   const [editCodigo, setEditCodigo] = useState(null)
+  const [deleteCodigoToConfirm, setDeleteCodigoToConfirm] = useState(null)
   const [search, setSearch] = useState('')
   const [nivelFilter, setNivelFilter] = useState('')
   const [sortKey, setSortKey] = useState('codigo')
@@ -535,7 +554,11 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
                             <Edit3 className="w-4 h-4" />
                           </button>
                         )}
-                        {}
+                        {canDelete && !c.es_default && (
+                          <button onClick={() => setDeleteCodigoToConfirm(c)} className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors" title={t('common.delete')}>
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -567,6 +590,7 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
           initialData={{ ...editCodigo }}
           procesos={procesos}
           niveles={niveles}
+          defaultEditing
           onSubmit={data => { onUpdate(editCodigo.id, data); setEditCodigo(null) }}
           loading={busy}
           inp={inp}
@@ -574,6 +598,13 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
           onDelete={() => { onDelete(editCodigo.id); setEditCodigo(null) }}
         />
       )}
+
+      <DeleteConfirmModal
+        item={deleteCodigoToConfirm}
+        onClose={() => setDeleteCodigoToConfirm(null)}
+        onConfirm={() => { onDelete(deleteCodigoToConfirm.id); setDeleteCodigoToConfirm(null) }}
+        loading={busy}
+      />
     </>
   )
 }
@@ -582,6 +613,7 @@ function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp,
   const { t } = useI18nStore()
   const [createOpen, setCreateOpen] = useState(false)
   const [editNivel, setEditNivel] = useState(null)
+  const [deleteNivelItem, setDeleteNivelItem] = useState(null)
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
@@ -638,6 +670,15 @@ function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp,
                             <Edit3 className="w-4 h-4" />
                           </button>
                         )}
+                        {canDelete && (
+                          <button
+                            onClick={() => setDeleteNivelItem(nivel)}
+                            className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="mt-2 space-y-1 text-sm text-warm-600 mb-4">
@@ -663,20 +704,27 @@ function NivelesTab({ niveles, loading, onCreate, onUpdate, onDelete, busy, inp,
       )}
 
       <NivelFormModal isOpen={createOpen} onClose={() => setCreateOpen(false)} title={t('anorm.config.nuevoNivel')} inp={inp} onSubmit={data => { onCreate(data); setCreateOpen(false) }} loading={busy} canDelete={canDelete} onDelete={() => {}} />
-      {editNivel && <NivelFormModal isOpen onClose={() => setEditNivel(null)} title={editNivel.codigo} initialData={editNivel} inp={inp} onSubmit={data => { onUpdate(editNivel.codigo, data); setEditNivel(null) }} loading={busy} canDelete={canDelete} onDelete={() => { onDelete(editNivel.codigo); setEditNivel(null) }} />}
+      {editNivel && <NivelFormModal isOpen onClose={() => setEditNivel(null)} title={editNivel.codigo} initialData={editNivel} inp={inp} defaultEditing onSubmit={data => { onUpdate(editNivel.codigo, data); setEditNivel(null) }} loading={busy} canDelete={canDelete} onDelete={() => { onDelete(editNivel.codigo); setEditNivel(null) }} />}
+
+      <DeleteConfirmModal
+        item={deleteNivelItem}
+        onClose={() => setDeleteNivelItem(null)}
+        onConfirm={() => { onDelete(deleteNivelItem.codigo); setDeleteNivelItem(null) }}
+        loading={busy}
+      />
     </div>
   )
 }
 
-function NivelFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, canDelete, onDelete }) {
+function NivelFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, canDelete, onDelete, defaultEditing }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData ? { ...initialData } : { ...NIVEL_EMPTY })
-  const [isEditing, setIsEditing] = useState(!initialData)
+  const [isEditing, setIsEditing] = useState(defaultEditing ?? !initialData)
   const isCreateMode = !initialData
 
   useEffect(() => {
     setForm(initialData ? { ...initialData } : { ...NIVEL_EMPTY })
-    setIsEditing(!initialData)
+    setIsEditing(defaultEditing ?? !initialData)
   }, [initialData, isOpen])
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
@@ -771,16 +819,16 @@ function NivelFormModal({ isOpen, onClose, title, initialData, onSubmit, loading
   )
 }
 
-function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, tipo, canDelete, onDelete }) {
+function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, tipo, canDelete, onDelete, defaultEditing }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData ? { ...initialData } : { ...CATALOGO_EMPTY })
-  const [isEditing, setIsEditing] = useState(!initialData)
+  const [isEditing, setIsEditing] = useState(defaultEditing ?? !initialData)
   const isProceso = tipo === 'proceso'
   const isCreateMode = !initialData
 
   useEffect(() => {
     setForm(initialData ? { ...initialData } : { ...CATALOGO_EMPTY })
-    setIsEditing(!initialData)
+    setIsEditing(defaultEditing ?? !initialData)
   }, [initialData, isOpen])
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
@@ -868,15 +916,15 @@ function CatalogoFormModal({ isOpen, onClose, title, initialData, onSubmit, load
   )
 }
 
-function CodigoFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, procesos, niveles = [], canDelete, onDelete }) {
+function CodigoFormModal({ isOpen, onClose, title, initialData, onSubmit, loading, inp, procesos, niveles = [], canDelete, onDelete, defaultEditing }) {
   const { t } = useI18nStore()
   const [form, setForm] = useState(initialData || { ...CODIGO_EMPTY })
-  const [isEditing, setIsEditing] = useState(!initialData)
+  const [isEditing, setIsEditing] = useState(defaultEditing ?? !initialData)
   const isCreateMode = !initialData
 
   useEffect(() => {
     setForm(initialData || { ...CODIGO_EMPTY })
-    setIsEditing(!initialData)
+    setIsEditing(defaultEditing ?? !initialData)
   }, [initialData, isOpen])
 
   const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }))

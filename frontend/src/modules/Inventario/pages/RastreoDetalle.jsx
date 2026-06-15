@@ -996,7 +996,7 @@ export default function RastreoDetalle() {
                         checked={checked}
                         disabled={resolveMode === 'all'}
                         onChange={() => toggleResolveCaja(caja.id)}
-                        className="h-4 w-4 rounded border-warm-300 text-primary-600 focus:ring-primary-200"
+                        className="cb"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="font-mono text-xs font-semibold text-warm-800">{caja.box_code}</p>

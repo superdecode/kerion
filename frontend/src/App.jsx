@@ -31,6 +31,9 @@ import NotFound from './pages/NotFound'
 import GlobalDashboard from './pages/GlobalDashboard'
 import Administracion from './pages/Administracion'
 
+// Dashboard Module (consolidated)
+import DashboardPage from './modules/Dashboard/pages/DashboardPage'
+
 // DropScan Module
 import DropScanDashboard from './modules/DropScan/pages/Dashboard'
 import Escaneo from './modules/DropScan/pages/Escaneo'
@@ -61,12 +64,23 @@ import SurtidoRegistros from './modules/Surtido/pages/Registros'
 
 // WMS Hub Module
 import WMSHubConfiguracion from './modules/WmsHub/pages/Configuracion'
+import GlobalPreloader from './core/components/common/GlobalPreloader'
 
 // Anormalidades Module
 import AnormRegistro from './modules/Anormalidades/pages/Registro'
 import AnormDashboard from './modules/Anormalidades/pages/Dashboard'
 import AnormMejoras from './modules/Anormalidades/pages/Mejoras'
 import AnormConfiguracion from './modules/Anormalidades/pages/Configuracion'
+
+// Despacho Module
+import DespachoOrdenes from './modules/Despacho/pages/Ordenes'
+import DespachoFolios from './modules/Despacho/pages/Folios'
+import DespachoFolioDetalle from './modules/Despacho/pages/FolioDetalle'
+
+// Recepcion Module
+import RecepcionRecibir from './modules/Recepcion/pages/Recibir'
+import RecepcionDetalle from './modules/Recepcion/pages/RecepcionDetalle'
+import ValidacionRecepcion from './modules/Recepcion/pages/ValidacionRecepcion'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -82,7 +96,7 @@ const queryClient = new QueryClient({
 // Smart redirect: if user can't view global dashboard, redirect to first allowed module
 const MODULE_ROUTES = [
   { module: 'global.inicio', path: '/' },
-  { module: 'dropscan.dashboard', path: '/dropscan' },
+  { module: 'dropscan.dashboard', path: '/dashboard?module=dropscan' },
   { module: 'dropscan.escaneo', path: '/DropScan/escaneo' },
   { module: 'dropscan.tarimas', path: '/DropScan/tarimas' },
   { module: 'dropscan.reportes', path: '/DropScan/reportes' },
@@ -99,8 +113,11 @@ const MODULE_ROUTES = [
   { module: 'surtido.registros', path: '/Surtido/registros' },
   { module: 'sistema.wms', path: '/wmshub' },
   { module: 'anormalidades.registro', path: '/Anormalidades/registro' },
-  { module: 'anormalidades.dashboard', path: '/Anormalidades/dashboard' },
+  { module: 'anormalidades.dashboard', path: '/dashboard?module=anormalidades' },
   { module: 'anormalidades.mejoras', path: '/Anormalidades/mejoras' },
+  { module: 'despacho.ordenes', path: '/despacho/ordenes' },
+  { module: 'despacho.folios', path: '/despacho/folios' },
+  { module: 'recepcion.recibir', path: '/recepcion/recibir' },
 ]
 
 function SmartRedirect() {
@@ -174,10 +191,13 @@ function AppRoutes() {
       >
         <Route index element={<ErrorBoundary><SmartRedirect /></ErrorBoundary>} />
 
-        {/* DropScan Module */}
-        <Route path="dropscan" element={
-          <PermissionRoute module="dropscan.dashboard"><ErrorBoundary><DropScanDashboard /></ErrorBoundary></PermissionRoute>
+        {/* Main Dashboard (consolidated) */}
+        <Route path="dashboard" element={
+          <ErrorBoundary><DashboardPage /></ErrorBoundary>
         } />
+
+        {/* DropScan Module — dashboard moved to /dashboard?module=dropscan */}
+        <Route path="dropscan" element={<Navigate to="/dashboard?module=dropscan" replace />} />
         <Route path="dropscan/escaneo" element={
           <PermissionRoute module="dropscan.escaneo"><ErrorBoundary><Escaneo /></ErrorBoundary></PermissionRoute>
         } />
@@ -264,15 +284,38 @@ function AppRoutes() {
         <Route path="anormalidades/registro" element={
           <PermissionRoute module="anormalidades.registro"><ErrorBoundary><AnormRegistro /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="anormalidades/dashboard" element={
-          <PermissionRoute module="anormalidades.dashboard"><ErrorBoundary><AnormDashboard /></ErrorBoundary></PermissionRoute>
-        } />
+        {/* Anormalidades dashboard moved to /dashboard?module=anormalidades */}
+        <Route path="anormalidades/dashboard" element={<Navigate to="/dashboard?module=anormalidades" replace />} />
         <Route path="anormalidades/mejoras" element={
           <PermissionRoute module="anormalidades.mejoras"><ErrorBoundary><AnormMejoras /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="anormalidades/configuracion" element={
           <PermissionRoute module="anormalidades.configuracion"><ErrorBoundary><AnormConfiguracion /></ErrorBoundary></PermissionRoute>
         } />
+
+        {/* Despacho Module */}
+        <Route path="despacho/ordenes" element={
+          <PermissionRoute module="despacho.ordenes"><ErrorBoundary><DespachoOrdenes /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="despacho/folios" element={
+          <PermissionRoute module="despacho.folios"><ErrorBoundary><DespachoFolios /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="despacho/folios/:id" element={
+          <PermissionRoute module="despacho.folios"><ErrorBoundary><DespachoFolioDetalle /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="despacho" element={<Navigate to="/despacho/folios" replace />} />
+
+        {/* Recepcion Module */}
+        <Route path="recepcion/recibir" element={
+          <PermissionRoute module="recepcion.recibir"><ErrorBoundary><RecepcionRecibir /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="recepcion/recibir/:id" element={
+          <PermissionRoute module="recepcion.recibir"><ErrorBoundary><RecepcionDetalle /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="recepcion/recibir/:id/validar" element={
+          <PermissionRoute module="recepcion.recibir"><ErrorBoundary><ValidacionRecepcion /></ErrorBoundary></PermissionRoute>
+        } />
+        <Route path="recepcion" element={<Navigate to="/recepcion/recibir" replace />} />
 
         {/* Administration */}
         <Route path="admin" element={
@@ -291,6 +334,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AppRoutes />
+        <GlobalPreloader />
       </BrowserRouter>
     </QueryClientProvider>
   )

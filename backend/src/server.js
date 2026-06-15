@@ -51,6 +51,21 @@ import anormDashboardRoutes from './modules/anormalidades/routes/dashboard.route
 import anormMejorasRoutes from './modules/anormalidades/routes/mejoras.routes.js'
 import anormConfigRoutes from './modules/anormalidades/routes/config.routes.js'
 
+// Despacho module
+import despachoFoliosRoutes from './modules/despacho/routes/folios.routes.js'
+import despachoCatalogsRoutes from './modules/despacho/routes/catalogs.routes.js'
+import despachoDashboardRoutes from './modules/despacho/routes/dashboard.routes.js'
+
+// Recepcion module
+import recepcionRoutes from './modules/recepcion/routes/recepcion.routes.js'
+import recepcionValidacionRoutes from './modules/recepcion/routes/validacion.routes.js'
+import recepcionReporteRoutes from './modules/recepcion/routes/reporte.routes.js'
+
+// Dashboard sub-routes (new per-module endpoints)
+import devDashboardRoutes from './modules/devoluciones/routes/dashboard.routes.js'
+import invDashboardRoutes from './modules/inventory/routes/dashboard.routes.js'
+import surtidoDashboardRoutes from './modules/wms/routes/surtido.dashboard.routes.js'
+
 const app = express()
 
 function isAllowedDevOrigin(origin) {
@@ -152,10 +167,11 @@ app.use('/api/dropscan/dashboard', tenantContext, tenantDB, moduleGuard('dropsca
 app.use('/api/dropscan/config', tenantContext, tenantDB, moduleGuard('dropscan'), dropscanConfigRoutes)
 app.use('/api/dropscan/operadores', tenantContext, tenantDB, moduleGuard('dropscan'), operadoresRoutes)
 
-// Inventory — require inventario module
-app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventario'), invScanRoutes)
+// Inventory — require inventario module (specific routes before catch-all)
+app.use('/api/inventory/dashboard', tenantContext, tenantDB, moduleGuard('inventario'), invDashboardRoutes)
 app.use('/api/inventory/tarimas', tenantContext, tenantDB, moduleGuard('inventario'), invTarimasRoutes)
 app.use('/api/inventory/historial', tenantContext, tenantDB, moduleGuard('inventario'), invTarimasRoutes)
+app.use('/api/inventory', tenantContext, tenantDB, moduleGuard('inventario'), invScanRoutes)
 
 // Rastreo (submodule of inventario)
 app.use('/api/rastreo', tenantContext, tenantDB, moduleGuard('inventario'), rastreoRoutes)
@@ -163,13 +179,15 @@ app.use('/api/rastreo', tenantContext, tenantDB, moduleGuard('inventario'), rast
 // FEP — require dropscan module (FEP is part of dropscan)
 app.use('/api/fep/folios', tenantContext, tenantDB, moduleGuard('dropscan'), fepFoliosRoutes)
 
-// Devoluciones module
+// Devoluciones module (specific routes before catch-all)
+app.use('/api/devoluciones/dashboard', tenantContext, tenantDB, moduleGuard('devoluciones'), devDashboardRoutes)
 app.use('/api/devoluciones/entradas', tenantContext, tenantDB, moduleGuard('devoluciones'), devEntradasRoutes)
 app.use('/api/devoluciones/inventario', tenantContext, tenantDB, moduleGuard('devoluciones'), devInventarioRoutes)
 app.use('/api/devoluciones/salidas', tenantContext, tenantDB, moduleGuard('devoluciones'), devSalidasRoutes)
 app.use('/api/devoluciones', tenantContext, tenantDB, moduleGuard('devoluciones'), devUtilsRoutes)
 
-// WMS Hub module (Surtido) — require surtido module
+// WMS Hub module (Surtido) — specific routes before catch-all
+app.use('/api/wmshub/dashboard', tenantContext, tenantDB, moduleGuard('surtido'), surtidoDashboardRoutes)
 app.use('/api/wmshub', tenantContext, tenantDB, moduleGuard('surtido'), wmsHubRoutes)
 
 // Anormalidades module
@@ -177,6 +195,16 @@ app.use('/api/anormalidades/dashboard', tenantContext, tenantDB, moduleGuard('an
 app.use('/api/anormalidades/mejoras', tenantContext, tenantDB, moduleGuard('anormalidades'), anormMejorasRoutes)
 app.use('/api/anormalidades/config', tenantContext, tenantDB, moduleGuard('anormalidades'), anormConfigRoutes)
 app.use('/api/anormalidades', tenantContext, tenantDB, moduleGuard('anormalidades'), anormRegistroRoutes)
+
+// Despacho module
+app.use('/api/despacho/catalogs', tenantContext, tenantDB, moduleGuard('despacho'), despachoCatalogsRoutes)
+app.use('/api/despacho/folios', tenantContext, tenantDB, moduleGuard('despacho'), despachoFoliosRoutes)
+app.use('/api/despacho/dashboard', tenantContext, tenantDB, moduleGuard('despacho'), despachoDashboardRoutes)
+
+// Recepcion module
+app.use('/api/recepcion', tenantContext, tenantDB, moduleGuard('recepcion'), recepcionRoutes)
+app.use('/api/recepcion', tenantContext, tenantDB, moduleGuard('recepcion'), recepcionValidacionRoutes)
+app.use('/api/recepcion', tenantContext, tenantDB, moduleGuard('recepcion'), recepcionReporteRoutes)
 
 // Usage summary — available to all authenticated tenants
 app.use('/api/usage', tenantContext, tenantDB, usageRoutes)

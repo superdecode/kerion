@@ -124,13 +124,20 @@ router.post('/renewal-request', signupLimiter, async (req, res) => {
     const { tenant_name, contact_name, contact_email, current_plan, message, tenant_id } = req.body
     if (!contact_email) return res.status(400).json({ error: 'Email requerido' })
 
+    let safeTenantId = null
+    if (tenant_id) {
+      const tenantRes = await query('SELECT id FROM tenants WHERE id = $1 LIMIT 1', [tenant_id])
+      if (tenantRes.rows.length === 0) return res.status(400).json({ error: 'tenant_id inválido' })
+      safeTenantId = tenantRes.rows[0].id
+    }
+
     // Store in signup_requests as renewal type so it appears in admin queue
     await query(
       `INSERT INTO tenant_signup_requests
          (organization_name, contact_name, contact_email, request_type, tenant_id, raw_payload)
        VALUES ($1,$2,$3,'renewal',$4,$5)`,
       [tenant_name || 'Renovacion', contact_name || '', contact_email.toLowerCase().trim(),
-       tenant_id || null, JSON.stringify({ tenant_name, contact_name, contact_email, current_plan, message })]
+       safeTenantId, JSON.stringify({ tenant_name, contact_name, contact_email, current_plan, message })]
     ).catch(() => {})
 
     // Alert super admin

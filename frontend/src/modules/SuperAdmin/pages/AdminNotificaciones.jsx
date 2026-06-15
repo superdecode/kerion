@@ -257,7 +257,7 @@ export default function AdminNotificaciones() {
                     type="checkbox"
                     checked={allPageSelected}
                     onChange={toggleSelectAll}
-                    className="rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-0 cursor-pointer"
+                    className="cb"
                   />
                 </th>
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">Destinatario</th>
@@ -276,7 +276,7 @@ export default function AdminNotificaciones() {
                       type="checkbox"
                       checked={selected.has(n.id)}
                       onChange={() => toggleSelect(n.id)}
-                      className="rounded border-gray-600 bg-gray-800 text-blue-500 focus:ring-0 cursor-pointer"
+                      className="cb"
                     />
                   </td>
                   <td className="px-4 py-3.5">

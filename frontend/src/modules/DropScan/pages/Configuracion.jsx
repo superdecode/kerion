@@ -763,7 +763,7 @@ function CanalModal({ canal, onClose, onSubmit, isLoading }) {
                     type="checkbox"
                     checked={formData.empresa_ids.includes(empresa.id)}
                     onChange={() => handleEmpresaToggle(empresa.id)}
-                    className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500"
+                    className="cb"
                   />
                   <div
                     className="w-3 h-3 rounded-full shrink-0"

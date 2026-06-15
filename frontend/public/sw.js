@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kirion-v12'
+const CACHE_NAME = 'kirion-v13'
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -72,6 +72,15 @@ self.addEventListener('fetch', (event) => {
 
   // Only cache same-origin GET requests
   if (request.method !== 'GET' || url.origin !== self.location.origin) return
+
+  // Never cache Vite dev-server internals — chunk hashes change on every restart
+  // and caching them causes "multiple React copies" errors in dev mode.
+  if (
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/@vite/') ||
+    url.pathname.includes('/.vite/')
+  ) return
 
   // Static assets: try network first, fall back to cache
   event.respondWith(

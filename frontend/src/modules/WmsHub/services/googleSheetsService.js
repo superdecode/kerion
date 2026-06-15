@@ -478,6 +478,81 @@ export async function getOutboundList() {
   return { success: true, data: { records, total: records.length, partial } }
 }
 
+export async function findOrderByBarcode(barcode) {
+  const q = (barcode || '').trim().toUpperCase()
+  if (!q) return null
+
+  // Fast path: search aggregated cache records first
+  const cached = readOutboundRecordCache()
+  if (cached?.records?.length) {
+    const found = cached.records.find(r =>
+      (r.outboundOrderNo || '').toUpperCase() === q ||
+      (r.logisticsTrackNo || '').toUpperCase() === q ||
+      (r.thirdOrderNo || '').toUpperCase() === q ||
+      (r.customizeCode || '').toUpperCase() === q
+    )
+    if (found) return found
+  }
+
+  // Full sheet scan — each row is one box so per-box customizeCode is accurate
+  try {
+    const rows = await loadSheet('outbound')
+    const [headerRow, ...dataRows] = rows
+    const map = buildHeaderMap(headerRow, OUTBOUND_ALIASES)
+    const match = dataRows
+      .map(row => mapRowToOutbound(row, map))
+      .find(r =>
+        (r.outboundOrderNo || '').toUpperCase() === q ||
+        (r.logisticsTrackNo || '').toUpperCase() === q ||
+        (r.thirdOrderNo || '').toUpperCase() === q ||
+        (r.customizeCode || '').toUpperCase() === q
+      )
+    return match ?? null
+  } catch {
+    return null
+  }
+}
+
+export async function findAllOrdersByBarcode(barcode) {
+  const q = (barcode || '').trim().toUpperCase()
+  if (!q) return []
+
+  const matchRow = r =>
+    (r.outboundOrderNo || '').toUpperCase() === q ||
+    (r.logisticsTrackNo || '').toUpperCase() === q ||
+    (r.thirdOrderNo || '').toUpperCase() === q ||
+    (r.customizeCode || '').toUpperCase() === q
+
+  // Fast path: aggregated cache (one entry per order)
+  const cached = readOutboundRecordCache()
+  if (cached?.records?.length) {
+    const hits = cached.records.filter(matchRow)
+    if (hits.length > 0) return hits
+  }
+
+  // Full sheet scan — deduplicate by outboundOrderNo
+  try {
+    const rows = await loadSheet('outbound')
+    const [headerRow, ...dataRows] = rows
+    const map = buildHeaderMap(headerRow, OUTBOUND_ALIASES)
+    const orderMap = new Map()
+    const SPARSE = ['thirdOrderNo', 'logisticsTrackNo', 'logisticsChannel', 'receiverName', 'outboundTime', 'whCode']
+    for (const row of dataRows) {
+      const r = mapRowToOutbound(row, map)
+      if (!r.outboundOrderNo || !matchRow(r)) continue
+      if (!orderMap.has(r.outboundOrderNo)) {
+        orderMap.set(r.outboundOrderNo, { ...r })
+      } else {
+        const existing = orderMap.get(r.outboundOrderNo)
+        SPARSE.forEach(f => { if (!existing[f] && r[f]) existing[f] = r[f] })
+      }
+    }
+    return Array.from(orderMap.values())
+  } catch {
+    return []
+  }
+}
+
 export async function getOutboundDetail(orderNo) {
   const rows = await loadSheet('outbound')
   const [headerRow, ...dataRows] = rows

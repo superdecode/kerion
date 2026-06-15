@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, RefreshCw, Target, CheckCircle2, Clock, Edit3, Eye, Link2, XCircle, Search, AlertTriangle, X } from 'lucide-react'
+import { Plus, RefreshCw, Target, CheckCircle2, Clock, Edit3, Eye, Link2, XCircle, Search, AlertTriangle, X, Trash2 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import Header from '../../../core/components/layout/Header'
 import MultiSelect from '../../../core/components/common/MultiSelect'
@@ -11,7 +11,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDate, fmtDateTime, getToday, subtractDays } from '../../../core/utils/dateFormat'
 import {
-  listMejoras, getMejora, createMejora, updateMejora,
+  listMejoras, getMejora, createMejora, updateMejora, deleteMejora,
   listAnormalidades, vincularMejora, getUsuarios, getMejorasCandidatas,
   getProcesosConfig, getOrigenesConfig,
 } from '../services/anormalidadesService'
@@ -50,6 +50,7 @@ export default function AnormMejoras() {
 
   const canCreate = hasPermission('anormalidades.mejoras', 'crear')
   const canUpdate = hasPermission('anormalidades.mejoras', 'actualizar')
+  const canDelete = hasPermission('anormalidades.mejoras', 'eliminar')
 
   const [page, setPage] = useState(1)
   const [estadoFilter, setEstadoFilter] = useState('')
@@ -66,6 +67,7 @@ export default function AnormMejoras() {
   const [detailId, setDetailId] = useState(null)
   const [editId, setEditId] = useState(null)
   const [vincularMejoraId, setVincularMejoraId] = useState(null)
+  const [deleteId, setDeleteId] = useState(null)
 
   const queryParams = useMemo(() => {
     const p = { page, limit: 20, search: search || undefined }
@@ -129,6 +131,12 @@ export default function AnormMejoras() {
   const vincularMut = useMutation({
     mutationFn: ({ mejora_id, anorm_id }) => vincularMejora(mejora_id, anorm_id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['anorm-mejora-detail', vincularMejoraId] }); setVincularMejoraId(null); toast.success(t('anorm.mejoras.vinculado')) },
+    onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: deleteMejora,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['anorm-mejoras'] }); setDeleteId(null); toast.success(t('common.deleted')) },
     onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 
@@ -322,6 +330,7 @@ export default function AnormMejoras() {
                         <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors"><Eye className="w-4 h-4" /></button>
                         {canUpdate && <button onClick={() => setEditId(row.id)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors"><Edit3 className="w-4 h-4" /></button>}
                         {canUpdate && <button onClick={() => setVincularMejoraId(row.id)} className="p-1.5 rounded-lg hover:bg-success-100 text-warm-400 hover:text-success-600 transition-colors" title={t('anorm.mejoras.vincular')}><Link2 className="w-4 h-4" /></button>}
+                        {canDelete && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg hover:bg-danger-100 text-warm-400 hover:text-danger-600 transition-colors" title={t('common.delete')}><Trash2 className="w-4 h-4" /></button>}
                       </div>
                     </td>
                   </tr>
@@ -389,6 +398,18 @@ export default function AnormMejoras() {
                 </div>
               </div>
             )}
+            {canUpdate && (
+              <div className="flex justify-end gap-3 pt-4 border-t border-warm-100">
+                <button
+                  type="button"
+                  onClick={() => { setDetailId(null); setEditId(detailId) }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-warning-700 bg-warning-50 hover:bg-warning-100 rounded-lg border border-warning-200 transition-colors"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  {t('common.edit')}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -401,6 +422,27 @@ export default function AnormMejoras() {
           onVincular={(anorm_id) => vincularMut.mutate({ mejora_id: vincularMejoraId, anorm_id })}
           loading={vincularMut.isPending}
         />
+      )}
+
+      {/* Delete confirm */}
+      {deleteId && (
+        <Modal isOpen onClose={() => setDeleteId(null)} title={t('anorm.delete.title')} icon={Trash2} size="sm">
+          <div className="flex items-start gap-3 rounded-xl border border-warning-200 bg-warning-50 p-3 mb-4">
+            <AlertTriangle className="w-4 h-4 text-warning-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-warning-700">{t('anorm.config.deleteCatalogWarning')}</p>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => setDeleteId(null)} className="btn-secondary text-sm">{t('common.cancel')}</button>
+            <button
+              onClick={() => deleteMut.mutate(deleteId)}
+              disabled={deleteMut.isPending}
+              className="btn-danger text-sm inline-flex items-center gap-2"
+            >
+              {deleteMut.isPending && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+              {t('common.delete')}
+            </button>
+          </div>
+        </Modal>
       )}
     </div>
   )
@@ -500,7 +542,7 @@ function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubm
         <div className="flex justify-end gap-3 pt-2 border-t border-warm-100">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
           {!isEditing && !isCreateMode ? (
-            <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-accent-700 bg-accent-50 hover:bg-accent-100 rounded-lg border border-accent-200 transition-colors">
+            <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-warning-700 bg-warning-50 hover:bg-warning-100 rounded-lg border border-warning-200 transition-colors">
               <Edit3 className="w-3.5 h-3.5" />
               {t('common.edit')}
             </button>

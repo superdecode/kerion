@@ -463,7 +463,7 @@ function CreateTenantModal({ onClose, onSuccess }) {
                         ? [...f.modules, m.code]
                         : f.modules.filter(c => c !== m.code),
                     }))}
-                    className="w-4 h-4 rounded accent-emerald-500"
+                    className="cb"
                   />
                   <span className="text-sm text-gray-300 group-hover:text-white transition-colors">{m.label}</span>
                 </label>

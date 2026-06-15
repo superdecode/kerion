@@ -1,0 +1,16 @@
+import api from '../../../core/services/api.js'
+
+export const listOrders = (params = {}) => api.get('/recepcion/orders', { params }).then(r => r.data)
+export const listClientes = () => api.get('/recepcion/orders/clientes').then(r => r.data)
+export const createOrder = (payload) => api.post('/recepcion/orders', payload).then(r => r.data)
+export const getOrder = (id) => api.get(`/recepcion/orders/${id}`).then(r => r.data)
+export const updateOrder = (id, payload) => api.patch(`/recepcion/orders/${id}`, payload).then(r => r.data)
+export const deleteOrder = (id) => api.delete(`/recepcion/orders/${id}`).then(r => r.data)
+export const updateLine = (lineId, payload) => api.patch(`/recepcion/lines/${lineId}`, payload).then(r => r.data)
+export const deleteLine = (lineId) => api.delete(`/recepcion/lines/${lineId}`).then(r => r.data)
+export const createSession = (orderId, payload) => api.post(`/recepcion/orders/${orderId}/sessions`, payload).then(r => r.data)
+export const updateSession = (orderId, sessionId, payload) => api.patch(`/recepcion/orders/${orderId}/sessions/${sessionId}`, payload).then(r => r.data)
+export const scanCode = (orderId, payload) => api.post(`/recepcion/orders/${orderId}/scan`, payload).then(r => r.data)
+export const getScanEvents = (orderId) => api.get(`/recepcion/orders/${orderId}/scan-events`).then(r => r.data)
+export const deleteLastValidationRecord = (orderId) => api.delete(`/recepcion/orders/${orderId}/scan-events/last-validation`).then(r => r.data)
+export const getListaRecepcion = (orderId) => api.get(`/recepcion/orders/${orderId}/lista-recepcion`).then(r => r.data)

@@ -26,6 +26,12 @@ const DEFAULT_ROLES = [
 // Only runs if DB is empty (no roles). Safe to call multiple times.
 router.post('/', async (_req, res) => {
   try {
+    if (!env.ALLOW_SETUP_ROUTE) {
+      return res.status(403).json({
+        error: 'POST /api/setup está deshabilitado. Habilítalo explícitamente solo para bootstrap controlado.',
+      })
+    }
+
     const existing = await query('SELECT COUNT(*) FROM roles')
     if (parseInt(existing.rows[0].count) > 0) {
       return res.status(409).json({
@@ -50,11 +56,14 @@ router.post('/', async (_req, res) => {
     }
 
     // Create admin user
-    const adminPassword = 'Admin2024!'
+    const adminPassword = env.INITIAL_ADMIN_PASSWORD
+    if (!adminPassword) {
+      return res.status(500).json({ error: 'INITIAL_ADMIN_PASSWORD no configurado para setup inicial' })
+    }
     const passwordHash = await bcrypt.hash(adminPassword, 10)
     await query(
       `INSERT INTO usuarios (tenant_id, codigo, nombre_completo, email, password_hash, rol_id, estado, es_admin_tenant, is_default, must_change_password)
-       VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVO', true, true, false)`,
+       VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVO', true, true, true)`,
       [tenantId, 'ADM001', 'Administrador', 'admin@kirion.com', passwordHash, roleIds['Administrador']]
     )
 
@@ -81,11 +90,8 @@ router.post('/', async (_req, res) => {
     res.json({
       success: true,
       message: 'Sistema inicializado correctamente.',
-      credentials: {
-        email: 'admin@kirion.com',
-        password: adminPassword,
-        nota: 'Cambia esta contraseña inmediatamente después de iniciar sesión.'
-      }
+      admin_email: 'admin@kirion.com',
+      password_source: 'INITIAL_ADMIN_PASSWORD',
     })
   } catch (error) {
     console.error('Setup error:', error)

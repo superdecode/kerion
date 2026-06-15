@@ -177,7 +177,7 @@ router.post('/',
           req.tenantId, descripcion_problema, ocurrencias || 1,
           causa_raiz_principal || null, accion_mejora,
           responsable_id || null, fecha_limite || null,
-          proceso, origen || null, req.userId,
+          proceso, origen || null, req.user.id,
         ]
       )
 
@@ -261,6 +261,19 @@ router.post('/:id/vincular',
       const { anormalidad_id } = req.body
       if (!anormalidad_id) return res.status(400).json({ error: 'anormalidad_id requerido' })
 
+      const [mejoraRes, anormRes] = await Promise.all([
+        req.tQuery(
+          'SELECT id FROM anormalidades_mejoras WHERE id = $1 AND tenant_id = $2',
+          [req.params.id, req.tenantId]
+        ),
+        req.tQuery(
+          'SELECT id FROM anormalidades WHERE id = $1 AND tenant_id = $2',
+          [anormalidad_id, req.tenantId]
+        ),
+      ])
+      if (!mejoraRes.rows.length) return res.status(404).json({ error: 'Mejora no encontrada' })
+      if (!anormRes.rows.length) return res.status(404).json({ error: 'Anormalidad no encontrada' })
+
       await req.tQuery(
         `INSERT INTO anormalidades_mejoras_vinculos (mejora_id, anormalidad_id, tenant_id)
          VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
@@ -289,6 +302,29 @@ router.delete('/:id/vincular/:anorm_id',
       res.json({ success: true })
     } catch (err) {
       res.status(500).json({ error: 'Error al desvincular' })
+    }
+  }
+)
+
+// ── DELETE /api/anormalidades/mejoras/:id ────────────────────────────────────
+router.delete('/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('anormalidades.mejoras', 'eliminar'),
+  async (req, res) => {
+    try {
+      await req.tQuery(
+        `DELETE FROM anormalidades_mejoras_vinculos WHERE mejora_id = $1 AND tenant_id = $2`,
+        [req.params.id, req.tenantId]
+      )
+      const result = await req.tQuery(
+        `DELETE FROM anormalidades_mejoras WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+        [req.params.id, req.tenantId]
+      )
+      if (!result.rows.length) return res.status(404).json({ error: 'No encontrada' })
+      res.json({ success: true })
+    } catch (err) {
+      console.error('[anorm.mejoras.delete]', err.message)
+      res.status(500).json({ error: 'Error al eliminar mejora' })
     }
   }
 )

@@ -148,6 +148,7 @@ export default function AnormalidadesRegistro() {
   const [editId, setEditId] = useState(null)
   const [deleteId, setDeleteId] = useState(null)
   const [estadoModal, setEstadoModal] = useState(null) // { id, estado_actual }
+  const [mejoraFromAnorm, setMejoraFromAnorm] = useState(null) // { anormId, prefill }
 
   const queryParams = useMemo(() => {
     const p = { page, limit: 20, search: search || undefined }
@@ -242,6 +243,7 @@ export default function AnormalidadesRegistro() {
     mutationFn: ({ id, payload }) => crearMejoraDesdeAnormalidad(id, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['anormalidad-detail', detailId] })
+      setMejoraFromAnorm(null)
       toast.success(t('anorm.toast.mejoraCreated'))
     },
     onError: (e) => toast.error(e?.response?.data?.error || t('anorm.toast.errorCreateMejora')),
@@ -481,7 +483,7 @@ export default function AnormalidadesRegistro() {
                         checked={allChecked}
                         ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
                         onChange={toggleAll}
-                        className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                        className="cb"
                         onClick={e => e.stopPropagation()}
                       />
                     </th>
@@ -510,7 +512,7 @@ export default function AnormalidadesRegistro() {
                           type="checkbox"
                           checked={selected.has(row.id)}
                           onChange={() => toggleRow(row.id)}
-                          className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                          className="cb"
                           onClick={e => e.stopPropagation()}
                         />
                       </td>
@@ -608,7 +610,20 @@ export default function AnormalidadesRegistro() {
         canCreate={canCreate}
         onChangeEstado={(estado) => setEstadoModal({ id: detailId, estado_actual: detail?.estado })}
         onEdit={() => { setEditId(detailId); setDetailId(null) }}
-        onCrearMejora={() => crearMejoraMut.mutate({ id: detailId, payload: {} })}
+        onCrearMejora={(anormDetail) => {
+          setDetailId(null)
+          setMejoraFromAnorm({
+            anormId: detailId,
+            prefill: {
+              proceso: anormDetail?.proceso || '',
+              origen: anormDetail?.origen_responsabilidad || '',
+              descripcion_problema: anormDetail?.descripcion || '',
+              causa_raiz_principal: anormDetail?.causa_raiz || '',
+              accion_mejora: anormDetail?.accion_preventiva || '',
+              responsable_id: anormDetail?.responsable_id ? String(anormDetail.responsable_id) : '',
+            },
+          })
+        }}
         creandoMejora={crearMejoraMut.isPending}
       />
 
@@ -619,6 +634,20 @@ export default function AnormalidadesRegistro() {
           onClose={() => setEstadoModal(null)}
           onSubmit={({ estado, nota }) => estadoMut.mutate({ id: estadoModal.id, estado, nota })}
           loading={estadoMut.isPending}
+        />
+      )}
+
+      {/* Modal: crear mejora desde anormalidad */}
+      {mejoraFromAnorm && (
+        <MejoraDesdeAnormModal
+          isOpen
+          onClose={() => setMejoraFromAnorm(null)}
+          prefill={mejoraFromAnorm.prefill}
+          usuarios={usuarios}
+          procesos={procesos}
+          origenes={origenes}
+          onSubmit={(formData) => crearMejoraMut.mutate({ id: mejoraFromAnorm.anormId, payload: formData })}
+          loading={crearMejoraMut.isPending}
         />
       )}
 
@@ -687,7 +716,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
   const disabledInput = `${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} icon={AlertTriangle} size="2xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={title} icon={AlertTriangle} size="xl">
       <form onSubmit={handleSubmit}>
         <SectionBlock title={t('anorm.section.identificacion')}>
           <Field label={t('anorm.field.fechaOcurrencia')}>
@@ -785,7 +814,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
         <div className="flex justify-end gap-2 pt-2 border-t border-warm-100">
           <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
           {!isEditing && !isCreateMode ? (
-            <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-accent-700 bg-accent-50 hover:bg-accent-100 rounded-lg border border-accent-200 transition-colors">
+            <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-warning-700 bg-warning-50 hover:bg-warning-100 rounded-lg border border-warning-200 transition-colors">
               <Edit3 className="w-3.5 h-3.5" />
               {t('common.edit')}
             </button>
@@ -883,7 +912,7 @@ function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canC
         </button>
       )}
       {d && onCrearMejora && (
-        <button onClick={onCrearMejora} disabled={creandoMejora} className="btn-success text-xs flex items-center gap-1.5">
+        <button onClick={() => onCrearMejora(d)} disabled={creandoMejora} className="btn-success text-xs flex items-center gap-1.5">
           {creandoMejora ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Target className="w-3 h-3" />}
           {t('anorm.action.crearMejora')}
         </button>
@@ -900,8 +929,8 @@ function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canC
       size="xl"
       headerAction={headerAction}
       footer={canCreate && d ? (
-        <button onClick={onEdit} className="btn-ghost text-xs flex items-center gap-1.5">
-          <Edit3 className="w-3 h-3" />
+        <button onClick={onEdit} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-warning-700 bg-warning-50 hover:bg-warning-100 rounded-lg border border-warning-200 transition-colors">
+          <Edit3 className="w-3.5 h-3.5" />
           {t('common.edit')}
         </button>
       ) : null}
@@ -1062,6 +1091,90 @@ function TabMejoras({ mejoras }) {
         </div>
       ))}
     </div>
+  )
+}
+
+// ── MejoraDesdeAnormModal ──────────────────────────────────────────────────────
+
+const MEJORA_EMPTY = {
+  descripcion_problema: '',
+  ocurrencias: 1,
+  proceso: '',
+  origen: '',
+  causa_raiz_principal: '',
+  accion_mejora: '',
+  responsable_id: '',
+  fecha_limite: '',
+}
+
+function MejoraDesdeAnormModal({ isOpen, onClose, prefill, usuarios, procesos, origenes, onSubmit, loading }) {
+  const { t } = useI18nStore()
+  const [form, setForm] = useState({ ...MEJORA_EMPTY, ...prefill })
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
+
+  useEffect(() => {
+    if (isOpen) setForm({ ...MEJORA_EMPTY, ...prefill })
+  }, [isOpen])
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSubmit(form)
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('anorm.action.crearMejora')} icon={Target} size="lg">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.proceso')} *</label>
+            <select value={form.proceso} onChange={e => set('proceso', e.target.value)} className={inp} required>
+              <option value="">{t('common.select')}</option>
+              {procesos.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.origen')}</label>
+            <select value={form.origen} onChange={e => set('origen', e.target.value)} className={inp}>
+              <option value="">{t('common.select')}</option>
+              {origenes.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-warm-700 mb-1">Descripción del problema *</label>
+          <textarea value={form.descripcion_problema} onChange={e => set('descripcion_problema', e.target.value)} className={`${inp} resize-none`} rows={3} required />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-warm-700 mb-1">Causa raíz</label>
+          <textarea value={form.causa_raiz_principal} onChange={e => set('causa_raiz_principal', e.target.value)} className={`${inp} resize-none`} rows={2} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-warm-700 mb-1">Acción de mejora *</label>
+          <textarea value={form.accion_mejora} onChange={e => set('accion_mejora', e.target.value)} className={`${inp} resize-none`} rows={2} required />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.responsableAsignado')}</label>
+            <select value={form.responsable_id} onChange={e => set('responsable_id', e.target.value)} className={inp}>
+              <option value="">{t('anorm.field.sinAsignar')}</option>
+              {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre_completo}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-warm-700 mb-1">Fecha límite</label>
+            <input type="date" value={form.fecha_limite} onChange={e => set('fecha_limite', e.target.value)} className={inp} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-warm-100">
+          <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
+          <button type="submit" disabled={loading} className="btn-primary text-sm flex items-center gap-2">
+            {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+            Crear mejora
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

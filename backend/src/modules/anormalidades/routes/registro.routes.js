@@ -251,7 +251,7 @@ router.post('/',
           cantidad_afectada || null, monto_impacto || null, descripcion || null,
           JSON.stringify(evidencia || []),
           detectado_por_id || null, detectado_por_nombre || null, origen_responsabilidad || null,
-          responsable_id || null, fecha_limite, req.userId,
+          responsable_id || null, fecha_limite, req.user.id,
         ]
       )
 
@@ -261,10 +261,10 @@ router.post('/',
         `INSERT INTO anormalidades_historial
            (anormalidad_id, tenant_id, usuario_id, usuario_nombre, estado_anterior, estado_nuevo, nota)
          VALUES ($1,$2,$3,$4,NULL,$5,'Anormalidad registrada')`,
-        [row.id, req.tenantId, req.userId, req.fullUser?.nombre_completo || null, 'nuevo']
+        [row.id, req.tenantId, req.user.id, req.fullUser?.nombre_completo || null, 'nuevo']
       )
 
-      await auditLog(req.tenantId, req.userId, 'CREATE', 'anormalidades', String(row.id), { folio })
+      await auditLog(req, 'CREATE', 'anormalidades', String(row.id), { folio })
 
       res.status(201).json({ success: true, data: row })
     } catch (err) {
@@ -351,7 +351,7 @@ router.put('/:id',
         ]
       )
 
-      await auditLog(req.tenantId, req.userId, 'UPDATE', 'anormalidades', req.params.id, {})
+      await auditLog(req, 'UPDATE', 'anormalidades', req.params.id, {})
       res.json({ success: true, data: result.rows[0] })
     } catch (err) {
       console.error('[anorm.registro.update]', err.message)
@@ -392,7 +392,7 @@ router.post('/:id/estado',
         `INSERT INTO anormalidades_historial
            (anormalidad_id, tenant_id, usuario_id, usuario_nombre, estado_anterior, estado_nuevo, nota)
          VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [req.params.id, req.tenantId, req.userId, req.fullUser?.nombre_completo || null, estadoAnterior, estado, nota || null]
+        [req.params.id, req.tenantId, req.user.id, req.fullUser?.nombre_completo || null, estadoAnterior, estado, nota || null]
       )
 
       res.json({ success: true, data: result.rows[0] })
@@ -439,7 +439,7 @@ router.post('/:id/crear-mejora',
           req.body?.fecha_limite || null,
           req.body?.proceso || anorm.proceso,
           req.body?.origen || anorm.origen_responsabilidad || null,
-          req.userId,
+          req.user.id,
         ]
       )
 
@@ -449,7 +449,7 @@ router.post('/:id/crear-mejora',
         [mejoraRes.rows[0].id, req.params.id, req.tenantId]
       )
 
-      await auditLog(req.tenantId, req.userId, 'CREATE', 'anormalidades_mejoras', String(mejoraRes.rows[0].id), {
+      await auditLog(req, 'CREATE', 'anormalidades_mejoras', String(mejoraRes.rows[0].id), {
         desde_anormalidad_id: Number(req.params.id),
       })
 
@@ -472,7 +472,7 @@ router.delete('/:id',
         [req.params.id, req.tenantId]
       )
       if (!result.rows.length) return res.status(404).json({ error: 'No encontrada' })
-      await auditLog(req.tenantId, req.userId, 'DELETE', 'anormalidades', req.params.id, {})
+      await auditLog(req, 'DELETE', 'anormalidades', req.params.id, {})
       res.json({ success: true })
     } catch (err) {
       console.error('[anorm.registro.delete]', err.message)

@@ -113,6 +113,27 @@
            cursor-pointer hover:text-warm-700 transition-colors select-none;
   }
 
+  /* Unified checkbox — use on every <input type="checkbox"> in the app */
+  .cb {
+    @apply appearance-none w-4 h-4 shrink-0 cursor-pointer rounded border-2 border-warm-300 bg-white
+           transition-colors duration-150;
+  }
+  .cb:hover:not(:disabled) { @apply border-primary-400; }
+  .cb:focus { @apply outline-none ring-2 ring-primary-100; border-color: theme('colors.primary.400'); }
+  .cb:checked {
+    @apply bg-primary-600 border-primary-600;
+    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+  }
+  .cb:indeterminate {
+    @apply bg-primary-500 border-primary-500;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 16 16'%3e%3cpath stroke='white' stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M4 8h8'/%3e%3c/svg%3e");
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+  }
+  .cb:disabled { @apply opacity-50 cursor-not-allowed; }
+
   .table-cell {
     @apply px-4 py-3.5 text-sm text-warm-700;
   }

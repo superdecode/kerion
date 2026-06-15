@@ -138,6 +138,8 @@ export async function provisionTenant(requestId, approvedByAdminId) {
             devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
             surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
             anormalidades: { registro: 'eliminar', dashboard: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
+            despacho: { ordenes: 'eliminar', folios: 'eliminar' },
+            recepcion: { recibir: 'eliminar' },
             sistema: { wms: 'eliminar' },
           })]
         )
@@ -173,7 +175,7 @@ export async function provisionTenant(requestId, approvedByAdminId) {
 
   // ── Step 2.5: seed_tenant_modules ─────────────────────────────────────────────
   try {
-    for (const code of ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades']) {
+    for (const code of ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades', 'despacho', 'recepcion']) {
       await query(
         `INSERT INTO tenant_modules (tenant_id, module_code, enabled, enabled_at, enabled_by, notes)
          VALUES ($1, $2, true, now(), 'system', 'provisioned with tenant')

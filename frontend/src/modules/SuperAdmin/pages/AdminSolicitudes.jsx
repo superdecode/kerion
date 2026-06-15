@@ -433,7 +433,7 @@ function RequestRow({ r, onRefresh, selected, onToggle }) {
             type="checkbox"
             checked={selected}
             onChange={onToggle}
-            className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+            className="cb"
           />
         </td>
         <td className="py-3 px-4">
@@ -713,7 +713,7 @@ export default function AdminSolicitudes() {
                       checked={allSelected}
                       onChange={toggleAll}
                       ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
-                      className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                      className="cb"
                     />
                   </th>
                   <SortTh col="organization_name" label="Organizacion" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />

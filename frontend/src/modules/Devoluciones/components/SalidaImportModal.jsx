@@ -172,7 +172,7 @@ export default function SalidaImportModal({ isOpen, onClose, onImport }) {
                           className={`border-b border-warm-50 cursor-pointer transition-colors ${checked.includes(i) ? (byGuia ? 'bg-accent-50/50' : 'bg-success-50/50') : 'hover:bg-primary-50/30'}`}
                           onClick={() => toggleCheck(i)}
                         >
-                          <td className="px-3 py-2"><input type="checkbox" readOnly checked={checked.includes(i)} className="rounded" /></td>
+                          <td className="px-3 py-2"><input type="checkbox" readOnly checked={checked.includes(i)} className="cb pointer-events-none" /></td>
                           <td className="px-3 py-2 font-medium text-warm-800">{row.sku}</td>
                           <td className="px-3 py-2 font-mono text-warm-500">{row.codigo_trazabilidad || '—'}</td>
                           <td className="px-3 py-2">

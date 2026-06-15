@@ -21,6 +21,7 @@ export const listMejoras = (params = {}) => api.get(`${BASE}/mejoras`, { params 
 export const getMejora = (id) => api.get(`${BASE}/mejoras/${id}`).then(r => r.data)
 export const createMejora = (payload) => api.post(`${BASE}/mejoras`, payload).then(r => r.data)
 export const updateMejora = (id, payload) => api.put(`${BASE}/mejoras/${id}`, payload).then(r => r.data)
+export const deleteMejora = (id) => api.delete(`${BASE}/mejoras/${id}`).then(r => r.data)
 export const vincularMejora = (mejora_id, anormalidad_id) =>
   api.post(`${BASE}/mejoras/${mejora_id}/vincular`, { anormalidad_id }).then(r => r.data)
 export const desvincularMejora = (mejora_id, anorm_id) =>

@@ -1174,7 +1174,7 @@ function WizardContent({
                       ${t.bloqueada ? 'cursor-not-allowed bg-warm-50/60' : `cursor-pointer ${isSel ? 'bg-primary-50' : 'hover:bg-warm-50'}`}`}
                   >
                     <input type="checkbox" checked={isSel} readOnly disabled={t.bloqueada}
-                      className="w-4 h-4 rounded border-warm-300 text-primary-600 shrink-0" />
+                      className="cb" />
                     <div className="flex-1 grid grid-cols-3 sm:grid-cols-4 gap-2 text-sm min-w-0">
                       <span className="code-main truncate">{t.codigo}</span>
                       <span className="text-warm-500 truncate">{t.canal_nombre}</span>

@@ -4,158 +4,278 @@ import { motion } from 'framer-motion'
 import Header from '../core/components/layout/Header'
 import { fmtTimeShort, fmtDateShort } from '../core/utils/dateFormat'
 import {
-  ScanBarcode, Package, RotateCcw, ArrowRight,
-  Activity, Users, Clock
+  ScanBarcode, Package, RotateCcw, ArrowUpRight,
+  AlertTriangle, Settings2, Layers,
+  Truck, Clock, LayoutGrid, PackageCheck,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-const getModules = (t) => [
+const ALL_MODULES = () => [
   {
     id: 'dropscan',
-    name: t('globalDash.dropscanTitle'),
-    description: t('globalDash.dropscanDesc'),
+    permission: 'dropscan.dashboard',
+    name: 'Dropscan',
+    description: 'Escaneo de guías y gestión de tarimas',
     icon: ScanBarcode,
     path: '/dropscan',
-    color: 'from-primary-500 to-primary-700',
-    glow: 'group-hover:shadow-glow',
-    actionLabel: t('globalDash.enterModule'),
-    variant: 'link',
+    from: '#6366f1',
+    to: '#4338ca',
+    light: 'rgba(99,102,241,0.08)',
+    ring: 'rgba(99,102,241,0.2)',
   },
   {
-    id: 'returns',
-    name: t('globalDash.returns'),
-    description: t('globalDash.returnsDesc'),
+    id: 'surtido',
+    permission: 'surtido.ordenes',
+    name: 'Surtido',
+    description: 'Órdenes de salida, validación y registros WMS',
+    icon: Truck,
+    path: '/surtido',
+    from: '#8b5cf6',
+    to: '#6d28d9',
+    light: 'rgba(139,92,246,0.08)',
+    ring: 'rgba(139,92,246,0.2)',
+  },
+  {
+    id: 'devoluciones',
+    permission: 'devoluciones.entradas',
+    name: 'Devoluciones',
+    description: 'Entradas, inventario temporal y salidas',
     icon: RotateCcw,
-    color: 'from-rose-500 to-orange-600',
-    glow: 'group-hover:shadow-glow',
-    variant: 'preview',
+    path: '/devoluciones/entradas',
+    from: '#f43f5e',
+    to: '#ea580c',
+    light: 'rgba(244,63,94,0.08)',
+    ring: 'rgba(244,63,94,0.2)',
   },
   {
-    id: 'inventory',
-    name: t('globalDash.inventory'),
-    description: t('globalDash.inventoryDesc'),
+    id: 'inventario',
+    permission: 'inventario.registros',
+    name: 'Inventario',
+    description: 'Escaneo, registros y rastreo de stock',
     icon: Package,
-    color: 'from-accent-500 to-accent-700',
-    glow: 'group-hover:shadow-glow-cyan',
-    variant: 'preview',
+    path: '/inventario/registros',
+    from: '#06b6d4',
+    to: '#0e7490',
+    light: 'rgba(6,182,212,0.08)',
+    ring: 'rgba(6,182,212,0.2)',
+  },
+  {
+    id: 'anormalidades',
+    permission: 'anormalidades.registro',
+    name: 'Anormalidades',
+    description: 'Registro y seguimiento de incidencias',
+    icon: AlertTriangle,
+    path: '/anormalidades/registro',
+    from: '#f59e0b',
+    to: '#d97706',
+    light: 'rgba(245,158,11,0.08)',
+    ring: 'rgba(245,158,11,0.2)',
+  },
+  {
+    id: 'despacho',
+    permission: 'despacho.folios',
+    name: 'Despacho',
+    description: 'Embarques, folios de salida y gestión de conductores',
+    icon: PackageCheck,
+    path: '/despacho/folios',
+    from: '#22c55e',
+    to: '#16a34a',
+    light: 'rgba(34,197,94,0.08)',
+    ring: 'rgba(34,197,94,0.2)',
+  },
+  {
+    id: 'wmshub',
+    permission: 'sistema.wms',
+    name: 'WMS Hub',
+    description: 'Configuración de conexión con WMS externo',
+    icon: Layers,
+    path: '/wmshub',
+    from: '#10b981',
+    to: '#0f766e',
+    light: 'rgba(16,185,129,0.08)',
+    ring: 'rgba(16,185,129,0.2)',
+  },
+  {
+    id: 'admin',
+    permission: 'global.administracion',
+    name: 'Administración',
+    description: 'Usuarios, roles y configuración del sistema',
+    icon: Settings2,
+    path: '/admin',
+    from: '#64748b',
+    to: '#334155',
+    light: 'rgba(100,116,139,0.08)',
+    ring: 'rgba(100,116,139,0.2)',
   },
 ]
 
-const fadeInUp = {
-  hidden: { opacity: 0, y: 20 },
-  visible: (i) => ({
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.07, delayChildren: 0.25 },
+  },
+}
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 18, scale: 0.97 },
+  visible: {
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.08, duration: 0.5, ease: [0.16, 1, 0.3, 1] },
-  }),
+    scale: 1,
+    transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
+  },
+}
+
+const bannerVariants = {
+  hidden: { opacity: 0, y: -16 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
+  },
 }
 
 export default function GlobalDashboard() {
-  const { user } = useAuthStore()
+  const { user, canView } = useAuthStore()
   const { t } = useI18nStore()
-  const modules = getModules(t)
-  const activeModules = modules.filter(mod => mod.variant === 'link').length
+  const modules = ALL_MODULES().filter(m => canView(m.permission))
 
   return (
     <div className="flex flex-col h-full">
       <Header title={t('nav.dashboard')} subtitle={t('app.subtitle')} />
 
-      <div className="flex-1 overflow-y-auto p-6">
-        {/* Welcome */}
-        <motion.div
-          className="bg-gradient-to-br from-primary-600 via-primary-700 to-accent-700 rounded-3xl p-8 text-white mb-8 shadow-xl overflow-hidden relative"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        >
-          <div className="absolute -right-10 -top-10 w-48 h-48 bg-white/5 rounded-full blur-2xl animate-float" />
-          <div className="absolute -left-10 -bottom-10 w-36 h-36 bg-white/5 rounded-full blur-xl animate-float-delayed" />
-          <div className="absolute right-20 bottom-0 w-72 h-72 bg-accent-400/10 rounded-full blur-3xl animate-pulse-glow" />
-          <div className="relative">
-            <motion.h2
-              className="text-2xl font-extrabold mb-1"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.15, duration: 0.5 }}
-            >
-              {t('globalDash.welcome')}, {user?.nombre_completo?.split(' ')[0] || 'Usuario'}
-            </motion.h2>
-            <motion.p
-              className="text-primary-200 text-sm font-medium"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.25 }}
-            >
-              Kirion · {user?.rol_nombre}
-            </motion.p>
+      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
 
-            <div className="grid grid-cols-3 gap-5 mt-8">
-              {[
-                { icon: Activity, value: String(activeModules), label: t('globalDash.activeModules'), delay: 0.3 },
-                { icon: Users, value: '—', label: t('globalDash.onlineUsers'), delay: 0.4 },
-                { icon: Clock, value: fmtTimeShort(new Date()), label: fmtDateShort(new Date()), delay: 0.5 },
-              ].map((stat, i) => (
-                <motion.div
-                  key={i}
-                  className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10 hover:bg-white/15 transition-colors duration-300"
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: stat.delay, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                >
-                  <stat.icon className="w-5 h-5 text-primary-200 mb-2" />
-                  <p className="text-2xl font-extrabold">{stat.value}</p>
-                  <p className="text-[11px] text-primary-200 font-medium">{stat.label}</p>
-                </motion.div>
-              ))}
+        {/* Welcome banner */}
+        <motion.div
+          variants={bannerVariants}
+          initial="hidden"
+          animate="visible"
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 via-primary-700 to-accent-700 px-7 py-5 text-white shadow-xl"
+        >
+          {/* Decorative blobs */}
+          <div className="pointer-events-none absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/5 blur-3xl" />
+          <div className="pointer-events-none absolute -left-8 -bottom-12 w-48 h-48 rounded-full bg-accent-400/10 blur-2xl" />
+          <div className="pointer-events-none absolute right-1/3 top-0 w-64 h-full bg-primary-400/5 blur-2xl" />
+
+          <div className="relative flex items-center justify-between gap-6">
+            {/* Left: greeting */}
+            <div>
+              <motion.p
+                className="text-xl font-extrabold tracking-tight"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.15, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {t('globalDash.welcome')}, {user?.nombre_completo?.split(' ')[0] || 'Usuario'}
+              </motion.p>
+              <motion.p
+                className="mt-0.5 text-xs font-medium text-primary-200"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.25 }}
+              >
+                Kirion &middot; {user?.rol_nombre}
+              </motion.p>
             </div>
+
+            {/* Right: chips */}
+            <motion.div
+              className="flex items-center gap-2.5"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 backdrop-blur-sm border border-white/10">
+                <LayoutGrid className="w-4 h-4 text-primary-200" />
+                <div>
+                  <p className="text-base font-extrabold leading-none">{modules.length}</p>
+                  <p className="text-[10px] text-primary-200 mt-0.5">{t('globalDash.activeModules')}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 backdrop-blur-sm border border-white/10">
+                <Clock className="w-4 h-4 text-primary-200" />
+                <div>
+                  <p className="text-base font-extrabold leading-none">{fmtTimeShort(new Date())}</p>
+                  <p className="text-[10px] text-primary-200 mt-0.5">{fmtDateShort(new Date())}</p>
+                </div>
+              </div>
+            </motion.div>
           </div>
         </motion.div>
 
-        {/* Modules */}
-        <motion.h3
-          className="text-xs font-bold text-warm-400 uppercase tracking-wider mb-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-        >
-          {t('globalDash.systemModules')}
-        </motion.h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {modules.map((mod, i) => {
-            const Icon = mod.icon
-            const isPreview = mod.variant === 'preview'
-            return (
-              <motion.div
-                key={mod.id}
-                custom={i}
-                variants={fadeInUp}
-                initial="hidden"
-                animate="visible"
-                className={`relative group card-interactive p-5 overflow-hidden
-                            ${isPreview ? 'bg-white/70 border-dashed border-warm-200/80' : ''}`}
-              >
-                {/* Decorative gradient blob */}
-                <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br ${mod.color} opacity-[0.06] group-hover:opacity-[0.12] group-hover:scale-125 transition-all duration-500`} />
+        {/* Modules section */}
+        <div>
+          <motion.p
+            className="mb-3.5 text-[11px] font-bold uppercase tracking-widest text-warm-400"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            {t('globalDash.systemModules')}
+          </motion.p>
 
-                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${mod.color} flex items-center justify-center mb-4 shadow-sm ${mod.glow} transition-shadow duration-300`}>
-                  <Icon className="w-5 h-5 text-white" />
-                </div>
-                <h4 className="text-sm font-bold text-warm-800 mb-1">{mod.name}</h4>
-                <p className="text-xs text-warm-400 mb-4 line-clamp-2 leading-relaxed">{mod.description}</p>
-                {mod.variant === 'link' ? (
+          <motion.div
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            {modules.map((mod) => {
+              const Icon = mod.icon
+              return (
+                <motion.div key={mod.id} variants={cardVariants} whileHover={{ y: -3, transition: { duration: 0.2 } }}>
                   <Link
                     to={mod.path}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 group/link"
+                    className="group relative flex flex-col gap-3.5 overflow-hidden rounded-2xl border border-warm-100 bg-white p-5 shadow-sm transition-shadow duration-300 hover:shadow-lg h-full"
                   >
-                    {mod.actionLabel || t('globalDash.enterModule')} <ArrowRight className="w-3 h-3 transition-transform group-hover/link:translate-x-1" />
+                    {/* Subtle background glow on hover */}
+                    <div
+                      className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"
+                      style={{ background: `radial-gradient(circle at top left, ${mod.light} 0%, transparent 70%)` }}
+                    />
+
+                    {/* Icon row */}
+                    <div className="relative flex items-center justify-between">
+                      <div
+                        className="flex h-11 w-11 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110"
+                        style={{ background: `linear-gradient(135deg, ${mod.from}, ${mod.to})` }}
+                      >
+                        <Icon className="h-5 w-5 text-white" />
+                      </div>
+                      <div
+                        className="flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-0 translate-x-1"
+                        style={{ background: mod.light, border: `1px solid ${mod.ring}` }}
+                      >
+                        <ArrowUpRight className="h-3.5 w-3.5" style={{ color: mod.from }} />
+                      </div>
+                    </div>
+
+                    {/* Text */}
+                    <div className="relative">
+                      <p className="text-sm font-bold text-warm-800 leading-snug">{mod.name}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-warm-400 line-clamp-2">{mod.description}</p>
+                    </div>
+
+                    {/* Bottom accent line */}
+                    <div
+                      className="absolute bottom-0 left-0 h-0.5 w-0 rounded-full transition-all duration-500 group-hover:w-full"
+                      style={{ background: `linear-gradient(90deg, ${mod.from}, ${mod.to})` }}
+                    />
                   </Link>
-                ) : (
-                  <span className="text-xs font-medium text-warm-300">{t('globalDash.previewSoon')}</span>
-                )}
-              </motion.div>
-            )
-          })}
+                </motion.div>
+              )
+            })}
+
+            {modules.length === 0 && (
+              <div className="col-span-full flex flex-col items-center justify-center py-16 text-warm-300 gap-3">
+                <LayoutGrid size={32} className="opacity-30" />
+                <p className="text-sm font-medium">Sin módulos disponibles</p>
+              </div>
+            )}
+          </motion.div>
         </div>
+
       </div>
     </div>
   )

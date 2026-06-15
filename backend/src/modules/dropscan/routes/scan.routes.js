@@ -8,7 +8,8 @@ const router = Router()
 
 // GET /api/dropscan/guide-usage — monthly guide usage vs plan limit for this tenant
 router.get('/guide-usage',
-  authenticateToken,
+  authenticateToken, loadFullUser,
+  requirePermission('dropscan.escaneo', 'ver'),
   async (req, res) => {
     try {
       const [planRes, usageRes] = await Promise.all([
@@ -174,10 +175,10 @@ router.post('/sessions/start',
       // Try to set operator context columns OUTSIDE transaction (non-fatal if columns don't exist)
       const operadorNombre = usuario_operador || req.fullUser?.nombre_completo || null
       try {
-        await query(
+        await req.tQuery(
           `UPDATE sesiones_escaneo SET usuario_operador = $1, nivel_usuario = $2, usuario_interno_id = $3
-           WHERE id = $4`,
-          [operadorNombre, nivel_usuario || null, usuario_interno_id || null, sesion.id]
+           WHERE id = $4 AND tenant_id = $5`,
+          [operadorNombre, nivel_usuario || null, usuario_interno_id || null, sesion.id, req.tenantId]
         )
       } catch {
         // Operator columns don't exist yet — non-fatal

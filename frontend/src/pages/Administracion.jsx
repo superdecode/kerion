@@ -39,6 +39,13 @@ const MODULE_GROUPS = [
     ]
   },
   {
+    group: 'Recepción',
+    groupKey: 'perm.group.recepcion',
+    modules: [
+      { key: 'recepcion.recibir', label: 'Recibir', labelKey: 'perm.sub.recepcion.recibir' },
+    ]
+  },
+  {
     group: 'Inventario',
     groupKey: 'perm.group.inventario',
     modules: [
@@ -54,6 +61,14 @@ const MODULE_GROUPS = [
       { key: 'surtido.validacion', label: 'Validar',   labelKey: 'perm.sub.surtido.validar' },
       { key: 'surtido.ordenes',    label: 'Órdenes',   labelKey: 'perm.sub.surtido.ordenes' },
       { key: 'surtido.registros',  label: 'Registros', labelKey: 'perm.sub.surtido.registros' },
+    ]
+  },
+  {
+    group: 'Despacho',
+    groupKey: 'perm.group.despacho',
+    modules: [
+      { key: 'despacho.ordenes', label: 'Órdenes', labelKey: 'perm.sub.despacho.ordenes' },
+      { key: 'despacho.folios',  label: 'Folios',  labelKey: 'perm.sub.despacho.folios' },
     ]
   },
   {

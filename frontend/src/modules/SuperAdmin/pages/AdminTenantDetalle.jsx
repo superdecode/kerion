@@ -958,8 +958,11 @@ const MODULE_LABELS = {
   surtido: 'Surtido',
   inventario: 'Inventario',
   devoluciones: 'Devoluciones',
+  anormalidades: 'Anormalidades',
+  despacho: 'Despacho',
+  recepcion: 'Recepción',
 }
-const ALL_MODULE_CODES = ['dropscan', 'surtido', 'inventario', 'devoluciones']
+const ALL_MODULE_CODES = ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades', 'despacho', 'recepcion']
 
 function ModulesPanel({ tenantId, onSaved }) {
   const [modules, setModules] = useState([])

@@ -357,7 +357,7 @@ export default function Entradas() {
                             checked={allChecked}
                             ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
                             onChange={toggleAll}
-                            className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                            className="cb"
                             onClick={e => e.stopPropagation()} />
                         </th>
                         <th className="table-header">{t('dev.entradas.col.codigo')}</th>
@@ -379,7 +379,7 @@ export default function Entradas() {
                               <input type="checkbox"
                                 checked={isSelected}
                                 onChange={() => toggleRow(row.id)}
-                                className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                                className="cb"
                                 onClick={e => e.stopPropagation()} />
                             </td>
                             <td className="table-cell">

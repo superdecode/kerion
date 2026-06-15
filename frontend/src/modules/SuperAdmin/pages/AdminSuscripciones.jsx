@@ -791,7 +791,7 @@ function SubscriptionsTab() {
                         checked={allSelected}
                         onChange={toggleAll}
                         ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
-                        className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                        className="cb"
                       />
                     </th>
                     <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider">ID</th>
@@ -817,7 +817,7 @@ function SubscriptionsTab() {
                             type="checkbox"
                             checked={selectedIds.has(s.id)}
                             onChange={() => toggleRow(s.id)}
-                            className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                            className="cb"
                           />
                         </td>
                         <td className="px-4 py-3 text-gray-500 font-mono text-xs">{s.id.slice(0, 8)}</td>

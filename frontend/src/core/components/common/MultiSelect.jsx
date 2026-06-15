@@ -72,7 +72,7 @@ export default function MultiSelect({ options = [], selected = [], onChange, pla
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
             transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute top-full left-0 right-0 mt-1 z-50 bg-white rounded-xl shadow-depth border border-warm-100 overflow-hidden"
+            className="absolute top-full left-0 right-0 mt-1 z-[500] bg-white rounded-xl shadow-depth border border-warm-100 overflow-hidden"
           >
             {/* Search */}
             {options.length > 5 && (

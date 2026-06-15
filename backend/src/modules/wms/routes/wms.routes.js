@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission, getPermissionLevel, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { getToday, instantDateInTZ } from '../../../shared/utils/dateUtils.js'
-import { checkModuleLimit } from '../../middleware/usageGuard.js'
+import { checkModuleLimitForUpdate } from '../../middleware/usageGuard.js'
 
 const SURTIDO_COUNT_QUERY = `SELECT COUNT(*) FROM pick_order_tracking WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`
 
@@ -238,7 +238,14 @@ async function refreshInventorySessionTotals(req, sessionId) {
 // GET /api/wmshub/sheets-urls — sheet URLs only, accessible to all authenticated users
 // Used by googleSheetsService across all modules (Inventario, Surtido, etc.)
 router.get('/sheets-urls',
-  authenticateToken,
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'sistema.wms', action: 'ver' },
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'inventario.escaneo', action: 'ver' },
+    { modulePath: 'despacho.folios', action: 'ver' },
+  ]),
   async (req, res) => {
     try {
       const result = await req.tQuery(
@@ -333,16 +340,42 @@ router.post('/config/sheets',
 // GET /api/wmshub/proxy/sheet?url=&limit=N — CORS proxy with server-side cache
 // limit=0 (or omitted) returns all rows; limit=N returns header + last N data rows.
 router.get('/proxy/sheet',
-  authenticateToken,
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'sistema.wms', action: 'ver' },
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'inventario.escaneo', action: 'ver' },
+    { modulePath: 'despacho.folios', action: 'ver' },
+  ]),
   async (req, res) => {
     try {
       const { url, limit } = req.query
       if (!url || !url.startsWith('https://docs.google.com/')) {
         return res.status(400).json({ success: false, error: 'URL inválida: debe ser una hoja de Google' })
       }
+
+      const configRes = await req.tQuery(
+        `SELECT sheet_inventory_url, sheet_outbound_url
+         FROM wms_config
+         WHERE tenant_id = $1 AND is_active = true
+         ORDER BY id DESC
+         LIMIT 1`,
+        [req.tenantId]
+      )
+      const allowedUrls = new Set(
+        [configRes.rows[0]?.sheet_inventory_url, configRes.rows[0]?.sheet_outbound_url]
+          .filter(Boolean)
+          .map(value => String(value).trim())
+      )
+      const normalizedUrl = String(url).trim()
+      if (!allowedUrls.has(normalizedUrl)) {
+        return res.status(403).json({ success: false, error: 'URL no autorizada para este tenant' })
+      }
+
       const limitNum = parseInt(limit) || 0
-      const cacheKey = `${req.tenantId}:${url}`
-      const pgKey = `csv:proxy:${crypto.createHash('sha256').update(url).digest('hex').slice(0, 24)}`
+      const cacheKey = `${req.tenantId}:${normalizedUrl}`
+      const pgKey = `csv:proxy:${crypto.createHash('sha256').update(normalizedUrl).digest('hex').slice(0, 24)}`
       const cached = _csvCache.get(cacheKey)
       const now = Date.now()
 
@@ -373,7 +406,7 @@ router.get('/proxy/sheet',
         // Stale — respond immediately with old data + refresh in background
         send(cached.text, 'stale', cached.rowCount)
         if (!cached.refreshing) {
-          fetchAndCacheSheet(req.tenantId, url, dbWriter).catch(() => {})
+          fetchAndCacheSheet(req.tenantId, normalizedUrl, dbWriter).catch(() => {})
         }
         return
       }
@@ -392,7 +425,7 @@ router.get('/proxy/sheet',
       } catch { /* non-fatal: fall through to Google fetch */ }
 
       // Full miss — fetch from Google, cache in memory + DB
-      const text = await fetchAndCacheSheet(req.tenantId, url, dbWriter)
+      const text = await fetchAndCacheSheet(req.tenantId, normalizedUrl, dbWriter)
       const entry = _csvCache.get(cacheKey)
       send(text, 'miss', entry?.rowCount || 0)
     } catch (err) {
@@ -729,12 +762,18 @@ router.post('/scan-event',
       if (scan_result === 'ok') {
         const obc = sessionCheck.rows[0].outbound_order_no
         if (obc && normCode) {
-          await req.tQuery(
-            `INSERT INTO pick_box_status (tenant_id, outbound_order_no, box_code, estado, updated_by)
-             VALUES ($1, $2, $3, 'validada', $4)
-             ON CONFLICT (tenant_id, outbound_order_no, box_code) DO NOTHING`,
-            [req.tenantId, obc, normCode, req.user.email || String(req.user.id)]
-          )
+          const updatedBy = req.user.email || String(req.user.id)
+          const codeVariants = new Set([normCode])
+          if (normCode.includes('-')) codeVariants.add(normCode.replace(/-/g, '/'))
+          if (normCode.includes('/')) codeVariants.add(normCode.replace(/\//g, '-'))
+          for (const variant of codeVariants) {
+            await req.tQuery(
+              `INSERT INTO pick_box_status (tenant_id, outbound_order_no, box_code, estado, updated_by)
+               VALUES ($1, $2, $3, 'validada', $4)
+               ON CONFLICT (tenant_id, outbound_order_no, box_code) DO NOTHING`,
+              [req.tenantId, obc, variant, updatedBy]
+            )
+          }
         }
       }
 
@@ -805,12 +844,18 @@ router.post('/scan-event/manual',
       )
       await refreshPickSessionTotals(req, session_id)
       if (session.outbound_order_no && normCodeManual) {
-        await req.tQuery(
-          `INSERT INTO pick_box_status (tenant_id, outbound_order_no, box_code, estado, updated_by)
-           VALUES ($1, $2, $3, 'validada', $4)
-           ON CONFLICT (tenant_id, outbound_order_no, box_code) DO NOTHING`,
-          [req.tenantId, session.outbound_order_no, normCodeManual, req.user.email || String(req.user.id)]
-        )
+        const updatedByManual = req.user.email || String(req.user.id)
+        const manualVariants = new Set([normCodeManual])
+        if (normCodeManual.includes('-')) manualVariants.add(normCodeManual.replace(/-/g, '/'))
+        if (normCodeManual.includes('/')) manualVariants.add(normCodeManual.replace(/\//g, '-'))
+        for (const variant of manualVariants) {
+          await req.tQuery(
+            `INSERT INTO pick_box_status (tenant_id, outbound_order_no, box_code, estado, updated_by)
+             VALUES ($1, $2, $3, 'validada', $4)
+             ON CONFLICT (tenant_id, outbound_order_no, box_code) DO NOTHING`,
+            [req.tenantId, session.outbound_order_no, variant, updatedByManual]
+          )
+        }
       }
       res.status(201).json({ success: true, data: result.rows[0] })
     } catch (err) {
@@ -911,7 +956,7 @@ router.delete('/scan-event/:id',
   async (req, res) => {
     try {
       const eventRes = await req.tQuery(
-        `SELECT e.id, e.session_id, s.status, s.operator_id
+        `SELECT e.id, e.session_id, s.status
          FROM pick_events e
          JOIN pick_sessions s ON s.id = e.session_id
          WHERE e.id = $1 AND s.tenant_id = $2`,
@@ -920,9 +965,6 @@ router.delete('/scan-event/:id',
       if (eventRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Registro no encontrado' })
       const event = eventRes.rows[0]
       if (event.status !== 'open') return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
-      if (event.operator_id !== req.user.id && req.fullUser.rol_nombre !== 'Administrador') {
-        return res.status(403).json({ success: false, error: 'No autorizado para eliminar este registro' })
-      }
 
       await req.tQuery('DELETE FROM pick_events WHERE id = $1', [req.params.id])
       await refreshPickSessionTotals(req, event.session_id)
@@ -1858,7 +1900,13 @@ router.post('/order-tracking/bulk',
 
         // 3. Check module limit once for all new OBCs
         if (newObcs.length > 0) {
-          const limitCheck = await checkModuleLimit(req.tenantId, 'surtido_limit', SURTIDO_COUNT_QUERY)
+          const limitCheck = await checkModuleLimitForUpdate(
+            client,
+            req.tenantId,
+            'surtido_limit',
+            SURTIDO_COUNT_QUERY,
+            newObcs.length
+          )
           if (limitCheck.limited) {
             const err = new Error('Límite mensual de órdenes surtido alcanzado.')
             err.statusCode = 402
@@ -1960,25 +2008,34 @@ router.put('/order-tracking/:obc',
       }
 
       if (existing.rows.length === 0) {
-        const limitCheck = await checkModuleLimit(req.tenantId, 'surtido_limit', SURTIDO_COUNT_QUERY)
-        if (limitCheck.limited) {
-          return res.status(402).json({
-            success: false,
-            error: 'Límite mensual de órdenes surtido alcanzado.',
-            code: 'SURTIDO_LIMIT_REACHED',
-            used: limitCheck.used,
-            limit: limitCheck.limit,
-          })
-        }
-        const result = await req.tQuery(
-          `INSERT INTO pick_order_tracking
-             (tenant_id, outbound_order_no, third_order_no, surtidor_id, surtidor_nombre, status, notes, assigned_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-          [req.tenantId, req.params.obc, normalizeOptionalText(third_order_no), surtidor_id || null,
-           surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes),
-           surtidor_id ? new Date() : null]
-        )
-        return res.json({ success: true, data: result.rows[0] })
+        const created = await req.tTransaction(async (client) => {
+          const limitCheck = await checkModuleLimitForUpdate(
+            client,
+            req.tenantId,
+            'surtido_limit',
+            SURTIDO_COUNT_QUERY,
+            1
+          )
+          if (limitCheck.limited) {
+            const err = new Error('Límite mensual de órdenes surtido alcanzado.')
+            err.statusCode = 402
+            err.code = 'SURTIDO_LIMIT_REACHED'
+            err.used = limitCheck.used
+            err.limit = limitCheck.limit
+            throw err
+          }
+
+          const result = await client.query(
+            `INSERT INTO pick_order_tracking
+               (tenant_id, outbound_order_no, third_order_no, surtidor_id, surtidor_nombre, status, notes, assigned_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [req.tenantId, req.params.obc, normalizeOptionalText(third_order_no), surtidor_id || null,
+             surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes),
+             surtidor_id ? new Date() : null]
+          )
+          return result.rows[0]
+        })
+        return res.json({ success: true, data: created })
       }
 
       const existingStatus = existing.rows[0].status

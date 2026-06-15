@@ -974,6 +974,7 @@ const { data: reasonsData } = useQuery({
   }, [step, ubicacionConfirmed, isActive])
 
   const [conflictDetails, setConflictDetails] = useState(null)
+  const [rejectedBoxModal, setRejectedBoxModal] = useState({ open: false, code: '' })
   
   const createSessionMut = useMutation({
     mutationFn: (force = false) => {
@@ -1218,11 +1219,11 @@ const { data: reasonsData } = useQuery({
     }
     const matched = findMatchedItem(norm, packageMap, productMap)
     if (!matched) {
-      playSound('error')
+      playSound('reject')
       setLastScan({ code: norm, result: 'rejected' })
       setHistory(h => [{ code: norm, result: 'rejected', ts: Date.now() }, ...h])
       setCounts(c => ({ ...c, rejected: c.rejected + 1 }))
-      toast.error(t('surtido.validacion.not_in_bd') + ': ' + norm)
+      setRejectedBoxModal({ open: true, code: norm })
       addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'not_found', quantity: 1, _dedupeKey: `NF_${norm}_${Date.now()}` })
       return
     }
@@ -1777,6 +1778,32 @@ const { data: reasonsData } = useQuery({
           )}
         </div>
       </div>
+
+      {/* Rejected box modal */}
+      <Modal
+        isOpen={rejectedBoxModal.open}
+        onClose={() => setRejectedBoxModal({ open: false, code: '' })}
+        title={t('surtido.escaneo.match_rejected')}
+        icon={XCircle}
+        footer={
+          <button
+            className="btn-danger w-full inline-flex items-center justify-center gap-2"
+            onClick={() => { setRejectedBoxModal({ open: false, code: '' }); setTimeout(() => scanRef.current?.focus(), 80) }}
+          >
+            <X size={14} /> {t('common.close')}
+          </button>
+        }
+      >
+        <div className="text-center space-y-4 py-2">
+          <div className="mx-auto w-16 h-16 rounded-full bg-danger-100 flex items-center justify-center">
+            <XCircle className="w-9 h-9 text-danger-600" />
+          </div>
+          <p className="text-sm font-medium text-warm-600">{t('surtido.validacion.not_in_bd')}</p>
+          <div className="bg-danger-50 border border-danger-200 rounded-2xl px-4 py-3">
+            <p className="font-mono font-bold text-danger-700 text-lg break-all">{rejectedBoxModal.code}</p>
+          </div>
+        </div>
+      </Modal>
 
       {/* Recount modal */}
       <RecountModal

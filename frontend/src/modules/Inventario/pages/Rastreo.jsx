@@ -601,7 +601,7 @@ export default function Rastreo() {
                         type="checkbox"
                         checked={allCurrentSelected}
                         onChange={toggleAll}
-                        className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                        className="cb"
                       />
                     </th>
                     <th className={TH}><SortableHeader label={t('rastreo.col.folio')} sortKey="folio" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
@@ -637,7 +637,7 @@ export default function Rastreo() {
                           type="checkbox"
                           checked={selected.has(o.id)}
                           onChange={() => toggleRow(o.id)}
-                          className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                          className="cb"
                         />
                       </td>
 

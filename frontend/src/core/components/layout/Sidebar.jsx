@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import {
@@ -19,29 +19,46 @@ import {
   Package,
   Wifi,
   AlertTriangle,
-  TrendingUp,
   Target,
   Crosshair,
+  Truck,
+  ClipboardList,
+  RotateCcw,
+  BarChart2,
+  Download,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
+
+const GROUP_STYLES = {
+  dashboard:    { iconBg: 'bg-indigo-500/20',  iconColor: 'text-indigo-400',  activeBg: 'bg-indigo-600/15',  activeBorder: 'border-indigo-500/30'  },
+  dropscan:     { iconBg: 'bg-blue-500/20',    iconColor: 'text-blue-400',    activeBg: 'bg-blue-600/15',    activeBorder: 'border-blue-500/30'    },
+  devoluciones: { iconBg: 'bg-amber-500/20',   iconColor: 'text-amber-400',   activeBg: 'bg-amber-600/15',   activeBorder: 'border-amber-500/30'   },
+  recepcion:    { iconBg: 'bg-sky-500/20',     iconColor: 'text-sky-400',     activeBg: 'bg-sky-600/15',     activeBorder: 'border-sky-500/30'     },
+  inventario:   { iconBg: 'bg-teal-500/20',    iconColor: 'text-teal-400',    activeBg: 'bg-teal-600/15',    activeBorder: 'border-teal-500/30'    },
+  surtido:      { iconBg: 'bg-violet-500/20',  iconColor: 'text-violet-400',  activeBg: 'bg-violet-600/15',  activeBorder: 'border-violet-500/30'  },
+  despacho:     { iconBg: 'bg-emerald-500/20', iconColor: 'text-emerald-400', activeBg: 'bg-emerald-600/15', activeBorder: 'border-emerald-500/30' },
+  anormalidades:{ iconBg: 'bg-rose-500/20',    iconColor: 'text-rose-400',    activeBg: 'bg-rose-600/15',    activeBorder: 'border-rose-500/30'    },
+  sistema:      { iconBg: 'bg-slate-500/20',   iconColor: 'text-slate-400',   activeBg: 'bg-slate-600/15',   activeBorder: 'border-slate-500/30'   },
+}
 
 const getNavItems = (t) => [
   {
     id: 'dropscan',
     label: 'DropScan',
+    icon: ScanBarcode,
     items: [
-      { path: '/dropscan',              tourId: 'nav-dashboard',      label: t('nav.dashboard'),     icon: LayoutDashboard, permission: 'dropscan.dashboard' },
-      { path: '/DropScan/escaneo',      tourId: 'nav-escaneo',        label: t('nav.scanning'),      icon: ScanBarcode,     permission: 'dropscan.escaneo' },
-      { path: '/DropScan/tarimas',      tourId: 'nav-tarimas',        label: t('nav.tarimas'),       icon: History,         permission: 'dropscan.tarimas' },
-      { path: '/DropScan/folios',       tourId: 'nav-folios',         label: t('nav.fep'),           icon: FileText,        permission: 'fep.folios' },
-      { path: '/DropScan/reportes',     tourId: 'nav-reportes',       label: t('nav.reports'),       icon: BarChart3,       permission: 'dropscan.reportes' },
-      { path: '/DropScan/configuracion',tourId: 'nav-configuracion',  label: t('nav.configuration'), icon: Settings,        permission: 'dropscan.configuracion' },
+      { path: '/DropScan/escaneo',       tourId: 'nav-escaneo',       label: t('nav.scanning'),      icon: ScanBarcode,     permission: 'dropscan.escaneo' },
+      { path: '/DropScan/tarimas',       tourId: 'nav-tarimas',       label: t('nav.tarimas'),       icon: History,         permission: 'dropscan.tarimas' },
+      { path: '/DropScan/folios',        tourId: 'nav-folios',        label: t('nav.fep'),           icon: FileText,        permission: 'fep.folios' },
+      { path: '/DropScan/reportes',      tourId: 'nav-reportes',      label: t('nav.reports'),       icon: BarChart3,       permission: 'dropscan.reportes' },
+      { path: '/DropScan/configuracion', tourId: 'nav-configuracion', label: t('nav.configuration'), icon: Settings,        permission: 'dropscan.configuracion' },
     ],
   },
   {
     id: 'devoluciones',
     label: t('nav.devoluciones'),
+    icon: RotateCcw,
     items: [
       { path: '/Devoluciones/entradas',   tourId: 'nav-dev-entradas',   label: t('nav.dev.entradas'),   icon: PackagePlus,  permission: 'devoluciones.entradas' },
       { path: '/Devoluciones/inventario', tourId: 'nav-dev-inventario', label: t('nav.dev.inventario'), icon: Boxes,        permission: 'devoluciones.inventario' },
@@ -49,50 +66,103 @@ const getNavItems = (t) => [
     ],
   },
   {
+    id: 'recepcion',
+    label: t('nav.recepcion'),
+    icon: Download,
+    items: [
+      { path: '/recepcion/recibir', tourId: 'nav-rec-recibir', label: t('nav.rec.recibir'), icon: PackagePlus, permission: 'recepcion.recibir' },
+    ],
+  },
+  {
     id: 'inventario',
     label: t('nav.inventario'),
+    icon: Boxes,
     items: [
-      { path: '/Inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode,   permission: 'inventario.escaneo' },
-      { path: '/Inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: Package,       permission: 'inventario.registros' },
-      { path: '/Inventario/rastreo',   tourId: 'nav-inv-rastreo',   label: t('nav.inv.rastreo'),   icon: Crosshair,     permission: 'inventario.rastreo' },
+      { path: '/Inventario/escaneo',   tourId: 'nav-inv-escaneo',   label: t('nav.inv.escaneo'),   icon: ScanBarcode, permission: 'inventario.escaneo' },
+      { path: '/Inventario/registros', tourId: 'nav-inv-registros', label: t('nav.inv.registros'), icon: Package,     permission: 'inventario.registros' },
+      { path: '/Inventario/rastreo',   tourId: 'nav-inv-rastreo',   label: t('nav.inv.rastreo'),   icon: Crosshair,   permission: 'inventario.rastreo' },
     ],
   },
   {
     id: 'surtido',
     label: t('nav.surtido'),
+    icon: BadgeCheck,
     items: [
-      { path: '/Surtido/validacion', tourId: 'nav-sur-validacion', label: t('nav.sur.validacion'),  icon: BadgeCheck,  permission: 'surtido.validacion' },
-      { path: '/surtido',            tourId: 'nav-sur-ordenes',    label: t('nav.sur.ordenes'),     icon: FileText,    permission: 'surtido.ordenes' },
-      { path: '/Surtido/registros',  tourId: 'nav-sur-registros',  label: t('nav.sur.registros'),   icon: History,     permission: 'surtido.registros' },
+      { path: '/Surtido/validacion', tourId: 'nav-sur-validacion', label: t('nav.sur.validacion'), icon: BadgeCheck, permission: 'surtido.validacion' },
+      { path: '/surtido',            tourId: 'nav-sur-ordenes',    label: t('nav.sur.ordenes'),    icon: ClipboardList, permission: 'surtido.ordenes' },
+      { path: '/Surtido/registros',  tourId: 'nav-sur-registros',  label: t('nav.sur.registros'),  icon: History,    permission: 'surtido.registros' },
+    ],
+  },
+  {
+    id: 'despacho',
+    label: t('nav.despacho'),
+    icon: Truck,
+    items: [
+      { path: '/despacho/ordenes', tourId: 'nav-desp-ordenes', label: t('nav.desp.ordenes'), icon: ClipboardList, permission: 'despacho.ordenes' },
+      { path: '/despacho/folios',  tourId: 'nav-desp-folios',  label: t('nav.desp.folios'),  icon: Truck,         permission: 'despacho.folios' },
     ],
   },
   {
     id: 'anormalidades',
     label: t('nav.anormalidades'),
+    icon: AlertTriangle,
     items: [
-      { path: '/Anormalidades/dashboard',  tourId: 'nav-anorm-dashboard',  label: t('nav.anorm.dashboard'),  icon: LayoutDashboard, permission: 'anormalidades.dashboard' },
-      { path: '/Anormalidades/registro',   tourId: 'nav-anorm-registro',   label: t('nav.anorm.registro'),   icon: AlertTriangle, permission: 'anormalidades.registro' },
-      { path: '/Anormalidades/mejoras',    tourId: 'nav-anorm-mejoras',    label: t('nav.anorm.mejoras'),    icon: Target,        permission: 'anormalidades.mejoras' },
-      { path: '/Anormalidades/configuracion', tourId: 'nav-anorm-config',  label: t('nav.configuration'),    icon: Settings,      permission: 'anormalidades.configuracion' },
+      { path: '/Anormalidades/registro',      tourId: 'nav-anorm-registro',  label: t('nav.anorm.registro'),  icon: AlertTriangle,   permission: 'anormalidades.registro' },
+      { path: '/Anormalidades/mejoras',       tourId: 'nav-anorm-mejoras',   label: t('nav.anorm.mejoras'),   icon: Target,          permission: 'anormalidades.mejoras' },
+      { path: '/Anormalidades/configuracion', tourId: 'nav-anorm-config',    label: t('nav.configuration'),   icon: Settings,        permission: 'anormalidades.configuracion' },
     ],
   },
 ]
 
 const getAdminNav = (t) => [
-  { path: '/wmshub', tourId: 'nav-wmshub', label: t('nav.wms.config'), icon: Wifi,     permission: 'sistema.wms' },
+  { path: '/wmshub', tourId: 'nav-wmshub', label: t('nav.wms.config'),     icon: Wifi,      permission: 'sistema.wms' },
   { path: '/admin',  tourId: 'nav-admin',  label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
 ]
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
-  const { user, canView, isModuleEnabled } = useAuthStore()
+  const [expandedGroups, setExpandedGroups] = useState(new Set())
+
+  const { user, canView, isModuleEnabled, hasPermission } = useAuthStore()
   const { t } = useI18nStore()
   const tourActive = useTourStore((s) => s.active)
   const highlightedSidebarItem = useTourStore((s) => s.highlightedSidebarItem)
   const navigate = useNavigate()
+  const { pathname } = useLocation()
 
   const navItems = getNavItems(t)
   const adminNav = getAdminNav(t)
+
+  const visibleGroups = useMemo(() =>
+    navItems.filter(group =>
+      isModuleEnabled(group.id) &&
+      group.items.some(item => canView(item.permission))
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user, navItems]
+  )
+
+  // Dashboard is visible if user has actualizar+ on at least one module's key permission
+  const DASHBOARD_PERMISSIONS = [
+    'dropscan.dashboard', 'devoluciones.entradas', 'inventario.registros',
+    'surtido.ordenes', 'despacho.folios', 'anormalidades.dashboard',
+  ]
+  const canSeeDashboard = useMemo(() =>
+    DASHBOARD_PERMISSIONS.some(p => hasPermission(p, 'actualizar')),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user]
+  )
+
+  const collapsibleMode = visibleGroups.length > 3
+
+  const toggleGroup = (id) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const handleLogout = async () => {
     await useAuthStore.getState().logout()
@@ -105,7 +175,13 @@ export default function Sidebar() {
 
   const roleName = user?.rol_nombre || user?.rol || ''
 
-  const { pathname } = useLocation()
+  const isChildActive = (item) => {
+    const lp = pathname.toLowerCase()
+    const ip = item.path.toLowerCase()
+    if (item.path === '/surtido') return lp === '/surtido' || lp.startsWith('/surtido/ordenes')
+    if (item.path === '/dropscan') return lp === '/dropscan'
+    return lp === ip || lp.startsWith(ip + '/')
+  }
 
   const renderLink = (item) => {
     if (!canView(item.permission)) return null
@@ -123,10 +199,10 @@ export default function Sidebar() {
         data-tour={item.tourId}
         className={({ isActive }) => {
           const active = forceActive !== null ? forceActive : isActive
-          return `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+          return `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
             active
               ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
-              : 'text-blue-200/70 hover:text-white hover:bg-white/10'
+              : 'text-blue-200/70 hover:text-white hover:bg-white/10 border border-transparent'
           }`
         }}
       >
@@ -148,14 +224,73 @@ export default function Sidebar() {
     )
   }
 
+  const renderGroup = (group) => {
+    if (!isModuleEnabled(group.id)) return null
+    const visibleItems = group.items.filter(item => canView(item.permission))
+    if (visibleItems.length === 0) return null
+
+    if (collapsibleMode && !collapsed) {
+      const isOpen = expandedGroups.has(group.id)
+      const styles = GROUP_STYLES[group.id] || {
+        iconBg: 'bg-white/10', iconColor: 'text-blue-400',
+        activeBg: 'bg-blue-600/15', activeBorder: 'border-blue-500/30',
+      }
+      const GroupIcon = group.icon
+      const hasActive = visibleItems.some(isChildActive)
+
+      return (
+        <div key={group.id} className="mb-1">
+          <button
+            onClick={() => toggleGroup(group.id)}
+            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 border ${
+              isOpen || hasActive
+                ? `${styles.activeBg} ${styles.activeBorder} text-white`
+                : 'border-transparent text-blue-200/70 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
+              isOpen || hasActive ? 'bg-white/20' : styles.iconBg
+            }`}>
+              <GroupIcon className={`w-3.5 h-3.5 ${isOpen || hasActive ? 'text-white' : styles.iconColor}`} />
+            </div>
+            <span className="flex-1 text-left truncate">{group.label}</span>
+            {hasActive && !isOpen && (
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${styles.iconColor} bg-current`} />
+            )}
+            <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 opacity-50 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
+          </button>
+          {isOpen && (
+            <div className="mt-0.5 ml-2 pl-2.5 border-l border-blue-900/40 pb-0.5 space-y-0.5">
+              {visibleItems.map(renderLink)}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    // Non-collapsible (≤3 groups) or icon-only sidebar
+    return (
+      <div key={group.id} className="mb-3">
+        {!collapsed && (
+          <p className="px-3 text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest mb-1.5">
+            {group.label}
+          </p>
+        )}
+        <div className="space-y-0.5">
+          {visibleItems.map(renderLink)}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <aside
       className={`relative ${collapsed ? 'w-16' : 'w-60'} bg-[#0b1437] border-r border-blue-900/40 flex flex-col transition-all duration-200 flex-shrink-0 ${tourActive ? 'z-[100001]' : ''}`}
     >
-      {/* Collapse toggle — attached to sidebar right edge */}
+      {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed(v => !v)}
-        className="absolute -right-3.5 top-[4.5rem] z-20 w-7 h-7 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-colors shadow-md"
+        className="absolute -right-3.5 top-[4.5rem] z-[100002] w-7 h-7 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-colors shadow-md"
         title={collapsed ? t('nav.expand') : t('nav.collapse')}
       >
         {collapsed
@@ -175,38 +310,76 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav data-tour="sidebar" className="flex-1 p-2 space-y-0.5 overflow-y-auto scrollbar-thin sidebar-scrollbar">
-        {navItems.map((group) => {
-          if (!isModuleEnabled(group.id)) return null
-          const visibleItems = group.items.filter(item => canView(item.permission))
-          if (visibleItems.length === 0) return null
+      <nav data-tour="sidebar" className="flex-1 p-2 overflow-y-auto scrollbar-thin sidebar-scrollbar">
+        <div className="space-y-0.5">
+          {/* Dashboard consolidado — primera posición */}
+          {canSeeDashboard && (() => {
+            const lp = pathname.toLowerCase()
+            const isActive = lp === '/dashboard' || lp.startsWith('/dashboard?') || lp.startsWith('/dashboard/')
+            const styles = GROUP_STYLES.dashboard
+            return (
+              <NavLink
+                to="/dashboard"
+                className={() => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors mb-1 border ${
+                  isActive
+                    ? `${styles.activeBg} ${styles.activeBorder} text-white`
+                    : 'border-transparent text-blue-200/70 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-white/20' : styles.iconBg}`}>
+                  <BarChart2 className={`w-3.5 h-3.5 ${isActive ? 'text-white' : styles.iconColor}`} />
+                </div>
+                {!collapsed && <span className="truncate flex-1">{t('nav.mainDashboard') || 'Dashboard'}</span>}
+              </NavLink>
+            )
+          })()}
+          {navItems.map(renderGroup)}
+        </div>
+
+        {/* Sistema — collapsible group */}
+        {(() => {
+          const visibleAdminItems = adminNav.filter(item => canView(item.permission))
+          if (visibleAdminItems.length === 0) return null
+          const styles = GROUP_STYLES.sistema
+          const isOpen = expandedGroups.has('sistema')
+          const hasActive = visibleAdminItems.some(isChildActive)
           return (
-            <div key={group.id} className="mb-3">
-              {!collapsed && (
-                <p className="px-3 text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest mb-1.5">
-                  {group.label}
-                </p>
+            <div className="mt-3 pt-3 border-t border-blue-900/30">
+              {!collapsed ? (
+                <>
+                  <button
+                    onClick={() => toggleGroup('sistema')}
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 border ${
+                      isOpen || hasActive
+                        ? `${styles.activeBg} ${styles.activeBorder} text-white`
+                        : 'border-transparent text-blue-200/70 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
+                      isOpen || hasActive ? 'bg-white/20' : styles.iconBg
+                    }`}>
+                      <Settings2 className={`w-3.5 h-3.5 ${isOpen || hasActive ? 'text-white' : styles.iconColor}`} />
+                    </div>
+                    <span className="flex-1 text-left truncate">{t('nav.system')}</span>
+                    {hasActive && !isOpen && (
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${styles.iconColor} bg-current`} />
+                    )}
+                    <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 opacity-50 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
+                  </button>
+                  {isOpen && (
+                    <div className="mt-0.5 ml-2 pl-2.5 border-l border-blue-900/40 pb-0.5 space-y-0.5">
+                      {visibleAdminItems.map(renderLink)}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-0.5">
+                  {visibleAdminItems.map(renderLink)}
+                </div>
               )}
-              <div className="space-y-0.5">
-                {visibleItems.map(renderLink)}
-              </div>
             </div>
           )
-        })}
-
-        {/* Sistema section — Conexión WMS separate from Administración */}
-        {adminNav.some(item => canView(item.permission)) && (
-          <div className="mt-3 pt-3 border-t border-blue-900/30">
-            {!collapsed && (
-              <p className="px-3 text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest mb-1.5">
-                {t('nav.system')}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {adminNav.filter(item => canView(item.permission)).map(renderLink)}
-            </div>
-          </div>
-        )}
+        })()}
       </nav>
 
       {/* Bottom — user info + logout */}

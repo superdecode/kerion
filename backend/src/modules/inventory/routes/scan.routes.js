@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { getInventoryMap } from '../../../shared/services/wmsClient.js'
-import { usageGuard } from '../../middleware/usageGuard.js'
+import { checkModuleLimitForUpdate } from '../../middleware/usageGuard.js'
 
 const INVENTARIO_COUNT_QUERY = `SELECT COUNT(*) FROM inventory_scans WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`
 
@@ -87,21 +87,44 @@ router.get('/sessions/active',
 router.post('/scans',
   authenticateToken, loadFullUser,
   requirePermission('inventory.escaneo', 'crear'),
-  usageGuard({ limitField: 'inventario_limit', countQuery: INVENTARIO_COUNT_QUERY, errorCode: 'INVENTARIO_LIMIT_REACHED' }),
   async (req, res) => {
+    let client
     try {
       const { session_id, barcode } = req.body
       if (!session_id || !barcode?.trim()) {
         return res.status(400).json({ error: 'session_id y barcode son requeridos' })
       }
 
+      client = await req.tGetClient()
+
       // Verify session belongs to caller and is active
-      const sessionRes = await req.tQuery(
-        `SELECT id FROM inventory_sessions WHERE id = $1 AND user_id = $2 AND status = 'active'`,
-        [session_id, req.user.id]
+      const sessionRes = await client.query(
+        `SELECT id
+         FROM inventory_sessions
+         WHERE id = $1 AND user_id = $2 AND tenant_id = $3 AND status = 'active'
+         FOR UPDATE`,
+        [session_id, req.user.id, req.tenantId]
       )
       if (sessionRes.rows.length === 0) {
+        await client.query('ROLLBACK')
         return res.status(400).json({ error: 'Sesión inválida o cerrada' })
+      }
+
+      const limitCheck = await checkModuleLimitForUpdate(
+        client,
+        req.tenantId,
+        'inventario_limit',
+        INVENTARIO_COUNT_QUERY,
+        1
+      )
+      if (limitCheck.limited) {
+        await client.query('ROLLBACK')
+        return res.status(402).json({
+          error: 'Límite mensual del plan alcanzado para este módulo.',
+          code: 'INVENTARIO_LIMIT_REACHED',
+          used: limitCheck.used,
+          limit: limitCheck.limit,
+        })
       }
 
       // Look up barcode in WMS inventory map
@@ -124,7 +147,7 @@ router.post('/scans',
         status = 'Bloqueado'
       }
 
-      const result = await req.tQuery(
+      const result = await client.query(
         `INSERT INTO inventory_scans
            (session_id, user_id, barcode, sku, product_name, cell_no, available_stock, status, tenant_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -141,11 +164,15 @@ router.post('/scans',
           req.tenantId
         ]
       )
+      await client.query('COMMIT')
 
       res.status(201).json({ scan: result.rows[0] })
     } catch (err) {
+      if (client) try { await client.query('ROLLBACK') } catch {}
       console.error('Inventory scan error:', err)
       res.status(500).json({ error: 'Error procesando escaneo' })
+    } finally {
+      if (client) client.release()
     }
   }
 )

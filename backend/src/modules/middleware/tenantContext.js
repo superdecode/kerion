@@ -19,6 +19,11 @@ function extractSlugFromHost(host) {
   return null
 }
 
+function isLocalDevHost(host) {
+  const withoutPort = String(host || '').split(':')[0].trim().toLowerCase()
+  return withoutPort === 'localhost' || withoutPort === '127.0.0.1' || withoutPort === '0.0.0.0'
+}
+
 // Decode JWT without verification — only used for tenant routing in dev
 function extractTenantIdFromBearer(req) {
   try {
@@ -41,7 +46,7 @@ export async function tenantContext(req, res, next) {
   // Allow slug override via header in development
   const slug =
     extractSlugFromHost(host) ||
-    (env.NODE_ENV !== 'production' ? req.headers['x-tenant-slug'] : null)
+    (env.NODE_ENV !== 'production' && isLocalDevHost(host) ? req.headers['x-tenant-slug'] : null)
 
   console.log('[tenantContext] host=' + host + ' baseDomain=' + env.TENANT_BASE_DOMAIN + ' slug=' + (slug || '(none)'))
 

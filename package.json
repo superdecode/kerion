@@ -5,6 +5,16 @@
   "engines": {
     "node": ">=18"
   },
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail --names \"api,web\" --prefix-colors \"cyan,magenta\" \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm run dev",
+    "vercel:dev": "vercel dev --listen 3000",
+    "build": "cd frontend && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",

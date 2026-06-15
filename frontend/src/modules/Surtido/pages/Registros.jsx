@@ -13,7 +13,7 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { fmtDateTime, getToday, subtractDays, fmtDate } from '../../../core/utils/dateFormat'
+import { fmtDateTime, fmtDate, fmtTimeShort, getToday, subtractDays } from '../../../core/utils/dateFormat'
 import {
   getScanSessions, getScanSession, getOutboundList, getRecords,
   updateScanEvent, deleteScanEvent, addManualScanEvent, getManualEntryReasons, deleteScanSession,
@@ -39,9 +39,9 @@ function resolveStatusLabel(t, key, fallbackKey = 'common.status') {
 }
 
 function durationLabel(startedAt, endedAt) {
-  if (!startedAt) return '—'
+  if (!startedAt || !endedAt) return '—'
   const start = new Date(startedAt)
-  const end = endedAt ? new Date(endedAt) : new Date()
+  const end = new Date(endedAt)
   const secs = Math.max(0, Math.floor((end - start) / 1000))
   const h = Math.floor(secs / 3600); const m = Math.floor((secs % 3600) / 60)
   if (h > 0) return `${h}h ${m}m`
@@ -72,7 +72,8 @@ function ObcHeader({ obc, status, t }) {
   )
 }
 
-function ScanTable({ events, showType = false, t, editable = false, editingId, editingCode, onEditCodeChange, onStartEdit, onSaveEdit, onDelete }) {
+function ScanTable({ events, showType = false, showUbicacion = false, t, editable = false, deletable = false, ubicacion, editingId, editingCode, onEditCodeChange, onStartEdit, onSaveEdit, onDelete }) {
+  const showActions = editable || deletable
   if (events.length === 0) return (
     <div className="flex flex-col items-center justify-center py-10 gap-2 text-warm-400">
       <CheckCircle2 size={32} className="opacity-30" />
@@ -85,10 +86,11 @@ function ScanTable({ events, showType = false, t, editable = false, editingId, e
         <thead className="bg-warm-50 sticky top-0 z-10 border-b border-warm-100">
           <tr>
             <th className={`${TH_CLASS} w-10`}><span className={TH_TEXT}>#</span></th>
-            <th className={`${TH_CLASS} w-[44%]`}><span className={TH_TEXT}>{t('surtido.validacion.code_header')}</span></th>
-            {showType && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Tipo</span></th>}
-            <th className={`${TH_CLASS} w-[30%]`}><span className={TH_TEXT}>Fecha escaneo</span></th>
-            {editable && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Acciones</span></th>}
+            <th className={`${TH_CLASS} w-[36%]`}><span className={TH_TEXT}>{t('surtido.validacion.code_header')}</span></th>
+            {showType && <th className={`${TH_CLASS} w-[14%]`}><span className={TH_TEXT}>Tipo</span></th>}
+            {showUbicacion && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Ubicación</span></th>}
+            <th className={`${TH_CLASS} w-[24%]`}><span className={TH_TEXT}>Fecha escaneo</span></th>
+            {showActions && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Acciones</span></th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-warm-50">
@@ -118,24 +120,31 @@ function ScanTable({ events, showType = false, t, editable = false, editingId, e
                   </span>
                 </td>
               )}
+              {showUbicacion && (
+                <td className="px-3 py-2 font-mono text-xs text-accent-700 truncate">{ubicacion || '—'}</td>
+              )}
               <td className="px-3 py-2 text-warm-400 tabular-nums">
                 {fmtDt(e.scanned_at || e.scan_time)}
               </td>
-              {editable && (
+              {showActions && (
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-1">
-                    {editingId === e.id ? (
-                      <button className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 hover:text-primary-700 transition-colors" onClick={() => onSaveEdit(e)} title="Guardar">
-                        <CheckCircle2 className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => onStartEdit(e)} title="Editar">
-                        <Edit3 className="w-4 h-4" />
+                    {editable && (
+                      editingId === e.id ? (
+                        <button className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 hover:text-primary-700 transition-colors" onClick={() => onSaveEdit(e)} title="Guardar">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => onStartEdit(e)} title="Editar">
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                      )
+                    )}
+                    {(editable || deletable) && (
+                      <button className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors" onClick={() => onDelete(e)} title="Eliminar">
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     )}
-                    <button className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors" onClick={() => onDelete(e)} title="Eliminar">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
                 </td>
               )}
@@ -220,6 +229,14 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   const validados  = events.filter(e => e.scan_result === 'ok')
   const rechazados = events.filter(e => e.scan_result !== 'ok')
 
+  const sortedEvents = [...events].sort((a, b) => {
+    const ta = new Date(a.scanned_at || a.scan_time || 0).getTime()
+    const tb = new Date(b.scanned_at || b.scan_time || 0).getTime()
+    return ta - tb
+  })
+  const firstEventAt = sortedEvents[0]?.scanned_at || sortedEvents[0]?.scan_time
+  const lastEventAt  = sortedEvents[sortedEvents.length - 1]?.scanned_at || sortedEvents[sortedEvents.length - 1]?.scan_time
+
   const totalExpected = session.total_expected ?? 0
   const totalScanned  = session.total_scanned ?? validados.length
   const destino      = wmsOrder?.receiverName || wmsOrder?.consignee || '—'
@@ -278,6 +295,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   const handleExportDetail = () => {
     try {
       const wb = XLSX.utils.book_new()
+      const ubicacionNota = session.ubicacion_nota || ''
       const info = [
         ['Orden WMS', session.outbound_order_no || ''],
         ['Destino', destino],
@@ -285,6 +303,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
         ['Tracking', tracking],
         ['Fecha entrega', fechaEntrega],
         ['Validador', session.operator_nombre || ''],
+        ['Ubicación', ubicacionNota],
         ['Inicio', fmtDt(session.started_at)],
         ['Final', fmtDt(session.ended_at ?? session.completed_at)],
         ['Duración', durationLabel(session.started_at, session.ended_at ?? session.completed_at)],
@@ -292,10 +311,11 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
         ['Validado', totalScanned],
         ['Estado', session.status || ''],
         [],
-        ['#', 'Código', 'Resultado', 'Fecha escaneo'],
+        ['#', 'Código', 'Ubicación', 'Resultado', 'Fecha escaneo'],
         ...events.map((e, i) => [
           i + 1,
           e.normalized_code || e.scanned_code || '',
+          ubicacionNota,
           e.scan_result || '',
           fmtDt(e.scanned_at || e.scan_time),
         ])
@@ -350,11 +370,19 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
 
           {/* Row 1: delivery info */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">Fecha entrega</p>
+              {(wmsOrder?.expectedTime || wmsOrder?.outboundTime) ? (
+                <div>
+                  <p className="text-sm font-semibold text-warm-700">{fmtDate(wmsOrder.expectedTime || wmsOrder.outboundTime)}</p>
+                  <p className="text-xs text-warm-500 tabular-nums">{fmtTimeShort(wmsOrder.expectedTime || wmsOrder.outboundTime)}</p>
+                </div>
+              ) : <p className="text-sm font-semibold text-warm-400">—</p>}
+            </div>
             {[
-              { l: 'Fecha entrega', v: fechaEntrega },
-              { l: 'Destino',       v: destino },
-              { l: 'Referencia',    v: referencia },
-              { l: 'Tracking',      v: tracking },
+              { l: 'Destino',    v: destino },
+              { l: 'Referencia', v: referencia },
+              { l: 'Tracking',   v: tracking },
             ].map(f => (
               <div key={f.l} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
                 <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{f.l}</p>
@@ -365,18 +393,42 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
 
           {/* Row 2: operational info */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">Validador</p>
+              <p className="text-sm font-semibold text-warm-700 truncate">{session.operator_nombre || '—'}</p>
+            </div>
             {[
-              { l: 'Validador', v: session.operator_nombre || '—' },
-              { l: 'Inicio',    v: fmtDt(session.started_at) },
-              { l: 'Final',     v: fmtDt(session.ended_at ?? session.completed_at) },
-              { l: 'Duración',  v: durationLabel(session.started_at, session.ended_at ?? session.completed_at) },
+              { l: 'Inicio', raw: session.started_at },
+              { l: 'Final',  raw: session.ended_at ?? session.completed_at },
             ].map(f => (
               <div key={f.l} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
                 <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{f.l}</p>
-                <p className="text-sm font-semibold text-warm-700 truncate">{f.v}</p>
+                {f.raw ? (
+                  <div>
+                    <p className="text-sm font-semibold text-warm-700">{fmtDate(f.raw)}</p>
+                    <p className="text-xs text-warm-500 tabular-nums">{fmtTimeShort(f.raw)}</p>
+                  </div>
+                ) : <p className="text-sm font-semibold text-warm-400">—</p>}
               </div>
             ))}
+            <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">Duración</p>
+              <p className="text-sm font-semibold text-warm-700">{durationLabel(firstEventAt, lastEventAt)}</p>
+            </div>
           </div>
+
+          {/* Ubicacion row */}
+          {session.ubicacion_nota && (
+            <div className="flex items-center gap-2 rounded-xl bg-accent-50 border border-accent-100 px-3 py-2.5">
+              <div className="w-6 h-6 rounded-lg bg-accent-100 flex items-center justify-center shrink-0">
+                <Eye className="w-3.5 h-3.5 text-accent-600" />
+              </div>
+              <div>
+                <p className="text-[10px] text-accent-500 uppercase tracking-wider font-bold">Ubicación</p>
+                <p className="text-sm font-mono font-semibold text-accent-700">{session.ubicacion_nota}</p>
+              </div>
+            </div>
+          )}
 
           {/* Session notes */}
           {session.notes && (
@@ -443,12 +495,15 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
                 events={validados}
                 t={t}
                 editable={!isReadOnly && editableSession && canEdit}
+                deletable={!isReadOnly && canDelete}
+                showUbicacion
+                ubicacion={session.ubicacion_nota || null}
                 editingId={editingId}
                 editingCode={editingCode}
                 onEditCodeChange={setEditingCode}
                 onStartEdit={(event) => { setEditingId(event.id); setEditingCode(event.normalized_code || event.scanned_code || '') }}
                 onSaveEdit={(event) => updateMut.mutate({ id: event.id, code: editingCode.trim() })}
-                onDelete={(event) => !isReadOnly && canDelete && deleteMut.mutate(event.id)}
+                onDelete={(event) => deleteMut.mutate(event.id)}
               />
               {!isReadOnly && editableSession && canEdit && (
                 <div className="grid grid-cols-[minmax(0,1fr)_12rem_auto] gap-2 rounded-xl border border-warm-100 bg-warm-50/70 p-3">
@@ -475,12 +530,15 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
               t={t}
               showType
               editable={!isReadOnly && editableSession && canEdit}
+              deletable={!isReadOnly && canDelete}
+              showUbicacion
+              ubicacion={session.ubicacion_nota || null}
               editingId={editingId}
               editingCode={editingCode}
               onEditCodeChange={setEditingCode}
               onStartEdit={(event) => { setEditingId(event.id); setEditingCode(event.normalized_code || event.scanned_code || '') }}
               onSaveEdit={(event) => updateMut.mutate({ id: event.id, code: editingCode.trim() })}
-              onDelete={(event) => !isReadOnly && canDelete && deleteMut.mutate(event.id)}
+              onDelete={(event) => deleteMut.mutate(event.id)}
             />
           )}
           {detailTab === 'incidencias' && (
@@ -1088,7 +1146,6 @@ export default function SurtidoRegistros() {
                     <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.duration')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.expected')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.validated')}</span></th>
-                    <th className={`${TH_CLASS} text-right hidden md:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.rejected')}</span></th>
                     <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.status')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
                   </tr>
@@ -1103,7 +1160,6 @@ export default function SurtidoRegistros() {
                       <td className="table-cell hidden lg:table-cell"><div className="h-3 w-12 rounded bg-warm-100 animate-pulse" /></td>
                       <td className="table-cell text-right"><div className="h-3 w-8 rounded bg-warm-100 animate-pulse ml-auto" /></td>
                       <td className="table-cell text-right"><div className="h-3 w-8 rounded bg-warm-100 animate-pulse ml-auto" /></td>
-                      <td className="table-cell text-right hidden md:table-cell"><div className="h-3 w-6 rounded bg-warm-100 animate-pulse ml-auto" /></td>
                       <td className="table-cell"><div className="h-5 w-20 rounded-full bg-warm-100 animate-pulse" /></td>
                       <td className="table-cell text-right"><div className="h-3 w-12 rounded bg-warm-100 animate-pulse ml-auto" /></td>
                     </tr>
@@ -1161,7 +1217,7 @@ export default function SurtidoRegistros() {
                       <input type="checkbox"
                         checked={selectedIds.size === records.length && records.length > 0}
                         onChange={toggleSelectAll}
-                        className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                        className="cb" />
                     </th>
                     <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.order_no')}</span></th>
                     <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.operator')}</span></th>
@@ -1169,7 +1225,6 @@ export default function SurtidoRegistros() {
                     <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.duration')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.expected')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.validated')}</span></th>
-                    <th className={`${TH_CLASS} text-right hidden md:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.rejected')}</span></th>
                     <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.status')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
                   </tr>
@@ -1177,7 +1232,6 @@ export default function SurtidoRegistros() {
                 <tbody className="divide-y divide-warm-50">
                   {records.map(r => {
                     const meta = STATUS_META[r.status] ?? STATUS_META.open
-                    const rejected = Math.max(0, (r.total_expected ?? 0) - (r.total_scanned ?? 0))
                     const pct = r.total_expected > 0
                       ? Math.min(100, Math.round(((r.total_scanned ?? 0) / r.total_expected) * 100))
                       : null
@@ -1189,7 +1243,7 @@ export default function SurtidoRegistros() {
                         <td className="table-cell text-center" onClick={e => { e.stopPropagation(); toggleSelect(r.id) }}>
                           <input type="checkbox" checked={isSelected}
                             onChange={() => toggleSelect(r.id)}
-                            className="w-4 h-4 rounded border-warm-300 text-primary-600 focus:ring-primary-500 cursor-pointer" />
+                            className="cb" />
                         </td>
                         <td className="table-cell">
                           <div className="flex min-w-0 items-center gap-1.5">
@@ -1216,9 +1270,12 @@ export default function SurtidoRegistros() {
                         </td>
                         <td className="table-cell hidden lg:table-cell text-warm-600 text-xs">{r.operator_nombre || '—'}</td>
                         <td className="table-cell hidden md:table-cell">
-                          <span className="text-warm-500 text-xs tabular-nums">
-                            {(r.started_at || r.created_at) ? fmtDateTime(r.started_at || r.created_at) : '—'}
-                          </span>
+                          {(r.started_at || r.created_at) ? (
+                            <div className="flex flex-col leading-snug">
+                              <span className="text-warm-700 text-xs tabular-nums font-medium">{fmtDate(r.started_at || r.created_at)}</span>
+                              <span className="text-warm-400 text-[11px] tabular-nums">{fmtTimeShort(r.started_at || r.created_at)}</span>
+                            </div>
+                          ) : <span className="text-warm-400 text-xs">—</span>}
                         </td>
                         <td className="table-cell hidden lg:table-cell">
                           <span className="text-warm-500 text-xs inline-flex items-center gap-1">
@@ -1239,11 +1296,6 @@ export default function SurtidoRegistros() {
                               </div>
                             )}
                           </div>
-                        </td>
-                        <td className="table-cell text-right hidden md:table-cell">
-                          <span className={`font-bold text-xs tabular-nums ${rejected > 0 ? 'text-danger-600' : 'text-warm-300'}`}>
-                            {rejected}
-                          </span>
                         </td>
                         <td className="table-cell">
                           <span className={`badge text-[11px] font-medium ${meta.cls}`}>{resolveStatusLabel(t, meta.labelKey)}</span>

@@ -175,7 +175,7 @@ function MultiSelect({ value, onChange, options, placeholder, t }) {
                   type="checkbox"
                   checked={value.includes(opt.value)}
                   readOnly
-                  className="rounded border-warm-300 text-primary-600 pointer-events-none"
+                  className="cb pointer-events-none"
                 />
                 <span className="truncate">{opt.label}</span>
               </label>
@@ -2283,7 +2283,7 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
         <input type="checkbox"
           checked={isChecked}
           onChange={() => onToggle(obc)}
-          className="rounded border-warm-300 text-primary-600 cursor-pointer"
+          className="cb"
           onClick={e => e.stopPropagation()} />
       </td>
 
@@ -2572,7 +2572,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
                   checked={allChecked}
                   ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
                   onChange={toggleAll}
-                  className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                  className="cb"
                   onClick={e => e.stopPropagation()} />
               </th>
               <th className={TH_CLASS}>
@@ -2798,7 +2798,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                   checked={allChecked}
                   ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
                   onChange={toggleAll}
-                  className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                  className="cb"
                   onClick={e => e.stopPropagation()} />
               </th>
               <th className={TH_CLASS}><span className={TH_TEXT}>OBC</span></th>
@@ -2833,7 +2833,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                     <input type="checkbox"
                       checked={isChecked}
                       onChange={() => toggleRow(obc)}
-                      className="rounded border-warm-300 text-primary-600 cursor-pointer"
+                      className="cb"
                       onClick={e => e.stopPropagation()} />
                   </td>
 
