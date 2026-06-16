@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import {
   getConductores, createConductor, updateConductor, deleteConductor,
   getUnidades, createUnidad, updateUnidad, deleteUnidad,
@@ -16,6 +17,7 @@ export const TIPO_UNIDAD = ['camion', 'furgon', 'camioneta', 'trailer', 'moto']
 // ── Conductores catalog modal ─────────────────────────────────────────────────
 export function ConductoresModal({ isOpen, onClose, canManage }) {
   const { addToast } = useToastStore()
+  const { t } = useI18nStore()
   const qc = useQueryClient()
   const [form, setForm] = useState({ nombre: '', licencia: '', telefono: '' })
   const [editingId, setEditingId] = useState(null)
@@ -29,7 +31,7 @@ export function ConductoresModal({ isOpen, onClose, canManage }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['despacho-conductores'] })
       setForm({ nombre: '', licencia: '', telefono: '' })
-      addToast('Conductor agregado', 'success')
+      addToast(t('desp.toast.conductorAgregado'), 'success')
     },
     onError: (err) => addToast(err?.response?.data?.error || 'Error', 'error'),
   })
@@ -39,7 +41,7 @@ export function ConductoresModal({ isOpen, onClose, canManage }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['despacho-conductores'] })
       setEditingId(null)
-      addToast('Conductor actualizado', 'success')
+      addToast(t('desp.toast.conductorActualizado'), 'success')
     },
     onError: (err) => addToast(err?.response?.data?.error || 'Error', 'error'),
   })
@@ -56,31 +58,31 @@ export function ConductoresModal({ isOpen, onClose, canManage }) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Conductores" icon={Users} size="md"
-      footer={<button className="btn-secondary text-sm" onClick={onClose}>Cerrar</button>}
+    <Modal isOpen={isOpen} onClose={onClose} title={t('desp.cat.conductores.title')} icon={Users} size="md"
+      footer={<button className="btn-secondary text-sm" onClick={onClose}>{t('common.close')}</button>}
     >
       <div className="space-y-4">
         {canManage && (
           <div className="bg-warm-50 rounded-xl p-3 border border-warm-100 space-y-2">
-            <p className="text-xs font-semibold text-warm-600">Agregar conductor</p>
+            <p className="text-xs font-semibold text-warm-600">{t('desp.cat.conductores.agregar')}</p>
             <div className="grid grid-cols-3 gap-2">
               <input value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
-                placeholder="Nombre *" className="input-field text-sm col-span-3" />
+                placeholder={t('desp.cat.conductores.nombre')} className="input-field text-sm col-span-3" />
               <input value={form.licencia} onChange={e => setForm(f => ({ ...f, licencia: e.target.value }))}
-                placeholder="Licencia" className="input-field text-sm" />
+                placeholder={t('desp.cat.conductores.licencia')} className="input-field text-sm" />
               <input value={form.telefono} onChange={e => setForm(f => ({ ...f, telefono: e.target.value }))}
-                placeholder="Teléfono" className="input-field text-sm col-span-2" />
+                placeholder={t('desp.cat.conductores.telefono')} className="input-field text-sm col-span-2" />
             </div>
             <button onClick={() => addMut.mutate(form)} disabled={!form.nombre.trim() || addMut.isPending}
               className="btn-primary text-xs flex items-center gap-1.5">
               {addMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-              Agregar
+              {t('common.create')}
             </button>
           </div>
         )}
         <div className="divide-y divide-warm-100 max-h-64 overflow-y-auto">
           {conductores.length === 0 ? (
-            <p className="text-sm text-warm-400 text-center py-6">Sin conductores registrados</p>
+            <p className="text-sm text-warm-400 text-center py-6">{t('desp.cat.conductores.empty')}</p>
           ) : conductores.map(c => (
             <div key={c.id} className="py-2.5">
               {editingId === c.id ? (
@@ -97,9 +99,9 @@ export function ConductoresModal({ isOpen, onClose, canManage }) {
                     <button onClick={() => editMut.mutate({ id: c.id, body: editForm })} disabled={editMut.isPending}
                       className="btn-primary text-xs flex items-center gap-1">
                       {editMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                      Guardar
+                      {t('common.save')}
                     </button>
-                    <button onClick={() => setEditingId(null)} className="btn-secondary text-xs">Cancelar</button>
+                    <button onClick={() => setEditingId(null)} className="btn-secondary text-xs">{t('common.cancel')}</button>
                   </div>
                 </div>
               ) : (
@@ -138,6 +140,7 @@ export function ConductoresModal({ isOpen, onClose, canManage }) {
 // ── Unidades catalog modal ────────────────────────────────────────────────────
 export function UnidadesModal({ isOpen, onClose, canManage }) {
   const { addToast } = useToastStore()
+  const { t } = useI18nStore()
   const qc = useQueryClient()
   const [form, setForm] = useState({ placa: '', tipo: 'camion', capacidad_kg: '' })
   const [editingId, setEditingId] = useState(null)
@@ -151,7 +154,7 @@ export function UnidadesModal({ isOpen, onClose, canManage }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['despacho-unidades'] })
       setForm({ placa: '', tipo: 'camion', capacidad_kg: '' })
-      addToast('Unidad agregada', 'success')
+      addToast(t('desp.toast.unidadAgregada'), 'success')
     },
     onError: (err) => addToast(err?.response?.data?.error || 'Error', 'error'),
   })
@@ -161,7 +164,7 @@ export function UnidadesModal({ isOpen, onClose, canManage }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['despacho-unidades'] })
       setEditingId(null)
-      addToast('Unidad actualizada', 'success')
+      addToast(t('desp.toast.unidadActualizada'), 'success')
     },
     onError: (err) => addToast(err?.response?.data?.error || 'Error', 'error'),
   })
@@ -178,33 +181,33 @@ export function UnidadesModal({ isOpen, onClose, canManage }) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Unidades de Transporte" icon={Truck} size="md"
-      footer={<button className="btn-secondary text-sm" onClick={onClose}>Cerrar</button>}
+    <Modal isOpen={isOpen} onClose={onClose} title={t('desp.cat.unidades.title')} icon={Truck} size="md"
+      footer={<button className="btn-secondary text-sm" onClick={onClose}>{t('common.close')}</button>}
     >
       <div className="space-y-4">
         {canManage && (
           <div className="bg-warm-50 rounded-xl p-3 border border-warm-100 space-y-2">
-            <p className="text-xs font-semibold text-warm-600">Agregar unidad</p>
+            <p className="text-xs font-semibold text-warm-600">{t('desp.cat.unidades.agregar')}</p>
             <div className="grid grid-cols-3 gap-2">
               <input value={form.placa} onChange={e => setForm(f => ({ ...f, placa: e.target.value }))}
-                placeholder="Placa *" className="input-field text-sm" />
+                placeholder={t('desp.cat.unidades.placa')} className="input-field text-sm" />
               <select value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
                 className="input-field text-sm">
-                {TIPO_UNIDAD.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                {TIPO_UNIDAD.map(tipo => <option key={tipo} value={tipo}>{tipo.charAt(0).toUpperCase() + tipo.slice(1)}</option>)}
               </select>
               <input type="number" value={form.capacidad_kg} onChange={e => setForm(f => ({ ...f, capacidad_kg: e.target.value }))}
-                placeholder="Cap. kg" className="input-field text-sm" />
+                placeholder={t('desp.cat.unidades.capacidad')} className="input-field text-sm" />
             </div>
             <button onClick={() => addMut.mutate(form)} disabled={!form.placa.trim() || addMut.isPending}
               className="btn-primary text-xs flex items-center gap-1.5">
               {addMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-              Agregar
+              {t('common.create')}
             </button>
           </div>
         )}
         <div className="divide-y divide-warm-100 max-h-64 overflow-y-auto">
           {unidades.length === 0 ? (
-            <p className="text-sm text-warm-400 text-center py-6">Sin unidades registradas</p>
+            <p className="text-sm text-warm-400 text-center py-6">{t('desp.cat.unidades.empty')}</p>
           ) : unidades.map(u => (
             <div key={u.id} className="py-2.5">
               {editingId === u.id ? (
@@ -223,9 +226,9 @@ export function UnidadesModal({ isOpen, onClose, canManage }) {
                     <button onClick={() => editMut.mutate({ id: u.id, body: editForm })} disabled={editMut.isPending}
                       className="btn-primary text-xs flex items-center gap-1">
                       {editMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                      Guardar
+                      {t('common.save')}
                     </button>
-                    <button onClick={() => setEditingId(null)} className="btn-secondary text-xs">Cancelar</button>
+                    <button onClick={() => setEditingId(null)} className="btn-secondary text-xs">{t('common.cancel')}</button>
                   </div>
                 </div>
               ) : (
@@ -260,18 +263,20 @@ export function UnidadesModal({ isOpen, onClose, canManage }) {
 }
 
 // ── New folio form modal ──────────────────────────────────────────────────────
-export function FolioFormModal({ isOpen, onClose, conductores = [], unidades = [] }) {
+export function FolioFormModal({ isOpen, onClose, onCreated, conductores = [], unidades = [] }) {
   const { addToast } = useToastStore()
+  const { t } = useI18nStore()
   const qc = useQueryClient()
   const [form, setForm] = useState({ conductor_id: '', unidad_id: '', fecha_salida: '', notas: '' })
 
   const { mutate: crear, isPending } = useMutation({
     mutationFn: createFolio,
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['despacho-folios'] })
-      addToast('Folio creado', 'success')
+      addToast(t('desp.toast.folioCreado'), 'success')
       setForm({ conductor_id: '', unidad_id: '', fecha_salida: '', notas: '' })
       onClose()
+      if (onCreated && data?.folio?.id) onCreated(data.folio.id)
     },
     onError: (err) => addToast(err?.response?.data?.error || 'Error creando folio', 'error'),
   })
@@ -279,40 +284,40 @@ export function FolioFormModal({ isOpen, onClose, conductores = [], unidades = [
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Nuevo Folio de Despacho" icon={FileText} size="md"
+    <Modal isOpen={isOpen} onClose={onClose} title={t('desp.folio.form.title')} icon={FileText} size="md"
       footer={
         <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="btn-secondary text-sm">Cancelar</button>
+          <button onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
           <button onClick={() => crear(form)} disabled={isPending} className="btn-primary text-sm flex items-center gap-1.5">
             {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            Crear Folio
+            {t('desp.folio.form.crear')}
           </button>
         </div>
       }
     >
       <div className="space-y-4 text-sm">
         <div>
-          <label className="block font-medium text-warm-700 mb-1">Conductor</label>
+          <label className="block font-medium text-warm-700 mb-1">{t('desp.folio.form.conductor')}</label>
           <select value={form.conductor_id} onChange={e => set('conductor_id', e.target.value)} className="input-field w-full">
-            <option value="">Sin conductor</option>
+            <option value="">{t('desp.folio.form.sinConductor')}</option>
             {conductores.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.licencia ? ` · ${c.licencia}` : ''}</option>)}
           </select>
         </div>
         <div>
-          <label className="block font-medium text-warm-700 mb-1">Unidad</label>
+          <label className="block font-medium text-warm-700 mb-1">{t('desp.folio.form.unidad')}</label>
           <select value={form.unidad_id} onChange={e => set('unidad_id', e.target.value)} className="input-field w-full">
-            <option value="">Sin unidad</option>
+            <option value="">{t('desp.folio.form.sinUnidad')}</option>
             {unidades.map(u => <option key={u.id} value={u.id}>{u.placa} ({u.tipo})</option>)}
           </select>
         </div>
         <div>
-          <label className="block font-medium text-warm-700 mb-1">Fecha de Salida</label>
+          <label className="block font-medium text-warm-700 mb-1">{t('desp.folio.form.fechaSalida')}</label>
           <input type="date" value={form.fecha_salida} onChange={e => set('fecha_salida', e.target.value)} className="input-field w-full" />
         </div>
         <div>
-          <label className="block font-medium text-warm-700 mb-1">Notas</label>
+          <label className="block font-medium text-warm-700 mb-1">{t('desp.folio.form.notas')}</label>
           <textarea value={form.notas} onChange={e => set('notas', e.target.value)}
-            rows={2} className="input-field w-full resize-none" placeholder="Observaciones opcionales" />
+            rows={2} className="input-field w-full resize-none" placeholder={t('desp.folio.form.notasPlaceholder')} />
         </div>
       </div>
     </Modal>

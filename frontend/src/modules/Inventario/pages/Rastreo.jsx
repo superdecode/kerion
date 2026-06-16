@@ -42,6 +42,7 @@ function subtractDays(isoDate, days) {
 }
 
 const ESTADO_META = {
+  borrador:   { cls: 'bg-warm-100 text-warm-500 border-warm-200',          dot: 'bg-warm-300',    labelKey: 'rastreo.estado.borrador' },
   abierta:    { cls: 'bg-primary-100 text-primary-700 border-primary-200', dot: 'bg-primary-400', labelKey: 'rastreo.estado.abierta' },
   en_proceso: { cls: 'bg-warning-100 text-warning-700 border-warning-200', dot: 'bg-warning-500', labelKey: 'rastreo.estado.en_proceso' },
   completada: { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', labelKey: 'rastreo.estado.completada' },
@@ -84,6 +85,8 @@ function SortableHeader({ label, sortKey, currentKey, currentDir, onSort }) {
 
 function getEstadoOptionsForRow(estado) {
   switch (estado) {
+    case 'borrador':
+      return ['borrador', 'abierta', 'en_proceso', 'cancelada']
     case 'abierta':
       return ['abierta', 'en_proceso', 'completada', 'cancelada']
     case 'en_proceso':

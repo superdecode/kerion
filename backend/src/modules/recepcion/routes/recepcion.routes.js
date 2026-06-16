@@ -209,6 +209,37 @@ router.delete('/lines/:id',
   }
 )
 
+// GET /orders/search-by-code — find order(s) by box/sku code (must be before /:id)
+router.get('/orders/search-by-code',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.recibir', 'ver'),
+  async (req, res) => {
+    try {
+      const { code } = req.query
+      if (!code || String(code).trim().length < 2) {
+        return res.status(400).json({ error: 'Código requerido' })
+      }
+      const c = String(code).trim()
+      const result = await req.tQuery(
+        `SELECT DISTINCT o.id, o.folio, o.cliente, o.estado, o.total_cajas, o.cajas_validadas, o.created_at
+         FROM inbound_orders o
+         JOIN inbound_lines l ON l.order_id = o.id AND l.tenant_id = o.tenant_id
+         WHERE o.tenant_id = $1 AND (
+           l.custom_box_barcode = $2 OR l.sku = $2
+           OR l.custom_box_barcode ILIKE $3 OR l.sku ILIKE $3
+         )
+         ORDER BY o.created_at DESC
+         LIMIT 10`,
+        [req.tenantId, c, `%${c}%`]
+      )
+      res.json({ orders: result.rows, count: result.rows.length })
+    } catch (err) {
+      console.error('[recepcion] search-by-code:', err.message)
+      res.status(500).json({ error: 'Error al buscar por código' })
+    }
+  }
+)
+
 // GET /orders/:id — order detail with lines
 router.get('/orders/:id',
   authenticateToken, loadFullUser,

@@ -13,17 +13,17 @@ import MultiSelect from '../../../core/components/common/MultiSelect'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { listOrders, listClientes, deleteOrder } from '../services/recepcionService'
+import { listOrders, listClientes, deleteOrder, searchByCode } from '../services/recepcionService'
 import { fmtDate } from '../../../core/utils/dateFormat'
 import ImportarOrdenModal from '../components/ImportarOrdenModal'
 import ListaRecepcionSelectorModal from '../components/ListaRecepcionSelectorModal'
 
 const ESTADO_META = {
-  pendiente_validacion: { cls: 'bg-warm-100 text-warm-600',       dot: 'bg-warm-400' },
-  en_validacion:        { cls: 'bg-sky-100 text-sky-700',         dot: 'bg-sky-400' },
-  completo:             { cls: 'bg-success-100 text-success-700', dot: 'bg-success-500' },
-  parcial:              { cls: 'bg-warning-100 text-warning-700', dot: 'bg-warning-500' },
-  cancelado:            { cls: 'bg-danger-100 text-danger-700',   dot: 'bg-danger-500' },
+  pendiente_validacion: { cls: 'bg-warm-100 text-warm-600' },
+  en_validacion:        { cls: 'bg-sky-100 text-sky-700' },
+  completo:             { cls: 'bg-success-100 text-success-700' },
+  parcial:              { cls: 'bg-warning-100 text-warning-700' },
+  cancelado:            { cls: 'bg-danger-100 text-danger-700' },
 }
 
 const TH = 'table-header whitespace-nowrap'
@@ -31,8 +31,7 @@ const TH = 'table-header whitespace-nowrap'
 function EstadoBadge({ estado, t }) {
   const meta = ESTADO_META[estado] ?? ESTADO_META.pendiente_validacion
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${meta.cls}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${meta.cls}`}>
       {t(`rec.status.${estado}`) || estado}
     </span>
   )
@@ -90,6 +89,10 @@ export default function Recibir() {
   const [deleteRow, setDeleteRow] = useState(null)
   const [selected, setSelected] = useState(new Set())
   const [bulkDelOpen, setBulkDelOpen] = useState(false)
+  const [showScanOrder, setShowScanOrder] = useState(false)
+  const [scanOrderCode, setScanOrderCode] = useState('')
+  const [scanOrderLoading, setScanOrderLoading] = useState(false)
+  const [scanOrderResult, setScanOrderResult] = useState(null)
 
   const params = useMemo(() => ({
     q: qFilter || undefined,
@@ -201,6 +204,27 @@ export default function Recibir() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Recepcion')
     XLSX.writeFile(wb, `recepcion-${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  const handleScanOrder = async () => {
+    const code = scanOrderCode.trim()
+    if (!code || scanOrderLoading) return
+    setScanOrderLoading(true)
+    setScanOrderResult(null)
+    try {
+      const result = await searchByCode(code)
+      if (result.count === 1) {
+        setShowScanOrder(false)
+        setScanOrderCode('')
+        navigate(`/recepcion/recibir/${result.orders[0].id}`)
+      } else {
+        setScanOrderResult(result)
+      }
+    } catch {
+      setScanOrderResult({ orders: [], count: 0 })
+    } finally {
+      setScanOrderLoading(false)
+    }
   }
 
   return (
@@ -334,8 +358,8 @@ export default function Recibir() {
               <PackageCheck className="w-10 h-10 mb-3 text-warm-200" />
               <p className="text-sm">{t('common.noData')}</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto table-scroll">
+          ) : (<>
+            <div className="hidden sm:block overflow-x-auto table-scroll">
               <table className="w-full text-sm">
                 <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                   <tr>
@@ -427,11 +451,147 @@ export default function Recibir() {
                 </tbody>
               </table>
             </div>
+            {/* Mobile card list */}
+            <div className="block sm:hidden space-y-2 px-3 py-2 pb-24">
+              {orders.map(order => {
+                const pct = order.total_cajas > 0 ? Math.round((order.cajas_validadas / order.total_cajas) * 100) : 0
+                return (
+                  <div
+                    key={order.id}
+                    onClick={() => navigate(`/recepcion/recibir/${order.id}`)}
+                    className="bg-white rounded-2xl border border-warm-100 px-4 py-3.5 shadow-sm cursor-pointer active:bg-warm-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <p className="font-mono font-bold text-primary-700 text-sm">{order.folio}</p>
+                        {order.cliente && <p className="text-xs text-warm-600 mt-0.5 truncate">{order.cliente}</p>}
+                      </div>
+                      <EstadoBadge estado={order.estado} t={t} />
+                    </div>
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-warm-400 uppercase tracking-wide">Cajas</span>
+                        <span className="text-[10px] font-semibold text-warm-700 tabular-nums">{order.cajas_validadas}/{order.total_cajas}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-warm-100 overflow-hidden">
+                        <div className="h-full rounded-full bg-success-500 transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-3 border-t border-warm-50" onClick={e => e.stopPropagation()}>
+                      <span className="text-[10px] text-warm-400">{fmtDate(order.created_at)}</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => navigate(`/recepcion/recibir/${order.id}`)}
+                          className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg bg-warm-50 text-warm-600 text-xs font-medium hover:bg-warm-100 transition-colors"
+                        >
+                          <Eye className="w-3 h-3" /> Ver
+                        </button>
+                        {canValidate && (
+                          <button
+                            onClick={() => navigate(`/recepcion/recibir/${order.id}/validar`)}
+                            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg bg-sky-50 text-sky-700 text-xs font-medium hover:bg-sky-100 transition-colors"
+                          >
+                            <ScanBarcode className="w-3 h-3" /> Validar
+                          </button>
+                        )}
+                        {canDel && order.estado === 'pendiente_validacion' && (
+                          <button
+                            onClick={() => setDeleteRow(order)}
+                            className="inline-flex items-center h-7 w-7 justify-center rounded-lg bg-danger-50 text-danger-500 hover:bg-danger-100 transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
           )}
 
           <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
         </div>
       </div>
+
+      {/* Scan order FAB - mobile only */}
+      {canValidate && (
+        <button
+          onClick={() => { setShowScanOrder(true); setScanOrderCode(''); setScanOrderResult(null) }}
+          className="fixed sm:hidden z-40 inline-flex items-center gap-2 h-14 px-5 rounded-2xl bg-primary-600 text-white shadow-lg shadow-primary-200 active:scale-95 transition-all"
+          style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))', right: '1.25rem' }}
+        >
+          <ScanBarcode className="w-5 h-5 shrink-0" />
+          <span className="font-semibold text-sm">{t('rec.mobile.scan_order')}</span>
+        </button>
+      )}
+
+      {/* Scan order modal */}
+      {showScanOrder && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full sm:max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-warm-100">
+              <div>
+                <p className="font-semibold text-warm-900">{t('rec.mobile.scan_order')}</p>
+                <p className="text-xs text-warm-500 mt-0.5">{t('rec.mobile.scan_order_desc')}</p>
+              </div>
+              <button onClick={() => setShowScanOrder(false)} className="p-2 rounded-xl hover:bg-warm-100 text-warm-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}>
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  type="text"
+                  value={scanOrderCode}
+                  onChange={e => { setScanOrderCode(e.target.value); setScanOrderResult(null) }}
+                  onKeyDown={e => e.key === 'Enter' && handleScanOrder()}
+                  placeholder="Código de caja..."
+                  className="flex-1 rounded-xl border border-warm-200 px-3 py-2.5 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                />
+                <button
+                  onClick={handleScanOrder}
+                  disabled={!scanOrderCode.trim() || scanOrderLoading}
+                  className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 transition-colors"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+              </div>
+              {scanOrderResult !== null && (
+                <div className="mt-3">
+                  {scanOrderResult.count === 0 ? (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-danger-50 text-danger-700 text-sm">
+                      <X className="w-4 h-4 shrink-0" />
+                      {t('rec.mobile.no_order')}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs text-warm-500 font-medium">
+                        {scanOrderResult.count === 1 ? t('rec.mobile.order_found') : t('rec.mobile.multiple_orders')}
+                      </p>
+                      {scanOrderResult.orders.map(order => (
+                        <button
+                          key={order.id}
+                          onClick={() => { setShowScanOrder(false); navigate(`/recepcion/recibir/${order.id}`) }}
+                          className="w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl bg-warm-50 hover:bg-primary-50 border border-warm-100 hover:border-primary-200 transition-colors"
+                        >
+                          <div>
+                            <p className="font-mono font-semibold text-primary-700 text-sm">{order.folio}</p>
+                            {order.cliente && <p className="text-xs text-warm-500">{order.cliente}</p>}
+                          </div>
+                          <EstadoBadge estado={order.estado} t={t} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Single delete confirm */}
       {deleteRow && (

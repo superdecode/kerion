@@ -33,9 +33,9 @@ const LINE_META = {
 }
 
 const SCAN_RESULT_META = {
-  correcto:      { cls: 'bg-success-100 text-success-700', dot: 'bg-success-500' },
-  duplicado:     { cls: 'bg-warning-100 text-warning-700', dot: 'bg-warning-500' },
-  no_encontrado: { cls: 'bg-danger-100 text-danger-700',   dot: 'bg-danger-500' },
+  correcto:      { cls: 'bg-success-100 text-success-700' },
+  duplicado:     { cls: 'bg-warning-100 text-warning-700' },
+  no_encontrado: { cls: 'bg-danger-100 text-danger-700' },
 }
 
 function CopyButton({ text }) {
@@ -132,6 +132,7 @@ export default function RecepcionDetalle() {
     queryKey: ['recepcion-order', id],
     queryFn: () => getOrder(id),
     retry: 1,
+    staleTime: 0,
   })
 
   const { data: eventsData } = useQuery({
@@ -144,7 +145,7 @@ export default function RecepcionDetalle() {
   const updateLineMutation = useMutation({
     mutationFn: ({ lineId, payload }) => updateLine(lineId, payload),
     onSuccess: () => {
-      toast.success('Estado actualizado')
+      toast.success(t('rec.toast.statusUpdated'))
       qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
       setLineStatusModal(null)
     },
@@ -154,13 +155,13 @@ export default function RecepcionDetalle() {
   const deleteLastMut = useMutation({
     mutationFn: () => deleteLastValidationRecord(id),
     onSuccess: () => {
-      toast.success('Último registro de validación eliminado')
+      toast.success(t('rec.toast.lastDeleted'))
       qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
       qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
       qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
       setConfirmDeleteOpen(false)
     },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar último registro'),
+    onError: (err) => toast.error(err.response?.data?.error || t('rec.toast.deleteError')),
   })
 
   const canValidate = hasPermission('recepcion.recibir', 'actualizar')
@@ -316,8 +317,39 @@ export default function RecepcionDetalle() {
       {/* General info panel */}
       <div className="shrink-0 px-5 py-3 border-b border-warm-100">
         <div className="overflow-hidden rounded-2xl border border-warm-100 bg-gradient-to-br from-white to-sky-50/30 shadow-sm">
-          <div className="border-b border-warm-100 px-5 py-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-500">Información general</p>
+          <div className="border-b border-warm-100 px-5 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-500">{t('rec.info.general')}</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-warm-200 bg-white px-2.5 py-1 shadow-sm">
+                <span className="text-xs font-bold text-warm-800 tabular-nums">{totalBase}</span>
+                <span className="text-[10px] font-medium text-warm-400">{t('rec.total_cajas')}</span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-success-200 bg-success-50 px-2.5 py-1 shadow-sm">
+                <CheckCircle2 className="w-3 h-3 text-success-500 shrink-0" />
+                <span className="text-xs font-bold text-success-700 tabular-nums">{validadas}</span>
+                <span className="text-[10px] font-medium text-success-600">{t('rec.cajas_validadas')}</span>
+              </div>
+              {pendientes > 0 && (
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-warm-200 bg-warm-50 px-2.5 py-1 shadow-sm">
+                  <Clock className="w-3 h-3 text-warm-400 shrink-0" />
+                  <span className="text-xs font-bold text-warm-600 tabular-nums">{pendientes}</span>
+                  <span className="text-[10px] font-medium text-warm-400">{t('rec.cajas_pendientes')}</span>
+                </div>
+              )}
+              {faltantes > 0 && (
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-danger-200 bg-danger-50 px-2.5 py-1 shadow-sm">
+                  <AlertCircle className="w-3 h-3 text-danger-500 shrink-0" />
+                  <span className="text-xs font-bold text-danger-700 tabular-nums">{faltantes}</span>
+                  <span className="text-[10px] font-medium text-danger-500">{t('rec.cajas_error')}</span>
+                </div>
+              )}
+              <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 shadow-sm">
+                <span className="text-xs font-bold text-sky-700 tabular-nums">{progreso}%</span>
+                <div className="w-14 h-1.5 rounded-full bg-sky-200/60 overflow-hidden">
+                  <div className="bg-sky-500 h-full rounded-full transition-all duration-700" style={{ width: `${progreso}%` }} />
+                </div>
+              </div>
+            </div>
           </div>
           <div className="px-5 py-4">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -331,32 +363,6 @@ export default function RecepcionDetalle() {
       </div>
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
-        {/* KPI cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <div className="rounded-xl border border-warm-100 bg-white px-4 py-3 shadow-sm text-center">
-            <p className="text-2xl font-bold text-warm-800 tabular-nums">{totalBase}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-warm-400 mt-0.5">{t('rec.total_cajas')}</p>
-          </div>
-          <div className="rounded-xl border border-success-100 bg-success-50 px-4 py-3 shadow-sm text-center">
-            <p className="text-2xl font-bold text-success-700 tabular-nums">{validadas}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-success-600 mt-0.5">{t('rec.cajas_validadas')}</p>
-          </div>
-          <div className="rounded-xl border border-warm-100 bg-warm-50 px-4 py-3 shadow-sm text-center">
-            <p className="text-2xl font-bold text-warm-600 tabular-nums">{pendientes}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-warm-400 mt-0.5">{t('rec.cajas_pendientes')}</p>
-          </div>
-          <div className="rounded-xl border border-danger-100 bg-danger-50 px-4 py-3 shadow-sm text-center">
-            <p className="text-2xl font-bold text-danger-700 tabular-nums">{faltantes}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-danger-500 mt-0.5">{t('rec.cajas_error')}</p>
-          </div>
-          <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 shadow-sm text-center">
-            <p className="text-2xl font-bold text-sky-700 tabular-nums">{progreso}%</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-500 mt-0.5">{t('rec.progreso')}</p>
-            <div className="mt-1.5 bg-sky-200/60 rounded-full h-1.5 overflow-hidden">
-              <div className="bg-sky-500 h-1.5 rounded-full transition-all duration-700" style={{ width: `${progreso}%` }} />
-            </div>
-          </div>
-        </div>
 
         {/* Tabs */}
         <div className="flex gap-1 border-b border-warm-100">
@@ -489,7 +495,7 @@ export default function RecepcionDetalle() {
                   </button>
                 )}
               </div>
-              <span className="text-xs text-warm-400 ml-auto">{filteredEvents.length} eventos</span>
+              <span className="text-xs text-warm-400 ml-auto">{filteredEvents.length} {t('rec.val.eventosLabel')}</span>
             </div>
 
             <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
@@ -519,7 +525,7 @@ export default function RecepcionDetalle() {
                           </button>
                         </th>
                       ))}
-                      <th className={`${TH} text-right`}>Acción</th>
+                      <th className={`${TH} text-right`}>{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warm-50">
@@ -536,8 +542,7 @@ export default function RecepcionDetalle() {
                           <td className="px-3 py-2.5 text-xs text-warm-600">{ev.scanned_by_nombre || '—'}</td>
                           <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDateTime(ev.scanned_at)}</td>
                           <td className="px-3 py-2.5">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${meta.cls}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap ${meta.cls}`}>
                               {t(`rec.scan.result.${ev.resultado}`)}
                             </span>
                           </td>
@@ -547,7 +552,7 @@ export default function RecepcionDetalle() {
                               onClick={() => setConfirmDeleteOpen(true)}
                               disabled={!canValidate || i !== 0 || ev.resultado !== 'correcto' || deleteLastMut.isPending}
                               className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-30"
-                              title="Eliminar último registro"
+                              title={t('rec.val.delete.tooltip')}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -572,7 +577,7 @@ export default function RecepcionDetalle() {
       {lineStatusModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full space-y-4">
-            <p className="font-semibold text-warm-900">Cambiar estado de línea</p>
+            <p className="font-semibold text-warm-900">{t('rec.val.changeStatus')}</p>
             <div className="space-y-2">
               {['pendiente', 'faltante'].map(st => (
                 <label key={st} className="flex items-center gap-2 cursor-pointer">
@@ -584,7 +589,7 @@ export default function RecepcionDetalle() {
             <textarea
               value={pendingNota}
               onChange={e => setPendingNota(e.target.value)}
-              placeholder="Nota (obligatoria)"
+              placeholder={t('rec.val.nota')}
               rows={2}
               className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-sky-400 resize-none"
             />
@@ -619,7 +624,7 @@ export default function RecepcionDetalle() {
       <Modal
         isOpen={confirmDeleteOpen}
         onClose={() => setConfirmDeleteOpen(false)}
-        title="Eliminar último registro"
+        title={t('rec.val.delete.title')}
         icon={AlertCircle}
         size="md"
         footer={
@@ -632,14 +637,12 @@ export default function RecepcionDetalle() {
               disabled={deleteLastMut.isPending}
               className="btn-danger disabled:opacity-50"
             >
-              {deleteLastMut.isPending ? t('common.loading') : 'Confirmar'}
+              {deleteLastMut.isPending ? t('common.loading') : t('common.confirm')}
             </button>
           </div>
         }
       >
-        <p className="text-sm text-warm-700">
-          Se eliminará el último registro correcto de validación y la caja volverá a estado pendiente.
-        </p>
+        <p className="text-sm text-warm-700">{t('rec.val.delete.desc')}</p>
       </Modal>
     </div>
   )

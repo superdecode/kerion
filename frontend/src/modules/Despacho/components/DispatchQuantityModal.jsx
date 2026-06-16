@@ -4,14 +4,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Package, Truck, Plus, X, CheckCircle2, MapPin, Hash, Tag } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getFolios, createFolio, addOrder } from '../services/despachoService'
 import { fmtDate } from '../../../core/utils/dateFormat'
 
 export default function DispatchQuantityModal({ isOpen, onClose, order, conductores = [], unidades = [] }) {
   const qc = useQueryClient()
   const { addToast } = useToastStore()
+  const { t } = useI18nStore()
 
-  const [bultos, setBultos]           = useState(1)
+  const [bultos, setBultos]           = useState('')
   const [selectedFolioId, setSelectedFolioId] = useState('')
   const [createNew, setCreateNew]     = useState(false)
   const [newConductorId, setNewConductorId] = useState('')
@@ -31,7 +33,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
 
   useEffect(() => {
     if (!isOpen) return
-    setBultos(order?.outboundBoxCount ?? 1)
+    setBultos('')
     setSelectedFolioId('')
     setCreateNew(false)
     setNewConductorId('')
@@ -41,10 +43,10 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
 
   async function handleSubmit() {
     if (!order) return
-    if (!createNew && !selectedFolioId) { setError('Selecciona un folio'); return }
-    if (createNew && !newConductorId)   { setError('Selecciona un conductor'); return }
-    if (createNew && !newUnidadId)      { setError('Selecciona una unidad'); return }
-    if (!bultos || bultos < 1)          { setError('Bultos debe ser al menos 1'); return }
+    if (!createNew && !selectedFolioId) { setError(t('desp.dispatch.err.selFolio')); return }
+    if (createNew && !newConductorId)   { setError(t('desp.dispatch.err.selConductor')); return }
+    if (createNew && !newUnidadId)      { setError(t('desp.dispatch.err.selUnidad')); return }
+    if (!bultos || Number(bultos) < 1)  { setError(t('desp.dispatch.err.bultos')); return }
 
     setSubmitting(true)
     setError('')
@@ -66,11 +68,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
       await qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
       await qc.invalidateQueries({ queryKey: ['despacho-folios'] })
 
-      const folioNum = createNew
-        ? 'nuevo folio'
-        : (activeFolios.find(f => f.id === folioId)?.folio_numero ?? folioId)
-
-      addToast(`Orden agregada al folio ${folioNum}`, 'success')
+      addToast(t('desp.toast.ordenAgregada'), 'success')
       onClose()
     } catch (err) {
       setError(err?.response?.data?.error ?? err.message ?? 'Error al agregar orden')
@@ -85,16 +83,20 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Confirmar Despacho"
+      title={t('desp.dispatch.title')}
       icon={Truck}
       size="sm"
       footer={
         <div className="flex gap-2 pt-4">
           <button onClick={onClose} className="btn-ghost flex-1 text-sm inline-flex items-center justify-center gap-1.5" disabled={submitting}>
-            <X className="w-3.5 h-3.5" /> Cancelar
+            <X className="w-3.5 h-3.5" /> {t('common.cancel')}
           </button>
-          <button onClick={handleSubmit} className="btn-primary flex-1 text-sm" disabled={submitting}>
-            {submitting ? 'Despachando...' : 'Despachar'}
+          <button
+            onClick={handleSubmit}
+            className="btn-primary flex-1 text-sm"
+            disabled={submitting || !bultos || Number(bultos) < 1}
+          >
+            {submitting ? t('desp.dispatch.despachando') : t('desp.dispatch.despachar')}
           </button>
         </div>
       }
@@ -138,21 +140,22 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
         {/* Bultos — expected qty left, dispatch qty right */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-warm-600 flex items-center gap-1">
-            <Package className="w-3.5 h-3.5" /> Bultos
+            <Package className="w-3.5 h-3.5" /> {t('desp.dispatch.bultos')}
           </label>
           <div className="flex items-stretch gap-2">
             <div className="flex-1 rounded-xl border border-primary-100 bg-primary-50 px-3 py-2 flex flex-col items-center justify-center gap-0.5">
-              <span className="text-[10px] text-primary-500 font-semibold uppercase tracking-wide">Esperado</span>
+              <span className="text-[10px] text-primary-500 font-semibold uppercase tracking-wide">{t('desp.dispatch.esperado')}</span>
               <span className="text-base font-bold text-primary-700">{order.outboundBoxCount ?? '—'}</span>
             </div>
             <div className="flex-1 flex flex-col gap-0.5">
-              <span className="text-[10px] text-warm-400 font-semibold uppercase tracking-wide text-center">A despachar</span>
+              <span className="text-[10px] text-warm-400 font-semibold uppercase tracking-wide text-center">{t('desp.dispatch.aDespachar')}</span>
               <input
                 type="number"
                 min={1}
                 value={bultos}
                 onChange={e => setBultos(e.target.value)}
-                className="w-full rounded-xl border border-warm-200 bg-white px-3 py-2 text-sm text-center font-bold text-warm-800 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                placeholder="—"
+                className="w-full rounded-xl border border-warm-200 bg-white px-3 py-2 text-sm text-center font-bold text-warm-800 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 placeholder:text-warm-300 placeholder:font-normal"
               />
             </div>
           </div>
@@ -160,7 +163,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
 
         {/* Folio selector */}
         <div className="space-y-2">
-          <label className="text-xs font-semibold text-warm-600">Folio de despacho</label>
+          <label className="text-xs font-semibold text-warm-600">{t('desp.dispatch.folio')}</label>
 
           {/* Create new option */}
           <button
@@ -171,7 +174,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
                 : 'border-warm-200 bg-warm-50 text-warm-600 hover:border-primary-300'
             }`}
           >
-            <Plus className="w-3.5 h-3.5" /> Crear nuevo folio
+            <Plus className="w-3.5 h-3.5" /> {t('desp.dispatch.crearNuevo')}
           </button>
 
           {/* Inline conductor + unidad for new folio */}
@@ -182,7 +185,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
                 onChange={e => setNewConductorId(e.target.value)}
                 className="w-full rounded-lg border border-warm-200 bg-white px-2 py-2 text-xs text-warm-800 outline-none"
               >
-                <option value="">Seleccionar conductor...</option>
+                <option value="">{t('desp.dispatch.selConductor')}</option>
                 {conductores.map(c => (
                   <option key={c.id} value={c.id}>{c.nombre}</option>
                 ))}
@@ -192,7 +195,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
                 onChange={e => setNewUnidadId(e.target.value)}
                 className="w-full rounded-lg border border-warm-200 bg-white px-2 py-2 text-xs text-warm-800 outline-none"
               >
-                <option value="">Seleccionar unidad...</option>
+                <option value="">{t('desp.dispatch.selUnidad')}</option>
                 {unidades.map(u => (
                   <option key={u.id} value={u.id}>{u.placa} ({u.tipo})</option>
                 ))}
@@ -222,7 +225,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
           )}
 
           {activeFolios.length === 0 && !createNew && (
-            <p className="text-xs text-warm-400 text-center py-2">No hay folios activos. Crea uno nuevo.</p>
+            <p className="text-xs text-warm-400 text-center py-2">{t('desp.dispatch.sinFolios')}</p>
           )}
         </div>
 

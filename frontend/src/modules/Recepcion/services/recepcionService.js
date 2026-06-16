@@ -14,3 +14,4 @@ export const scanCode = (orderId, payload) => api.post(`/recepcion/orders/${orde
 export const getScanEvents = (orderId) => api.get(`/recepcion/orders/${orderId}/scan-events`).then(r => r.data)
 export const deleteLastValidationRecord = (orderId) => api.delete(`/recepcion/orders/${orderId}/scan-events/last-validation`).then(r => r.data)
 export const getListaRecepcion = (orderId) => api.get(`/recepcion/orders/${orderId}/lista-recepcion`).then(r => r.data)
+export const searchByCode = (code) => api.get('/recepcion/orders/search-by-code', { params: { code } }).then(r => r.data)

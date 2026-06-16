@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft, ScanBarcode, CheckCircle2, XCircle, AlertCircle,
   Layers, PackageCheck, X, Square, ArrowUp, ArrowDown, ArrowUpDown, Trash2,
+  ChevronDown, PanelRightClose, PanelRightOpen,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -12,10 +13,40 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { getOrder, createSession, updateSession, scanCode, deleteLastValidationRecord } from '../services/recepcionService'
 
-const RESULT_CFG = {
-  correcto:      { bg: 'bg-success-50/90 border-success-200', icon: CheckCircle2, iconCls: 'text-success-500', label: 'text-success-600' },
-  duplicado:     { bg: 'bg-warning-50/90 border-warning-200', icon: AlertCircle,  iconCls: 'text-warning-500', label: 'text-warning-600' },
-  no_encontrado: { bg: 'bg-danger-50/90  border-danger-200',  icon: XCircle,      iconCls: 'text-danger-500',  label: 'text-danger-600'  },
+// ─── Tarima virtual logic ────────────────────────────────────────────────────
+function extractBaseCode(code) {
+  if (!code) return null
+  const str = String(code).trim()
+  const stripped = str.replace(/[-_.]?\d+$/, '')
+  return stripped.length > 0 ? stripped : str
+}
+
+function buildTarimaMap(lines) {
+  const map = new Map()
+  let next = 1
+  for (const line of lines) {
+    const base = extractBaseCode(line.custom_box_barcode)
+    if (base && !map.has(base)) map.set(base, next++)
+  }
+  return map
+}
+
+const TARIMA_PALETTE = [
+  { bg: 'bg-sky-600',     ring: 'ring-sky-700',     text: 'text-white', pill: 'bg-sky-100 text-sky-800',         bar: 'bg-sky-500' },
+  { bg: 'bg-violet-600',  ring: 'ring-violet-700',  text: 'text-white', pill: 'bg-violet-100 text-violet-800',   bar: 'bg-violet-500' },
+  { bg: 'bg-amber-500',   ring: 'ring-amber-600',   text: 'text-white', pill: 'bg-amber-100 text-amber-800',     bar: 'bg-amber-400' },
+  { bg: 'bg-emerald-600', ring: 'ring-emerald-700', text: 'text-white', pill: 'bg-emerald-100 text-emerald-800', bar: 'bg-emerald-500' },
+  { bg: 'bg-rose-600',    ring: 'ring-rose-700',    text: 'text-white', pill: 'bg-rose-100 text-rose-800',       bar: 'bg-rose-500' },
+  { bg: 'bg-indigo-600',  ring: 'ring-indigo-700',  text: 'text-white', pill: 'bg-indigo-100 text-indigo-800',   bar: 'bg-indigo-500' },
+  { bg: 'bg-orange-500',  ring: 'ring-orange-600',  text: 'text-white', pill: 'bg-orange-100 text-orange-800',   bar: 'bg-orange-400' },
+  { bg: 'bg-teal-600',    ring: 'ring-teal-700',    text: 'text-white', pill: 'bg-teal-100 text-teal-800',       bar: 'bg-teal-500' },
+]
+function getTarimaColor(num) { return TARIMA_PALETTE[(num - 1) % TARIMA_PALETTE.length] }
+
+const RESULT_CFG_BASE = {
+  correcto:      { bg: 'bg-success-50/90 border-success-200', icon: CheckCircle2, iconCls: 'text-success-500', label: 'text-success-600', labelKey: 'rec.val.result.correcto' },
+  duplicado:     { bg: 'bg-warning-50/90 border-warning-200', icon: AlertCircle,  iconCls: 'text-warning-500', label: 'text-warning-600', labelKey: 'rec.val.result.duplicado' },
+  no_encontrado: { bg: 'bg-danger-50/90  border-danger-200',  icon: XCircle,      iconCls: 'text-danger-500',  label: 'text-danger-600',  labelKey: 'rec.val.result.no_encontrado' },
 }
 
 export default function ValidacionRecepcion() {
@@ -25,9 +56,14 @@ export default function ValidacionRecepcion() {
   const toast = useToastStore()
   const qc = useQueryClient()
 
-  const scanRef = useRef(null)
+  // Two separate refs: one for the inline desktop input, one for the mobile fixed-bottom input
+  const scanRefDesktop = useRef(null)
+  const scanRefMobile  = useRef(null)
+
   const [sessionId, setSessionId] = useState(null)
   const [withTarimas, setWithTarimas] = useState(false)
+  const [sidebarVisible, setSidebarVisible] = useState(true)
+  const [expandedTarimas, setExpandedTarimas] = useState(new Set())
   const [lastResult, setLastResult] = useState(null)
   const [history, setHistory] = useState([])
   const [scanning, setScanning] = useState(true)
@@ -35,6 +71,7 @@ export default function ValidacionRecepcion() {
   const [historySortKey, setHistorySortKey] = useState('scannedAt')
   const [historySortDir, setHistorySortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [showTarimaConfirm, setShowTarimaConfirm] = useState(false)
 
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['recepcion-order', id],
@@ -42,28 +79,59 @@ export default function ValidacionRecepcion() {
     refetchInterval: scanning ? 4000 : false,
   })
 
-  const order  = orderData?.order  ?? null
-  const lines  = orderData?.lines  ?? []
-  const totalFromOrder = Number(order?.total_cajas || 0)
-  const totalFromLines = lines.length
-  const total = Math.max(totalFromOrder, totalFromLines)
-  const validadasFromLines = lines.filter((l) => l.estado_validacion === 'validada').length
-  const validadasFromOrder = Number(order?.cajas_validadas || 0)
-  const validadas = Math.max(validadasFromLines, validadasFromOrder)
-  const faltantes = lines.filter((l) => l.estado_validacion === 'faltante').length
+  const order    = orderData?.order ?? null
+  const lines    = orderData?.lines ?? []
+  const total    = Math.max(Number(order?.total_cajas || 0), lines.length)
+  const validadas  = Math.max(lines.filter(l => l.estado_validacion === 'validada').length, Number(order?.cajas_validadas || 0))
+  const faltantes  = lines.filter(l => l.estado_validacion === 'faltante').length
   const pendientes = Math.max(total - validadas - faltantes, 0)
   const progressPct = total > 0 ? Math.min(100, Math.round((validadas / total) * 100)) : 0
 
+  const tarimaMap    = useMemo(() => buildTarimaMap(lines), [lines])
+  const totalTarimas = tarimaMap.size
+
+  const lastTarimaNum = useMemo(() => {
+    if (!withTarimas || !lastResult?.code) return null
+    const base = extractBaseCode(lastResult.code)
+    return base ? (tarimaMap.get(base) ?? null) : null
+  }, [withTarimas, lastResult, tarimaMap])
+
+  const lastTarimaBase  = lastResult?.code ? extractBaseCode(lastResult.code) : null
+  const lastTarimaColor = lastTarimaNum ? getTarimaColor(lastTarimaNum) : null
+
+  // Per-tarima stats for the side panel
+  const tarimaStats = useMemo(() => {
+    if (!withTarimas) return []
+    const stats = []
+    for (const [base, num] of tarimaMap.entries()) {
+      const tarLines = lines.filter(l => extractBaseCode(l.custom_box_barcode) === base)
+      const validated = tarLines.filter(l => l.estado_validacion === 'validada').length
+      stats.push({ num, base, total: tarLines.length, validated, color: getTarimaColor(num), tarLines })
+    }
+    return stats.sort((a, b) => a.num - b.num)
+  }, [withTarimas, tarimaMap, lines])
+
+  const toggleTarima = useCallback((num) => {
+    setExpandedTarimas(prev => {
+      const next = new Set(prev)
+      next.has(num) ? next.delete(num) : next.add(num)
+      return next
+    })
+  }, [])
+
   const refocus = useCallback(() => {
-    setTimeout(() => scanRef.current?.focus(), 80)
+    setTimeout(() => {
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
+      const ref = isMobile ? scanRefMobile : scanRefDesktop
+      ref.current?.focus()
+    }, 50)
   }, [])
 
   useEffect(() => { if (scanning) refocus() }, [scanning, refocus])
 
   useEffect(() => {
     let cancelled = false
-
-    async function bootstrapSession() {
+    async function boot() {
       try {
         const res = await createSession(id)
         if (cancelled) return
@@ -76,21 +144,9 @@ export default function ValidacionRecepcion() {
         if (!cancelled) setBootingSession(false)
       }
     }
-
-    bootstrapSession()
+    boot()
     return () => { cancelled = true }
   }, [id, refocus, toast])
-
-  const startSession = async () => {
-    try {
-      const res = await createSession(id)
-      setSessionId(res.session?.id ?? 'local')
-      setScanning(true)
-      refocus()
-    } catch {
-      toast.error('Error al iniciar sesión de validación')
-    }
-  }
 
   const endSession = async () => {
     if (sessionId && sessionId !== 'local') {
@@ -113,47 +169,26 @@ export default function ValidacionRecepcion() {
       setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado })
       if (ev.resultado === 'correcto') {
         setHistory(prev => [{
-          id: ev.id,
-          result: ev.resultado,
-          code: ev.codigo_escaneado,
-          sku: ev.sku_asociado,
-          scannedAt: ev.scanned_at,
-          scannedBy: ev.scanned_by_nombre || '—',
+          id: ev.id, result: ev.resultado, code: ev.codigo_escaneado,
+          sku: ev.sku_asociado, scannedAt: ev.scanned_at, scannedBy: ev.scanned_by_nombre || '—',
         }, ...prev.slice(0, 49)])
-      }
-      if (ev.resultado === 'correcto' && data.line) {
-        qc.setQueryData(['recepcion-order', id], (current) => {
-          if (!current) return current
-          const nextLines = (current.lines || []).map((line) => (
-            line.id === data.line.id
-              ? {
-                  ...line,
-                  estado_validacion: 'validada',
-                  validated_at: ev.scanned_at,
-                  validated_by_nombre: ev.scanned_by_nombre || line.validated_by_nombre,
-                }
-              : line
-          ))
-          return {
-            ...current,
-            order: {
-              ...current.order,
-              cajas_validadas: data.cajas_validadas ?? current.order?.cajas_validadas ?? 0,
-              estado: data.estado || current.order?.estado,
-            },
-            lines: nextLines,
-          }
-        })
-
-        qc.setQueryData(['recepcion-orders'], (current) => current)
+        if (data.line) {
+          qc.setQueryData(['recepcion-order', id], (cur) => {
+            if (!cur) return cur
+            return {
+              ...cur,
+              order: { ...cur.order, cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0, estado: data.estado || cur.order?.estado },
+              lines: (cur.lines || []).map(l => l.id === data.line.id
+                ? { ...l, estado_validacion: 'validada', validated_at: ev.scanned_at, validated_by_nombre: ev.scanned_by_nombre || l.validated_by_nombre }
+                : l),
+            }
+          })
+        }
       }
       qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
-      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
-      qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)()
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
+        const osc = ctx.createOscillator(); const gain = ctx.createGain()
         osc.connect(gain); gain.connect(ctx.destination)
         osc.frequency.value = ev.resultado === 'correcto' ? 880 : ev.resultado === 'duplicado' ? 440 : 220
         gain.gain.value = ev.resultado === 'no_encontrado' ? 0.2 : 0.15
@@ -167,32 +202,23 @@ export default function ValidacionRecepcion() {
   const deleteLastMut = useMutation({
     mutationFn: () => deleteLastValidationRecord(id),
     onSuccess: (data) => {
-      setHistory((prev) => prev.filter((item) => item.id !== data.removedEvent?.id))
-      qc.setQueryData(['recepcion-order', id], (current) => {
-        if (!current) return current
-        const nextLines = (current.lines || []).map((line) => (
-          line.id === data.lineId
-            ? { ...line, estado_validacion: 'pendiente', validated_at: null, validated_by_nombre: null }
-            : line
-        ))
+      setHistory(prev => prev.filter(item => item.id !== data.removedEvent?.id))
+      qc.setQueryData(['recepcion-order', id], (cur) => {
+        if (!cur) return cur
         return {
-          ...current,
-          order: {
-            ...current.order,
-            cajas_validadas: data.cajas_validadas ?? current.order?.cajas_validadas ?? 0,
-            estado: data.estado || current.order?.estado,
-          },
-          lines: nextLines,
+          ...cur,
+          order: { ...cur.order, cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0, estado: data.estado || cur.order?.estado },
+          lines: (cur.lines || []).map(l => l.id === data.lineId
+            ? { ...l, estado_validacion: 'pendiente', validated_at: null, validated_by_nombre: null }
+            : l),
         }
       })
       qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
-      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
-      qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
-      toast.success('Último registro de validación eliminado')
+      toast.success('Último registro eliminado')
       setConfirmDeleteOpen(false)
       refocus()
     },
-    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar último registro'),
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar'),
   })
 
   const handleKeyDown = (e) => {
@@ -203,294 +229,437 @@ export default function ValidacionRecepcion() {
   }
 
   const handleHistorySort = (key) => {
-    if (historySortKey === key) setHistorySortDir((dir) => dir === 'asc' ? 'desc' : 'asc')
-    else {
-      setHistorySortKey(key)
-      setHistorySortDir(key === 'scannedAt' ? 'desc' : 'asc')
-    }
+    if (historySortKey === key) setHistorySortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setHistorySortKey(key); setHistorySortDir(key === 'scannedAt' ? 'desc' : 'asc') }
   }
 
-  const sortedHistory = [...history].sort((a, b) => {
-    const av = a?.[historySortKey] ?? ''
-    const bv = b?.[historySortKey] ?? ''
-    let cmp = 0
-    if (historySortKey === 'scannedAt') cmp = new Date(av).getTime() - new Date(bv).getTime()
-    else cmp = String(av).localeCompare(String(bv), 'es')
+  const sortedHistory = useMemo(() => [...history].sort((a, b) => {
+    const av = a?.[historySortKey] ?? ''; const bv = b?.[historySortKey] ?? ''
+    let cmp = historySortKey === 'scannedAt' ? new Date(av).getTime() - new Date(bv).getTime() : String(av).localeCompare(String(bv), 'es')
     return historySortDir === 'asc' ? cmp : -cmp
-  })
+  }), [history, historySortKey, historySortDir])
+
+  const RESULT_CFG = Object.fromEntries(
+    Object.entries(RESULT_CFG_BASE).map(([k, v]) => [k, { ...v, labelText: t(v.labelKey) }])
+  )
 
   if (isLoading || bootingSession || !order) return (
     <div className="flex flex-col h-full">
-      <Header title="Validación" icon={PackageCheck} />
+      <Header title={t('rec.scan.title')} icon={PackageCheck} />
       <div className="flex-1 flex items-center justify-center text-warm-400 text-sm">{t('common.loading')}</div>
     </div>
   )
 
+  // Shared scan input props (used by both desktop inline and mobile fixed-bottom inputs)
+  const scanInputProps = {
+    type: 'text',
+    className: 'w-full pl-12 pr-4 py-3.5 text-lg bg-white border-2 border-warm-200 rounded-2xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide',
+    placeholder: t('rec.scan.placeholder') || 'Escanear código...',
+    onKeyDown: handleKeyDown,
+    autoComplete: 'off',
+    autoCorrect: 'off',
+    spellCheck: false,
+    inputMode: 'none',
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-warm-50 overflow-hidden">
+    <div className="flex flex-col bg-warm-50 overflow-hidden" style={{ height: '100dvh' }}>
+
+      {/* ── Header ── */}
       <Header
         title={
-          <div className="flex items-center gap-3">
-            <button
-              onClick={endSession}
-              className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors shrink-0"
-            >
+          <div className="flex items-center gap-2">
+            <button onClick={endSession} className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors shrink-0">
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="font-mono font-black text-base text-warm-900 leading-none truncate">{order.folio}</span>
-              {order.cliente && (
-                <span className="text-sm text-warm-400 truncate hidden sm:inline">· {order.cliente}</span>
-              )}
+            <div className="min-w-0">
+              <span className="font-mono font-black text-sm sm:text-base text-warm-900 leading-none truncate">{order.folio}</span>
+              {order.cliente && <span className="text-xs text-warm-400 hidden sm:inline ml-2">· {order.cliente}</span>}
             </div>
           </div>
         }
         icon={PackageCheck}
         actions={
-          scanning ? (
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                <div
-                  onClick={() => setWithTarimas(p => !p)}
-                  className={`relative w-8 h-4 rounded-full transition-colors ${withTarimas ? 'bg-sky-500' : 'bg-warm-200'}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${withTarimas ? 'translate-x-4' : ''}`} />
-                </div>
-                <Layers className={`w-3.5 h-3.5 ${withTarimas ? 'text-sky-600' : 'text-warm-400'}`} />
-                <span className="text-xs text-warm-600 hidden sm:inline">{t('rec.tarimas.toggle')}</span>
-              </label>
-              <button
-                onClick={endSession}
-                className="btn-ghost flex items-center gap-1.5 text-sm text-danger-600 border-danger-200 hover:bg-danger-50"
-              >
-                <Square className="w-3.5 h-3.5" />
-                {t('rec.scan.terminar')}
-              </button>
-            </div>
-          ) : null
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Tarimas toggle */}
+            <button
+              type="button"
+              onClick={() => { if (!withTarimas && totalTarimas > 0) setShowTarimaConfirm(true); else setWithTarimas(p => !p) }}
+              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                withTarimas ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-warm-200 text-warm-500 hover:bg-warm-50'
+              }`}
+            >
+              <Layers className={`w-3.5 h-3.5 ${withTarimas ? 'text-sky-600' : 'text-warm-400'}`} />
+              <span className="hidden sm:inline">{withTarimas ? `${totalTarimas} tarimas` : t('rec.tarimas.toggle')}</span>
+              {withTarimas && <span className="sm:hidden">{totalTarimas}T</span>}
+            </button>
+            {/* Terminar */}
+            <button
+              onClick={endSession}
+              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 transition-colors"
+            >
+              <Square className="w-3.5 h-3.5" />
+              <span>Terminar</span>
+            </button>
+          </div>
         }
       />
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-5 max-w-4xl mx-auto space-y-4 w-full">
+      {/* ── Body: flex row (main content + sidebar) ── */}
+      <div className="flex-1 min-h-0 flex overflow-hidden">
 
-          {/* Order progress card */}
-          <motion.div
-            className="card p-4 shadow-sm"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <div className="flex items-start gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center shrink-0">
-                <PackageCheck className="w-5 h-5 text-sky-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-black text-warm-900 font-mono text-lg leading-none truncate">{order.folio}</p>
-                {order.cliente && <p className="text-xs text-warm-500 mt-0.5 truncate">{order.cliente}</p>}
-                {order.tracking_no && (
-                  <p className="text-[10px] font-mono text-warm-400 mt-0.5 truncate">{order.tracking_no}</p>
-                )}
-              </div>
-              <div className="text-right shrink-0">
-                <p className="text-4xl font-black text-warm-900 tabular-nums leading-none">{validadas}</p>
-                <p className="text-xs font-medium text-warm-400">/{total}</p>
-              </div>
-            </div>
+        {/* ── Main scroll area ── */}
+        <div className="flex-1 min-w-0 overflow-y-auto overscroll-contain">
+          <div className="p-3 sm:p-5 space-y-3 max-w-2xl mx-auto lg:max-w-none">
 
-            {/* Progress bar */}
-            <div className="relative w-full h-2.5 bg-warm-100 rounded-full overflow-hidden shadow-inner mb-2">
-              <div
-                className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ease-out ${
-                  progressPct >= 100 ? 'bg-gradient-to-r from-success-400 to-success-500' :
-                  progressPct >= 80  ? 'bg-gradient-to-r from-primary-400 to-sky-500' :
-                  'bg-gradient-to-r from-sky-500 to-primary-500'
-                } ${progressPct > 0 ? 'min-w-[8px]' : ''}`}
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-
-            {/* Counters */}
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: t('rec.total_cajas'),     value: total,      cls: 'text-warm-700' },
-                { label: t('rec.cajas_validadas'),  value: validadas,  cls: 'text-success-700' },
-                { label: t('rec.cajas_pendientes'), value: pendientes, cls: 'text-warm-500' },
-                { label: t('rec.cajas_error'),      value: faltantes,  cls: 'text-danger-600' },
-              ].map(({ label, value, cls }) => (
-                <div key={label} className="text-center rounded-xl border border-warm-100 bg-warm-50 py-2 px-1">
-                  <p className={`text-xl font-bold tabular-nums ${cls}`}>{value}</p>
-                  <p className="text-[9px] text-warm-400 font-semibold uppercase tracking-wide mt-0.5 leading-tight">{label}</p>
+            {/* Progress + counters card */}
+            <div className="card p-3 sm:p-4">
+              <div className="flex items-center gap-3 mb-2.5">
+                <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center shrink-0">
+                  <PackageCheck className="w-4.5 h-4.5 text-sky-600" />
                 </div>
-              ))}
-            </div>
-
-            {progressPct >= 100 && (
-              <div className="mt-3 flex items-center gap-2 bg-success-50 border border-success-200 text-success-700 rounded-xl px-3 py-2 text-sm font-semibold">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                {t('rec.status.completo')} — todas las cajas validadas
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-warm-900 font-mono text-base leading-none truncate">{order.folio}</p>
+                  {order.cliente && <p className="text-xs text-warm-500 mt-0.5 truncate">{order.cliente}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-3xl font-black text-warm-900 tabular-nums leading-none">{validadas}</p>
+                  <p className="text-xs text-warm-400">/{total}</p>
+                </div>
               </div>
-            )}
-          </motion.div>
-
-          {scanning ? (
-            <motion.div
-              className="space-y-4"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.25 }}
-            >
-              {/* Scan input */}
-              <div className="relative">
-                <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
-                <input
-                  ref={scanRef}
-                  type="text"
-                  className="w-full pl-14 pr-5 py-4 text-xl bg-white border-2 border-warm-200 rounded-2xl
-                    focus:border-primary-500 focus:shadow-glow
-                    transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
-                  placeholder={t('rec.scan.placeholder') || 'Escanear código...'}
-                  onKeyDown={handleKeyDown}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  inputMode="none"
+              <div className="relative w-full h-2 bg-warm-100 rounded-full overflow-hidden mb-2.5">
+                <div
+                  className={`absolute inset-y-0 left-0 rounded-full transition-all duration-500 ${
+                    progressPct >= 100 ? 'bg-gradient-to-r from-success-400 to-success-500' :
+                    progressPct >= 80  ? 'bg-gradient-to-r from-primary-400 to-sky-500' :
+                    'bg-gradient-to-r from-sky-500 to-primary-400'
+                  } ${progressPct > 0 ? 'min-w-[6px]' : ''}`}
+                  style={{ width: `${progressPct}%` }}
                 />
               </div>
-              <p className="text-center text-[11px] text-warm-400">{t('rec.scan.enter_hint')}</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center rounded-xl border border-success-100 bg-success-50 py-2">
+                  <p className="text-2xl sm:text-3xl font-black text-success-700 tabular-nums">{validadas}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-success-600 mt-0.5">{t('rec.cajas_validadas')}</p>
+                </div>
+                <div className="text-center rounded-xl border border-warm-100 bg-warm-50 py-2">
+                  <p className="text-2xl sm:text-3xl font-black text-warm-600 tabular-nums">{pendientes}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-warm-400 mt-0.5">{t('rec.cajas_pendientes')}</p>
+                </div>
+                <div className="text-center rounded-xl border border-danger-100 bg-danger-50 py-2">
+                  <p className="text-2xl sm:text-3xl font-black text-danger-700 tabular-nums">{faltantes}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-danger-500 mt-0.5">{t('rec.cajas_faltantes')}</p>
+                </div>
+              </div>
+              {progressPct >= 100 && (
+                <div className="mt-2.5 flex items-center gap-2 bg-success-50 border border-success-200 text-success-700 rounded-xl px-3 py-2 text-sm font-semibold">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  {t('rec.status.completo')} {t('rec.val.allValidated')}
+                </div>
+              )}
+            </div>
 
-              {/* Last scan feedback */}
-              <AnimatePresence mode="wait">
-                {lastResult && (() => {
-                  const cfg = RESULT_CFG[lastResult.result] || RESULT_CFG.no_encontrado
-                  const Icon = cfg.icon
-                  return (
-                    <motion.div
-                      key={lastResult.code + lastResult.result}
-                      initial={{ opacity: 0, y: -10, scale: 0.97 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                      className={`p-4 rounded-2xl flex items-center gap-3 border backdrop-blur-sm ${cfg.bg}`}
-                    >
+            {/* ── Desktop scan input (inline, sticky so it stays visible while scrolling history) ── */}
+            <div className="hidden sm:block card p-3 sm:p-4 sticky top-0 z-[10] bg-white/95 backdrop-blur-sm">
+              <div className="relative">
+                <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300 pointer-events-none" />
+                <input ref={scanRefDesktop} {...scanInputProps} />
+              </div>
+              <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
+            </div>
+
+            {/* ── Scan result feedback ── */}
+            <AnimatePresence mode="wait">
+              {lastResult && (() => {
+                const cfg = RESULT_CFG[lastResult.result] || RESULT_CFG.no_encontrado
+                const Icon = cfg.icon
+                return (
+                  <motion.div
+                    key={lastResult.code + lastResult.result}
+                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    {/* Big tarima display:
+                        - Always on mobile (side panel absent)
+                        - On desktop only when sidebar is hidden */}
+                    {withTarimas && lastTarimaNum && lastTarimaColor && (
+                      <div className={`${sidebarVisible ? 'sm:hidden' : ''} rounded-2xl flex flex-col items-center justify-center py-6 mb-3 ${lastTarimaColor.bg} ring-4 ${lastTarimaColor.ring} ring-offset-2`}>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">{t('rec.tarimas.label')}</p>
+                        <p className="text-[80px] sm:text-[96px] font-black text-white leading-none tabular-nums">{lastTarimaNum}</p>
+                        <p className="text-xs font-mono text-white/60 mt-1">{lastTarimaBase}</p>
+                      </div>
+                    )}
+
+                    {/* Scan result card */}
+                    <div className={`p-4 rounded-2xl flex items-center gap-3 border backdrop-blur-sm ${cfg.bg}`}>
                       <Icon className={`w-5 h-5 shrink-0 ${cfg.iconCls}`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-warm-400">Último escaneo</p>
-                        <p className="font-mono font-bold text-warm-800 truncate">{lastResult.code}</p>
+                        <p className="text-xs text-warm-400">{t('rec.scan.ultimo')}</p>
+                        <p className="font-mono font-bold text-warm-800 truncate text-sm sm:text-base">{lastResult.code}</p>
                         {lastResult.sku && <p className="text-xs text-warm-500 font-mono">SKU: {lastResult.sku}</p>}
                       </div>
-                      <span className={`text-sm font-semibold shrink-0 ${cfg.label}`}>
-                        {lastResult.result === 'correcto'      ? 'Correcto' :
-                         lastResult.result === 'duplicado'     ? 'Duplicado' : 'No encontrado'}
-                      </span>
-                    </motion.div>
-                  )
-                })()}
-              </AnimatePresence>
+                      <div className="shrink-0 flex flex-col items-end gap-1.5">
+                        <span className={`text-sm font-bold ${cfg.label}`}>{cfg.labelText}</span>
+                        {/* Compact tarima chip — desktop when panel is visible */}
+                        {withTarimas && lastTarimaNum && lastTarimaColor && sidebarVisible && (
+                          <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${lastTarimaColor.pill}`}>
+                            T{lastTarimaNum}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })()}
+            </AnimatePresence>
 
-              {/* Scan history */}
-              {history.length > 0 && (
-                <div className="card overflow-hidden shadow-sm">
-                  <div className="px-4 py-2.5 border-b border-warm-100 bg-warm-50 flex items-center justify-between">
-                    <p className="text-xs font-bold text-warm-600 uppercase tracking-wide">Registro de escaneos</p>
-                    <button
-                      onClick={() => setHistory([])}
-                      className="text-[11px] text-warm-400 hover:text-warm-600 flex items-center gap-1 transition-colors"
-                    >
-                      <X className="w-3 h-3" /> Limpiar
-                    </button>
-                  </div>
-                  <div className="overflow-x-auto max-h-64">
-                    <table className="w-full min-w-[920px] text-xs table-fixed">
-                      <colgroup>
-                        <col style={{ width: '4rem' }} />
-                        <col style={{ width: '22rem' }} />
-                        <col style={{ width: '12rem' }} />
-                        <col style={{ width: '12rem' }} />
-                        <col style={{ width: '14rem' }} />
-                        <col style={{ width: '4.5rem' }} />
-                      </colgroup>
-                      <thead className="bg-warm-50 sticky top-0 border-b border-warm-100">
-                        <tr>
-                          <th className="table-header">#</th>
-                          {[
-                            ['code', 'Código'],
-                            ['sku', 'SKU'],
-                            ['scannedBy', 'Usuario'],
-                            ['scannedAt', 'Fecha y hora'],
-                          ].map(([key, label]) => (
-                            <th key={key} className="table-header">
-                              <button
-                                type="button"
-                                onClick={() => handleHistorySort(key)}
-                                className="inline-flex items-center gap-1 hover:text-primary-700 transition-colors"
-                              >
-                                {label}
-                                {historySortKey === key
-                                  ? historySortDir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />
-                                  : <ArrowUpDown size={10} className="opacity-40" />}
-                              </button>
-                            </th>
-                          ))}
-                          <th className="table-header text-right">Acción</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-warm-50">
-                        {sortedHistory.map((h, i) => (
+            {/* ── Scan history ── */}
+            {history.length > 0 && (
+              <div className="card overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-warm-100 bg-warm-50 flex items-center justify-between">
+                  <p className="text-xs font-bold text-warm-600 uppercase tracking-wide">
+                    {t('rec.scan.historial')} ({history.length})
+                  </p>
+                  <button onClick={() => setHistory([])} className="text-[11px] text-warm-400 hover:text-warm-600 flex items-center gap-1">
+                    <X className="w-3 h-3" /> {t('common.clear')}
+                  </button>
+                </div>
+                <div className="overflow-x-auto max-h-52">
+                  <table className="w-full min-w-[560px] text-xs">
+                    <thead className="bg-warm-50 sticky top-0 border-b border-warm-100">
+                      <tr>
+                        <th className="table-header w-8">#</th>
+                        {[['code', t('rec.scan.col.codigo')], ['sku', 'SKU'], ['scannedAt', t('rec.scan.col.hora')]].map(([key, lbl]) => (
+                          <th key={key} className="table-header">
+                            <button type="button" onClick={() => handleHistorySort(key)} className="inline-flex items-center gap-1 hover:text-primary-700 transition-colors">
+                              {lbl}
+                              {historySortKey === key
+                                ? (historySortDir === 'asc' ? <ArrowUp size={9} /> : <ArrowDown size={9} />)
+                                : <ArrowUpDown size={9} className="opacity-30" />}
+                            </button>
+                          </th>
+                        ))}
+                        {withTarimas && <th className="table-header">{t('rec.tarimas.label')}</th>}
+                        <th className="table-header text-right">{t('common.actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-warm-50">
+                      {sortedHistory.map((h, i) => {
+                        const base = withTarimas ? extractBaseCode(h.code) : null
+                        const tarimaNum = withTarimas && base ? (tarimaMap.get(base) ?? null) : null
+                        const tc = tarimaNum ? getTarimaColor(tarimaNum) : null
+                        return (
                           <tr key={h.id || i} className="hover:bg-warm-50/50">
                             <td className="px-3 py-2 text-warm-400 tabular-nums">{sortedHistory.length - i}</td>
-                            <td className="px-3 py-2 font-mono font-semibold text-warm-800 truncate" title={h.code}>{h.code}</td>
-                            <td className="px-3 py-2 text-warm-500 font-mono truncate" title={h.sku || '—'}>{h.sku || '—'}</td>
-                            <td className="px-3 py-2 text-warm-600 truncate" title={h.scannedBy || '—'}>{h.scannedBy || '—'}</td>
-                            <td className="px-3 py-2 text-warm-500 whitespace-nowrap">{h.scannedAt ? new Date(h.scannedAt).toLocaleString('es-MX') : '—'}</td>
+                            <td className="px-3 py-2 font-mono font-semibold text-warm-800 max-w-[180px] truncate">{h.code}</td>
+                            <td className="px-3 py-2 text-warm-500 font-mono">{h.sku || '—'}</td>
+                            <td className="px-3 py-2 text-warm-500 whitespace-nowrap">
+                              {h.scannedAt ? new Date(h.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
+                            </td>
+                            {withTarimas && (
+                              <td className="px-3 py-2">
+                                {tarimaNum && tc ? (
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${tc.pill}`}>T{tarimaNum}</span>
+                                ) : '—'}
+                              </td>
+                            )}
                             <td className="px-3 py-2 text-right">
                               <button
                                 type="button"
                                 onClick={() => setConfirmDeleteOpen(true)}
                                 disabled={i !== 0 || deleteLastMut.isPending}
-                                className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-30"
-                                title="Eliminar último registro"
+                                className="p-1.5 rounded-lg text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                                title={t('rec.val.delete.tooltip')}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-            </motion.div>
-          ) : null}
+              </div>
+            )}
+
+          </div>
         </div>
+
+        {/* ── Panel toggle button (desktop, only when tarimas enabled) ── */}
+        {withTarimas && (
+          <div className="hidden lg:flex shrink-0 items-start pt-4 pr-1">
+            <button
+              type="button"
+              onClick={() => setSidebarVisible(p => !p)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 hover:bg-warm-50 hover:text-sky-600 transition-colors"
+              title={sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}
+            >
+              {sidebarVisible ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+            </button>
+          </div>
+        )}
+
+        {/* ── Tarimas side panel (desktop, lg+, only when withTarimas + sidebarVisible) ── */}
+        {withTarimas && sidebarVisible && (
+          <div className="hidden lg:flex w-72 xl:w-80 flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-sky-50/20 shrink-0 shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.28)]">
+            {/* Panel header */}
+            <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/60 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
+                <Layers className="w-3.5 h-3.5 text-sky-500" />
+                Tarimas · {totalTarimas}
+              </h3>
+              {lastTarimaNum && lastTarimaColor && (
+                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${lastTarimaColor.pill}`}>
+                  T{lastTarimaNum} activa
+                </span>
+              )}
+            </div>
+
+            {/* Tarima cards list */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {tarimaStats.map(ts => {
+                const isActive = ts.num === lastTarimaNum
+                const isExpanded = expandedTarimas.has(ts.num)
+                const pct = ts.total > 0 ? Math.round((ts.validated / ts.total) * 100) : 0
+                return (
+                  <div
+                    key={ts.num}
+                    className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
+                      isActive
+                        ? `${ts.color.bg} border-transparent ring-2 ${ts.color.ring} ring-offset-1 shadow-lg`
+                        : 'bg-white border-warm-200 hover:border-warm-300'
+                    }`}
+                  >
+                    {/* Card header row */}
+                    <button
+                      type="button"
+                      onClick={() => toggleTarima(ts.num)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
+                    >
+                      <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                        isActive ? 'bg-white/25 text-white' : ts.color.pill
+                      }`}>{ts.num}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-mono text-xs font-semibold truncate ${isActive ? 'text-white' : 'text-warm-800'}`}>{ts.base}</p>
+                        <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : 'text-warm-400'}`}>{ts.validated}/{ts.total}</p>
+                      </div>
+                      <div className="shrink-0 flex flex-col items-end gap-0.5">
+                        <span className={`text-xs font-bold tabular-nums ${isActive ? 'text-white' : 'text-warm-600'}`}>{pct}%</span>
+                        {isActive && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white/25 text-white leading-none">ACTIVA</span>
+                        )}
+                      </div>
+                      <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-white/60' : 'text-warm-300'}`} />
+                    </button>
+
+                    {/* Progress bar (only when inactive — color bg already communicates active state) */}
+                    {!isActive && (
+                      <div className="px-3 pb-2.5">
+                        <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                          <div className={`h-full ${ts.color.bar} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expanded: codes in this tarima */}
+                    {isExpanded && (
+                      <div className={`border-t divide-y ${isActive ? 'border-white/20 divide-white/10' : 'border-warm-100 divide-warm-50'}`}>
+                        {ts.tarLines.map(l => (
+                          <div key={l.id} className={`flex items-center gap-2 px-3 py-1.5 ${isActive ? 'hover:bg-white/10' : 'hover:bg-warm-50'} transition-colors`}>
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                              l.estado_validacion === 'validada' ? 'bg-success-400' :
+                              l.estado_validacion === 'faltante' ? 'bg-danger-400' : 'bg-warm-300'
+                            }`} />
+                            <span className={`font-mono text-[11px] truncate flex-1 ${isActive ? 'text-white/80' : 'text-warm-600'}`}>
+                              {l.custom_box_barcode || '—'}
+                            </span>
+                            <span className={`text-[10px] font-bold shrink-0 ${
+                              l.estado_validacion === 'validada'
+                                ? (isActive ? 'text-white/70' : 'text-success-600')
+                                : l.estado_validacion === 'faltante'
+                                  ? (isActive ? 'text-white/60' : 'text-danger-500')
+                                  : (isActive ? 'text-white/40' : 'text-warm-300')
+                            }`}>
+                              {l.estado_validacion === 'validada' ? '✓' : l.estado_validacion === 'faltante' ? '✗' : '·'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
       </div>
 
+      {/* ── Mobile scan input (fixed bottom, hidden on sm+) ── */}
+      <div className="sm:hidden shrink-0 bg-white border-t border-warm-100 px-3 py-2.5" style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom, 0px))' }}>
+        <div className="relative">
+          <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300 pointer-events-none" />
+          <input ref={scanRefMobile} {...scanInputProps} />
+        </div>
+        <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
+      </div>
+
+      {/* ── Tarima confirm modal ── */}
       <Modal
-        isOpen={confirmDeleteOpen}
-        onClose={() => setConfirmDeleteOpen(false)}
-        title="Eliminar último registro"
-        icon={AlertCircle}
-        size="md"
+        isOpen={showTarimaConfirm}
+        onClose={() => setShowTarimaConfirm(false)}
+        title={t('rec.tarimas.toggle')}
+        icon={Layers}
+        size="sm"
         footer={
-          <div className="flex w-full justify-end gap-2">
-            <button onClick={() => setConfirmDeleteOpen(false)} className="btn-ghost">
-              {t('common.cancel')}
-            </button>
-            <button
-              onClick={() => deleteLastMut.mutate()}
-              disabled={deleteLastMut.isPending}
-              className="btn-danger disabled:opacity-50"
-            >
-              {deleteLastMut.isPending ? t('common.loading') : 'Confirmar'}
+          <div className="flex gap-2 justify-end w-full">
+            <button onClick={() => setShowTarimaConfirm(false)} className="btn-ghost">{t('common.cancel')}</button>
+            <button onClick={() => { setWithTarimas(true); setShowTarimaConfirm(false); refocus() }} className="btn-primary">
+              {t('rec.tarimas.activar')} ({totalTarimas})
             </button>
           </div>
         }
       >
-        <p className="text-sm text-warm-700">
-          Se eliminará el último registro correcto de validación y la caja volverá a estado pendiente.
-        </p>
+        <div className="space-y-3 text-sm text-warm-700">
+          <p>{t('rec.tarimas.confirm.desc1').replace('{n}', totalTarimas)}</p>
+          <p>{t('rec.tarimas.confirm.desc2').replace('{n}', totalTarimas)}</p>
+          <div className="grid grid-cols-2 gap-1.5 mt-3">
+            {Array.from(tarimaMap.entries()).slice(0, 8).map(([base, num]) => {
+              const tc = getTarimaColor(num)
+              return (
+                <div key={base} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${tc.pill}`}>
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${tc.bg} text-white`}>{num}</span>
+                  <span className="font-mono text-xs truncate">{base}</span>
+                </div>
+              )
+            })}
+          </div>
+          {tarimaMap.size > 8 && <p className="text-xs text-warm-400 text-center">+{tarimaMap.size - 8} más...</p>}
+        </div>
       </Modal>
+
+      {/* ── Delete confirm modal ── */}
+      <Modal
+        isOpen={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        title={t('rec.val.delete.title')}
+        icon={AlertCircle}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end w-full">
+            <button onClick={() => setConfirmDeleteOpen(false)} className="btn-ghost">{t('common.cancel')}</button>
+            <button onClick={() => deleteLastMut.mutate()} disabled={deleteLastMut.isPending} className="btn-danger disabled:opacity-50">
+              {deleteLastMut.isPending ? t('common.loading') : t('rec.val.delete.btn')}
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm text-warm-700">{t('rec.val.delete.desc')}</p>
+      </Modal>
+
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { CalendarDays, Truck } from 'lucide-react'
 import { setDespachoDates } from '../utils/despachoSession'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 const MAX_DAYS = 7
 
@@ -16,6 +17,7 @@ function daysDiff(from, to) {
 
 export default function IniciarDespachoModal({ isOpen, onConfirm, initialFrom, initialTo }) {
   const { warning } = useToastStore()
+  const { t } = useI18nStore()
   const [from, setFrom] = useState(() => initialFrom || today())
   const [to,   setTo]   = useState(() => initialTo   || today())
 
@@ -35,21 +37,21 @@ export default function IniciarDespachoModal({ isOpen, onConfirm, initialFrom, i
     setFrom(val)
     if (!to || val > to) setTo(val)
     if (to && val <= to && daysDiff(val, to) > MAX_DAYS) {
-      warning('El rango máximo permitido es de 7 días')
+      warning(t('desp.iniciar.warn'))
     }
   }
 
   function handleToChange(val) {
     setTo(val)
     if (from && val && daysDiff(from, val) > MAX_DAYS) {
-      warning('El rango máximo permitido es de 7 días')
+      warning(t('desp.iniciar.warn'))
     }
   }
 
   function handleConfirm() {
     if (!from || !to) return
     if (rangeExceeded) {
-      warning('El rango máximo permitido es de 7 días')
+      warning(t('desp.iniciar.warn'))
       return
     }
     setDespachoDates(from, to)
@@ -65,8 +67,8 @@ export default function IniciarDespachoModal({ isOpen, onConfirm, initialFrom, i
             <Truck className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-warm-800 font-bold text-base">Iniciar Despacho</h2>
-            <p className="text-warm-500 text-xs">Selecciona el rango de fechas de envío esperado</p>
+            <h2 className="text-warm-800 font-bold text-base">{t('desp.iniciar.title')}</h2>
+            <p className="text-warm-500 text-xs">{t('desp.iniciar.subtitle')}</p>
           </div>
         </div>
 
@@ -75,7 +77,7 @@ export default function IniciarDespachoModal({ isOpen, onConfirm, initialFrom, i
           <div className="space-y-1">
             <label className="text-xs font-semibold text-warm-600 flex items-center gap-1.5">
               <CalendarDays className="w-3.5 h-3.5 text-primary-500" />
-              Fecha inicio
+              {t('desp.iniciar.fechaInicio')}
             </label>
             <input
               type="date"
@@ -87,7 +89,7 @@ export default function IniciarDespachoModal({ isOpen, onConfirm, initialFrom, i
           <div className="space-y-1">
             <label className="text-xs font-semibold text-warm-600 flex items-center gap-1.5">
               <CalendarDays className="w-3.5 h-3.5 text-primary-500" />
-              Fecha fin
+              {t('desp.iniciar.fechaFin')}
             </label>
             <input
               type="date"
@@ -108,8 +110,8 @@ export default function IniciarDespachoModal({ isOpen, onConfirm, initialFrom, i
                 : 'text-primary-700 bg-gradient-to-r from-primary-50 to-accent-50 border-primary-100'
             }`}>
               {rangeExceeded
-                ? `Rango de ${diff} días supera el máximo de ${MAX_DAYS} días permitidos`
-                : `Cargará órdenes con fecha de envío esperada del ${from} al ${to}`
+                ? t('desp.iniciar.warn')
+                : `${from} → ${to}`
               }
             </p>
           )}
@@ -122,7 +124,7 @@ export default function IniciarDespachoModal({ isOpen, onConfirm, initialFrom, i
             disabled={!from || !to || rangeExceeded}
             className="w-full btn-primary py-3 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Iniciar Despacho
+            {t('desp.iniciar.btn')}
           </button>
         </div>
       </div>

@@ -12,34 +12,16 @@ import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDate, fmtTimeShort, getToday, subtractDays } from '../../../core/utils/dateFormat'
 import { getFolios, getConductores, getUnidades } from '../services/despachoService'
 import { ConductoresModal, UnidadesModal, FolioFormModal } from '../components/CatalogsModals'
 
 const ESTADO_META = {
-  borrador:   { label: 'Borrador',   cls: 'bg-warm-100 text-warm-600',       icon: Clock },
-  en_proceso: { label: 'En Proceso', cls: 'bg-primary-100 text-primary-700', icon: Truck },
-  cerrado:    { label: 'Cerrado',    cls: 'bg-success-100 text-success-700',  icon: CheckCircle2 },
-  cancelado:  { label: 'Cancelado',  cls: 'bg-danger-100 text-danger-700',    icon: XCircle },
-}
-
-const DATE_PRESETS = [
-  { label: 'Hoy',     d: 0 },
-  { label: '7 días',  d: 7 },
-  { label: '30 días', d: 30 },
-]
-
-const ESTADO_OPTIONS = Object.entries(ESTADO_META).map(([k, v]) => ({ value: k, label: v.label }))
-
-function estadoBadge(estado) {
-  const meta = ESTADO_META[estado] ?? ESTADO_META.borrador
-  const Icon = meta.icon
-  return (
-    <span className={`badge text-[11px] font-semibold gap-1 ${meta.cls}`}>
-      <Icon className="w-3 h-3" />
-      {meta.label}
-    </span>
-  )
+  borrador:   { labelKey: 'desp.folio.estado.borrador',   cls: 'bg-warm-100 text-warm-600',       icon: Clock },
+  en_proceso: { labelKey: 'desp.folio.estado.enProceso',  cls: 'bg-primary-100 text-primary-700', icon: Truck },
+  cerrado:    { labelKey: 'desp.folio.estado.cerrado',     cls: 'bg-success-100 text-success-700',  icon: CheckCircle2 },
+  cancelado:  { labelKey: 'desp.folio.estado.cancelado',   cls: 'bg-danger-100 text-danger-700',    icon: XCircle },
 }
 
 function SortHeader({ label, field, sortField, sortDir, onSort, className = '' }) {
@@ -65,6 +47,7 @@ function SortHeader({ label, field, sortField, sortDir, onSort, className = '' }
 export default function Folios() {
   const navigate = useNavigate()
   const { canWrite } = useAuthStore()
+  const { t } = useI18nStore()
   const canManageCatalogs = useAuthStore(s => {
     const lvl = s.getPermissionLevel('despacho.folios')
     return lvl === 'actualizar' || lvl === 'eliminar'
@@ -178,24 +161,46 @@ export default function Folios() {
   const hasFilters = q || dateFrom || dateTo ||
     estadoFilter.length > 0 || unidadFilter.length > 0 || conductorFilter.length > 0
 
+  const DATE_PRESETS = [
+    { label: t('common.today'),      d: 0 },
+    { label: t('common.last7Days'),  d: 7 },
+    { label: t('common.last30Days'), d: 30 },
+  ]
+
+  const ESTADO_OPTIONS = Object.entries(ESTADO_META).map(([k, v]) => ({
+    value: k,
+    label: t(v.labelKey),
+  }))
+
+  function estadoBadge(estado) {
+    const meta = ESTADO_META[estado] ?? ESTADO_META.borrador
+    const Icon = meta.icon
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${meta.cls}`}>
+        <Icon className="w-3 h-3" />
+        {t(meta.labelKey)}
+      </span>
+    )
+  }
+
   const sp = { sortField, sortDir, onSort: handleSort }
 
   return (
     <div className="flex flex-col h-full">
       <Header
-        title="Folios de Despacho"
-        subtitle="Gestión de embarques y salidas"
+        title={t('desp.folios.title')}
+        subtitle={t('desp.folios.subtitle')}
         actions={
           <div className="flex items-center gap-2">
             {canManageCatalogs && (
               <>
                 <button onClick={() => setShowConductores(true)} className="btn-ghost text-xs flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" />
-                  Conductores
+                  {t('desp.btn.conductores')}
                 </button>
                 <button onClick={() => setShowUnidades(true)} className="btn-ghost text-xs flex items-center gap-1.5">
                   <Truck className="w-3.5 h-3.5" />
-                  Unidades
+                  {t('desp.btn.unidades')}
                 </button>
               </>
             )}
@@ -235,7 +240,7 @@ export default function Folios() {
             {canWrite('despacho.folios') && (
               <button onClick={() => setShowCreate(true)} className="btn-primary text-sm flex items-center gap-1.5">
                 <Plus className="w-4 h-4" />
-                Nuevo Folio
+                {t('desp.btn.nuevoFolio')}
               </button>
             )}
           </div>
@@ -246,28 +251,28 @@ export default function Folios() {
               options={ESTADO_OPTIONS}
               selected={estadoFilter}
               onChange={setEstadoFilter}
-              placeholder="Estado"
+              placeholder={t('desp.folio.col.estado')}
               icon={Clock}
             />
             <MultiSelect
               options={unidadOptions}
               selected={unidadFilter}
               onChange={setUnidadFilter}
-              placeholder="Unidad"
+              placeholder={t('desp.folio.col.unidad')}
               icon={Truck}
             />
             <MultiSelect
               options={conductorOptions}
               selected={conductorFilter}
               onChange={setConductorFilter}
-              placeholder="Conductor"
+              placeholder={t('desp.folio.col.conductor')}
               icon={User}
             />
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[200px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
               <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
               <input
                 type="text"
-                placeholder="Buscar folio, conductor o unidad..."
+                placeholder={t('desp.filter.buscarFolio')}
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') applyFilters() }}
@@ -282,12 +287,12 @@ export default function Folios() {
             {hasFilters && (
               <button onClick={clearFilters}
                 className="inline-flex items-center gap-1 h-10 px-3 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
-                <X className="w-3 h-3" /> Limpiar
+                <X className="w-3 h-3" /> {t('common.clear')}
               </button>
             )}
             <button onClick={applyFilters}
               className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-100 px-4 text-xs font-semibold text-violet-700 hover:bg-violet-200 transition-colors">
-              <Filter className="w-3 h-3" /> Aplicar
+              <Filter className="w-3 h-3" /> {t('common.apply')}
             </button>
           </div>
         </div>
@@ -298,10 +303,10 @@ export default function Folios() {
         ) : isError ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center px-5">
             <AlertCircle className="w-10 h-10 text-danger-300" />
-            <p className="text-sm font-semibold text-warm-700">Error al cargar folios</p>
-            <p className="text-xs text-warm-500">Verifica la conexión con el servidor</p>
+            <p className="text-sm font-semibold text-warm-700">{t('desp.folios.error')}</p>
+            <p className="text-xs text-warm-500">{t('desp.folios.errorHint')}</p>
             <button onClick={() => refetch()} className="inline-flex items-center gap-1.5 h-9 px-4 rounded-xl bg-primary-50 text-primary-700 text-xs font-semibold hover:bg-primary-100 transition-colors">
-              <RefreshCw className="w-3.5 h-3.5" /> Reintentar
+              <RefreshCw className="w-3.5 h-3.5" /> {t('desp.btn.reintentar')}
             </button>
           </div>
         ) : (
@@ -310,12 +315,12 @@ export default function Folios() {
               <table className="w-full text-sm">
                 <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                   <tr>
-                    <SortHeader label="Folio" field="folio_numero" {...sp} />
-                    <SortHeader label="Fecha Creación" field="created_at" {...sp} />
-                    <SortHeader label="Estado" field="estado" {...sp} />
-                    <SortHeader label="Conductor" field="conductor_nombre" {...sp} />
-                    <SortHeader label="Unidad" field="unidad_placa" {...sp} />
-                    <SortHeader label="Órdenes" field="total_ordenes" {...sp} className="text-center" />
+                    <SortHeader label={t('desp.folio.col.folio')} field="folio_numero" {...sp} />
+                    <SortHeader label={t('desp.folio.col.fechaCreacion')} field="created_at" {...sp} />
+                    <SortHeader label={t('desp.folio.col.estado')} field="estado" {...sp} />
+                    <SortHeader label={t('desp.folio.col.conductor')} field="conductor_nombre" {...sp} />
+                    <SortHeader label={t('desp.folio.col.unidad')} field="unidad_placa" {...sp} />
+                    <SortHeader label={t('desp.folio.col.ordenes')} field="total_ordenes" {...sp} className="text-center" />
                     <th className="table-header w-10" />
                   </tr>
                 </thead>
@@ -324,7 +329,7 @@ export default function Folios() {
                     <tr>
                       <td colSpan={7} className="py-14 text-center">
                         <PackageCheck className="w-8 h-8 text-warm-200 mx-auto mb-2" />
-                        <p className="text-sm text-warm-400 font-medium">Sin folios en el rango seleccionado</p>
+                        <p className="text-sm text-warm-400 font-medium">{t('desp.folios.empty')}</p>
                       </td>
                     </tr>
                   ) : paginated.map((folio, i) => (
@@ -362,7 +367,7 @@ export default function Folios() {
                       <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
                         <button
                           onClick={() => navigate(`/despacho/folios/${folio.id}`)}
-                          title="Ver detalle"
+                          title={t('desp.btn.verDetalle')}
                           className="p-1.5 rounded-xl hover:bg-primary-50 text-warm-300 hover:text-primary-600 transition-all"
                         >
                           <Eye className="w-4 h-4" />
@@ -385,7 +390,13 @@ export default function Folios() {
         )}
       </div>
 
-      <FolioFormModal isOpen={showCreate} onClose={() => setShowCreate(false)} conductores={conductores} unidades={unidades} />
+      <FolioFormModal
+        isOpen={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={(id) => navigate(`/despacho/folios/${id}`)}
+        conductores={conductores}
+        unidades={unidades}
+      />
       <ConductoresModal isOpen={showConductores} onClose={() => setShowConductores(false)} canManage={canManageCatalogs} />
       <UnidadesModal isOpen={showUnidades} onClose={() => setShowUnidades(false)} canManage={canManageCatalogs} />
     </div>

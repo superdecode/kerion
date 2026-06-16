@@ -6,13 +6,14 @@ import {
   Search, X, Truck, PackageCheck, RefreshCw, Clock, Filter,
   Users, ChevronUp, ChevronDown, ChevronsUpDown, AlertCircle,
   ScanLine, CalendarDays, Copy, Check, MapPin, Package,
-  Loader2, CheckCircle2, Pencil,
+  Loader2, CheckCircle2, Pencil, Box,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useAuthStore } from '../../../core/stores/authStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDate, fmtTimeShort, toDateKey, fmtDateString } from '../../../core/utils/dateFormat'
 import { getOutboundList, getOrdenesDispatch, getConductores, getUnidades, findAllOrdersByBarcode } from '../services/despachoService'
 import { ConductoresModal, UnidadesModal } from '../components/CatalogsModals'
@@ -22,53 +23,42 @@ import AgendaView            from '../components/AgendaView'
 import ScanResolutionModal  from '../components/ScanResolutionModal'
 import { getDespachoDates, setDespachoDates, clearDespachoDates } from '../utils/despachoSession'
 
+function getCodeBase(barcode) {
+  if (!barcode) return ''
+  let v = String(barcode).trim().toUpperCase()
+  v = v.replace(/[-_\s]?\d+$/, '')
+  v = v.replace(/[-_\s]+$/, '')
+  return v
+}
+
+function getCodigosCaja(order) {
+  const codes = order.allCustomizeCodes?.length
+    ? order.allCustomizeCodes
+    : order.customizeCode ? [order.customizeCode] : []
+  const bases = [...new Set(codes.map(getCodeBase).filter(Boolean))]
+  return bases
+}
+
 const SCAN_IDLE      = 'idle'
 const SCAN_LOADING   = 'loading'
 const SCAN_FOUND     = 'found'
 const SCAN_NOT_FOUND = 'not_found'
 const SCAN_OUT_RANGE = 'out_of_range'
 
-const SCAN_STATUS_META = {
-  [SCAN_IDLE]:      { icon: null,         cls: '',                    text: '' },
-  [SCAN_LOADING]:   { icon: Loader2,      cls: 'text-primary-500',   text: 'Buscando...' },
-  [SCAN_FOUND]:     { icon: CheckCircle2, cls: 'text-success-600',   text: 'Orden encontrada' },
-  [SCAN_NOT_FOUND]: { icon: AlertCircle,  cls: 'text-danger-500',    text: 'Orden no encontrada' },
-  [SCAN_OUT_RANGE]: { icon: AlertCircle,  cls: 'text-warning-600',   text: 'Fuera del rango de fechas activo' },
-}
-
 const STATUS_META = {
-  pending_assignment: { label: 'Por Asignar', cls: 'bg-warm-100 text-warm-600' },
-  sorting:            { label: 'En Surtido',  cls: 'bg-primary-100 text-primary-700' },
-  validating:         { label: 'Validando',   cls: 'bg-accent-100 text-accent-700' },
-  complete:           { label: 'Completo',    cls: 'bg-success-100 text-success-700' },
-  partial:            { label: 'Parcial',     cls: 'bg-warning-100 text-warning-700' },
-  cancelled:          { label: 'Cancelado',   cls: 'bg-danger-100 text-danger-700' },
+  pending_assignment: { labelKey: 'desp.status.porAsignar', cls: 'bg-warm-100 text-warm-600' },
+  sorting:            { labelKey: 'desp.status.enSurtido',  cls: 'bg-primary-100 text-primary-700' },
+  validating:         { labelKey: 'desp.status.validando',  cls: 'bg-accent-100 text-accent-700' },
+  complete:           { labelKey: 'desp.status.completo',   cls: 'bg-success-100 text-success-700' },
+  partial:            { labelKey: 'desp.status.parcial',    cls: 'bg-warning-100 text-warning-700' },
+  cancelled:          { labelKey: 'desp.status.cancelado',  cls: 'bg-danger-100 text-danger-700' },
 }
 
 const DISPATCH_ESTADO_META = {
-  pendiente:  { label: 'Pendiente',  cls: 'bg-warm-100 text-warm-600' },
-  cargado:    { label: 'Cargado',    cls: 'bg-primary-100 text-primary-700' },
-  entregado:  { label: 'Entregado',  cls: 'bg-success-100 text-success-700' },
-  devolucion: { label: 'Devolución', cls: 'bg-danger-100 text-danger-600' },
-}
-
-const STATUS_OPTIONS  = Object.entries(STATUS_META).map(([k, v]) => ({ value: k, label: v.label }))
-const DISPATCH_OPTIONS = [
-  { value: 'none', label: 'Sin folio' },
-  ...Object.entries(DISPATCH_ESTADO_META).map(([k, v]) => ({ value: k, label: v.label })),
-]
-
-const TABS = [
-  { id: 'all',       label: 'Todos' },
-  { id: 'pendiente', label: 'Pendiente' },
-  { id: 'cargado',   label: 'Cargado' },
-  { id: 'entregado', label: 'Entregado' },
-  { id: 'cancelado', label: 'Cancelado' },
-]
-
-function statusBadge(status) {
-  const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
-  return <span className={`badge text-[11px] font-semibold ${meta.cls}`}>{meta.label}</span>
+  pendiente:  { labelKey: 'desp.dispEstado.pendiente',  cls: 'bg-warm-100 text-warm-600' },
+  cargado:    { labelKey: 'desp.dispEstado.cargado',    cls: 'bg-primary-100 text-primary-700' },
+  entregado:  { labelKey: 'desp.dispEstado.entregado',  cls: 'bg-success-100 text-success-700' },
+  devolucion: { labelKey: 'desp.dispEstado.devolucion', cls: 'bg-danger-100 text-danger-600' },
 }
 
 function SortHeader({ label, field, sortField, sortDir, onSort, className = '' }) {
@@ -93,6 +83,33 @@ function SortHeader({ label, field, sortField, sortDir, onSort, className = '' }
 
 export default function Ordenes() {
   const qc = useQueryClient()
+  const { t } = useI18nStore()
+
+  const SCAN_STATUS_META = {
+    [SCAN_IDLE]:      { cls: '',                   text: '' },
+    [SCAN_LOADING]:   { cls: 'text-primary-500',   text: t('desp.scan.buscando') },
+    [SCAN_FOUND]:     { cls: 'text-success-600',   text: t('desp.scan.encontrada') },
+    [SCAN_NOT_FOUND]: { cls: 'text-danger-500',    text: t('desp.scan.noEncontrada') },
+    [SCAN_OUT_RANGE]: { cls: 'text-warning-600',   text: t('desp.scan.fueraRango') },
+  }
+
+  const STATUS_OPTIONS = Object.entries(STATUS_META).map(([k, v]) => ({ value: k, label: t(v.labelKey) }))
+  const DISPATCH_OPTIONS = [
+    { value: 'none', label: t('desp.filter.sinFolio') },
+    ...Object.entries(DISPATCH_ESTADO_META).map(([k, v]) => ({ value: k, label: t(v.labelKey) })),
+  ]
+  const TABS = [
+    { id: 'all',       label: t('desp.tab.todos') },
+    { id: 'pendiente', label: t('desp.tab.pendiente') },
+    { id: 'cargado',   label: t('desp.tab.cargado') },
+    { id: 'entregado', label: t('desp.tab.entregado') },
+    { id: 'cancelado', label: t('desp.tab.cancelado') },
+  ]
+
+  function statusBadge(status) {
+    const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
+    return <span className={`badge text-[11px] font-semibold ${meta.cls}`}>{t(meta.labelKey)}</span>
+  }
 
   const canManageCatalogs = useAuthStore(s => {
     const lvl = s.getPermissionLevel('despacho.ordenes')
@@ -392,8 +409,8 @@ export default function Ordenes() {
   return (
     <div className="flex flex-col h-full">
       <Header
-        title="Órdenes de Despacho"
-        subtitle="Órdenes de salida disponibles para embarque"
+        title={t('desp.ordenes.title')}
+        subtitle={t('desp.ordenes.subtitle')}
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -402,17 +419,17 @@ export default function Ordenes() {
               className="btn-ghost text-xs flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CalendarDays className="w-3.5 h-3.5" />
-              Agenda
+              {t('desp.btn.agenda')}
             </button>
             {canManageCatalogs && (
               <>
                 <button onClick={() => setShowConductores(true)} className="btn-ghost text-xs flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" />
-                  Conductores
+                  {t('desp.btn.conductores')}
                 </button>
                 <button onClick={() => setShowUnidades(true)} className="btn-ghost text-xs flex items-center gap-1.5">
                   <Truck className="w-3.5 h-3.5" />
-                  Unidades
+                  {t('desp.btn.unidades')}
                 </button>
               </>
             )}
@@ -438,12 +455,12 @@ export default function Ordenes() {
                     {fmtDateString(dateFrom)} → {fmtDateString(dateTo)}
                   </span>
                 ) : (
-                  <span className="text-xs text-warm-400 italic">Seleccionar fechas</span>
+                  <span className="text-xs text-warm-400 italic">{t('desp.selFechas')}</span>
                 )}
                 <Pencil className="w-3 h-3 text-warm-300 group-hover:text-primary-400 transition-colors" />
               </button>
               {isPartial && (
-                <span className="text-[11px] text-warning-600 font-medium ml-1">Cargando datos...</span>
+                <span className="text-[11px] text-warning-600 font-medium ml-1">{t('desp.cargandoDatos')}</span>
               )}
             </div>
 
@@ -470,7 +487,7 @@ export default function Ordenes() {
                     value={scanInput}
                     onChange={handleScanChange}
                     onKeyDown={handleScanKeyDown}
-                    placeholder="Escanear o escribir orden..."
+                    placeholder={t('desp.scan.placeholder')}
                     disabled={!allOrders.length}
                     className="flex-1 min-w-0 bg-transparent font-mono text-xs text-warm-800 outline-none focus-visible:outline-none focus-visible:ring-0 placeholder:text-warm-400 disabled:cursor-not-allowed disabled:opacity-50"
                   />
@@ -501,20 +518,20 @@ export default function Ordenes() {
               options={STATUS_OPTIONS}
               selected={statusFilter}
               onChange={setStatusFilter}
-              placeholder="Estado WMS"
+              placeholder={t('desp.filter.estadoWms')}
             />
             <MultiSelect
               options={DISPATCH_OPTIONS}
               selected={dispatchFilter}
               onChange={setDispatchFilter}
-              placeholder="Folio estado"
+              placeholder={t('desp.filter.folioEstado')}
               icon={Truck}
             />
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[200px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
               <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
               <input
                 type="text"
-                placeholder="Buscar por orden o cliente..."
+                placeholder={t('desp.filter.buscar')}
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') applyFilters() }}
@@ -529,12 +546,12 @@ export default function Ordenes() {
             {hasFilters && (
               <button onClick={clearFilters}
                 className="inline-flex items-center gap-1 h-10 px-3 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
-                <X className="w-3 h-3" /> Limpiar
+                <X className="w-3 h-3" /> {t('common.clear')}
               </button>
             )}
             <button onClick={applyFilters}
               className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-100 px-4 text-xs font-semibold text-violet-700 hover:bg-violet-200 transition-colors">
-              <Filter className="w-3 h-3" /> Aplicar
+              <Filter className="w-3 h-3" /> {t('common.apply')}
             </button>
           </div>
 
@@ -567,10 +584,10 @@ export default function Ordenes() {
         ) : isError ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <AlertCircle className="w-10 h-10 text-danger-300" />
-            <p className="text-sm font-medium text-warm-600">No se pudieron cargar las órdenes</p>
-            <p className="text-xs text-warm-400">Verifica la configuración de WMS Hub o presiona Actualizar</p>
+            <p className="text-sm font-medium text-warm-600">{t('desp.ordenes.error')}</p>
+            <p className="text-xs text-warm-400">{t('desp.ordenes.errorHint')}</p>
             <button onClick={handleRefresh} className="btn-secondary text-xs flex items-center gap-1.5 mt-1">
-              <RefreshCw className="w-3.5 h-3.5" /> Reintentar
+              <RefreshCw className="w-3.5 h-3.5" /> {t('desp.btn.reintentar')}
             </button>
           </div>
         ) : (
@@ -579,37 +596,37 @@ export default function Ordenes() {
               <table className="w-full text-sm">
                 <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                   <tr>
-                    <SortHeader label="Orden"          field="outboundOrderNo" {...sp} />
-                    <SortHeader label="Fecha Entrega"  field="date"            {...sp} />
-                    <SortHeader label="Destino"        field="receiverName"    {...sp} />
-                    <SortHeader label="Estado WMS"     field="trackingStatus"  {...sp} />
-                    <SortHeader label="Folio Despacho" field="folio"           {...sp} />
-                    <SortHeader label="Estado Folio"   field="dispatchEstado"  {...sp} />
-                    <SortHeader label="Cantidad"       field="cantidad"        {...sp} />
-                    {canDispatch && <th className="table-header">Acciones</th>}
+                    <SortHeader label={t('desp.col.orden')}        field="outboundOrderNo" {...sp} />
+                    <SortHeader label={t('desp.col.fechaEntrega')} field="date"            {...sp} />
+                    <SortHeader label={t('desp.col.destino')}      field="receiverName"    {...sp} />
+                    <SortHeader label={t('desp.col.estadoWms')}    field="trackingStatus"  {...sp} />
+                    <SortHeader label={t('desp.col.folio')}        field="folio"           {...sp} />
+                    <SortHeader label={t('desp.col.estadoFolio')}  field="dispatchEstado"  {...sp} />
+                    <SortHeader label={t('desp.col.cantidad')}     field="cantidad"        {...sp} />
+                    <th className="table-header">{t('desp.col.codigoCaja')}</th>
+                    {canDispatch && <th className="table-header">{t('desp.col.acciones')}</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
                   {paginated.length === 0 ? (
                     <tr>
-                      <td colSpan={canDispatch ? 8 : 7} className="py-14 text-center">
+                      <td colSpan={canDispatch ? 9 : 8} className="py-14 text-center">
                         <PackageCheck className="w-8 h-8 text-warm-200 mx-auto mb-2" />
-                        <p className="text-sm text-warm-400 font-medium">Sin órdenes en el rango seleccionado</p>
+                        <p className="text-sm text-warm-400 font-medium">{t('desp.ordenes.empty')}</p>
                         {allOrders.length === 0 && (
-                          <p className="text-xs text-warm-300 mt-1">
-                            Presiona <strong>Actualizar</strong> para cargar datos desde la hoja
-                          </p>
+                          <p className="text-xs text-warm-300 mt-1">{t('desp.ordenes.emptyHint')}</p>
                         )}
                       </td>
                     </tr>
                   ) : paginated.map((order, i) => {
-                    const orderNo  = order.outboundOrderNo || order.order_no || ''
-                    const destino  = order.receiverName || order.customerName || order.cliente || '—'
-                    const status   = order.trackingStatus || order.status || 'pending_assignment'
-                    const dateVal  = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
-                    const cantidad = order.outboundBoxCount ?? null
-                    const dispatch = dispatchMap.get(orderNo)
-                    const dm       = dispatch ? DISPATCH_ESTADO_META[dispatch.order_estado] : null
+                    const orderNo    = order.outboundOrderNo || order.order_no || ''
+                    const destino    = order.receiverName || order.customerName || order.cliente || '—'
+                    const status     = order.trackingStatus || order.status || 'pending_assignment'
+                    const dateVal    = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
+                    const cantidad   = order.outboundBoxCount ?? null
+                    const dispatch   = dispatchMap.get(orderNo)
+                    const dm         = dispatch ? DISPATCH_ESTADO_META[dispatch.order_estado] : null
+                    const cajaCodes  = getCodigosCaja(order)
 
                     return (
                       <motion.tr key={orderNo || i}
@@ -682,6 +699,27 @@ export default function Ordenes() {
                               <span className="text-xs font-semibold text-warm-700">{cantidad}</span>
                             </div>
                           ) : <span className="text-warm-300 text-xs">—</span>}
+                        </td>
+                        {/* Código de caja */}
+                        <td className="px-4 py-3 max-w-[160px]">
+                          {cajaCodes.length === 0 ? (
+                            <span className="text-warm-300 text-xs">—</span>
+                          ) : cajaCodes.length <= 3 ? (
+                            <div className="flex flex-col gap-0.5">
+                              {cajaCodes.map(c => (
+                                <span key={c} className="font-mono text-xs text-warm-600 leading-tight">{c}</span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div title={cajaCodes.join('\n')} className="cursor-default">
+                              <div className="flex flex-col gap-0.5">
+                                {cajaCodes.slice(0, 2).map(c => (
+                                  <span key={c} className="font-mono text-xs text-warm-600 leading-tight">{c}</span>
+                                ))}
+                                <span className="text-[10px] text-warm-400 font-medium">+{cajaCodes.length - 2} más</span>
+                              </div>
+                            </div>
+                          )}
                         </td>
                         {canDispatch && (
                           <td className="px-3 py-3" onClick={e => e.stopPropagation()}>

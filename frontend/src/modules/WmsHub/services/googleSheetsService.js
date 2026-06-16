@@ -457,20 +457,28 @@ export async function getOutboundList() {
 
   const SPARSE_FIELDS = ['thirdOrderNo', 'logisticsTrackNo', 'logisticsChannel', 'receiverName', 'outboundTime', 'whCode']
 
+  const boxCodesMap = new Map()
+
   for (const row of dataRows) {
     const r = mapRowToOutbound(row, map)
     if (!r.outboundOrderNo) continue
     boxCountMap.set(r.outboundOrderNo, (boxCountMap.get(r.outboundOrderNo) || 0) + 1)
     if (!orderMap.has(r.outboundOrderNo)) {
       orderMap.set(r.outboundOrderNo, { ...r })
+      boxCodesMap.set(r.outboundOrderNo, [])
     } else {
       const existing = orderMap.get(r.outboundOrderNo)
       SPARSE_FIELDS.forEach(f => { if (!existing[f] && r[f]) existing[f] = r[f] })
+    }
+    if (r.customizeCode) {
+      const codes = boxCodesMap.get(r.outboundOrderNo)
+      if (!codes.includes(r.customizeCode)) codes.push(r.customizeCode)
     }
   }
 
   const records = Array.from(orderMap.values()).map(r => ({
     ...r,
+    allCustomizeCodes: boxCodesMap.get(r.outboundOrderNo) || [],
     outboundBoxCount: r.outboundBoxCount || boxCountMap.get(r.outboundOrderNo) || 0,
   }))
   const { partial } = getCacheStatus('outbound')

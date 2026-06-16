@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { AlertTriangle, CalendarDays, MapPin, Hash, Tag, Package, Truck, X, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import { fmtDateString, toDateKey } from '../../../core/utils/dateFormat'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 function getOrderDateKey(order) {
   const raw = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
@@ -111,6 +112,7 @@ function OrderCard({ entry, selected, onSelect, dateFrom, dateTo }) {
 }
 
 export default function ScanResolutionModal({ isOpen, onClose, onConfirm, orders = [], query = '', dateFrom, dateTo }) {
+  const { t } = useI18nStore()
   const [selectedNo, setSelectedNo] = useState(null)
 
   const isSingle     = orders.length === 1
@@ -158,14 +160,14 @@ export default function ScanResolutionModal({ isOpen, onClose, onConfirm, orders
       footer={
         <div className="flex gap-2 w-full">
           <button onClick={onClose} className="btn-ghost flex-1 inline-flex items-center justify-center gap-1.5 text-sm">
-            <X className="w-3.5 h-3.5" /> Cancelar
+            <X className="w-3.5 h-3.5" /> {t('desp.scan.resolution.cancelar')}
           </button>
           <button
             onClick={handleConfirm}
             disabled={!selectedEntry}
             className="btn-primary flex-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSingle && allOutRange ? 'Sí, agregar de todas formas' : 'Confirmar Despacho'}
+            {isSingle && allOutRange ? t('desp.scan.resolution.confirmarDeTodas') : t('desp.scan.resolution.confirmar')}
           </button>
         </div>
       }
@@ -174,14 +176,14 @@ export default function ScanResolutionModal({ isOpen, onClose, onConfirm, orders
         {/* Context info */}
         <div className="rounded-xl bg-warm-50 border border-warm-100 px-4 py-3 space-y-1.5">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-bold text-warm-400 uppercase tracking-wide">Código escaneado</span>
+            <span className="text-[10px] font-bold text-warm-400 uppercase tracking-wide">{t('desp.scan.codigoEscaneado')}</span>
             <span className="font-mono text-xs font-bold text-warm-700">{query}</span>
           </div>
           {dateFrom && dateTo && (
             <div className="flex items-center gap-1.5">
               <Clock className="w-3 h-3 text-warm-400 shrink-0" />
               <span className="text-xs text-warm-600">
-                Rango activo: <span className="font-semibold">{fmtDateString(dateFrom)} → {fmtDateString(dateTo)}</span>
+                {t('desp.scan.rangoActivo')}: <span className="font-semibold">{fmtDateString(dateFrom)} → {fmtDateString(dateTo)}</span>
               </span>
             </div>
           )}

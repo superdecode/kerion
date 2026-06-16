@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   ScanBarcode, RotateCcw, Boxes, BadgeCheck, Truck,
-  AlertTriangle, RefreshCw,
+  AlertTriangle, RefreshCw, PackageCheck, Settings2,
 } from 'lucide-react'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -11,11 +11,15 @@ import { getToday } from '../../../core/utils/dateFormat'
 
 import DropScanDashboard from './DropScanDashboard'
 import DevoluccionesDashboard from './DevoluccionesDashboard'
+import RecepcionDashboard from './RecepcionDashboard'
 import InventarioDashboard from './InventarioDashboard'
 import SurtidoDashboard from './SurtidoDashboard'
 import DespachoDashboard from './DespachoDashboard'
 import AnormDashboard from './AnormDashboard'
+import AdminDashboard from './AdminDashboard'
 
+// Fila 1: DropScan · Devoluciones · Recepción · Inventario
+// Fila 2: Surtido  · Despacho     · Anorm      · Administración
 const ALL_MODULES = [
   {
     id: 'dropscan',
@@ -34,6 +38,15 @@ const ALL_MODULES = [
     permission: 'devoluciones.entradas',
     module: 'devoluciones',
     component: DevoluccionesDashboard,
+  },
+  {
+    id: 'recepcion',
+    label: 'Recepción',
+    icon: PackageCheck,
+    color: 'sky',
+    permission: 'recepcion.recibir',
+    module: 'recepcion',
+    component: RecepcionDashboard,
   },
   {
     id: 'inventario',
@@ -71,15 +84,26 @@ const ALL_MODULES = [
     module: 'anormalidades',
     component: AnormDashboard,
   },
+  {
+    id: 'administracion',
+    label: 'Administración',
+    icon: Settings2,
+    color: 'slate',
+    permission: 'usuarios',
+    module: 'administracion',
+    component: AdminDashboard,
+  },
 ]
 
 const COLOR_STYLES = {
   blue:    { iconBg: 'bg-blue-50',    iconColor: 'text-blue-600',    activeBg: 'bg-blue-50',    activeText: 'text-blue-700',   activeDot: 'bg-blue-500',   activeBar: 'bg-blue-500'   },
   amber:   { iconBg: 'bg-amber-50',   iconColor: 'text-amber-600',   activeBg: 'bg-amber-50',   activeText: 'text-amber-700',  activeDot: 'bg-amber-500',  activeBar: 'bg-amber-500'  },
+  sky:     { iconBg: 'bg-sky-50',     iconColor: 'text-sky-600',     activeBg: 'bg-sky-50',     activeText: 'text-sky-700',    activeDot: 'bg-sky-500',    activeBar: 'bg-sky-500'    },
   teal:    { iconBg: 'bg-teal-50',    iconColor: 'text-teal-600',    activeBg: 'bg-teal-50',    activeText: 'text-teal-700',   activeDot: 'bg-teal-500',   activeBar: 'bg-teal-500'   },
   violet:  { iconBg: 'bg-violet-50',  iconColor: 'text-violet-600',  activeBg: 'bg-violet-50',  activeText: 'text-violet-700', activeDot: 'bg-violet-500', activeBar: 'bg-violet-500' },
   emerald: { iconBg: 'bg-emerald-50', iconColor: 'text-emerald-600', activeBg: 'bg-emerald-50', activeText: 'text-emerald-700',activeDot: 'bg-emerald-500',activeBar: 'bg-emerald-500'},
   rose:    { iconBg: 'bg-rose-50',    iconColor: 'text-rose-600',    activeBg: 'bg-rose-50',    activeText: 'text-rose-700',   activeDot: 'bg-rose-500',   activeBar: 'bg-rose-500'   },
+  slate:   { iconBg: 'bg-slate-100',  iconColor: 'text-slate-600',   activeBg: 'bg-slate-50',   activeText: 'text-slate-700',  activeDot: 'bg-slate-500',  activeBar: 'bg-slate-500'  },
 }
 
 const DEFAULT_RANGE = { from: getToday(), to: getToday() }

@@ -2,6 +2,7 @@ import { Download, Printer, X } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import PrintListaRecepcion from './PrintListaRecepcion'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 function printHtml(nodeId) {
   const el = document.getElementById(nodeId)
@@ -24,11 +25,12 @@ function printHtml(nodeId) {
 }
 
 export default function ListaRecepcionPreviewModal({ isOpen, onClose, data, loading, onExport }) {
+  const { t } = useI18nStore()
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Vista previa lista de recepción"
+      title={t('rec.lista.preview.title')}
       icon={Printer}
       size="xl"
       headerAction={!loading ? (
@@ -39,22 +41,22 @@ export default function ListaRecepcionPreviewModal({ isOpen, onClose, data, load
       footer={data && !loading ? (
         <div className="flex w-full justify-end gap-3">
           <button className="btn-success inline-flex items-center gap-2" onClick={onExport}>
-            <Download size={14} /> Exportar Excel
+            <Download size={14} /> {t('rec.lista.export')}
           </button>
           <button className="btn-primary inline-flex items-center gap-2" onClick={() => printHtml('print-lista-recepcion')}>
-            <Printer size={14} /> Imprimir
+            <Printer size={14} /> {t('rec.lista.print')}
           </button>
         </div>
       ) : null}
     >
       {loading ? (
         <div className="py-16">
-          <LoadingSpinner text="Generando vista previa..." />
+          <LoadingSpinner text={t('rec.lista.generating')} />
         </div>
       ) : data ? (
         <PrintListaRecepcion data={data} />
       ) : (
-        <div className="py-12 text-center text-sm text-warm-400">No hay datos para mostrar.</div>
+        <div className="py-12 text-center text-sm text-warm-400">{t('rec.lista.noData')}</div>
       )}
     </Modal>
   )
