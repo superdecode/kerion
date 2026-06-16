@@ -321,14 +321,14 @@ export default function ValidacionRecepcion() {
                 key={String(chip.key)}
                 type="button"
                 onClick={() => setTarimaFilter(chip.key)}
-                className={`w-full min-w-0 px-1 py-1.5 h-9 rounded-xl text-[10px] font-semibold border transition-all flex flex-col items-center justify-center truncate ${
+                className={`w-full min-w-0 px-1 py-1.5 h-9 rounded-xl text-[10px] font-semibold border transition-all flex items-center justify-center gap-0.5 overflow-hidden ${
                   isActive
                     ? 'bg-white text-sky-700 border-sky-200 shadow-sm ring-1 ring-sky-100'
                     : 'bg-white/75 text-warm-500 border-transparent hover:border-warm-200 hover:bg-warm-50'
                 }`}
               >
-                <span className="truncate w-full text-center leading-tight">{chip.label}</span>
-                <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'text-sky-400' : 'text-warm-400'}`}>{chip.count}</span>
+                <span className="truncate">{chip.label}</span>
+                <span className={`text-[9px] font-bold tabular-nums shrink-0 ${isActive ? 'text-sky-400' : 'text-warm-400'}`}>{chip.count}</span>
               </button>
             )
           })}
