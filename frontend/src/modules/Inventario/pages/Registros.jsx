@@ -523,7 +523,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                             <td colSpan={6} className="p-0">
                               <button
                                 onClick={() => setExpandedTarimaCode(isExpanded ? null : tarima.code)}
-                                className="w-full grid grid-cols-[minmax(0,1fr)_7rem_7rem_7rem_6rem_2rem] items-center gap-2 px-4 py-3 hover:bg-primary-50/30 text-left transition-colors"
+                                className="w-full grid grid-cols-[minmax(0,1fr)_7rem_7rem_7rem_6rem_2rem] items-center gap-2 px-4 py-3 hover:bg-primary-100 text-left transition-colors"
                               >
                                 <span className="font-mono text-xs font-semibold text-warm-700 truncate">{tarima.code}</span>
                                 <span className="text-center text-xs font-bold text-success-600">{tarima.counts.ok}</span>

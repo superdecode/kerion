@@ -471,7 +471,7 @@ function ScanFeedTable({ items, t }) {
           </thead>
           <tbody className="divide-y divide-warm-50">
             {items.map((e, i) => (
-              <tr key={i} className="hover:bg-success-50/30 transition-colors">
+              <tr key={i} className="hover:bg-primary-100 transition-colors">
                 <td className="px-3 py-2.5">
                   <span className="w-6 h-6 rounded-lg bg-success-100 text-success-700 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                 </td>

@@ -367,7 +367,7 @@ export default function ImportarUbicacionesModal({ isOpen, onClose, existingUbic
                       <tr
                         key={row._rowId}
                         className={`transition-colors ${
-                          !row._valid ? 'bg-danger-50/30' : 'hover:bg-primary-50/30'
+                          !row._valid ? 'bg-danger-50/30' : 'hover:bg-primary-100'
                         }`}
                       >
                         <td className="px-4 py-3">

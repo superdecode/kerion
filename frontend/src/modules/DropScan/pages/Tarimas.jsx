@@ -594,7 +594,7 @@ export default function Tarimas() {
                               <div
                                 key={g.id}
                                 onMouseDown={(e) => { e.preventDefault(); handleGuiaResultClick(g) }}
-                                className="px-3 py-2.5 hover:bg-primary-50/50 cursor-pointer border-b border-warm-50 last:border-b-0 transition-colors group"
+                                className="px-3 py-2.5 hover:bg-primary-100 cursor-pointer border-b border-warm-50 last:border-b-0 transition-colors group"
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <p className="code-main truncate flex-1">{g.codigo_guia}</p>

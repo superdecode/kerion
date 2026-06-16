@@ -703,7 +703,7 @@ export default function RastreoDetalle() {
                   </thead>
                   <tbody className="divide-y divide-warm-100">
                     {filteredCajas.map((c, idx) => (
-                      <tr key={c.id} className="hover:bg-primary-50/20 transition-colors">
+                      <tr key={c.id} className="hover:bg-primary-100 transition-colors">
                         <td className="px-3 py-2.5 text-center text-[11px] text-warm-300 font-mono">{idx + 1}</td>
                         <td className="px-3 py-2.5">
                           <CopyableCell text={c.box_code} className="font-mono text-xs text-warm-600" />

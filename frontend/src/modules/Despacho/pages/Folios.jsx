@@ -337,7 +337,7 @@ export default function Folios() {
                     <motion.tr key={folio.id}
                       initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                      className="hover:bg-warm-50/60 cursor-pointer transition-colors"
+                      className="hover:bg-primary-100 cursor-pointer transition-colors"
                       onClick={() => navigate(`/despacho/folios/${folio.id}`)}
                     >
                       <td className="px-4 py-3">

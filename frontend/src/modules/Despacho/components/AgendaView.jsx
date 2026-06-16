@@ -197,7 +197,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
                   const estado   = dispatch?.order_estado
                   const time     = order.outboundTime || order.expectedTime || ''
                   return (
-                    <tr key={orderNo} className="hover:bg-warm-50/60 transition-colors">
+                    <tr key={orderNo} className="hover:bg-primary-100 transition-colors">
                       <td className="px-4 py-2.5 text-xs text-warm-500">
                         {time ? fmtTimeShort(time) : '—'}
                       </td>

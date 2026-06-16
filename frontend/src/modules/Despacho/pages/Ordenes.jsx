@@ -633,7 +633,7 @@ export default function Ordenes() {
                       <motion.tr key={orderNo || i}
                         initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                        className="hover:bg-warm-50/60 transition-colors"
+                        className="hover:bg-primary-100 transition-colors"
                       >
                         {/* Orden — copy on hover */}
                         <td className="px-4 py-3">

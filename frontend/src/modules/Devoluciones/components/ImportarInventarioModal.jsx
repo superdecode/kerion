@@ -511,7 +511,7 @@ export default function ImportarInventarioModal({ isOpen, onClose, inventario = 
                                 ? 'bg-danger-50/40'
                                 : row._isNew
                                 ? 'bg-accent-50/30'
-                                : 'hover:bg-primary-50/30'
+                                : 'hover:bg-primary-100'
                             }`}
                           >
                             {/* Status */}

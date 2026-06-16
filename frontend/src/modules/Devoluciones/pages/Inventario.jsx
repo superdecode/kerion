@@ -601,7 +601,7 @@ export default function Inventario() {
                     </thead>
                     <tbody className="divide-y divide-warm-50">
                       {paginatedInventario.map(row => (
-                        <tr key={row.id} className="hover:bg-gradient-to-r hover:from-primary-50/30 hover:to-transparent transition-all duration-150 group border-b border-warm-50">
+                        <tr key={row.id} className="hover:bg-primary-100 transition-colors group border-b border-warm-50">
                           <td className="table-cell">
                             <div className="flex items-center gap-1.5">
                               <span className="font-mono text-xs text-warm-700">{row.codigo_trazabilidad}</span>

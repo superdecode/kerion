@@ -465,7 +465,7 @@ export default function Reportes() {
                               {porEscaneador.map((e, i) => {
                                 const maxGuias = porEscaneador[0]?.guias || 1
                                 return (
-                                  <tr key={e.escaneador || i} className="hover:bg-primary-50/20 transition-colors">
+                                  <tr key={e.escaneador || i} className="hover:bg-primary-100 transition-colors">
                                     <td className="px-4 py-3 font-semibold text-warm-700">{e.escaneador}</td>
                                     <td className="px-4 py-3 text-center text-warm-600">{e.tarimas}</td>
                                     <td className="px-4 py-3 text-center font-bold text-warm-700">{e.guias}</td>
@@ -506,7 +506,7 @@ export default function Reportes() {
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                               {porDia.map(d => (
-                                <tr key={d.fecha} className="hover:bg-primary-50/20 transition-colors">
+                                <tr key={d.fecha} className="hover:bg-primary-100 transition-colors">
                                   <td className="px-4 py-3 text-warm-700">{fmtDateStringShort(d.fecha)}</td>
                                   <td className="px-4 py-3 text-center text-warm-600">{d.tarimas}</td>
                                   <td className="px-4 py-3 text-center text-success-600 font-semibold">{d.completadas}</td>

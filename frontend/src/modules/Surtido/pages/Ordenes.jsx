@@ -2277,7 +2277,7 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
   return (
     <tr
       onClick={() => onView(obc)}
-      className={`transition-colors cursor-pointer hover:bg-primary-50/50 ${isChecked ? 'bg-primary-50/20' : noSurtidor ? 'bg-warning-50/20' : ''}`}>
+      className={`transition-colors cursor-pointer hover:bg-primary-100 ${isChecked ? 'bg-primary-50/20' : noSurtidor ? 'bg-warning-50/20' : ''}`}>
 
       <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
         <input type="checkbox"
@@ -2827,7 +2827,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
               return (
                 <tr key={obc || i}
                   onClick={() => onView(obc)}
-                  className={`transition-colors cursor-pointer hover:bg-primary-50/50 ${isChecked ? 'bg-primary-50/20' : ''}`}>
+                  className={`transition-colors cursor-pointer hover:bg-primary-100 ${isChecked ? 'bg-primary-50/20' : ''}`}>
 
                   <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
                     <input type="checkbox"

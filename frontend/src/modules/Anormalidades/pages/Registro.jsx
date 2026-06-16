@@ -505,7 +505,7 @@ export default function AnormalidadesRegistro() {
                     <tr
                       key={row.id}
                       onClick={() => setDetailId(row.id)}
-                      className="table-row hover:bg-primary-50/30 cursor-pointer transition-colors"
+                      className="table-row cursor-pointer transition-colors"
                     >
                       <td className="table-cell w-8" onClick={e => e.stopPropagation()}>
                         <input

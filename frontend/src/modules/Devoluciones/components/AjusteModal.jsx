@@ -325,7 +325,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
                     {ajustes.map((row, i) => {
                       const diff = row.cantidad_nueva !== '' ? parseInt(row.cantidad_nueva, 10) - (row._disponible ?? 0) : null
                       return (
-                        <tr key={i} className="border-b border-warm-50 last:border-0 hover:bg-primary-50/30">
+                        <tr key={i} className="border-b border-warm-50 last:border-0 hover:bg-primary-100 transition-colors">
                           <td className="px-3 py-2.5 text-warm-300 font-mono">{i + 1}</td>
                           <td className="px-3 py-2.5 font-semibold text-warm-800"><CopyableCell text={row._sku} /></td>
                           <td className="px-3 py-2.5 font-mono text-warm-500"><CopyableCell text={row._codigo} /></td>
@@ -434,7 +434,7 @@ export default function AjusteModal({ isOpen, onClose, initialTipo = 'ajuste', i
                         const sel = selectedIds.includes(inv.id)
                         return (
                           <tr key={inv.id} onClick={() => toggleId(inv.id)}
-                            className={`border-b border-warm-50 last:border-0 cursor-pointer transition-colors ${sel ? 'bg-primary-50' : 'hover:bg-primary-50/30'}`}
+                            className={`border-b border-warm-50 last:border-0 cursor-pointer transition-colors ${sel ? 'bg-primary-50' : 'hover:bg-primary-100'}`}
                           >
                             <td className="px-3 py-2.5">
                               <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${sel ? 'bg-primary-500 border-primary-500' : 'border-warm-300'}`}>

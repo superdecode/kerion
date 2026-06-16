@@ -372,7 +372,7 @@ export default function Recibir() {
                       <tr
                         key={order.id}
                         onClick={() => navigate(`/recepcion/recibir/${order.id}`)}
-                        className="hover:bg-sky-50/30 cursor-pointer transition-colors"
+                        className="hover:bg-primary-100 cursor-pointer transition-colors"
                       >
                         <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
                           <input type="checkbox" checked={selected.has(order.id)} onChange={() => toggleRow(order.id)} className="cb" />

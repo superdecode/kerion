@@ -1021,7 +1021,7 @@ export default function FolioDetalle() {
                         className={`transition-colors group ${editable ? 'cursor-pointer' : ''} ${
                           validatingOrderId === order.id
                             ? 'bg-primary-50/50 border-l-[3px] border-l-primary-400'
-                            : 'hover:bg-warm-50/60'
+                            : 'hover:bg-primary-100'
                         }`}>
                         <td className="pl-3 pr-1 py-3.5">
                           {editable && (

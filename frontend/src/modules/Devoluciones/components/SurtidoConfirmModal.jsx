@@ -278,7 +278,7 @@ export default function SurtidoConfirmModal({ isOpen, onClose, items = [], salid
                   const overStock = !row.surtido && Number(row.cantidad_surtida) > (row.cantidad_disponible ?? Infinity)
                   return (
                     <tr key={row.salida_item_id} className={`border-b border-warm-50 last:border-0 transition-colors ${
-                      row.surtido ? 'bg-success-50/30 opacity-60' : 'hover:bg-primary-50/30'
+                      row.surtido ? 'bg-success-50/30 opacity-60' : 'hover:bg-primary-100'
                     }`}>
                       <td className="py-2.5 pl-4 pr-3">
                         <div className="code-main">{row.sku}</div>

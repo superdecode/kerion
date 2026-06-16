@@ -95,7 +95,7 @@ function InventarioSection({ records, open, onToggle }) {
                   </thead>
                   <tbody className="divide-y divide-primary-50">
                     {records.map((r, i) => (
-                      <tr key={i} className="hover:bg-primary-50/30">
+                      <tr key={i} className="hover:bg-primary-100 transition-colors">
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.customizeBarcode || r.barcode || '—'} className="font-mono font-medium text-warm-700" />
                         </td>
@@ -158,7 +158,7 @@ function SurtidoSection({ records, open, onToggle }) {
                   </thead>
                   <tbody className="divide-y divide-accent-50">
                     {records.map((r, i) => (
-                      <tr key={i} className="hover:bg-accent-50/30">
+                      <tr key={i} className="hover:bg-primary-100 transition-colors">
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.customizeCode || '—'} className="font-mono text-warm-700" />
                         </td>
@@ -220,7 +220,7 @@ function EscaneoSection({ records, open, onToggle }) {
                   </thead>
                   <tbody className="divide-y divide-warning-50">
                     {records.map((r, i) => (
-                      <tr key={i} className="hover:bg-warning-50/30">
+                      <tr key={i} className="hover:bg-primary-100 transition-colors">
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.barcode || '—'} className="font-mono text-warm-700" />
                         </td>
@@ -282,7 +282,7 @@ function ValidacionSection({ records, open, onToggle }) {
                   </thead>
                   <tbody className="divide-y divide-success-50">
                     {records.map((r, i) => (
-                      <tr key={i} className="hover:bg-success-50/30">
+                      <tr key={i} className="hover:bg-primary-100 transition-colors">
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.scanned_code || '—'} className="font-mono text-warm-700" />
                         </td>
@@ -347,7 +347,7 @@ function InventarioRegistrosSection({ records, open, onToggle }) {
                   </thead>
                   <tbody className="divide-y divide-sky-50">
                     {records.map((r, i) => (
-                      <tr key={r.id || i} className="hover:bg-sky-50/30">
+                      <tr key={r.id || i} className="hover:bg-primary-100 transition-colors">
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.normalized_code || r.scanned_code || '—'} className="font-mono text-warm-700" />
                         </td>
@@ -415,7 +415,7 @@ function RastreoSection({ records, open, onToggle }) {
                   </thead>
                   <tbody className="divide-y divide-rose-50">
                     {records.map((r, i) => (
-                      <tr key={r.id || i} className="hover:bg-rose-50/30">
+                      <tr key={r.id || i} className="hover:bg-primary-100 transition-colors">
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.box_code || '—'} className="font-mono text-warm-700" />
                         </td>

@@ -511,7 +511,7 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
                 {filteredCodigos.length === 0 ? (
                   <tr><td colSpan={6} className="py-14 text-center text-sm text-warm-400">{t('common.noData')}</td></tr>
                 ) : filteredCodigos.map(c => (
-                  <tr key={c.id} className="hover:bg-warm-50/50 transition-colors">
+                  <tr key={c.id} className="hover:bg-primary-100 transition-colors">
                     <td className="px-4 py-3">
                       <span className="font-mono text-xs font-semibold text-primary-700">{c.codigo}</span>
                       {c.es_default && <span className="ml-2 rounded-md bg-warm-100 px-1.5 py-0.5 text-[10px] text-warm-500">{t('anorm.config.baseCode')}</span>}

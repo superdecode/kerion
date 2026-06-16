@@ -861,7 +861,7 @@ export default function Folios() {
                         <div key={tar.id}>
                           <button
                             onClick={() => setExpandedDetailTarima(expandedDetailTarima === tar.id ? null : tar.id)}
-                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-warm-50/60 text-left transition-colors group/trow"
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-primary-100 text-left transition-colors group/trow"
                           >
                             <div className="flex-1 grid grid-cols-3 sm:grid-cols-4 gap-3 text-sm min-w-0">
                               <div className="flex items-center gap-1.5">

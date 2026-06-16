@@ -312,7 +312,7 @@ export default function AnormMejoras() {
                 {rows.length === 0 ? (
                   <tr><td colSpan={9} className="text-center py-16 text-warm-400 text-sm">{t('common.noData')}</td></tr>
                 ) : rows.map(row => (
-                  <tr key={row.id} onClick={() => setDetailId(row.id)} className="table-row hover:bg-primary-50/30 cursor-pointer transition-colors">
+                  <tr key={row.id} onClick={() => setDetailId(row.id)} className="table-row cursor-pointer transition-colors">
                     <td className="table-cell text-xs text-warm-600">{fmtDate(row.created_at)}</td>
                     <td className="table-cell text-xs text-warm-700">{row.proceso || '—'}</td>
                     <td className="table-cell text-xs text-warm-600">{row.origen || '—'}</td>

@@ -961,7 +961,7 @@ export default function ValidacionRecepcion() {
                                     const cfg = RESULT_CFG[h.result] || RESULT_CFG.no_encontrado
                                     const Icon = cfg.icon
                                     return (
-                                      <tr key={h.id || i} className="hover:bg-warm-50/50">
+                                      <tr key={h.id || i} className="hover:bg-primary-100 transition-colors">
                                         <td className="px-3 py-1.5 text-warm-400 tabular-nums whitespace-nowrap text-[10px]">
                                           {h.scannedAt ? new Date(h.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
                                         </td>
@@ -1085,7 +1085,7 @@ export default function ValidacionRecepcion() {
                         const tarimaNum = withTarimas && base ? (tarimaMap.get(base) ?? null) : null
                         const tc = tarimaNum ? getTarimaColor(tarimaNum) : null
                         return (
-                          <tr key={h.id || i} className="hover:bg-warm-50/50">
+                          <tr key={h.id || i} className="hover:bg-primary-100 transition-colors">
                             <td className="px-3 py-2 text-warm-400 tabular-nums">{sortedHistory.length - i}</td>
                             <td className="px-3 py-2 font-mono font-semibold text-warm-800 max-w-[180px] truncate">{h.code}</td>
                             <td className="px-3 py-2 text-warm-500 font-mono">{h.sku || '—'}</td>

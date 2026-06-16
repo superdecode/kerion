@@ -227,7 +227,7 @@ export default function InventarioUbicacionesModal({
                 const isActive = row.activo !== false
 
                 return (
-                  <tr key={row.id} className={`border-b border-warm-50 last:border-0 transition-colors ${isActive ? 'hover:bg-primary-50/30' : 'bg-warm-50/30 opacity-70'}`}>
+                  <tr key={row.id} className={`border-b border-warm-50 last:border-0 transition-colors ${isActive ? 'hover:bg-primary-100' : 'bg-warm-50/30 opacity-70'}`}>
                     <td className="px-4 py-3 code-main">{row.codigo}</td>
                     <td className="px-4 py-3 text-warm-700">{row.nombre}
                       {row.descripcion && <span className="text-warm-400 text-xs ml-1.5">· {row.descripcion}</span>}
