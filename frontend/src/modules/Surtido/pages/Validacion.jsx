@@ -1660,7 +1660,7 @@ const { data: reasonsData } = useQuery({
       <div className="hidden lg:flex shrink-0 items-start pt-4 pr-2">
         <button
           type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 hover:bg-warm-50 hover:text-primary-600"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
           onClick={() => {
             setSidebarVisible((prev) => {
               const next = !prev
@@ -1676,7 +1676,7 @@ const { data: reasonsData } = useQuery({
 
       {/* Right sidebar: orders with progress */}
       <div className={`${sidebarVisible ? 'hidden lg:flex w-80' : 'hidden'} border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shrink-0 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]`}>
-        <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50">
+        <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50">
           <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
             <Zap className="w-3.5 h-3.5 text-primary-500" /> {t('surtido.validacion.sidebar_title')}
           </h3>

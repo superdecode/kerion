@@ -12,14 +12,7 @@ import Modal from '../../../core/components/common/Modal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { getOrder, createSession, updateSession, scanCode, deleteLastValidationRecord } from '../services/recepcionService'
-
-// ─── Tarima virtual logic ────────────────────────────────────────────────────
-function extractBaseCode(code) {
-  if (!code) return null
-  const str = String(code).trim()
-  const stripped = str.replace(/[-_.]?\d+$/, '')
-  return stripped.length > 0 ? stripped : str
-}
+import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 
 function buildTarimaMap(lines) {
   const map = new Map()
@@ -70,6 +63,7 @@ export default function ValidacionRecepcion() {
   const [historySortKey, setHistorySortKey] = useState('scannedAt')
   const [historySortDir, setHistorySortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [dupModal, setDupModal] = useState({ open: false, code: null, entry: null })
   const [showTarimaConfirm, setShowTarimaConfirm] = useState(false)
   const [tarimaSearch, setTarimaSearch] = useState('')
   const [tarimaFilter, setTarimaFilter] = useState(null)
@@ -238,10 +232,29 @@ export default function ValidacionRecepcion() {
     onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar'),
   })
 
+  const playDupAudio = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+      const osc = ctx.createOscillator(); const gain = ctx.createGain()
+      osc.connect(gain); gain.connect(ctx.destination)
+      osc.frequency.value = 330
+      gain.gain.value = 0.2
+      osc.start(); osc.stop(ctx.currentTime + 0.25)
+    } catch { /* audio not available */ }
+  }, [])
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && e.target.value.trim()) {
-      scanMut.mutate(e.target.value.trim())
+      const code = e.target.value.trim()
       e.target.value = ''
+      const existing = history.find(h => h.code === code)
+      if (existing) {
+        playDupAudio()
+        setDupModal({ open: true, code, entry: existing })
+        refocus()
+        return
+      }
+      scanMut.mutate(code)
     }
   }
 
@@ -261,10 +274,10 @@ export default function ValidacionRecepcion() {
   )
 
   const CHIPS = [
-    { key: null,         label: 'Todos',      count: tarimaStats.length,      inactiveCls: 'bg-warm-100/80 text-warm-600 border-warm-200/80 hover:bg-warm-200/60',        activeCls: 'bg-warm-700 text-white border-warm-700' },
-    { key: 'completo',   label: 'Completo',   count: tarimaCounts.completo,   inactiveCls: 'bg-success-50 text-success-700 border-success-200/60 hover:bg-success-100/70', activeCls: 'bg-success-100 text-success-700 border-success-200' },
-    { key: 'en_proceso', label: 'En proceso', count: tarimaCounts.en_proceso, inactiveCls: 'bg-sky-50 text-sky-700 border-sky-200/60 hover:bg-sky-100/70',                activeCls: 'bg-sky-100 text-sky-700 border-sky-200' },
-    { key: 'pendiente',  label: 'Pendiente',  count: tarimaCounts.pendiente,  inactiveCls: 'bg-warm-100/80 text-warm-500 border-warm-200/80 hover:bg-warm-200/60',        activeCls: 'bg-warm-200 text-warm-700 border-warm-300' },
+    { key: null,         label: 'Todos',     count: tarimaStats.length },
+    { key: 'completo',   label: 'Completo',  count: tarimaCounts.completo },
+    { key: 'en_proceso', label: 'Parcial',   count: tarimaCounts.en_proceso },
+    { key: 'pendiente',  label: 'Pendiente', count: tarimaCounts.pendiente },
   ]
 
   // Shared tarima panel body — design aligned with Dropscan panel
@@ -299,8 +312,8 @@ export default function ValidacionRecepcion() {
           )}
         </div>
 
-        {/* Filter chips — pill/badge style matching Dropscan badge aesthetic */}
-        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+        {/* Filter chips — segmented control (mirrors Surtido's grid pattern, sky theme) */}
+        <div className="grid grid-cols-4 gap-1 rounded-2xl border border-sky-100/70 bg-gradient-to-br from-sky-50/85 via-white to-white p-1.5 shadow-[0_12px_26px_-24px_rgba(14,165,233,0.55)]">
           {CHIPS.map(chip => {
             const isActive = tarimaFilter === chip.key
             return (
@@ -308,12 +321,14 @@ export default function ValidacionRecepcion() {
                 key={String(chip.key)}
                 type="button"
                 onClick={() => setTarimaFilter(chip.key)}
-                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
-                  isActive ? chip.activeCls : chip.inactiveCls
+                className={`w-full min-w-0 px-1 py-1.5 h-9 rounded-xl text-[10px] font-semibold border transition-all flex flex-col items-center justify-center truncate ${
+                  isActive
+                    ? 'bg-white text-sky-700 border-sky-200 shadow-sm ring-1 ring-sky-100'
+                    : 'bg-white/75 text-warm-500 border-transparent hover:border-warm-200 hover:bg-warm-50'
                 }`}
               >
-                {chip.label}
-                <span className={`text-[10px] font-bold tabular-nums ${isActive ? 'opacity-75' : 'opacity-55'}`}>{chip.count}</span>
+                <span className="truncate w-full text-center leading-tight">{chip.label}</span>
+                <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'text-sky-400' : 'text-warm-400'}`}>{chip.count}</span>
               </button>
             )
           })}
@@ -756,6 +771,41 @@ export default function ValidacionRecepcion() {
             })}
           </div>
           {tarimaMap.size > 8 && <p className="text-xs text-warm-400 text-center">+{tarimaMap.size - 8} más...</p>}
+        </div>
+      </Modal>
+
+      {/* ── Duplicate scan block modal ── */}
+      <Modal
+        isOpen={dupModal.open}
+        onClose={() => { setDupModal({ open: false, code: null, entry: null }); refocus() }}
+        title={t('rec.val.dup.title')}
+        icon={AlertCircle}
+        size="sm"
+        footer={
+          <div className="flex justify-end w-full">
+            <button onClick={() => { setDupModal({ open: false, code: null, entry: null }); refocus() }} className="btn-primary">
+              {t('rec.val.dup.confirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">{t('rec.val.dup.body')}</p>
+          <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 space-y-1.5">
+            <p className="font-mono font-bold text-warning-800 text-base break-all">{dupModal.code}</p>
+            {dupModal.entry?.scannedAt && (
+              <p className="text-xs text-warning-700">
+                <span className="font-semibold">{t('rec.val.dup.time')}:</span>{' '}
+                {new Date(dupModal.entry.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </p>
+            )}
+            {dupModal.entry?.scannedBy && dupModal.entry.scannedBy !== '—' && (
+              <p className="text-xs text-warning-700">
+                <span className="font-semibold">{t('rec.val.dup.user')}:</span>{' '}
+                {dupModal.entry.scannedBy}
+              </p>
+            )}
+          </div>
         </div>
       </Modal>
 
