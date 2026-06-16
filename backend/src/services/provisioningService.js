@@ -139,7 +139,7 @@ export async function provisionTenant(requestId, approvedByAdminId) {
             surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
             anormalidades: { registro: 'eliminar', dashboard: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
             despacho: { ordenes: 'eliminar', folios: 'eliminar' },
-            recepcion: { recibir: 'eliminar' },
+            recepcion: { recibir: 'eliminar', validacion: 'eliminar' },
             sistema: { wms: 'eliminar' },
           })]
         )
