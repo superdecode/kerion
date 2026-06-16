@@ -2081,7 +2081,8 @@ router.put('/order-tracking/:obc',
       res.json({ success: true, data: result.rows[0] })
     } catch (err) {
       console.error('PUT order-tracking error:', err.message)
-      res.status(500).json({ success: false, error: 'Error actualizando seguimiento' })
+      const status = err.statusCode || 500
+      res.status(status).json({ success: false, error: err.statusCode ? err.message : 'Error actualizando seguimiento', code: err.code })
     }
   }
 )

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Copy, Check, PackageCheck, ScanBarcode, Printer,
   Download, Trash2, CheckCircle2, Clock, Search, X,
-  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle,
+  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, MapPin,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -184,15 +184,16 @@ export default function RecepcionDetalle() {
   const { order, lines = [] } = data
   const events = eventsData?.events || []
 
-  const totalFromOrder = Number(order.total_cajas || 0)
-  const totalFromLines = lines.length
-  const totalBase = Math.max(totalFromOrder, totalFromLines)
-  const validadasFromLines = lines.filter((l) => l.estado_validacion === 'validada').length
+  const totalBase = Number(order.total_cajas || 0) > 0 ? Number(order.total_cajas) : lines.length
   const validadasFromOrder = Number(order.cajas_validadas || 0)
-  const validadas = Math.max(validadasFromLines, validadasFromOrder)
+  const validadasFromLines = lines.filter((l) => l.estado_validacion === 'validada').length
+  const validadas = validadasFromOrder > 0 ? validadasFromOrder : validadasFromLines
   const faltantes = lines.filter((l) => l.estado_validacion === 'faltante').length
   const pendientes = Math.max(totalBase - validadas - faltantes, 0)
-  const progreso = totalBase > 0 ? Math.min(100, Math.round((validadas / totalBase) * 100)) : 0
+  const progresoRaw = totalBase > 0 ? Math.min(100, (validadas / totalBase) * 100) : 0
+  const progreso = progresoRaw > 0 && progresoRaw < 1
+    ? parseFloat(progresoRaw.toFixed(1))
+    : Math.round(progresoRaw)
 
   const estadoMeta = ESTADO_META[order.estado] ?? ESTADO_META.pendiente_validacion
 
@@ -345,8 +346,11 @@ export default function RecepcionDetalle() {
               )}
               <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 shadow-sm">
                 <span className="text-xs font-bold text-sky-700 tabular-nums">{progreso}%</span>
-                <div className="w-14 h-1.5 rounded-full bg-sky-200/60 overflow-hidden">
-                  <div className="bg-sky-500 h-full rounded-full transition-all duration-700" style={{ width: `${progreso}%` }} />
+                <div className="relative w-14 h-1.5 rounded-full bg-sky-200/60 overflow-hidden">
+                  <div
+                    className="absolute inset-y-0 left-0 bg-sky-500 rounded-full transition-all duration-700"
+                    style={{ width: `${progresoRaw}%` }}
+                  />
                 </div>
               </div>
             </div>
@@ -504,6 +508,7 @@ export default function RecepcionDetalle() {
                       <th className={TH}>#</th>
                       {[
                         ['codigo_escaneado', t('rec.scan.col.codigo')],
+                        ['ubicacion', t('rec.scan.col.ubicacion')],
                         ['match_field', t('rec.scan.col.match_field')],
                         ['scanned_by_nombre', t('rec.scan.col.usuario')],
                         ['scanned_at', t('rec.scan.col.hora')],
@@ -534,6 +539,14 @@ export default function RecepcionDetalle() {
                           <td className="group px-3 py-2.5 font-mono text-xs font-semibold text-warm-700">
                             <CopyInline value={ev.codigo_escaneado} mono />
                           </td>
+                          <td className="px-3 py-2.5">
+                            {ev.ubicacion
+                              ? <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-accent-700 bg-accent-50 border border-accent-100 px-2 py-0.5 rounded-full">
+                                  <MapPin size={9} className="shrink-0" />{ev.ubicacion}
+                                </span>
+                              : <span className="text-xs text-warm-300">—</span>
+                            }
+                          </td>
                           <td className="px-3 py-2.5 text-xs text-warm-500">{ev.match_field || '—'}</td>
                           <td className="px-3 py-2.5 text-xs text-warm-600">{ev.scanned_by_nombre || '—'}</td>
                           <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDateTime(ev.scanned_at)}</td>
@@ -558,7 +571,7 @@ export default function RecepcionDetalle() {
                     })}
                     {filteredEvents.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-3 py-10 text-center text-warm-400 text-sm">{t('common.noData')}</td>
+                        <td colSpan={8} className="px-3 py-10 text-center text-warm-400 text-sm">{t('common.noData')}</td>
                       </tr>
                     )}
                   </tbody>

@@ -142,7 +142,7 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
   const [reviewSearch, setReviewSearch] = useState('')
   const [sortKey, setSortKey] = useState(null)
   const [sortDir, setSortDir] = useState('asc')
-  const [duplicatePrompt, setDuplicatePrompt] = useState(null)
+  const [duplicateError, setDuplicateError] = useState(null)
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -151,8 +151,8 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
 
   const reset = () => {
     setStep('upload'); setRawRows([]); setFileHeaders([]); setMapping({})
-    setMappedRows([]); setReviewSearch(''); setSortKey(null); setSortDir('asc');
-    setDuplicatePrompt(null)
+    setMappedRows([]); setReviewSearch(''); setSortKey(null); setSortDir('asc')
+    setDuplicateError(null)
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -226,12 +226,14 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
     setStep('review')
   }
 
-  const handleConfirm = async (allowDuplicate = false) => {
+  const handleConfirm = async () => {
     if (mappedRows.length === 0) return
-    const preloaderTask = beginPreloader('Importando orden...', 2000)
+    setDuplicateError(null)
+    const count = mappedRows.length
+    const preloaderTask = beginPreloader('Importando orden...', 8000)
     setSubmitting(true)
+    let result
     try {
-      // Extract order-level fields from first row
       const first = mappedRows[0]
       const payload = {
         cliente: first.cliente || null,
@@ -251,41 +253,33 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
           weight_unit: r.weight_unit || null,
         })),
       }
-      let result
-      if (allowDuplicate) {
-        result = await createOrder({
-          ...payload,
-          allow_duplicate_inbound_order: true,
-        })
-      } else {
-        try {
-          result = await createOrder(payload)
-        } catch (err) {
-          const duplicateInboundOrder = err.response?.status === 409 && err.response?.data?.duplicateInboundOrder
-          if (!duplicateInboundOrder) throw err
-
-          setDuplicatePrompt({
-            message: err.response?.data?.error || 'La IB Order ya existe.',
-            existingOrder: err.response?.data?.existingOrder || null,
-            confirmed: false,
-          })
-          return
-        }
-      }
-
-      reset()
-      onClose?.()
-      toast.success(`Orden ${result.order.folio} creada con ${mappedRows.length} cajas`)
-      try {
-        await Promise.resolve(onCreated?.(result.order))
-      } catch (callbackError) {
-        console.error('[recepcion] post-import callback:', callbackError)
-      }
+      result = await createOrder(payload)
     } catch (err) {
-      toast.error(err.response?.data?.error || t('rec.import.err.file'))
+      if (err.response?.status === 409 && err.response?.data?.duplicateInboundOrder) {
+        setDuplicateError(err.response.data)
+        return
+      }
+      const isTimeout = !err.response && (err.code === 'ECONNABORTED' || /timeout/i.test(err.message || ''))
+      if (isTimeout) {
+        toast.error('La solicitud tardó demasiado. Verifica en la lista si la orden fue creada antes de reintentar.')
+      } else {
+        toast.error(err.response?.data?.error || t('rec.import.err.file'))
+      }
+      return
     } finally {
       endPreloader(preloaderTask)
       setSubmitting(false)
+    }
+
+    // Success path — reset and navigate
+    const order = result?.order
+    reset()
+    onClose?.()
+    toast.success(`Orden ${order?.folio ?? ''} creada con ${count} cajas`)
+    try {
+      await Promise.resolve(onCreated?.(order))
+    } catch (callbackError) {
+      console.error('[recepcion] post-import callback:', callbackError)
     }
   }
 
@@ -328,13 +322,13 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
                   </span>
                 )}
               </span>
-              <button onClick={() => { reset() }} className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">
+              <button onClick={reset} className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">
                 {t('rec.import.btn.cancel')}
               </button>
               <button
                 onClick={handleConfirm}
                 disabled={submitting || mappedRows.length === 0}
-                className="px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold disabled:opacity-50"
+                className="btn-primary text-sm disabled:opacity-50"
               >
                 {submitting ? t('common.loading') : t('rec.import.btn.confirm')}
               </button>
@@ -364,6 +358,18 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
 
         {step === 'review' && (
           <div className="space-y-3">
+            {duplicateError && (
+              <div className="flex items-start gap-3 rounded-xl border border-danger-200 bg-danger-50 px-4 py-3">
+                <AlertCircle className="w-4 h-4 text-danger-600 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-danger-700">Orden duplicada — no se puede importar</p>
+                  <p className="text-xs text-danger-600 mt-0.5">{duplicateError.error}</p>
+                  {duplicateError.existingOrder?.folio && (
+                    <p className="text-xs font-mono text-danger-800 mt-1">Orden existente: {duplicateError.existingOrder.folio}</p>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-success-600" />
               <span className="text-sm font-semibold text-success-700">
@@ -488,47 +494,6 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
         onConfirm={handleMappingConfirm}
       />
 
-      <Modal
-        isOpen={!!duplicatePrompt}
-        onClose={() => setDuplicatePrompt(null)}
-        title="IB Order duplicada"
-        icon={AlertCircle}
-        size="md"
-        footer={
-          <div className="flex w-full justify-end gap-2">
-            <button
-              onClick={() => setDuplicatePrompt(null)}
-              className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              onClick={() => {
-                setDuplicatePrompt(null)
-                void handleConfirm(true)
-              }}
-              className="px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold"
-            >
-              Continuar de todas formas
-            </button>
-          </div>
-        }
-      >
-        {duplicatePrompt ? (
-          <div className="space-y-3 text-sm text-warm-700">
-            <p>{duplicatePrompt.message}</p>
-            {duplicatePrompt.existingOrder?.folio ? (
-              <div className="rounded-xl border border-warning-200 bg-warning-50 px-3 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-warning-700">Orden existente</p>
-                <p className="mt-1 font-mono text-sm text-warm-900">{duplicatePrompt.existingOrder.folio}</p>
-              </div>
-            ) : null}
-            <p className="text-xs text-warm-500">
-              Si continúas, se importará una nueva orden aunque la IB Order ya exista.
-            </p>
-          </div>
-        ) : null}
-      </Modal>
     </>
   )
 }

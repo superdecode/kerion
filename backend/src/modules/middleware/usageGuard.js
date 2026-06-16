@@ -69,7 +69,7 @@ export async function checkModuleLimitForUpdate(client, tenantId, limitField, co
      FROM tenants t
      LEFT JOIN plans p ON t.current_plan_id = p.id
      WHERE t.id = $1
-     FOR UPDATE`,
+     FOR UPDATE OF t`,
     [tenantId]
   )
   const limit = planRes.rows[0]?.lim ?? null

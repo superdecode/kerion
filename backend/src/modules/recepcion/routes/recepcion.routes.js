@@ -90,13 +90,13 @@ router.post('/orders',
   requirePermission('recepcion.recibir', 'crear'),
   async (req, res) => {
     try {
-      const { cliente, inbound_order_no, tracking_no, reference_no, lines, allow_duplicate_inbound_order } = req.body
+      const { cliente, inbound_order_no, tracking_no, reference_no, lines } = req.body
       if (!Array.isArray(lines) || lines.length === 0) {
         return res.status(400).json({ error: 'Se requieren líneas de recepción' })
       }
 
       const inboundOrderNo = String(inbound_order_no || '').trim()
-      if (inboundOrderNo && !allow_duplicate_inbound_order) {
+      if (inboundOrderNo) {
         const duplicateRes = await req.tQuery(
           `SELECT id, folio
            FROM inbound_orders
@@ -123,19 +123,24 @@ router.post('/orders',
       )
       const order = orderRes.rows[0]
 
-      for (const line of lines) {
-        await req.tQuery(
-          `INSERT INTO inbound_lines (tenant_id, order_id, box_type, custom_box_barcode, sku, qty_per_box, length_oms, width_oms, height_oms, dimension_unit, weight_oms, weight_unit)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-          [
-            req.tenantId, order.id,
-            line.box_type || null, line.custom_box_barcode || null,
-            line.sku || null, line.qty_per_box || null,
-            line.length_oms || null, line.width_oms || null, line.height_oms || null,
-            line.dimension_unit || null, line.weight_oms || null, line.weight_unit || null,
-          ]
-        )
-      }
+      // Bulk INSERT — one round-trip regardless of line count
+      const COLS = 12
+      const placeholders = lines.map((_, i) => {
+        const b = i * COLS + 1
+        return `($${b},$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11})`
+      }).join(',')
+      const lineParams = lines.flatMap(l => [
+        req.tenantId, order.id,
+        l.box_type || null, l.custom_box_barcode || null,
+        l.sku || null, l.qty_per_box || null,
+        l.length_oms || null, l.width_oms || null, l.height_oms || null,
+        l.dimension_unit || null, l.weight_oms || null, l.weight_unit || null,
+      ])
+      await req.tQuery(
+        `INSERT INTO inbound_lines (tenant_id, order_id, box_type, custom_box_barcode, sku, qty_per_box, length_oms, width_oms, height_oms, dimension_unit, weight_oms, weight_unit)
+         VALUES ${placeholders}`,
+        lineParams
+      )
 
       auditLog(req, 'RECEPCION_ORDER_CREATE', 'inbound_orders', order.id, { folio, total_cajas: lines.length })
       res.status(201).json({ order })

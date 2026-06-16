@@ -107,12 +107,14 @@ router.patch('/orders/:id/sessions/:sid',
   requirePermission('recepcion.validacion', 'actualizar'),
   async (req, res) => {
     try {
-      const { total_escaneado } = req.body
+      const { total_escaneado, ubicacion_nota } = req.body
       const result = await req.tQuery(
         `UPDATE inbound_validation_sessions
-         SET fin_at=now(), total_escaneado=COALESCE($3, total_escaneado)
+         SET fin_at=now(),
+             total_escaneado=COALESCE($3, total_escaneado),
+             ubicacion_nota=COALESCE($4, ubicacion_nota)
          WHERE id=$1 AND tenant_id=$2 RETURNING *`,
-        [req.params.sid, req.tenantId, total_escaneado || null]
+        [req.params.sid, req.tenantId, total_escaneado || null, ubicacion_nota || null]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Sesión no encontrada' })
       res.json({ session: result.rows[0] })
@@ -128,7 +130,7 @@ router.post('/orders/:id/scan',
   requirePermission('recepcion.validacion', 'actualizar'),
   async (req, res) => {
     try {
-      const { codigo_escaneado } = req.body
+      const { codigo_escaneado, ubicacion } = req.body
       if (!codigo_escaneado) return res.status(400).json({ error: 'Se requiere el código escaneado' })
 
       const rawCode = String(codigo_escaneado).trim()
@@ -170,10 +172,10 @@ router.post('/orders/:id/scan',
 
       if (!line) {
         const eventRes = await req.tQuery(
-          `INSERT INTO inbound_scan_events (tenant_id, order_id, codigo_escaneado, resultado, scanned_by)
-           VALUES ($1,$2,$3,'no_encontrado',$4)
+          `INSERT INTO inbound_scan_events (tenant_id, order_id, codigo_escaneado, resultado, scanned_by, ubicacion)
+           VALUES ($1,$2,$3,'no_encontrado',$4,$5)
            RETURNING *`,
-          [req.tenantId, req.params.id, normalizedCode || rawCode, req.user.id]
+          [req.tenantId, req.params.id, normalizedCode || rawCode, req.user.id, ubicacion || null]
         )
         return res.json({
           resultado: 'no_encontrado',
@@ -184,10 +186,10 @@ router.post('/orders/:id/scan',
 
       if (line.estado_validacion === 'validada') {
         const eventRes = await req.tQuery(
-          `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by)
-           VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7)
+          `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
+           VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
            RETURNING *`,
-          [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id]
+          [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
         )
         return res.json({
           resultado: 'duplicado',
@@ -204,10 +206,10 @@ router.post('/orders/:id/scan',
         [line.id, req.tenantId, req.user.id]
       )
       const eventRes = await req.tQuery(
-        `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by)
-         VALUES ($1,$2,$3,$4,$5,$6,'correcto',$7)
+        `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
+         VALUES ($1,$2,$3,$4,$5,$6,'correcto',$7,$8)
          RETURNING *`,
-        [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id]
+        [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
       )
 
       // Update order counters

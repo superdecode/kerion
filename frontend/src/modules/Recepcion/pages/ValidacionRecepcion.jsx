@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft, ScanBarcode, CheckCircle2, XCircle, AlertCircle,
   Layers, PackageCheck, X, Square, ArrowUp, ArrowDown, ArrowUpDown, Trash2,
-  ChevronDown, PanelRightClose, PanelRightOpen, Search,
+  ChevronDown, PanelRightClose, PanelRightOpen, Search, LayoutList, MapPin, Check,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -51,6 +51,7 @@ export default function ValidacionRecepcion() {
 
   const scanRefDesktop = useRef(null)
   const scanRefMobile  = useRef(null)
+  const locationRef    = useRef(null)
 
   const [sessionId, setSessionId] = useState(null)
   const [withTarimas, setWithTarimas] = useState(false)
@@ -64,10 +65,19 @@ export default function ValidacionRecepcion() {
   const [historySortDir, setHistorySortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [dupModal, setDupModal] = useState({ open: false, code: null, entry: null })
+  const [rejectModal, setRejectModal] = useState({ open: false, code: null })
   const [showTarimaConfirm, setShowTarimaConfirm] = useState(false)
   const [tarimaSearch, setTarimaSearch] = useState('')
   const [tarimaFilter, setTarimaFilter] = useState(null)
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
+
+  // Ubicacion mode (when withTarimas is false)
+  const [selectedUbicacion, setSelectedUbicacion] = useState(null)
+  const [ubicacionConfirmed, setUbicacionConfirmed] = useState(false)
+  const [locationInputValue, setLocationInputValue] = useState('')
+  const [locationBatches, setLocationBatches] = useState([])
+  const [ubicacionSearch, setUbicacionSearch] = useState('')
+  const [mobileUbicacionPanelOpen, setMobileUbicacionPanelOpen] = useState(false)
 
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['recepcion-order', id],
@@ -130,13 +140,54 @@ export default function ValidacionRecepcion() {
     })
   }, [])
 
+  // Ubicacion groups: combine completed batches + current active batch
+  const allUbicacionGroups = useMemo(() => {
+    const activeCodes = history.filter(h => h.result === 'correcto')
+    const allBatches = [
+      ...locationBatches,
+      ...(activeCodes.length > 0 ? [{ ubicacion: selectedUbicacion, codes: activeCodes }] : []),
+    ]
+    const map = new Map()
+    for (const batch of allBatches) {
+      const key = batch.ubicacion ?? ''
+      const existing = map.get(key) ?? { ubicacion: batch.ubicacion, codes: [] }
+      existing.codes = [...existing.codes, ...batch.codes]
+      map.set(key, existing)
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (!a.ubicacion) return 1
+      if (!b.ubicacion) return -1
+      return a.ubicacion.localeCompare(b.ubicacion)
+    })
+  }, [locationBatches, history, selectedUbicacion])
+
+  const filteredUbicacionGroups = useMemo(() => {
+    const q = ubicacionSearch.trim().toLowerCase()
+    if (!q) return allUbicacionGroups
+    return allUbicacionGroups
+      .map(g => ({
+        ...g,
+        codes: g.codes.filter(c =>
+          c.code.toLowerCase().includes(q) ||
+          (g.ubicacion ?? '').toLowerCase().includes(q)
+        ),
+      }))
+      .filter(g => g.codes.length > 0 || (g.ubicacion ?? '').toLowerCase().includes(q))
+  }, [allUbicacionGroups, ubicacionSearch])
+
+  const totalUbicacionCodes = allUbicacionGroups.reduce((s, g) => s + g.codes.length, 0)
+
   const refocus = useCallback(() => {
     setTimeout(() => {
+      if (!withTarimas && !ubicacionConfirmed) {
+        locationRef.current?.focus()
+        return
+      }
       const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
       const ref = isMobile ? scanRefMobile : scanRefDesktop
       ref.current?.focus()
     }, 50)
-  }, [])
+  }, [withTarimas, ubicacionConfirmed])
 
   useEffect(() => { if (scanning) refocus() }, [scanning, refocus])
 
@@ -161,7 +212,7 @@ export default function ValidacionRecepcion() {
 
   const endSession = async () => {
     if (sessionId && sessionId !== 'local') {
-      try { await updateSession(id, sessionId) } catch { /* best-effort */ }
+      try { await updateSession(id, sessionId, { ubicacion_nota: selectedUbicacion || null }) } catch { /* best-effort */ }
     }
     setSessionId(null)
     setScanning(false)
@@ -174,14 +225,18 @@ export default function ValidacionRecepcion() {
   }
 
   const scanMut = useMutation({
-    mutationFn: (codigo) => scanCode(id, { codigo_escaneado: codigo, session_id: sessionId, tarimas_enabled: withTarimas }),
-    onSuccess: (data) => {
+    mutationFn: ({ codigo, ubicacion }) => scanCode(id, { codigo_escaneado: codigo, session_id: sessionId, tarimas_enabled: withTarimas, ubicacion: ubicacion || null }),
+    onSuccess: (data, variables) => {
       const ev = data.event
       setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado })
+      if (ev.resultado === 'no_encontrado') {
+        setRejectModal({ open: true, code: ev.codigo_escaneado })
+      }
       if (ev.resultado === 'correcto') {
         setHistory(prev => [{
           id: ev.id, result: ev.resultado, code: ev.codigo_escaneado,
           sku: ev.sku_asociado, scannedAt: ev.scanned_at, scannedBy: ev.scanned_by_nombre || '—',
+          ubicacion: variables.ubicacion || null,
         }, ...prev.slice(0, 49)])
         if (data.line) {
           qc.setQueryData(['recepcion-order', id], (cur) => {
@@ -244,6 +299,7 @@ export default function ValidacionRecepcion() {
   }, [])
 
   const handleKeyDown = (e) => {
+    if (!withTarimas && !ubicacionConfirmed) return
     if (e.key === 'Enter' && e.target.value.trim()) {
       const code = e.target.value.trim()
       e.target.value = ''
@@ -254,9 +310,35 @@ export default function ValidacionRecepcion() {
         refocus()
         return
       }
-      scanMut.mutate(code)
+      scanMut.mutate({ codigo: code, ubicacion: selectedUbicacion })
     }
   }
+
+  const tryConfirmUbicacion = useCallback((value) => {
+    const ub = value.trim() || null
+    setSelectedUbicacion(ub)
+    setUbicacionConfirmed(true)
+    setTimeout(() => {
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
+      const ref = isMobile ? scanRefMobile : scanRefDesktop
+      ref.current?.focus()
+    }, 80)
+  }, [])
+
+  const completarUbicacion = useCallback(() => {
+    const batchCodes = history.filter(h => h.result === 'correcto').map(h => ({
+      id: h.id, code: h.code, scannedAt: h.scannedAt,
+    }))
+    if (batchCodes.length > 0 || selectedUbicacion) {
+      setLocationBatches(prev => [...prev, { ubicacion: selectedUbicacion, codes: batchCodes }])
+    }
+    setHistory([])
+    setLastResult(null)
+    setUbicacionConfirmed(false)
+    setLocationInputValue('')
+    setSelectedUbicacion(null)
+    setTimeout(() => locationRef.current?.focus(), 80)
+  }, [history, selectedUbicacion])
 
   const handleHistorySort = (key) => {
     if (historySortKey === key) setHistorySortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -279,6 +361,97 @@ export default function ValidacionRecepcion() {
     { key: 'en_proceso', label: t('rec.status.parcial'),          count: tarimaCounts.en_proceso },
     { key: 'pendiente',  label: t('rec.line.status.pendiente'),   count: tarimaCounts.pendiente },
   ]
+
+  // Ubicacion panel body — shown when withTarimas is false
+  const renderUbicacionPanelBody = () => (
+    <>
+      <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50 space-y-2.5 shrink-0">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-bold text-warm-700">{t('rec.val.ubicacion.panel.title')} · {allUbicacionGroups.length}</h4>
+          <span className="text-[10px] font-semibold text-warm-400 tabular-nums">{totalUbicacionCodes} {t('rec.scan.historial').toLowerCase()}</span>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-2xl border border-accent-100/80 bg-gradient-to-r from-white via-accent-50/55 to-white px-3 h-10 shadow-sm transition-all focus-within:border-accent-300 focus-within:ring-2 focus-within:ring-accent-100">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-100/80 shadow-inner shrink-0">
+            <Search className="w-3 h-3 text-accent-500" />
+          </div>
+          <input
+            type="text"
+            value={ubicacionSearch}
+            onChange={e => setUbicacionSearch(e.target.value)}
+            placeholder={t('rec.val.ubicacion.panel.search')}
+            className="flex-1 min-w-0 bg-transparent text-xs text-warm-700 outline-none placeholder:text-warm-400 font-mono"
+          />
+          {ubicacionSearch && (
+            <button type="button" onClick={() => setUbicacionSearch('')} className="text-warm-300 hover:text-warm-500 shrink-0">
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        {ubicacionSearch && (
+          <p className="text-[10px] text-warm-400 text-right leading-none">
+            {filteredUbicacionGroups.length} de {allUbicacionGroups.length}
+          </p>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
+        {filteredUbicacionGroups.length === 0 ? (
+          <div className="py-8 text-center text-xs text-warm-400">
+            {ubicacionSearch ? t('rec.val.ubicacion.panel.no_results') : t('rec.val.ubicacion.panel.sin_registros')}
+          </div>
+        ) : filteredUbicacionGroups.map((g, gi) => {
+          const isActive = g.ubicacion === selectedUbicacion && ubicacionConfirmed
+          return (
+            <div key={g.ubicacion ?? '__sin__'} className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
+              isActive
+                ? 'bg-accent-600 border-transparent ring-2 ring-accent-700 ring-offset-1'
+                : 'border-warm-200/90 bg-white hover:border-accent-100 hover:bg-gradient-to-br hover:from-white hover:to-accent-50/30'
+            }`}>
+              <div className="flex items-center gap-2.5 px-3 py-2.5">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                  isActive ? 'bg-white/25' : 'bg-accent-50'
+                }`}>
+                  <MapPin className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-accent-600'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-semibold truncate ${isActive ? 'text-white' : 'text-warm-800'}`}>
+                    {g.ubicacion || t('rec.val.ubicacion.panel.sin_ub')}
+                  </p>
+                  <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : 'text-warm-400'}`}>
+                    {g.codes.length} {t('rec.scan.historial').toLowerCase()}
+                  </p>
+                </div>
+                {isActive && (
+                  <span className="badge text-[9px] bg-white/25 text-white border-0 shrink-0">ACTIVA</span>
+                )}
+              </div>
+              {g.codes.length > 0 && (
+                <div className={`border-t divide-y max-h-36 overflow-y-auto ${
+                  isActive ? 'border-white/20 divide-white/10' : 'border-warm-100 divide-warm-50'
+                }`}>
+                  {g.codes.map((c, ci) => (
+                    <div key={c.id || ci} className={`flex items-center gap-2 px-3 py-1.5 ${
+                      isActive ? 'hover:bg-white/10' : 'hover:bg-warm-50/50'
+                    }`}>
+                      <Check className={`w-3 h-3 shrink-0 ${isActive ? 'text-white/60' : 'text-success-400'}`} />
+                      <span className={`font-mono text-[11px] truncate flex-1 ${isActive ? 'text-white/80' : 'text-warm-600'}`}>
+                        {c.code}
+                      </span>
+                      {c.scannedAt && (
+                        <span className={`text-[10px] tabular-nums shrink-0 ${isActive ? 'text-white/40' : 'text-warm-300'}`}>
+                          {new Date(c.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
 
   // Shared tarima panel body — design aligned with Dropscan panel
   const renderPanelBody = () => (
@@ -446,13 +619,21 @@ export default function ValidacionRecepcion() {
             </button>
             <div className="min-w-0">
               <span className="font-mono font-black text-sm sm:text-base text-warm-900 leading-none truncate">{order.folio}</span>
-              {order.cliente && <span className="text-xs text-warm-400 hidden sm:inline ml-2">· {order.cliente}</span>}
             </div>
           </div>
         }
         icon={PackageCheck}
         actions={
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Hub navigation — go back to main scan list */}
+            <button
+              type="button"
+              onClick={() => navigate('/recepcion/recibir')}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 text-warm-500 hover:bg-warm-50 hover:text-sky-600 transition-colors"
+              title="Lista de órdenes"
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+            </button>
             {/* Tarimas toggle — on mobile when active: opens panel; on desktop: toggles off */}
             <button
               type="button"
@@ -473,6 +654,29 @@ export default function ValidacionRecepcion() {
               <span className="hidden sm:inline">{withTarimas ? t('rec.tarimas.n_tarimas').replace('{n}', totalTarimas) : t('rec.tarimas.toggle')}</span>
               {withTarimas && <span className="sm:hidden">{totalTarimas}T</span>}
             </button>
+            {/* Ubicacion panel button (when not in tarimas mode) */}
+            {!withTarimas && allUbicacionGroups.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setMobileUbicacionPanelOpen(true)}
+                className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-accent-200 bg-accent-50 text-xs font-semibold text-accent-700 transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                <span>{allUbicacionGroups.length}</span>
+              </button>
+            )}
+            {/* Completar ubicacion (when confirmed and has scans) */}
+            {!withTarimas && ubicacionConfirmed && history.filter(h => h.result === 'correcto').length > 0 && (
+              <button
+                type="button"
+                onClick={completarUbicacion}
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-accent-300 bg-accent-600 text-xs font-semibold text-white hover:bg-accent-700 transition-colors"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{t('rec.val.btn.completar')}</span>
+                <span className="sm:hidden">OK</span>
+              </button>
+            )}
             {/* Terminar */}
             <button
               onClick={endSession}
@@ -539,8 +743,74 @@ export default function ValidacionRecepcion() {
               )}
             </div>
 
+            {/* ── Ubicacion input (desktop, when not in tarimas mode) ── */}
+            {!withTarimas && (
+              <div className="hidden sm:block card p-3 sm:p-4 sticky top-0 z-[10] bg-white/95 backdrop-blur-sm">
+                {!ubicacionConfirmed ? (
+                  <>
+                    <p className="text-xs font-semibold text-accent-700 mb-2 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5" />
+                      {t('rec.val.ubicacion.label')}
+                    </p>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-300 pointer-events-none" />
+                        <input
+                          ref={locationRef}
+                          type="text"
+                          value={locationInputValue}
+                          onChange={e => setLocationInputValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') tryConfirmUbicacion(locationInputValue) }}
+                          placeholder={t('rec.val.ubicacion.placeholder')}
+                          className="w-full pl-12 pr-4 py-3.5 text-lg bg-white border-2 border-accent-200 rounded-2xl focus:border-accent-500 focus:ring-2 focus:ring-accent-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
+                          autoComplete="off"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          inputMode="none"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => tryConfirmUbicacion(locationInputValue)}
+                        disabled={!locationInputValue.trim()}
+                        className="px-5 py-2 rounded-2xl bg-accent-600 text-white text-sm font-semibold hover:bg-accent-700 disabled:opacity-40 transition-colors"
+                      >
+                        {t('rec.val.ubicacion.confirm')}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => tryConfirmUbicacion('')}
+                      className="mt-1.5 text-[11px] text-warm-400 hover:text-warm-600 transition-colors"
+                    >
+                      {t('rec.val.ubicacion.skip')}
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center gap-2 flex-1 px-3 py-2.5 rounded-xl border ${
+                      selectedUbicacion ? 'bg-accent-50 border-accent-200' : 'bg-warm-50 border-warm-200'
+                    }`}>
+                      <MapPin className={`w-4 h-4 shrink-0 ${selectedUbicacion ? 'text-accent-600' : 'text-warm-400'}`} />
+                      <span className={`text-sm font-mono font-semibold ${selectedUbicacion ? 'text-accent-700' : 'text-warm-500'}`}>
+                        {selectedUbicacion || t('rec.val.ubicacion.panel.sin_ub')}
+                      </span>
+                      <span className="text-[11px] text-accent-500 ml-1">{t('rec.val.ubicacion.active')}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
+                      className="text-xs text-warm-400 hover:text-warm-600 transition-colors px-2 py-1.5 rounded-lg hover:bg-warm-100"
+                    >
+                      {t('rec.val.ubicacion.edit')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── Desktop scan input ── */}
-            <div className="hidden sm:block card p-3 sm:p-4 sticky top-0 z-[10] bg-white/95 backdrop-blur-sm">
+            <div className={`hidden sm:block card p-3 sm:p-4 sticky top-0 z-[10] bg-white/95 backdrop-blur-sm ${!withTarimas && !ubicacionConfirmed ? 'opacity-40 pointer-events-none' : ''}`}>
               <div className="relative">
                 <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300 pointer-events-none" />
                 <input ref={scanRefDesktop} {...scanInputProps} />
@@ -616,6 +886,7 @@ export default function ValidacionRecepcion() {
                             </button>
                           </th>
                         ))}
+                        {!withTarimas && <th className="table-header">{t('rec.scan.col.ubicacion')}</th>}
                         {withTarimas && <th className="table-header">{t('rec.tarimas.label')}</th>}
                         <th className="table-header text-right">{t('common.actions')}</th>
                       </tr>
@@ -633,6 +904,16 @@ export default function ValidacionRecepcion() {
                             <td className="px-3 py-2 text-warm-500 whitespace-nowrap">
                               {h.scannedAt ? new Date(h.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
                             </td>
+                            {!withTarimas && (
+                              <td className="px-3 py-2">
+                                {h.ubicacion
+                                  ? <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-accent-700 bg-accent-50 border border-accent-100 px-2 py-0.5 rounded-full">
+                                      <MapPin size={9} className="shrink-0" />{h.ubicacion}
+                                    </span>
+                                  : <span className="text-warm-300">—</span>
+                                }
+                              </td>
+                            )}
                             {withTarimas && (
                               <td className="px-3 py-2">
                                 {tarimaNum && tc ? (
@@ -663,8 +944,8 @@ export default function ValidacionRecepcion() {
           </div>
         </div>
 
-        {/* ── Panel toggle button (desktop) — mirrors Dropscan h-10 w-10 shadow-sm ── */}
-        {withTarimas && (
+        {/* ── Panel toggle button (desktop) ── */}
+        {(withTarimas || (!withTarimas && allUbicacionGroups.length > 0)) && (
           <div className="hidden lg:flex shrink-0 items-start pt-4 pr-1">
             <button
               type="button"
@@ -677,10 +958,10 @@ export default function ValidacionRecepcion() {
           </div>
         )}
 
-        {/* ── Tarimas side panel (desktop lg+) — mirrors Dropscan w-80 backdrop-blur-2xl ── */}
-        {withTarimas && sidebarVisible && (
+        {/* ── Side panel (desktop lg+) ── */}
+        {sidebarVisible && (withTarimas || (!withTarimas && allUbicacionGroups.length > 0)) && (
           <div className="hidden lg:flex w-80 flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-sky-50/20 backdrop-blur-2xl shrink-0 animate-fade-in shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.38)]">
-            {renderPanelBody()}
+            {withTarimas ? renderPanelBody() : renderUbicacionPanelBody()}
           </div>
         )}
 
@@ -688,7 +969,53 @@ export default function ValidacionRecepcion() {
 
       {/* ── Mobile scan input ── */}
       <div className="sm:hidden shrink-0 bg-white border-t border-warm-100 px-3 py-2.5" style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom, 0px))' }}>
-        <div className="relative">
+        {/* Location input — shown when not in tarimas mode and ubicacion not yet confirmed */}
+        {!withTarimas && !ubicacionConfirmed && (
+          <div className="mb-2">
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-accent-400 pointer-events-none" />
+              <input
+                ref={locationRef}
+                type="text"
+                value={locationInputValue}
+                onChange={e => setLocationInputValue(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); tryConfirmUbicacion(locationInputValue) } }}
+                placeholder={t('rec.val.ubicacion.placeholder')}
+                className="w-full pl-9 pr-16 py-2.5 text-sm border border-accent-300 rounded-xl bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-400 placeholder:text-accent-300"
+              />
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => tryConfirmUbicacion(locationInputValue)}
+                  className="px-2 py-1 text-[11px] font-semibold bg-accent-600 text-white rounded-lg"
+                >
+                  {t('rec.val.ubicacion.confirm')}
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => tryConfirmUbicacion('')}
+              className="mt-1 text-[10px] text-warm-400 hover:text-warm-600 w-full text-center"
+            >
+              {t('rec.val.ubicacion.skip')}
+            </button>
+          </div>
+        )}
+
+        {/* Active ubicacion badge on mobile */}
+        {!withTarimas && ubicacionConfirmed && (
+          <div className="mb-2 flex items-center justify-between px-1">
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-accent-700 bg-accent-50 border border-accent-200 px-2 py-1 rounded-full">
+              <MapPin size={10} />{selectedUbicacion || t('rec.val.ubicacion.skip')}
+            </span>
+            <button type="button" onClick={completarUbicacion} className="text-[10px] text-accent-600 hover:text-accent-800 font-medium">
+              {t('rec.val.btn.completar')}
+            </button>
+          </div>
+        )}
+
+        <div className={`relative ${!withTarimas && !ubicacionConfirmed ? 'opacity-40 pointer-events-none' : ''}`}>
           <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300 pointer-events-none" />
           <input ref={scanRefMobile} {...scanInputProps} />
         </div>
@@ -734,6 +1061,45 @@ export default function ValidacionRecepcion() {
               {renderPanelBody()}
 
               {/* Safe area bottom padding */}
+              <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Mobile ubicacion bottom sheet ── */}
+      <AnimatePresence>
+        {!withTarimas && mobileUbicacionPanelOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+              onClick={() => setMobileUbicacionPanelOpen(false)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="lg:hidden fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
+              style={{ maxHeight: '82dvh' }}
+            >
+              <div className="flex justify-center pt-3 pb-1 shrink-0">
+                <div className="w-10 h-1 bg-warm-200 rounded-full" />
+              </div>
+              <div className="flex justify-end px-3 pb-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMobileUbicacionPanelOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              {renderUbicacionPanelBody()}
               <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
             </motion.div>
           </>
@@ -826,6 +1192,30 @@ export default function ValidacionRecepcion() {
         }
       >
         <p className="text-sm text-warm-700">{t('rec.val.delete.desc')}</p>
+      </Modal>
+
+      {/* ── Rejection blocking modal ── */}
+      <Modal
+        isOpen={rejectModal.open}
+        onClose={() => { setRejectModal({ open: false, code: null }); refocus() }}
+        title={t('rec.val.reject.title')}
+        icon={XCircle}
+        size="sm"
+        footer={
+          <div className="flex justify-end w-full">
+            <button onClick={() => { setRejectModal({ open: false, code: null }); refocus() }} className="btn-danger">
+              {t('rec.val.reject.confirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">{t('rec.val.reject.body')}</p>
+          <div className="rounded-xl border border-danger-200 bg-danger-50 p-3">
+            <p className="font-mono font-bold text-danger-800 text-base break-all">{rejectModal.code}</p>
+          </div>
+          <p className="text-xs text-warm-500 leading-relaxed">{t('rec.val.reject.hint')}</p>
+        </div>
       </Modal>
 
     </div>

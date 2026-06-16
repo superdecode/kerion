@@ -21,7 +21,7 @@ import {
   addOrderScan, deleteLastOrderScan,
 } from '../services/despachoService'
 import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
-import { printFolio } from '../utils/printFolio'
+import FolioPreviewModal from '../components/FolioPreviewModal'
 
 const FOLIO_ESTADO_META = {
   borrador:   { label: 'Borrador',   cls: 'bg-warm-100 text-warm-600',       icon: Clock },
@@ -286,6 +286,7 @@ export default function FolioDetalle() {
   const [validatingOrderId, setValidatingOrderId] = useState(null)
 
   const [showConfirmCancel, setShowConfirmCancel] = useState(false)
+  const [showPrintModal, setShowPrintModal] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['despacho-folio', folioId],
@@ -395,11 +396,7 @@ export default function FolioDetalle() {
     setEditMode(true)
   }
 
-  const handlePrint = () => {
-    if (!folio) return
-    const result = printFolio({ folio, orders })
-    if (!result.success) addToast(result.message, 'error')
-  }
+  const handlePrint = () => setShowPrintModal(true)
 
   // Lookup order in sheets
   const handleLookup = useCallback(async (code) => {
@@ -1140,6 +1137,14 @@ export default function FolioDetalle() {
           </div>
         )}
       </div>
+
+      {/* ── Print preview modal ───────────────────────────────────────────── */}
+      <FolioPreviewModal
+        isOpen={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        folio={folio}
+        orders={orders}
+      />
 
       {/* ── Cancel confirm modal ───────────────────────────────────────────── */}
       <Modal

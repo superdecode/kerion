@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import {
@@ -122,6 +122,14 @@ const getAdminNav = (t) => [
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState(new Set())
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const handler = (e) => setCollapsed(e.matches)
+    if (mq.matches) setCollapsed(true)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
 
   const { user, canView, isModuleEnabled, hasPermission } = useAuthStore()
   const { t } = useI18nStore()
