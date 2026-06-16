@@ -15,3 +15,6 @@ export const getScanEvents = (orderId) => api.get(`/recepcion/orders/${orderId}/
 export const deleteLastValidationRecord = (orderId) => api.delete(`/recepcion/orders/${orderId}/scan-events/last-validation`).then(r => r.data)
 export const getListaRecepcion = (orderId) => api.get(`/recepcion/orders/${orderId}/lista-recepcion`).then(r => r.data)
 export const searchByCode = (code) => api.get('/recepcion/orders/search-by-code', { params: { code } }).then(r => r.data)
+export const getNovedades = (orderId) => api.get(`/recepcion/orders/${orderId}/novedades`).then(r => r.data)
+export const createNovedad = (orderId, payload) => api.post(`/recepcion/orders/${orderId}/novedades`, payload).then(r => r.data)
+export const deleteNovedad = (orderId, novedadId) => api.delete(`/recepcion/orders/${orderId}/novedades/${novedadId}`).then(r => r.data)

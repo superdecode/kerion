@@ -343,4 +343,62 @@ router.delete('/orders/:id/scan-events/last-validation',
   }
 )
 
+// GET /orders/:id/novedades
+router.get('/orders/:id/novedades',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'ver'),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `SELECT n.*, u.nombre_completo AS created_by_nombre
+         FROM inbound_novedades n
+         LEFT JOIN usuarios u ON u.id = n.created_by
+         WHERE n.order_id=$1 AND n.tenant_id=$2
+         ORDER BY n.created_at DESC`,
+        [req.params.id, req.tenantId]
+      )
+      res.json({ novedades: result.rows })
+    } catch (err) {
+      res.status(500).json({ error: 'Error al obtener novedades' })
+    }
+  }
+)
+
+// POST /orders/:id/novedades
+router.post('/orders/:id/novedades',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'actualizar'),
+  async (req, res) => {
+    try {
+      const { tipo, codigo } = req.body
+      if (!tipo) return res.status(400).json({ error: 'Tipo requerido' })
+      const result = await req.tQuery(
+        `INSERT INTO inbound_novedades (tenant_id, order_id, tipo, codigo, created_by)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [req.tenantId, req.params.id, tipo, codigo?.trim() || null, req.user.id]
+      )
+      res.status(201).json({ novedad: result.rows[0] })
+    } catch (err) {
+      res.status(500).json({ error: 'Error al registrar novedad' })
+    }
+  }
+)
+
+// DELETE /orders/:id/novedades/:nid
+router.delete('/orders/:id/novedades/:nid',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'actualizar'),
+  async (req, res) => {
+    try {
+      await req.tQuery(
+        `DELETE FROM inbound_novedades WHERE id=$1 AND order_id=$2 AND tenant_id=$3`,
+        [req.params.nid, req.params.id, req.tenantId]
+      )
+      res.json({ ok: true })
+    } catch (err) {
+      res.status(500).json({ error: 'Error al eliminar novedad' })
+    }
+  }
+)
+
 export default router

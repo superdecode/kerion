@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Copy, Check, PackageCheck, ScanBarcode, Printer,
   Download, Trash2, CheckCircle2, Clock, Search, X,
-  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, MapPin,
+  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, MapPin, Plus,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -13,7 +13,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord } from '../services/recepcionService'
+import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, getNovedades, createNovedad, deleteNovedad } from '../services/recepcionService'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
 import * as XLSX from 'xlsx'
@@ -105,6 +105,24 @@ function GeneralInfoBlock({ icon: Icon, label, value, tone = 'warm', mono = fals
 
 const TH = 'table-header whitespace-nowrap'
 
+const TIPOS_NOVEDAD = [
+  'Caja con Daños', 'Faltante', 'Sobrante', 'Caja Vacía',
+  'Mercancía Suelta', 'Caja Con Faltante', 'Código Duplicado',
+  'Producto Dañada', 'Caja Sin Etiqueta',
+]
+
+const TIPO_META = {
+  'Caja con Daños':    'bg-orange-100 text-orange-700',
+  'Faltante':          'bg-danger-100 text-danger-700',
+  'Sobrante':          'bg-success-100 text-success-700',
+  'Caja Vacía':        'bg-warm-100 text-warm-600',
+  'Mercancía Suelta':  'bg-warning-100 text-warning-700',
+  'Caja Con Faltante': 'bg-orange-100 text-orange-700',
+  'Código Duplicado':  'bg-sky-100 text-sky-700',
+  'Producto Dañada':   'bg-danger-100 text-danger-700',
+  'Caja Sin Etiqueta': 'bg-warm-100 text-warm-600',
+}
+
 export default function RecepcionDetalle() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -127,6 +145,8 @@ export default function RecepcionDetalle() {
   const [eventSortKey, setEventSortKey] = useState('scanned_at')
   const [eventSortDir, setEventSortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [nuevoTipo, setNuevoTipo] = useState('')
+  const [nuevoCodigo, setNuevoCodigo] = useState('')
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['recepcion-order', id],
@@ -138,6 +158,13 @@ export default function RecepcionDetalle() {
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
     queryFn: () => getScanEvents(id),
+    retry: 0,
+    staleTime: 30_000,
+  })
+
+  const { data: novedadesData } = useQuery({
+    queryKey: ['recepcion-novedades', id],
+    queryFn: () => getNovedades(id),
     retry: 0,
     staleTime: 30_000,
   })
@@ -164,6 +191,26 @@ export default function RecepcionDetalle() {
     onError: (err) => toast.error(err.response?.data?.error || t('rec.toast.deleteError')),
   })
 
+  const createNovedadMut = useMutation({
+    mutationFn: (payload) => createNovedad(id, payload),
+    onSuccess: () => {
+      toast.success('Novedad registrada')
+      qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
+      setNuevoTipo('')
+      setNuevoCodigo('')
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  const deleteNovedadMut = useMutation({
+    mutationFn: (nid) => deleteNovedad(id, nid),
+    onSuccess: () => {
+      toast.success('Novedad eliminada')
+      qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
   const canValidate = hasPermission('recepcion.recibir', 'actualizar')
   const canEdit = hasPermission('recepcion.recibir', 'actualizar')
   const canCreate = hasPermission('recepcion.recibir', 'crear')
@@ -183,6 +230,7 @@ export default function RecepcionDetalle() {
 
   const { order, lines = [] } = data
   const events = eventsData?.events || []
+  const novedades = novedadesData?.novedades || []
 
   const totalBase = Number(order.total_cajas || 0) > 0 ? Number(order.total_cajas) : lines.length
   const validadasFromOrder = Number(order.cajas_validadas || 0)
@@ -243,7 +291,10 @@ export default function RecepcionDetalle() {
   }, [events])
 
   const handleExportLines = () => {
-    const rows = lines.map((l, i) => [
+    const wb = XLSX.utils.book_new()
+
+    // Sheet 1: Detalle
+    const detalleRows = lines.map((l, i) => [
       i + 1, l.box_type || '', l.custom_box_barcode || '', l.sku || '',
       l.qty_per_box || '',
       l.length_oms || '', l.width_oms || '', l.height_oms || '', l.dimension_unit || '',
@@ -252,24 +303,21 @@ export default function RecepcionDetalle() {
       lineUbicacionMap.get(l.id) || '',
       l.validated_by_nombre || '', l.validated_at ? fmtDateTime(l.validated_at) : '',
     ])
-    const ws = XLSX.utils.aoa_to_sheet([
+    const wsDetalle = XLSX.utils.aoa_to_sheet([
       ['#', 'Box Type', 'Custom Box Barcode', 'SKU', 'Qty/Caja',
        'Length (OMS)', 'Width (OMS)', 'Height (OMS)', 'Dim Unit', 'Weight (OMS)', 'Weight Unit',
        'Estado', 'Ubicación', 'Validado por', 'Hora validación'],
-      ...rows,
+      ...detalleRows,
     ])
-    ws['!cols'] = [
+    wsDetalle['!cols'] = [
       { wch: 5 }, { wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 10 },
       { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
       { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 18 },
     ]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Detalle')
-    XLSX.writeFile(wb, `${order.folio}-detalle.xlsx`)
-  }
+    XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle')
 
-  const handleExportValidacion = () => {
-    const rows = events.map((ev, i) => [
+    // Sheet 2: Validación
+    const validRows = events.map((ev, i) => [
       i + 1,
       ev.codigo_escaneado || '',
       ev.sku_asociado || '',
@@ -279,17 +327,36 @@ export default function RecepcionDetalle() {
       ev.scanned_by_nombre || '',
       ev.scanned_at ? fmtDateTime(ev.scanned_at) : '',
     ])
-    const ws = XLSX.utils.aoa_to_sheet([
+    const wsValid = XLSX.utils.aoa_to_sheet([
       ['#', 'Código Escaneado', 'SKU', 'Campo', 'Resultado', 'Ubicación', 'Escaneado por', 'Hora'],
-      ...rows,
+      ...validRows,
     ])
-    ws['!cols'] = [
+    wsValid['!cols'] = [
       { wch: 5 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 20 }, { wch: 18 },
     ]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Validación')
-    XLSX.writeFile(wb, `${order.folio}-validacion.xlsx`)
+    XLSX.utils.book_append_sheet(wb, wsValid, 'Validación')
+
+    // Sheet 3: Otros
+    if (novedades.length > 0) {
+      const otrosRows = novedades.map((n, i) => [
+        i + 1,
+        n.tipo || '',
+        n.codigo || '',
+        n.created_by_nombre || '',
+        n.created_at ? fmtDateTime(n.created_at) : '',
+      ])
+      const wsOtros = XLSX.utils.aoa_to_sheet([
+        ['#', 'Tipo', 'Código', 'Registrado por', 'Fecha/Hora'],
+        ...otrosRows,
+      ])
+      wsOtros['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 18 }]
+      XLSX.utils.book_append_sheet(wb, wsOtros, 'Otros')
+    }
+
+    XLSX.writeFile(wb, `${order.folio}-recepcion.xlsx`)
   }
+
+  const handleExportValidacion = handleExportLines
 
   const handleListaRecepcion = async () => {
     setListaPreviewLoading(true)
@@ -412,41 +479,61 @@ export default function RecepcionDetalle() {
             : hasErrors
               ? 'border-danger-200 bg-danger-50 text-danger-700'
               : 'border-warning-200 bg-warning-50 text-warning-700'
-          const currentSearch = activeTab === 'detalle' ? lineSearch : eventSearch
-          const setCurrentSearch = activeTab === 'detalle' ? setLineSearch : setEventSearch
+          const currentSearch = activeTab === 'detalle' ? lineSearch : activeTab === 'validacion' ? eventSearch : ''
+          const setCurrentSearch = activeTab === 'detalle' ? setLineSearch : activeTab === 'validacion' ? setEventSearch : () => {}
+          const showSearch = activeTab !== 'otros'
           return (
-            <div className="flex items-center gap-2 border-b border-warm-100 pb-0">
-              <div className="flex gap-1">
-                {['detalle', 'validacion'].map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                      activeTab === tab
-                        ? 'border-primary-500 text-primary-700'
-                        : 'border-transparent text-warm-500 hover:text-warm-700'
-                    }`}
-                  >
-                    {t(`rec.scan.tab.${tab}`)}
-                  </button>
-                ))}
-              </div>
-              <div className="ml-auto flex items-center gap-2 pb-1.5">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300 pointer-events-none" />
-                  <input
-                    value={currentSearch}
-                    onChange={e => setCurrentSearch(e.target.value)}
-                    placeholder={`${t('common.search')}...`}
-                    className="pl-8 pr-3 py-1.5 rounded-lg border border-warm-200 text-sm focus:outline-none focus:border-sky-400 w-52"
-                  />
-                  {currentSearch && (
-                    <button onClick={() => setCurrentSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+            <div className="flex items-center gap-2 border-b border-warm-100 pb-0 overflow-x-auto">
+              <div className="flex gap-1 shrink-0">
+                <button
+                  onClick={() => setActiveTab('detalle')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                    activeTab === 'detalle' ? 'border-primary-500 text-primary-700' : 'border-transparent text-warm-500 hover:text-warm-700'
+                  }`}
+                >
+                  {t('rec.scan.tab.detalle')}
+                </button>
+                <button
+                  onClick={() => setActiveTab('validacion')}
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                    activeTab === 'validacion' ? 'border-primary-500 text-primary-700' : 'border-transparent text-warm-500 hover:text-warm-700'
+                  }`}
+                >
+                  {t('rec.scan.tab.validacion')}
+                  {events.length > 0 && (
+                    <span className="badge text-[9px] bg-sky-100 text-sky-700 border-0 shrink-0">{events.length}</span>
                   )}
-                </div>
-                <span className={`badge ${chipCls}`}>{validadas}/{totalBase}</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('otros')}
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                    activeTab === 'otros' ? 'border-primary-500 text-primary-700' : 'border-transparent text-warm-500 hover:text-warm-700'
+                  }`}
+                >
+                  Otros
+                  {novedades.length > 0 && (
+                    <span className="badge text-[9px] bg-warning-100 text-warning-700 border-0 shrink-0">{novedades.length}</span>
+                  )}
+                </button>
+              </div>
+              <div className="ml-auto flex items-center gap-2 pb-1.5 shrink-0">
+                {showSearch && (
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300 pointer-events-none" />
+                    <input
+                      value={currentSearch}
+                      onChange={e => setCurrentSearch(e.target.value)}
+                      placeholder={`${t('common.search')}...`}
+                      className="pl-8 pr-3 py-1.5 rounded-lg border border-warm-200 text-sm focus:outline-none focus:border-sky-400 w-44 sm:w-52"
+                    />
+                    {currentSearch && (
+                      <button onClick={() => setCurrentSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                <span className={`badge ${chipCls} shrink-0`}>{validadas}/{totalBase}</span>
               </div>
             </div>
           )
@@ -536,7 +623,7 @@ export default function RecepcionDetalle() {
           <div className="space-y-3">
 
             <div className="flex justify-end">
-              <button onClick={handleExportValidacion} className="btn-ghost flex items-center gap-1.5 text-sm">
+              <button onClick={handleExportLines} className="btn-ghost flex items-center gap-1.5 text-sm">
                 <Download className="w-4 h-4" />
                 {t('rec.btn.exportarValidacion')}
               </button>
@@ -614,6 +701,96 @@ export default function RecepcionDetalle() {
                     {filteredEvents.length === 0 && (
                       <tr>
                         <td colSpan={8} className="px-3 py-10 text-center text-warm-400 text-sm">{t('common.noData')}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Otros */}
+        {activeTab === 'otros' && (
+          <div className="space-y-3">
+
+            {/* Manual entry form */}
+            <div className="card p-4 space-y-3 border border-warm-100/80 shadow-soft">
+              <p className="text-xs font-bold text-warm-600 uppercase tracking-wide">Registrar novedad</p>
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+                <select
+                  value={nuevoTipo}
+                  onChange={e => setNuevoTipo(e.target.value)}
+                  className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 bg-white"
+                >
+                  <option value="">Seleccionar tipo...</option>
+                  {TIPOS_NOVEDAD.map(tipo => (
+                    <option key={tipo} value={tipo}>{tipo}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={nuevoCodigo}
+                  onChange={e => setNuevoCodigo(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && nuevoTipo) createNovedadMut.mutate({ tipo: nuevoTipo, codigo: nuevoCodigo }) }}
+                  placeholder="Código (opcional)"
+                  className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => createNovedadMut.mutate({ tipo: nuevoTipo, codigo: nuevoCodigo })}
+                  disabled={!nuevoTipo || createNovedadMut.isPending}
+                  className="btn-primary flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  Agregar
+                </button>
+              </div>
+            </div>
+
+            {/* Records table */}
+            <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
+              <div className="table-scroll">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className={TH}>#</th>
+                      <th className={TH}>Tipo</th>
+                      <th className={TH}>Código</th>
+                      <th className={TH}>Registrado por</th>
+                      <th className={TH}>Fecha/Hora</th>
+                      <th className={`${TH} text-right`}>{t('common.actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-warm-50">
+                    {novedades.map((n, i) => (
+                      <tr key={n.id} className="table-row">
+                        <td className="px-3 py-2.5 text-warm-400 text-xs tabular-nums">{i + 1}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${TIPO_META[n.tipo] || 'bg-warm-100 text-warm-600'}`}>
+                            {n.tipo}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-xs text-warm-700">{n.codigo || '—'}</td>
+                        <td className="px-3 py-2.5 text-xs text-warm-500">{n.created_by_nombre || '—'}</td>
+                        <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDateTime(n.created_at)}</td>
+                        <td className="px-3 py-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => deleteNovedadMut.mutate(n.id)}
+                            disabled={deleteNovedadMut.isPending}
+                            className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:opacity-30"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {novedades.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-10 text-center text-warm-400 text-sm">Sin registros de novedades</td>
                       </tr>
                     )}
                   </tbody>

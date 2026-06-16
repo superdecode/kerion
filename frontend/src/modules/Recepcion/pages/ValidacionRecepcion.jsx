@@ -191,8 +191,13 @@ export default function ValidacionRecepcion() {
     if (ubicacionFilter === 'activa') result = result.filter(g => g.ubicacion === selectedUbicacion && ubicacionConfirmed)
     if (ubicacionFilter === 'con_registros') result = result.filter(g => g.codes.length > 0)
     const q = ubicacionSearch.trim().toLowerCase()
-    if (!q) return result
-    return result
+    const sortActive = (arr) => [...arr].sort((a, b) => {
+      const aA = a.ubicacion === selectedUbicacion && ubicacionConfirmed
+      const bA = b.ubicacion === selectedUbicacion && ubicacionConfirmed
+      return aA === bA ? 0 : aA ? -1 : 1
+    })
+    if (!q) return sortActive(result)
+    return sortActive(result
       .map(g => ({
         ...g,
         codes: g.codes.filter(c =>
@@ -201,6 +206,7 @@ export default function ValidacionRecepcion() {
         ),
       }))
       .filter(g => g.codes.length > 0 || (g.ubicacion ?? '').toLowerCase().includes(q))
+    )
   }, [allUbicacionGroups, ubicacionSearch, ubicacionFilter, selectedUbicacion, ubicacionConfirmed])
 
   const totalUbicacionCodes = allUbicacionGroups.reduce((s, g) => s + g.codes.length, 0)
@@ -495,7 +501,7 @@ export default function ValidacionRecepcion() {
               key={cardKey}
               className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
                 isActive
-                  ? 'border-accent-200 bg-gradient-to-br from-accent-50 via-white to-accent-50/50 shadow-[0_18px_34px_-24px_rgba(124,58,237,0.38)]'
+                  ? 'border-accent-400 bg-gradient-to-br from-accent-100 via-accent-50 to-white shadow-[0_18px_34px_-18px_rgba(124,58,237,0.55)] ring-2 ring-accent-300 ring-offset-1'
                   : 'border-accent-100/60 bg-gradient-to-br from-white via-accent-50/20 to-accent-50/35 shadow-[0_14px_30px_-24px_rgba(124,58,237,0.16)] hover:border-accent-200 hover:to-accent-50/55 hover:shadow-[0_20px_38px_-26px_rgba(124,58,237,0.28)]'
               }`}
             >
@@ -512,7 +518,7 @@ export default function ValidacionRecepcion() {
                   {g.ubicacion || t('rec.val.ubicacion.panel.sin_ub')}
                 </span>
                 {isActive
-                  ? <span className="badge bg-accent-100 text-accent-700 text-[9px] border-0 shrink-0">ACTIVA</span>
+                  ? <span className="badge bg-accent-600 text-white text-[9px] border-0 shrink-0 shadow-sm">ACTIVA</span>
                   : <span className="badge bg-accent-50 text-accent-600 border border-accent-100 text-[9px] shrink-0">{g.codes.length}</span>
                 }
                 <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-accent-400' : 'text-warm-300'}`} />
@@ -846,12 +852,20 @@ export default function ValidacionRecepcion() {
               )}
             </div>
 
+            {/* ── Desktop scan input ── */}
+            <div className={`hidden sm:block card p-3 sm:p-4 sticky top-0 z-[11] bg-gradient-to-br from-sky-50/40 via-white to-white border-sky-100 shadow-[0_6px_22px_-12px_rgba(14,165,233,0.22)] backdrop-blur-sm ${!withTarimas && !ubicacionConfirmed ? 'opacity-40 pointer-events-none' : ''}`}>
+              <div className="relative">
+                <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-sky-500 pointer-events-none" />
+                <input ref={scanRefDesktop} {...scanInputProps} className="w-full pl-12 pr-4 py-3.5 text-lg bg-sky-50/30 border-2 border-sky-100 rounded-2xl focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-warm-900" />
+              </div>
+              <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
+            </div>
+
             {/* ── Ubicación — unified card: input → summary in one block ── */}
             {!withTarimas && (() => {
-              const batchCodes = history.filter(h => h.result === 'correcto')
-              const batchCount = batchCodes.length
+              const batchCount = history.filter(h => h.result === 'correcto').length
               return (
-                <div className="hidden sm:block card overflow-hidden border border-accent-100 sticky top-0 z-[10] bg-white/97 backdrop-blur-sm">
+                <div className="hidden sm:block card overflow-hidden border border-accent-100 z-[10] bg-white/97 backdrop-blur-sm">
                   {!ubicacionConfirmed ? (
                     /* ─── INPUT MODE ─── */
                     <div className="p-3">
@@ -915,7 +929,7 @@ export default function ValidacionRecepcion() {
                           <span>Editar ubicación</span>
                         </button>
                       </div>
-                      {/* Counters + code list */}
+                      {/* Counters + history table */}
                       <div className="p-3 space-y-2">
                         <div className="grid grid-cols-3 gap-1.5">
                           <div className="text-center py-1.5 rounded-xl bg-warm-50 border border-warm-100">
@@ -931,19 +945,43 @@ export default function ValidacionRecepcion() {
                             <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">Ubicaciones</p>
                           </div>
                         </div>
-                        {batchCodes.length > 0 && (
-                          <div className="rounded-xl border border-warm-100 divide-y divide-warm-50 max-h-32 overflow-y-auto">
-                            {batchCodes.map((c, ci) => (
-                              <div key={c.id || ci} className="flex items-center gap-2 px-3 py-1.5 hover:bg-warm-50/50 transition-colors">
-                                <Check className="w-3 h-3 shrink-0 text-success-400" />
-                                <span className="font-mono text-[11px] truncate flex-1 text-warm-700">{c.code}</span>
-                                {c.scannedAt && (
-                                  <span className="text-[10px] tabular-nums shrink-0 text-warm-300">
-                                    {new Date(c.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
+                        {sortedHistory.length > 0 && (
+                          <div className="overflow-hidden rounded-xl border border-warm-100">
+                            <div className="overflow-y-auto max-h-44">
+                              <table className="w-full text-xs">
+                                <thead className="bg-warm-50 sticky top-0 border-b border-warm-100 z-[1]">
+                                  <tr>
+                                    <th className="table-header py-1.5 text-[10px]">{t('rec.scan.col.hora')}</th>
+                                    <th className="table-header py-1.5 text-[10px]">{t('rec.scan.col.codigo')}</th>
+                                    <th className="table-header py-1.5 text-[10px]">Resultado</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-warm-50">
+                                  {sortedHistory.map((h, i) => {
+                                    const cfg = RESULT_CFG[h.result] || RESULT_CFG.no_encontrado
+                                    const Icon = cfg.icon
+                                    return (
+                                      <tr key={h.id || i} className="hover:bg-warm-50/50">
+                                        <td className="px-3 py-1.5 text-warm-400 tabular-nums whitespace-nowrap text-[10px]">
+                                          {h.scannedAt ? new Date(h.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
+                                        </td>
+                                        <td className="px-3 py-1.5 font-mono font-semibold text-warm-800 max-w-[180px] truncate text-[11px]">{h.code}</td>
+                                        <td className="px-3 py-1.5">
+                                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${
+                                            h.result === 'correcto' ? 'bg-success-50 text-success-600' :
+                                            h.result === 'duplicado' ? 'bg-warning-50 text-warning-600' :
+                                            'bg-danger-50 text-danger-600'
+                                          }`}>
+                                            <Icon className="w-2.5 h-2.5 shrink-0" />
+                                            {cfg.labelText}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
                         )}
                         {batchCount > 0 && (
@@ -962,15 +1000,6 @@ export default function ValidacionRecepcion() {
                 </div>
               )
             })()}
-
-            {/* ── Desktop scan input ── */}
-            <div className={`hidden sm:block card p-3 sm:p-4 sticky top-0 z-[10] bg-gradient-to-br from-sky-50/40 via-white to-white border-sky-100 shadow-[0_6px_22px_-12px_rgba(14,165,233,0.22)] backdrop-blur-sm ${!withTarimas && !ubicacionConfirmed ? 'opacity-40 pointer-events-none' : ''}`}>
-              <div className="relative">
-                <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-sky-500 pointer-events-none" />
-                <input ref={scanRefDesktop} {...scanInputProps} className="w-full pl-12 pr-4 py-3.5 text-lg bg-sky-50/30 border-2 border-sky-100 rounded-2xl focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-warm-900" />
-              </div>
-              <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
-            </div>
 
             {/* ── Scan result feedback ── */}
             <AnimatePresence mode="wait">
@@ -1019,9 +1048,9 @@ export default function ValidacionRecepcion() {
               })()}
             </AnimatePresence>
 
-            {/* ── Scan history ── */}
+            {/* ── Scan history (mobile only — desktop shows in ubicación card) ── */}
             {history.length > 0 && (
-              <div className="card overflow-hidden">
+              <div className="sm:hidden card overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-warm-100 bg-warm-50 flex items-center justify-between">
                   <p className="text-xs font-bold text-warm-600 uppercase tracking-wide">
                     {t('rec.scan.historial')} ({history.length})
