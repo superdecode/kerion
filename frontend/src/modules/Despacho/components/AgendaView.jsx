@@ -2,6 +2,7 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeft, Printer, CalendarDays, Package, Search, X } from 'lucide-react'
 import { fmtDate, fmtTimeShort } from '../../../core/utils/dateFormat'
+import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 
 function escapeHtml(str) {
   return String(str ?? '')
@@ -62,22 +63,25 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
       <div class="group">
         <div class="group-header">DESTINO: ${escapeHtml(g.customer)}</div>
         <table>
-          <thead><tr><th>Horario</th><th>Orden</th><th>Bultos</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Horario</th><th>Orden</th><th>Código base</th><th>Bultos</th><th>Estado</th></tr></thead>
           <tbody>
             ${g.rows.map(o => {
               const orderNo  = o.outboundOrderNo || o.order_no || ''
+              const codes    = o.allCustomizeCodes?.length ? o.allCustomizeCodes : o.customizeCode ? [o.customizeCode] : []
+              const bases    = [...new Set(codes.map(c => extractBaseCode(c)).filter(Boolean))]
               const dispatch = dispatchMap?.get(orderNo)
               const estado   = dispatch ? DISPATCH_LABEL[dispatch.order_estado] ?? escapeHtml(dispatch.order_estado) : 'Sin folio'
               const time     = o.outboundTime || o.expectedTime || ''
               return `<tr>
                 <td>${time ? new Date(time).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                 <td class="mono">${escapeHtml(orderNo)}</td>
+                <td class="mono">${bases.length ? bases.map(b => escapeHtml(b)).join(', ') : '—'}</td>
                 <td class="center">${escapeHtml(o.outboundBoxCount ?? '—')}</td>
                 <td>${estado}</td>
               </tr>`
             }).join('')}
           </tbody>
-          <tfoot><tr><td colspan="4">Subtotal ${escapeHtml(g.customer)}: ${g.rows.length} orden${g.rows.length !== 1 ? 'es' : ''} · ${g.totalBultos} bultos</td></tr></tfoot>
+          <tfoot><tr><td colspan="5">Subtotal ${escapeHtml(g.customer)}: ${g.rows.length} orden${g.rows.length !== 1 ? 'es' : ''} · ${g.totalBultos} bultos</td></tr></tfoot>
         </table>
       </div>`).join('')
 
@@ -179,6 +183,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
                 <tr>
                   <th className="table-header">Horario</th>
                   <th className="table-header">Orden</th>
+                  <th className="table-header">Código base</th>
                   <th className="table-header text-center">Bultos</th>
                   <th className="table-header">Estado</th>
                 </tr>
@@ -186,6 +191,8 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
               <tbody className="divide-y divide-warm-50">
                 {rows.map(order => {
                   const orderNo  = order.outboundOrderNo || order.order_no || ''
+                  const codes    = order.allCustomizeCodes?.length ? order.allCustomizeCodes : order.customizeCode ? [order.customizeCode] : []
+                  const bases    = [...new Set(codes.map(c => extractBaseCode(c)).filter(Boolean))]
                   const dispatch = dispatchMap?.get(orderNo)
                   const estado   = dispatch?.order_estado
                   const time     = order.outboundTime || order.expectedTime || ''
@@ -196,6 +203,9 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
                       </td>
                       <td className="px-4 py-2.5">
                         <span className="font-mono text-xs font-semibold text-primary-700">{orderNo}</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="font-mono text-xs text-warm-600">{bases.length ? bases.join(', ') : '—'}</span>
                       </td>
                       <td className="px-4 py-2.5 text-center">
                         <span className="text-xs font-bold text-warm-700">{order.outboundBoxCount ?? '—'}</span>
@@ -213,7 +223,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
               {/* Subtotal */}
               <tfoot>
                 <tr className="bg-warm-50/80">
-                  <td colSpan={4} className="px-4 py-2 text-[11px] font-bold text-warm-600">
+                  <td colSpan={5} className="px-4 py-2 text-[11px] font-bold text-warm-600">
                     Subtotal {customer}: {rows.length} orden{rows.length !== 1 ? 'es' : ''} · {gtb} bultos
                   </td>
                 </tr>

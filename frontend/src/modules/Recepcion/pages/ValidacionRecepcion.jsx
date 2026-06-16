@@ -274,10 +274,10 @@ export default function ValidacionRecepcion() {
   )
 
   const CHIPS = [
-    { key: null,         label: 'Todos',     count: tarimaStats.length },
-    { key: 'completo',   label: 'Completo',  count: tarimaCounts.completo },
-    { key: 'en_proceso', label: 'Parcial',   count: tarimaCounts.en_proceso },
-    { key: 'pendiente',  label: 'Pendiente', count: tarimaCounts.pendiente },
+    { key: null,         label: t('common.all'),                  count: tarimaStats.length },
+    { key: 'completo',   label: t('rec.status.completo'),         count: tarimaCounts.completo },
+    { key: 'en_proceso', label: t('rec.status.parcial'),          count: tarimaCounts.en_proceso },
+    { key: 'pendiente',  label: t('rec.line.status.pendiente'),   count: tarimaCounts.pendiente },
   ]
 
   // Shared tarima panel body — design aligned with Dropscan panel
@@ -289,7 +289,7 @@ export default function ValidacionRecepcion() {
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-bold text-warm-700">{t('rec.tarimas.label')} · {totalTarimas}</h4>
           {lastTarimaNum && lastTarimaColor && (
-            <span className={`badge text-[9px] font-bold ${lastTarimaColor.pill}`}>T{lastTarimaNum} activa</span>
+            <span className={`badge text-[9px] font-bold ${lastTarimaColor.pill}`}>T{lastTarimaNum} {t('rec.tarimas.panel.activa')}</span>
           )}
         </div>
 
@@ -302,7 +302,7 @@ export default function ValidacionRecepcion() {
             type="text"
             value={tarimaSearch}
             onChange={e => setTarimaSearch(e.target.value)}
-            placeholder="Buscar código..."
+            placeholder={t('rec.tarimas.panel.search')}
             className="flex-1 min-w-0 bg-transparent text-xs text-warm-700 outline-none focus-visible:ring-0 placeholder:text-warm-400 font-mono"
           />
           {tarimaSearch && (
@@ -342,7 +342,7 @@ export default function ValidacionRecepcion() {
       {/* Cards list — mirrors Dropscan's scrollbar-thin bg-warm-50/55 p-3 space-y-2.5 */}
       <div className="flex-1 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
         {filteredTarimaStats.length === 0 ? (
-          <div className="py-8 text-center text-xs text-warm-400">{tarimaSearch ? 'Sin resultados' : 'Sin tarimas'}</div>
+          <div className="py-8 text-center text-xs text-warm-400">{tarimaSearch ? t('rec.tarimas.panel.no_results') : t('rec.tarimas.panel.sin_tarimas')}</div>
         ) : filteredTarimaStats.map(ts => {
           const isActive = ts.num === lastTarimaNum
           const isExpanded = expandedTarimas.has(ts.num)
@@ -470,7 +470,7 @@ export default function ValidacionRecepcion() {
               }`}
             >
               <Layers className={`w-3.5 h-3.5 ${withTarimas ? 'text-sky-600' : 'text-warm-400'}`} />
-              <span className="hidden sm:inline">{withTarimas ? `${totalTarimas} tarimas` : t('rec.tarimas.toggle')}</span>
+              <span className="hidden sm:inline">{withTarimas ? t('rec.tarimas.n_tarimas').replace('{n}', totalTarimas) : t('rec.tarimas.toggle')}</span>
               {withTarimas && <span className="sm:hidden">{totalTarimas}T</span>}
             </button>
             {/* Terminar */}
@@ -479,7 +479,7 @@ export default function ValidacionRecepcion() {
               className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 transition-colors"
             >
               <Square className="w-3.5 h-3.5" />
-              <span>Terminar</span>
+              <span>{t('rec.val.btn.terminar')}</span>
             </button>
           </div>
         }

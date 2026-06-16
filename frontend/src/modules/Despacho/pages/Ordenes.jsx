@@ -9,6 +9,7 @@ import {
   Loader2, CheckCircle2, Pencil, Box,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
+import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import TablePagination from '../../../core/components/common/TablePagination'
@@ -22,20 +23,13 @@ import DispatchQuantityModal from '../components/DispatchQuantityModal'
 import AgendaView            from '../components/AgendaView'
 import ScanResolutionModal  from '../components/ScanResolutionModal'
 import { getDespachoDates, setDespachoDates, clearDespachoDates } from '../utils/despachoSession'
-
-function getCodeBase(barcode) {
-  if (!barcode) return ''
-  let v = String(barcode).trim().toUpperCase()
-  v = v.replace(/[-_\s]?\d+$/, '')
-  v = v.replace(/[-_\s]+$/, '')
-  return v
-}
+import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 
 function getCodigosCaja(order) {
   const codes = order.allCustomizeCodes?.length
     ? order.allCustomizeCodes
     : order.customizeCode ? [order.customizeCode] : []
-  const bases = [...new Set(codes.map(getCodeBase).filter(Boolean))]
+  const bases = [...new Set(codes.map(extractBaseCode).filter(Boolean))]
   return bases
 }
 
@@ -146,6 +140,7 @@ export default function Ordenes() {
   const [showDispatchQty, setShowDispatchQty] = useState(false)
   const [scanResolutionData, setScanResolutionData] = useState(null)
   const [showScanResolution, setShowScanResolution] = useState(false)
+  const [conflictModal, setConflictModal] = useState({ open: false, orderNo: null, dispatch: null })
 
   const { data: sheetsData, isLoading: loadingSheets, isError } = useQuery({
     queryKey: ['despacho-outbound-list'],
@@ -373,6 +368,12 @@ export default function Ordenes() {
     setShowDispatchQty(true)
   }
   function handleTruckClick(order) {
+    const orderNo = order.outboundOrderNo || order.order_no || ''
+    const existing = dispatchMap.get(orderNo)
+    if (existing?.folio_numero) {
+      setConflictModal({ open: true, orderNo, dispatch: existing })
+      return
+    }
     setDispatchOrder(order)
     setShowDispatchQty(true)
   }
@@ -465,7 +466,7 @@ export default function Ordenes() {
             </div>
 
             {canDispatch && (
-              <div className="flex flex-col gap-1 min-w-[300px]">
+              <div className="flex flex-col gap-1 min-w-[360px]">
                 <div className={`flex items-center gap-2 rounded-xl border-2 pl-3 pr-2.5 h-10 transition-all duration-200 ${
                   scanStatus === SCAN_FOUND
                     ? 'border-success-400 bg-success-50'
@@ -773,6 +774,7 @@ export default function Ordenes() {
         order={dispatchOrder}
         conductores={conductores}
         unidades={unidades}
+        dateFrom={dateFrom}
       />
 
       {/* Scan resolution modal — out-of-range and multi-match cases */}
@@ -789,6 +791,41 @@ export default function Ordenes() {
         dateFrom={dateFrom}
         dateTo={dateTo}
       />
+
+      {/* Conflict modal — order already assigned to a folio */}
+      <Modal
+        isOpen={conflictModal.open}
+        onClose={() => setConflictModal({ open: false, orderNo: null, dispatch: null })}
+        title={t('desp.conflict.title')}
+        icon={AlertCircle}
+        size="sm"
+        footer={
+          <div className="flex justify-end w-full">
+            <button onClick={() => setConflictModal({ open: false, orderNo: null, dispatch: null })} className="btn-primary">
+              {t('desp.conflict.confirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">{t('desp.conflict.body')}</p>
+          <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 space-y-1.5">
+            <p className="font-mono font-bold text-warning-800 text-sm break-all">{conflictModal.orderNo}</p>
+            {conflictModal.dispatch?.folio_numero && (
+              <p className="text-xs text-warning-700">
+                <span className="font-semibold">{t('desp.conflict.folio')}:</span>{' '}
+                <span className="font-mono">{conflictModal.dispatch.folio_numero}</span>
+              </p>
+            )}
+            {conflictModal.dispatch?.order_estado && (
+              <p className="text-xs text-warning-700">
+                <span className="font-semibold">{t('desp.conflict.estado')}:</span>{' '}
+                {t(`desp.dispEstado.${conflictModal.dispatch.order_estado}`) || conflictModal.dispatch.order_estado}
+              </p>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       {/* Full-screen agenda overlay */}
       {showAgenda && (

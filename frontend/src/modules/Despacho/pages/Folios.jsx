@@ -86,7 +86,7 @@ export default function Folios() {
     [conductores]
   )
   const unidadOptions = useMemo(
-    () => unidades.map(u => ({ value: String(u.id), label: `${u.placa} (${u.tipo})` })),
+    () => unidades.map(u => ({ value: String(u.id), label: u.placa })),
     [unidades]
   )
 
@@ -117,7 +117,7 @@ export default function Folios() {
     arr.sort((a, b) => {
       const av = a[sortField] ?? ''
       const bv = b[sortField] ?? ''
-      if (sortField === 'total_ordenes') {
+      if (sortField === 'total_ordenes' || sortField === 'total_cajas') {
         return sortDir === 'asc' ? Number(av) - Number(bv) : Number(bv) - Number(av)
       }
       const as = String(av).toLowerCase()
@@ -321,13 +321,14 @@ export default function Folios() {
                     <SortHeader label={t('desp.folio.col.conductor')} field="conductor_nombre" {...sp} />
                     <SortHeader label={t('desp.folio.col.unidad')} field="unidad_placa" {...sp} />
                     <SortHeader label={t('desp.folio.col.ordenes')} field="total_ordenes" {...sp} className="text-center" />
+                    <SortHeader label={t('desp.folio.col.cajas')} field="total_cajas" {...sp} className="text-center" />
                     <th className="table-header w-10" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
                   {paginated.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-14 text-center">
+                      <td colSpan={8} className="py-14 text-center">
                         <PackageCheck className="w-8 h-8 text-warm-200 mx-auto mb-2" />
                         <p className="text-sm text-warm-400 font-medium">{t('desp.folios.empty')}</p>
                       </td>
@@ -362,6 +363,11 @@ export default function Folios() {
                       <td className="px-4 py-3 text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-50 text-primary-700 text-xs font-bold">
                           {folio.total_ordenes}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="text-xs font-semibold tabular-nums text-warm-700">
+                          {folio.total_cajas ?? 0}
                         </span>
                       </td>
                       <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>

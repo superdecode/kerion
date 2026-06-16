@@ -1,4 +1,4 @@
-import { Download, Printer, X } from 'lucide-react'
+import { Download, Printer } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import PrintListaRecepcion from './PrintListaRecepcion'
@@ -33,14 +33,9 @@ export default function ListaRecepcionPreviewModal({ isOpen, onClose, data, load
       title={t('rec.lista.preview.title')}
       icon={Printer}
       size="xl"
-      headerAction={!loading ? (
-        <button onClick={onClose} className="p-2 rounded-xl hover:bg-primary-100/60 text-warm-400 hover:text-primary-600 transition-all duration-200">
-          <X className="w-4 h-4" />
-        </button>
-      ) : null}
       footer={data && !loading ? (
         <div className="flex w-full justify-end gap-3">
-          <button className="btn-success inline-flex items-center gap-2" onClick={onExport}>
+          <button className="btn-ghost inline-flex items-center gap-2" onClick={onExport}>
             <Download size={14} /> {t('rec.lista.export')}
           </button>
           <button className="btn-primary inline-flex items-center gap-2" onClick={() => printHtml('print-lista-recepcion')}>

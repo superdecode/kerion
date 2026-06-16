@@ -364,43 +364,58 @@ export default function RecepcionDetalle() {
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
 
-        {/* Tabs */}
-        <div className="flex gap-1 border-b border-warm-100">
-          {['detalle', 'validacion'].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab
-                  ? 'border-primary-500 text-primary-700'
-                  : 'border-transparent text-warm-500 hover:text-warm-700'
-              }`}
-            >
-              {t(`rec.scan.tab.${tab}`)}
-            </button>
-          ))}
-        </div>
+        {/* Tabs row — tabs left, search + counter chip right */}
+        {(() => {
+          const allDone = totalBase > 0 && validadas >= totalBase
+          const hasErrors = faltantes > 0
+          const chipCls = allDone
+            ? 'border-success-200 bg-success-50 text-success-700'
+            : hasErrors
+              ? 'border-danger-200 bg-danger-50 text-danger-700'
+              : 'border-warning-200 bg-warning-50 text-warning-700'
+          const currentSearch = activeTab === 'detalle' ? lineSearch : eventSearch
+          const setCurrentSearch = activeTab === 'detalle' ? setLineSearch : setEventSearch
+          return (
+            <div className="flex items-center gap-2 border-b border-warm-100 pb-0">
+              <div className="flex gap-1">
+                {['detalle', 'validacion'].map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                      activeTab === tab
+                        ? 'border-primary-500 text-primary-700'
+                        : 'border-transparent text-warm-500 hover:text-warm-700'
+                    }`}
+                  >
+                    {t(`rec.scan.tab.${tab}`)}
+                  </button>
+                ))}
+              </div>
+              <div className="ml-auto flex items-center gap-2 pb-1.5">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300 pointer-events-none" />
+                  <input
+                    value={currentSearch}
+                    onChange={e => setCurrentSearch(e.target.value)}
+                    placeholder={`${t('common.search')}...`}
+                    className="pl-8 pr-3 py-1.5 rounded-lg border border-warm-200 text-sm focus:outline-none focus:border-sky-400 w-52"
+                  />
+                  {currentSearch && (
+                    <button onClick={() => setCurrentSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <span className={`badge ${chipCls}`}>{validadas}/{totalBase}</span>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Tab: Detalle */}
         {activeTab === 'detalle' && (
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300" />
-                <input
-                  value={lineSearch}
-                  onChange={e => setLineSearch(e.target.value)}
-                  placeholder={`${t('common.search')}...`}
-                  className="pl-8 pr-3 py-1.5 rounded-lg border border-warm-200 text-sm focus:outline-none focus:border-sky-400 w-64"
-                />
-                {lineSearch && (
-                  <button onClick={() => setLineSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-              <span className="text-xs text-warm-400 ml-auto">{filteredLines.length} / {lines.length}</span>
-            </div>
 
             <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
               <div className="table-scroll">
@@ -480,23 +495,6 @@ export default function RecepcionDetalle() {
         {/* Tab: Validación */}
         {activeTab === 'validacion' && (
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300" />
-                <input
-                  value={eventSearch}
-                  onChange={e => setEventSearch(e.target.value)}
-                  placeholder={`${t('common.search')}...`}
-                  className="pl-8 pr-3 py-1.5 rounded-lg border border-warm-200 text-sm focus:outline-none focus:border-sky-400 w-64"
-                />
-                {eventSearch && (
-                  <button onClick={() => setEventSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-              <span className="text-xs text-warm-400 ml-auto">{filteredEvents.length} {t('rec.val.eventosLabel')}</span>
-            </div>
 
             <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
               <div className="table-scroll">
@@ -507,7 +505,6 @@ export default function RecepcionDetalle() {
                       {[
                         ['codigo_escaneado', t('rec.scan.col.codigo')],
                         ['match_field', t('rec.scan.col.match_field')],
-                        ['sku_asociado', t('rec.line.sku')],
                         ['scanned_by_nombre', t('rec.scan.col.usuario')],
                         ['scanned_at', t('rec.scan.col.hora')],
                         ['resultado', t('rec.scan.col.resultado')],
@@ -538,7 +535,6 @@ export default function RecepcionDetalle() {
                             <CopyInline value={ev.codigo_escaneado} mono />
                           </td>
                           <td className="px-3 py-2.5 text-xs text-warm-500">{ev.match_field || '—'}</td>
-                          <td className="px-3 py-2.5 text-xs text-warm-600">{ev.sku_asociado || '—'}</td>
                           <td className="px-3 py-2.5 text-xs text-warm-600">{ev.scanned_by_nombre || '—'}</td>
                           <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDateTime(ev.scanned_at)}</td>
                           <td className="px-3 py-2.5">
@@ -562,7 +558,7 @@ export default function RecepcionDetalle() {
                     })}
                     {filteredEvents.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-3 py-10 text-center text-warm-400 text-sm">{t('common.noData')}</td>
+                        <td colSpan={7} className="px-3 py-10 text-center text-warm-400 text-sm">{t('common.noData')}</td>
                       </tr>
                     )}
                   </tbody>

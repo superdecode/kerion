@@ -12,7 +12,7 @@ import {
   createFolio,
 } from '../services/despachoService'
 
-export const TIPO_UNIDAD = ['camion', 'furgon', 'camioneta', 'trailer', 'moto']
+export const TIPO_UNIDAD = ['camion', 'furgon', 'camioneta', 'trailer', 'torton', 'moto']
 
 // ── Conductores catalog modal ─────────────────────────────────────────────────
 export function ConductoresModal({ isOpen, onClose, canManage }) {

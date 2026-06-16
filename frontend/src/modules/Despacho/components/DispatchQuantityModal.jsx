@@ -8,7 +8,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getFolios, createFolio, addOrder } from '../services/despachoService'
 import { fmtDate } from '../../../core/utils/dateFormat'
 
-export default function DispatchQuantityModal({ isOpen, onClose, order, conductores = [], unidades = [] }) {
+export default function DispatchQuantityModal({ isOpen, onClose, order, conductores = [], unidades = [], dateFrom = '' }) {
   const qc = useQueryClient()
   const { addToast } = useToastStore()
   const { t } = useI18nStore()
@@ -27,9 +27,14 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
     enabled: isOpen,
   })
 
-  const activeFolios = (foliosData?.folios ?? []).filter(
-    f => f.estado === 'borrador' || f.estado === 'en_proceso'
-  )
+  const activeFolios = (foliosData?.folios ?? []).filter(f => {
+    if (f.estado !== 'borrador' && f.estado !== 'en_proceso') return false
+    if (dateFrom && f.fecha_salida) {
+      const folioDate = String(f.fecha_salida).slice(0, 10)
+      if (folioDate !== dateFrom) return false
+    }
+    return true
+  })
 
   useEffect(() => {
     if (!isOpen) return

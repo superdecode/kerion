@@ -1,12 +1,8 @@
 import * as XLSX from 'xlsx'
+import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 
 export function getCodeBase(barcode) {
-  if (!barcode) return ''
-  let value = String(barcode).trim().toUpperCase()
-  value = value.replace(/[-_\s]?\d+$/, '')
-  value = value.replace(/(?<=\d)[A-Z]$/, '')
-  value = value.replace(/[-_\s]+$/, '')
-  return value
+  return extractBaseCode(barcode) ?? ''
 }
 
 function assignTarimaNums(lines) {

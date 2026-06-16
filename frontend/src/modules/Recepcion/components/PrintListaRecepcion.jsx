@@ -59,10 +59,10 @@ export default function PrintListaRecepcion({ data }) {
           <tr style={{ background: '#eff6ff' }}>
             <th style={{ ...TH, width: '44px', textAlign: 'center' }}>#</th>
             <th style={{ ...TH, textAlign: 'left' }}>Código base</th>
-            <th style={{ ...TH, textAlign: 'right' }}>Cajas</th>
+            <th style={{ ...TH, textAlign: 'center' }}>Cajas</th>
             <th style={{ ...TH, textAlign: 'left' }}>SKU</th>
-            <th style={{ ...TH, textAlign: 'right' }}>Qty/Caja</th>
-            {data.withTarimas && <th style={{ ...TH, textAlign: 'right' }}># Tarima</th>}
+            <th style={{ ...TH, textAlign: 'center' }}>Qty/Caja</th>
+            {data.withTarimas && <th style={{ ...TH, textAlign: 'center' }}># Tarima</th>}
           </tr>
         </thead>
         <tbody>
@@ -70,10 +70,10 @@ export default function PrintListaRecepcion({ data }) {
             <tr key={`${row.base}-${index}`} style={{ background: index % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
               <td style={{ ...TD, textAlign: 'center', color: '#94a3b8', fontWeight: '600' }}>{index + 1}</td>
               <td style={{ ...TD, fontFamily: 'Courier New, monospace', fontWeight: '700', color: '#0f172a' }}>{row.base || '—'}</td>
-              <td style={{ ...TD, textAlign: 'right', fontWeight: '700', color: '#1d4ed8' }}>{row.cajas}</td>
+              <td style={{ ...TD, textAlign: 'center', fontWeight: '700', color: '#1d4ed8' }}>{row.cajas}</td>
               <td style={{ ...TD, color: '#334155' }}>{row.sku || '—'}</td>
-              <td style={{ ...TD, textAlign: 'right', color: '#475569' }}>{row.qty_per_box || '—'}</td>
-              {data.withTarimas && <td style={{ ...TD, textAlign: 'right', color: '#475569' }}>{row.tarima || '—'}</td>}
+              <td style={{ ...TD, textAlign: 'center', color: '#475569' }}>{row.qty_per_box || '—'}</td>
+              {data.withTarimas && <td style={{ ...TD, textAlign: 'center', color: '#475569' }}>{row.tarima || '—'}</td>}
             </tr>
           ))}
         </tbody>

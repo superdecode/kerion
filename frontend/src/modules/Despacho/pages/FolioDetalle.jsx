@@ -12,6 +12,7 @@ import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDate, fmtTimeShort, fmtDateTime } from '../../../core/utils/dateFormat'
 import {
   getFolio, updateFolio, addOrder, updateOrder, removeOrder,
@@ -258,6 +259,7 @@ export default function FolioDetalle() {
   const { id: folioId } = useParams()
   const navigate = useNavigate()
   const { addToast } = useToastStore()
+  const { t } = useI18nStore()
   const { canWrite, canDelete } = useAuthStore()
   const qc = useQueryClient()
 
@@ -485,6 +487,7 @@ export default function FolioDetalle() {
 
   const estadoMeta = folio ? (FOLIO_ESTADO_META[folio.estado] ?? FOLIO_ESTADO_META.borrador) : null
   const totalBultos = orders.reduce((s, o) => s + (o.bultos || 0), 0)
+  const primaryDestinatario = orders.find(o => o.destinatario)?.destinatario ?? null
 
   return (
     <div className="flex flex-col h-full">
@@ -550,12 +553,30 @@ export default function FolioDetalle() {
 
             {/* ── Info block ──────────────────────────────────────────────── */}
             <div className="bg-white rounded-2xl border border-warm-100 shadow-sm">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-warm-100">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-warm-100 gap-3 flex-wrap">
+                <div className="flex items-center gap-2.5 flex-wrap">
                   <span className="text-sm font-semibold text-warm-700">Información del folio</span>
                   <span className="text-xs text-warm-400">
                     {fmtDate(folio.created_at)} · {fmtTimeShort(folio.created_at)}
                   </span>
+                  {orders.length > 0 && (
+                    <>
+                      <div className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-2.5 py-0.5 shadow-sm">
+                        <span className="text-xs font-bold text-primary-700 tabular-nums">{orders.length}</span>
+                        <span className="text-[10px] font-medium text-primary-500">{t('desp.folio.col.ordenes').toLowerCase()}</span>
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 rounded-full border border-warm-200 bg-white px-2.5 py-0.5 shadow-sm">
+                        <span className="text-xs font-bold text-warm-800 tabular-nums">{totalBultos}</span>
+                        <span className="text-[10px] font-medium text-warm-400">{t('desp.folio.col.cajas').toLowerCase()}</span>
+                      </div>
+                    </>
+                  )}
+                  {primaryDestinatario && (
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 shadow-sm">
+                      <MapPin className="w-3 h-3 text-sky-500 shrink-0" />
+                      <span className="text-[10px] font-semibold text-sky-700 max-w-[180px] truncate">{primaryDestinatario}</span>
+                    </div>
+                  )}
                 </div>
                 {editable && !editMode && (
                   <button onClick={startEdit}
@@ -754,6 +775,23 @@ export default function FolioDetalle() {
                               </div>
                             </div>
                           </div>
+
+                          {/* Destination mismatch warning */}
+                          {primaryDestinatario && addForm.destinatario && addForm.destinatario !== primaryDestinatario && (
+                            <div className="flex items-start gap-3 rounded-xl border border-warning-200 bg-warning-50 px-4 py-3">
+                              <AlertCircle className="w-4 h-4 text-warning-500 shrink-0 mt-0.5" />
+                              <div className="min-w-0 space-y-1">
+                                <p className="text-xs font-semibold text-warning-700">Destino diferente al del folio</p>
+                                <div className="flex flex-col gap-0.5 text-[11px] text-warning-600">
+                                  <span><span className="font-semibold">Folio:</span> {primaryDestinatario}</span>
+                                  <span><span className="font-semibold">Esta orden:</span> {addForm.destinatario}</span>
+                                </div>
+                                <p className="text-[11px] text-warning-500 leading-snug pt-0.5">
+                                  Puedes agregar esta orden al folio, pero ten en cuenta que generalmente un folio corresponde a un solo destino.
+                                </p>
+                              </div>
+                            </div>
+                          )}
 
                           {/* Cantidad a despachar + toggle en la misma fila */}
                           <div className="flex items-center gap-2">
@@ -964,9 +1002,9 @@ export default function FolioDetalle() {
                     <th className="table-header w-10"></th>
                     <th className="table-header">Orden</th>
                     <th className="table-header">Destinatario</th>
-                    <th className="table-header text-center">Esperadas</th>
-                    <th className="table-header text-center">Despacho</th>
-                    <th className="table-header text-center">Validados</th>
+                    <th className="table-header text-center">{t('desp.folio.col.esperadas')}</th>
+                    <th className="table-header text-center">{t('desp.folio.col.validadas')}</th>
+                    <th className="table-header text-center">{t('desp.folio.col.despacho')}</th>
                     <th className="table-header">Estado</th>
                     {editable && <th className="table-header w-10"></th>}
                   </tr>
@@ -1026,14 +1064,14 @@ export default function FolioDetalle() {
                           <span className="text-xs text-warm-500 tabular-nums">{order.bultos_esperados ?? '—'}</span>
                         </td>
                         <td className="px-4 py-3.5 text-center">
-                          <span className="text-xs font-semibold text-warm-800 tabular-nums">{order.bultos}</span>
+                          <span className={`text-xs font-semibold tabular-nums ${
+                            (order.surtido_validadas ?? 0) > 0 ? 'text-success-600' : 'text-warm-300'
+                          }`}>
+                            {order.surtido_validadas ?? 0}
+                          </span>
                         </td>
                         <td className="px-4 py-3.5 text-center">
-                          <span className={`text-xs font-semibold tabular-nums ${
-                            order.scans?.length > 0 ? 'text-success-600' : 'text-warm-300'
-                          }`}>
-                            {order.scans?.length ?? 0}
-                          </span>
+                          <span className="text-xs font-semibold text-warm-800 tabular-nums">{order.bultos}</span>
                         </td>
                         <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
                           {editable ? (

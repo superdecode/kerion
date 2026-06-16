@@ -1,4 +1,5 @@
 // frontend/src/modules/Despacho/utils/printFolio.js
+import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 
 function esc(str) {
   if (str == null) return ''
@@ -15,21 +16,42 @@ function fmtPrint(dt) {
   return new Date(dt).toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
+// Group scanned codes by base code → [ [base, count], ... ] sorted by base
+function getOrderCodes(order) {
+  const scans = order.scans ?? []
+  if (scans.length === 0) return []
+  const map = new Map()
+  for (const s of scans) {
+    const base = extractBaseCode(s.codigo_caja) || s.codigo_caja
+    if (!base) continue
+    map.set(base, (map.get(base) || 0) + 1)
+  }
+  return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+}
+
 export function printFolio({ folio, orders }) {
   if (!folio || !orders?.length) return { success: false, message: 'No hay órdenes para imprimir' }
 
   const totalBultos = orders.reduce((s, o) => s + (Number(o.bultos) || 0), 0)
   const totalPeso   = orders.reduce((s, o) => s + (Number(o.peso_kg) || 0), 0)
 
-  const orderRows = orders.map((o, i) => `
+  const orderRows = orders.map((o, i) => {
+    const codes = getOrderCodes(o)
+    const codesHtml = codes.length > 0
+      ? codes.map(([base, count]) =>
+          `<div class="code-row"><span class="code-base">${esc(base)}</span><span class="code-count">${count}</span></div>`
+        ).join('')
+      : '<span style="color:#94a3b8">—</span>'
+    return `
     <tr>
       <td class="col-num">${i + 1}</td>
       <td class="col-mono">${esc(o.outbound_order_no) || '—'}</td>
-      <td>${esc(o.cliente) || '—'}</td>
+      <td class="col-codes">${codesHtml}</td>
       <td class="col-center">${o.bultos ?? '—'}</td>
       <td class="col-center">${o.peso_kg != null ? Number(o.peso_kg).toFixed(2) : '—'}</td>
       <td>${esc(o.estado) || 'pendiente'}</td>
-    </tr>`).join('')
+    </tr>`
+  }).join('')
 
   const rejectionRows = Array.from({ length: 16 }, (_, i) => `
     <tr>
@@ -54,11 +76,17 @@ export function printFolio({ folio, orders }) {
     .header-value { font-weight: 700; font-size: 9pt; }
     table { width: 100%; border-collapse: collapse; border: 1px solid #fed7aa; margin-bottom: 14px; }
     th { background: #fff7ed; color: #78716c; padding: 5px 6px; font-size: 8.5pt; font-weight: 600; border-bottom: 1px solid #fed7aa; text-transform: uppercase; text-align: left; }
-    td { padding: 5px 6px; border-bottom: 1px solid #fee2ca; font-size: 9pt; }
+    td { padding: 5px 6px; border-bottom: 1px solid #fee2ca; font-size: 9pt; vertical-align: top; }
     tr:nth-child(even) td { background: #fffbeb; }
     .col-num { width: 28px; text-align: center; }
-    .col-mono { font-family: monospace; font-weight: 600; color: #1e3a5f; }
+    .col-mono { font-family: monospace; font-weight: 600; color: #1e3a5f; white-space: nowrap; }
     .col-center { text-align: center; }
+    .col-codes { min-width: 180px; }
+    .code-row { display: flex; align-items: baseline; gap: 8px; line-height: 1.55; }
+    .code-base { font-family: monospace; font-size: 8.5pt; font-weight: 600; color: #1e3a5f; }
+    .code-count { font-size: 8pt; color: #64748b; white-space: nowrap; }
+    .code-count::before { content: '('; }
+    .code-count::after  { content: ')'; }
     tfoot td { background: #ffedd5 !important; font-weight: 700; font-size: 9pt; padding: 6px; }
     .section-title { background: #ffedd5; color: #9a3412; padding: 5px 8px; font-weight: 700; font-size: 10pt; border: 1px solid #fed7aa; margin-bottom: 8px; }
     .firmas { display: flex; justify-content: space-between; margin-top: 36px; }
@@ -93,7 +121,7 @@ export function printFolio({ folio, orders }) {
       <tr>
         <th class="col-num">#</th>
         <th>Orden</th>
-        <th>Cliente</th>
+        <th>Código</th>
         <th class="col-center">Bultos</th>
         <th class="col-center">Peso kg</th>
         <th>Estado</th>

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import {
   ArrowLeft, Copy, Check, Package2, Truck, Clock, User, Hash,
   ScanBarcode, UserCheck, ClipboardList, CheckCircle2, Loader2,
-  Boxes, BarChart3, ShieldAlert, AlertTriangle, ExternalLink,
+  Boxes, BarChart3, ShieldAlert, AlertTriangle, ExternalLink, Crosshair,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -27,6 +27,7 @@ import {
   getBoxStatus,
   updateBoxStatus,
 } from '../services/surtidoService'
+import { buscarCaja, createRastreoOrden } from '../../../core/services/rastreoService'
 
 const BOX_STATUS_TRANSITIONS = {
   pendiente:   ['faltante', 'anormalidad', 'reparacion', 'rastreo'],
@@ -273,7 +274,7 @@ function TraceabilityTimeline({ tracking, t }) {
   )
 }
 
-function PackagesTable({ packages, referencia, trackingNo, obc, boxStatuses, onOpenStatus, navigate, t }) {
+function PackagesTable({ packages, referencia, trackingNo, obc, boxStatuses, onOpenStatus, navigate, rastreoLinks, hasRastreoAccess, t }) {
   if (packages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 gap-2 text-warm-300">
@@ -303,6 +304,7 @@ function PackagesTable({ packages, referencia, trackingNo, obc, boxStatuses, onO
             const estado = (normKey && boxStatuses?.[normKey]) ?? 'pendiente'
             const type = p.boxType || p.type || '—'
             const qty = p.quantity ?? p.qty ?? p.count ?? 1
+            const rastreoFolio = normKey ? rastreoLinks?.[normKey] : null
             return (
               <tr key={i} className="table-row">
                 <td className="table-cell text-warm-400 font-bold tabular-nums w-8">{i + 1}</td>
@@ -330,6 +332,25 @@ function PackagesTable({ packages, referencia, trackingNo, obc, boxStatuses, onO
                       >
                         <ExternalLink size={11} />
                       </button>
+                    )}
+                    {estado === 'rastreo' && rastreoFolio && (
+                      hasRastreoAccess ? (
+                        <button
+                          type="button"
+                          title={`Orden de rastreo: ${rastreoFolio}`}
+                          onClick={() => navigate(`/inventario/rastreo/${encodeURIComponent(rastreoFolio)}`)}
+                          className="p-0.5 rounded text-sky-500 hover:text-sky-700 hover:bg-sky-50 transition-colors"
+                        >
+                          <Crosshair size={11} />
+                        </button>
+                      ) : (
+                        <span
+                          title={`Orden de rastreo: ${rastreoFolio}`}
+                          className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-sky-100"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                        </span>
+                      )
                     )}
                   </div>
                 </td>
@@ -400,12 +421,14 @@ export default function OrdenDetalle() {
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
   const canForceValidate = hasPermission('surtido.ordenes', 'eliminar')
+  const hasRastreoAccess = hasPermission('inventario.rastreo', 'ver')
 
   const [copied, setCopied] = useState(false)
   const [showAssign, setShowAssign] = useState(false)
   const [showForceValidate, setShowForceValidate] = useState(false)
   const [forceReason, setForceReason] = useState('')
   const [statusModal, setStatusModal] = useState(null) // { code, currentEstado }
+  const [rastreoLinksSession, setRastreoLinksSession] = useState({})
 
   const { data: wmsListData } = useQuery({
     queryKey: ['wms-outbound'],
@@ -441,15 +464,72 @@ export default function OrdenDetalle() {
   })
   const boxStatuses = boxStatusRaw?.data ?? {}
 
+  // Para cajas ya en estado rastreo al cargar la pagina, buscar la orden de rastreo asociada
+  const rasteroCodes = Object.entries(boxStatuses)
+    .filter(([, estado]) => estado === 'rastreo')
+    .map(([code]) => code)
+
+  const { data: rastreoLinksDb } = useQuery({
+    queryKey: ['surtido-rastreo-links', obc, rasteroCodes.slice().sort().join(',')],
+    queryFn: async () => {
+      const results = await Promise.all(
+        rasteroCodes.map(code =>
+          buscarCaja(code, 'exact')
+            .catch(() => ({ data: { rastreo: [] } }))
+            .then(r => ({ code, rastreo: r?.data?.rastreo || [] }))
+        )
+      )
+      return results.reduce((acc, { code, rastreo }) => {
+        const active = rastreo.find(r => r.orden_estado !== 'cancelada')
+        if (active) acc[code] = active.folio
+        return acc
+      }, {})
+    },
+    staleTime: 60000,
+    enabled: rasteroCodes.length > 0,
+  })
+
+  const rastreoLinks = { ...rastreoLinksDb, ...rastreoLinksSession }
+
   const boxStatusMut = useMutation({
     mutationFn: ({ code, estado, notes }) => updateBoxStatus(obc, code, estado, notes),
-    onSuccess: () => {
+    onSuccess: async (_, { code, estado }) => {
       qc.invalidateQueries({ queryKey: ['wms-box-status', obc] })
       qc.invalidateQueries({ queryKey: ['wms-tracking-obc', obc] })
       refetchBoxStatus()
       refetchTracking()
       setStatusModal(null)
       toast.success(t('common.save') + ' OK')
+
+      if (estado === 'rastreo') {
+        try {
+          const searchRes = await buscarCaja(code, 'exact')
+          const existing = (searchRes?.data?.rastreo || []).find(
+            r => r.orden_estado !== 'cancelada'
+          )
+          if (existing) {
+            setRastreoLinksSession(prev => ({ ...prev, [code]: existing.folio }))
+            toast.info(t('rastreo.toast.rastreoYaExiste') + existing.folio)
+          } else {
+            const { user } = useAuthStore.getState()
+            const res = await createRastreoOrden({
+              outbound_order_no: obc,
+              estado: 'borrador',
+              notas: `Creado automaticamente desde surtido (${obc})`,
+              creado_por_id: user?.id,
+              cajas: [{ box_code: code }],
+            })
+            const folio = res?.data?.folio
+            if (folio) {
+              setRastreoLinksSession(prev => ({ ...prev, [code]: folio }))
+              toast.success(t('rastreo.toast.rastreoAutoCreado') + folio)
+            }
+          }
+          qc.invalidateQueries({ queryKey: ['surtido-rastreo-links', obc] })
+        } catch {
+          // creacion de rastreo es best-effort, no bloquear flujo
+        }
+      }
     },
     onError: (err) => toast.error(err?.response?.data?.error || t('toast.error')),
   })
@@ -502,7 +582,7 @@ export default function OrdenDetalle() {
       refetchTracking()
       setShowForceValidate(false)
       setForceReason('')
-      toast.success('Orden cerrada forzosamente')
+      toast.success(t('surtido.force.toast.success'))
     },
     onError: (err) => toast.error(err?.response?.data?.error || t('toast.error')),
   })
@@ -565,7 +645,7 @@ export default function OrdenDetalle() {
                 className="btn-ghost text-sm flex items-center gap-1.5 text-danger-600 border-danger-200 hover:bg-danger-50"
                 onClick={() => { setShowForceValidate(true); setForceReason('') }}>
                 <ShieldAlert size={14} />
-                Forzar validación
+                {t('surtido.force.btn')}
               </button>
             )}
           </div>
@@ -581,7 +661,7 @@ export default function OrdenDetalle() {
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
         >
           <div className="border-b border-warm-100/80 bg-gradient-to-r from-white via-white to-primary-50/50 px-5 py-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary-500">Informacion general</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary-500">{t('surtido.info.general')}</p>
           </div>
 
           <div className="px-5 py-5">
@@ -647,6 +727,8 @@ export default function OrdenDetalle() {
             boxStatuses={boxStatuses}
             onOpenStatus={(code, currentEstado) => setStatusModal({ code, currentEstado })}
             navigate={navigate}
+            rastreoLinks={rastreoLinks}
+            hasRastreoAccess={hasRastreoAccess}
             t={t}
           />
         </motion.div>
@@ -663,31 +745,31 @@ export default function OrdenDetalle() {
       <Modal
         isOpen={showForceValidate}
         onClose={() => { setShowForceValidate(false); setForceReason('') }}
-        title="Cerrar orden / Forzar validación"
+        title={t('surtido.force.title')}
         icon={ShieldAlert}
         footer={
           <div className="flex gap-3 justify-end">
-            <button className="btn-ghost" onClick={() => { setShowForceValidate(false); setForceReason('') }}>Cancelar</button>
+            <button className="btn-ghost" onClick={() => { setShowForceValidate(false); setForceReason('') }}>{t('common.cancel')}</button>
             <button
               className="btn-danger"
               disabled={!forceReason.trim() || forceValidateMut.isPending}
               onClick={() => forceValidateMut.mutate(forceReason)}
             >
               {forceValidateMut.isPending ? <Loader2 size={14} className="animate-spin inline mr-1" /> : null}
-              Confirmar cierre
+              {t('surtido.force.confirm.btn')}
             </button>
           </div>
         }
       >
         <div className="space-y-3">
           <p className="text-sm text-warm-600">
-            Se marcará la orden <span className="font-mono font-semibold text-warm-900">{obc}</span> como <span className="font-semibold text-success-700">Completa</span>. Esta acción queda registrada en el historial de la orden.
+            {t('surtido.force.body').replace('{obc}', obc)}
           </p>
           <div>
-            <label className="block text-xs font-semibold text-warm-700 mb-1">Motivo (requerido)</label>
+            <label className="block text-xs font-semibold text-warm-700 mb-1">{t('surtido.force.motivo.label')}</label>
             <textarea
               className="input-field text-sm w-full h-20 resize-none"
-              placeholder="Describe el motivo del cierre forzado..."
+              placeholder={t('surtido.force.motivo.placeholder')}
               value={forceReason}
               onChange={e => setForceReason(e.target.value)}
               autoFocus

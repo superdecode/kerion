@@ -38,7 +38,11 @@ async function getFolioDetail(req, folioId) {
   if (folioRes.rows.length === 0) return null
 
   const ordersRes = await req.tQuery(
-    `SELECT * FROM dispatch_folio_orders WHERE folio_id = $1 AND tenant_id = $2 ORDER BY created_at ASC`,
+    `SELECT o.*, COALESCE(ps.total_scanned, 0) AS surtido_validadas
+     FROM dispatch_folio_orders o
+     LEFT JOIN pick_sessions ps ON ps.outbound_order_no = o.outbound_order_no AND ps.tenant_id = o.tenant_id
+     WHERE o.folio_id = $1 AND o.tenant_id = $2
+     ORDER BY o.created_at ASC`,
     [folioId, req.tenantId]
   )
 
@@ -96,7 +100,8 @@ router.get('/',
                 c.nombre AS conductor_nombre,
                 u.placa AS unidad_placa, u.tipo AS unidad_tipo,
                 us.nombre_completo AS operador_nombre,
-                COUNT(fo.id) AS total_ordenes
+                COUNT(fo.id) AS total_ordenes,
+                COALESCE(SUM(fo.bultos), 0) AS total_cajas
          FROM dispatch_folios f
          LEFT JOIN dispatch_conductores c ON c.id = f.conductor_id
          LEFT JOIN dispatch_unidades u ON u.id = f.unidad_id

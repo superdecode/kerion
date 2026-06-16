@@ -12,6 +12,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 
 const ESTADO_META = {
+  borrador:   { cls: 'bg-warm-100 text-warm-500 border-warm-200', dot: 'bg-warm-300', labelKey: 'rastreo.estado.borrador' },
   abierta:    { cls: 'bg-primary-100 text-primary-700 border-primary-200', dot: 'bg-primary-500', labelKey: 'rastreo.estado.abierta' },
   en_proceso: { cls: 'bg-warning-100 text-warning-700 border-warning-200', dot: 'bg-warning-500', labelKey: 'rastreo.estado.en_proceso' },
   completada: { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', labelKey: 'rastreo.estado.completada' },
@@ -19,6 +20,7 @@ const ESTADO_META = {
 }
 
 const CARD_BORDER = {
+  borrador:   'border-warm-200/60 hover:border-warm-300 hover:shadow-[0_4px_12px_-4px_rgba(120,113,108,0.08)]',
   abierta:    'border-primary-200/60 hover:border-primary-300 hover:shadow-[0_4px_12px_-4px_rgba(99,102,241,0.15)]',
   en_proceso: 'border-warning-200/60 hover:border-warning-300 hover:shadow-[0_4px_12px_-4px_rgba(245,158,11,0.15)]',
   completada: 'border-success-200/60 hover:border-success-300 hover:shadow-[0_4px_12px_-4px_rgba(34,197,94,0.15)]',
