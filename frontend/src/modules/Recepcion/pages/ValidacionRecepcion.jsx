@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft, ScanBarcode, CheckCircle2, XCircle, AlertCircle,
   Layers, PackageCheck, X, Square, ArrowUp, ArrowDown, ArrowUpDown, Trash2,
-  ChevronDown, PanelRightClose, PanelRightOpen,
+  ChevronDown, PanelRightClose, PanelRightOpen, Search,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -56,7 +56,6 @@ export default function ValidacionRecepcion() {
   const toast = useToastStore()
   const qc = useQueryClient()
 
-  // Two separate refs: one for the inline desktop input, one for the mobile fixed-bottom input
   const scanRefDesktop = useRef(null)
   const scanRefMobile  = useRef(null)
 
@@ -72,6 +71,9 @@ export default function ValidacionRecepcion() {
   const [historySortDir, setHistorySortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [showTarimaConfirm, setShowTarimaConfirm] = useState(false)
+  const [tarimaSearch, setTarimaSearch] = useState('')
+  const [tarimaFilter, setTarimaFilter] = useState(null)
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
 
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['recepcion-order', id],
@@ -99,7 +101,6 @@ export default function ValidacionRecepcion() {
   const lastTarimaBase  = lastResult?.code ? extractBaseCode(lastResult.code) : null
   const lastTarimaColor = lastTarimaNum ? getTarimaColor(lastTarimaNum) : null
 
-  // Per-tarima stats for the side panel
   const tarimaStats = useMemo(() => {
     if (!withTarimas) return []
     const stats = []
@@ -110,6 +111,22 @@ export default function ValidacionRecepcion() {
     }
     return stats.sort((a, b) => a.num - b.num)
   }, [withTarimas, tarimaMap, lines])
+
+  const tarimaCounts = useMemo(() => ({
+    completo:   tarimaStats.filter(ts => ts.validated === ts.total && ts.total > 0).length,
+    pendiente:  tarimaStats.filter(ts => ts.validated === 0).length,
+    en_proceso: tarimaStats.filter(ts => ts.validated > 0 && ts.validated < ts.total).length,
+  }), [tarimaStats])
+
+  const filteredTarimaStats = useMemo(() => {
+    let result = tarimaStats
+    const q = tarimaSearch.trim().toLowerCase()
+    if (q) result = result.filter(ts => ts.base.toLowerCase().includes(q))
+    if (tarimaFilter === 'completo')   result = result.filter(ts => ts.validated === ts.total && ts.total > 0)
+    if (tarimaFilter === 'pendiente')  result = result.filter(ts => ts.validated === 0)
+    if (tarimaFilter === 'en_proceso') result = result.filter(ts => ts.validated > 0 && ts.validated < ts.total)
+    return result
+  }, [tarimaStats, tarimaSearch, tarimaFilter])
 
   const toggleTarima = useCallback((num) => {
     setExpandedTarimas(prev => {
@@ -243,6 +260,150 @@ export default function ValidacionRecepcion() {
     Object.entries(RESULT_CFG_BASE).map(([k, v]) => [k, { ...v, labelText: t(v.labelKey) }])
   )
 
+  const CHIPS = [
+    { key: null,         label: 'Todos',      count: tarimaStats.length,     inactiveCls: 'bg-warm-100 text-warm-600 border-warm-200',    activeCls: 'bg-warm-700 text-white border-warm-700' },
+    { key: 'completo',   label: 'Completo',   count: tarimaCounts.completo,   inactiveCls: 'bg-success-50 text-success-700 border-success-100', activeCls: 'bg-success-500 text-white border-success-500' },
+    { key: 'en_proceso', label: 'En proceso', count: tarimaCounts.en_proceso, inactiveCls: 'bg-sky-50 text-sky-700 border-sky-100',         activeCls: 'bg-sky-500 text-white border-sky-500' },
+    { key: 'pendiente',  label: 'Pendiente',  count: tarimaCounts.pendiente,  inactiveCls: 'bg-warm-50 text-warm-500 border-warm-200',      activeCls: 'bg-warm-500 text-white border-warm-500' },
+  ]
+
+  // Shared tarima panel body (used by both desktop sidebar and mobile drawer)
+  const renderPanelBody = () => (
+    <>
+      {/* Search + filter chips */}
+      <div className="px-3 pt-3 pb-2 space-y-2 shrink-0 border-b border-warm-100">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300 pointer-events-none" />
+          <input
+            type="text"
+            value={tarimaSearch}
+            onChange={e => setTarimaSearch(e.target.value)}
+            placeholder="Buscar código..."
+            className="w-full pl-8 pr-7 py-1.5 text-xs bg-warm-50 border border-warm-200 rounded-xl focus:border-sky-300 focus:ring-1 focus:ring-sky-100 outline-none placeholder:text-warm-300 font-mono transition-all"
+          />
+          {tarimaSearch && (
+            <button
+              type="button"
+              onClick={() => setTarimaSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300 hover:text-warm-500 transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter chips row */}
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+          {CHIPS.map(chip => {
+            const isActive = tarimaFilter === chip.key
+            return (
+              <button
+                key={String(chip.key)}
+                type="button"
+                onClick={() => setTarimaFilter(chip.key)}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                  isActive ? chip.activeCls : chip.inactiveCls
+                }`}
+              >
+                {chip.label}
+                <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
+                  isActive ? 'bg-white/25 text-white' : 'bg-white text-warm-500'
+                }`}>
+                  {chip.count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Filtered count indicator */}
+        {(tarimaSearch || tarimaFilter) && (
+          <p className="text-[10px] text-warm-400 text-right">
+            {filteredTarimaStats.length} de {tarimaStats.length} tarimas
+          </p>
+        )}
+      </div>
+
+      {/* Tarima cards list */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {filteredTarimaStats.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2 text-warm-400">
+            <Search className="w-5 h-5 opacity-40" />
+            <p className="text-xs">Sin resultados</p>
+          </div>
+        ) : filteredTarimaStats.map(ts => {
+          const isActive = ts.num === lastTarimaNum
+          const isExpanded = expandedTarimas.has(ts.num)
+          const pct = ts.total > 0 ? Math.round((ts.validated / ts.total) * 100) : 0
+          return (
+            <div
+              key={ts.num}
+              className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
+                isActive
+                  ? `${ts.color.bg} border-transparent ring-2 ${ts.color.ring} ring-offset-1 shadow-lg`
+                  : 'bg-white border-warm-200 hover:border-warm-300'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => toggleTarima(ts.num)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
+              >
+                <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                  isActive ? 'bg-white/25 text-white' : ts.color.pill
+                }`}>{ts.num}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-mono text-xs font-semibold truncate ${isActive ? 'text-white' : 'text-warm-800'}`}>{ts.base}</p>
+                  <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : 'text-warm-400'}`}>{ts.validated}/{ts.total}</p>
+                </div>
+                <div className="shrink-0 flex flex-col items-end gap-0.5">
+                  <span className={`text-xs font-bold tabular-nums ${isActive ? 'text-white' : 'text-warm-600'}`}>{pct}%</span>
+                  {isActive && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white/25 text-white leading-none">ACTIVA</span>
+                  )}
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-white/60' : 'text-warm-300'}`} />
+              </button>
+
+              {!isActive && (
+                <div className="px-3 pb-2.5">
+                  <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                    <div className={`h-full ${ts.color.bar} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {isExpanded && (
+                <div className={`border-t divide-y ${isActive ? 'border-white/20 divide-white/10' : 'border-warm-100 divide-warm-50'}`}>
+                  {ts.tarLines.map(l => (
+                    <div key={l.id} className={`flex items-center gap-2 px-3 py-1.5 ${isActive ? 'hover:bg-white/10' : 'hover:bg-warm-50'} transition-colors`}>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        l.estado_validacion === 'validada' ? 'bg-success-400' :
+                        l.estado_validacion === 'faltante' ? 'bg-danger-400' : 'bg-warm-300'
+                      }`} />
+                      <span className={`font-mono text-[11px] truncate flex-1 ${isActive ? 'text-white/80' : 'text-warm-600'}`}>
+                        {l.custom_box_barcode || '—'}
+                      </span>
+                      <span className={`text-[10px] font-bold shrink-0 ${
+                        l.estado_validacion === 'validada'
+                          ? (isActive ? 'text-white/70' : 'text-success-600')
+                          : l.estado_validacion === 'faltante'
+                            ? (isActive ? 'text-white/60' : 'text-danger-500')
+                            : (isActive ? 'text-white/40' : 'text-warm-300')
+                      }`}>
+                        {l.estado_validacion === 'validada' ? '✓' : l.estado_validacion === 'faltante' ? '✗' : '·'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+
   if (isLoading || bootingSession || !order) return (
     <div className="flex flex-col h-full">
       <Header title={t('rec.scan.title')} icon={PackageCheck} />
@@ -250,7 +411,6 @@ export default function ValidacionRecepcion() {
     </div>
   )
 
-  // Shared scan input props (used by both desktop inline and mobile fixed-bottom inputs)
   const scanInputProps = {
     type: 'text',
     className: 'w-full pl-12 pr-4 py-3.5 text-lg bg-white border-2 border-warm-200 rounded-2xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide',
@@ -281,10 +441,18 @@ export default function ValidacionRecepcion() {
         icon={PackageCheck}
         actions={
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Tarimas toggle */}
+            {/* Tarimas toggle — on mobile when active: opens panel; on desktop: toggles off */}
             <button
               type="button"
-              onClick={() => { if (!withTarimas && totalTarimas > 0) setShowTarimaConfirm(true); else setWithTarimas(p => !p) }}
+              onClick={() => {
+                if (withTarimas) {
+                  if (window.innerWidth < 1024) setMobilePanelOpen(true)
+                  else setWithTarimas(false)
+                } else {
+                  if (totalTarimas > 0) setShowTarimaConfirm(true)
+                  else setWithTarimas(true)
+                }
+              }}
               className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
                 withTarimas ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-warm-200 text-warm-500 hover:bg-warm-50'
               }`}
@@ -359,7 +527,7 @@ export default function ValidacionRecepcion() {
               )}
             </div>
 
-            {/* ── Desktop scan input (inline, sticky so it stays visible while scrolling history) ── */}
+            {/* ── Desktop scan input ── */}
             <div className="hidden sm:block card p-3 sm:p-4 sticky top-0 z-[10] bg-white/95 backdrop-blur-sm">
               <div className="relative">
                 <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300 pointer-events-none" />
@@ -381,9 +549,6 @@ export default function ValidacionRecepcion() {
                     exit={{ opacity: 0, y: 8 }}
                     transition={{ duration: 0.18 }}
                   >
-                    {/* Big tarima display:
-                        - Always on mobile (side panel absent)
-                        - On desktop only when sidebar is hidden */}
                     {withTarimas && lastTarimaNum && lastTarimaColor && (
                       <div className={`${sidebarVisible ? 'sm:hidden' : ''} rounded-2xl flex flex-col items-center justify-center py-6 mb-3 ${lastTarimaColor.bg} ring-4 ${lastTarimaColor.ring} ring-offset-2`}>
                         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">{t('rec.tarimas.label')}</p>
@@ -392,7 +557,6 @@ export default function ValidacionRecepcion() {
                       </div>
                     )}
 
-                    {/* Scan result card */}
                     <div className={`p-4 rounded-2xl flex items-center gap-3 border backdrop-blur-sm ${cfg.bg}`}>
                       <Icon className={`w-5 h-5 shrink-0 ${cfg.iconCls}`} />
                       <div className="flex-1 min-w-0">
@@ -402,7 +566,6 @@ export default function ValidacionRecepcion() {
                       </div>
                       <div className="shrink-0 flex flex-col items-end gap-1.5">
                         <span className={`text-sm font-bold ${cfg.label}`}>{cfg.labelText}</span>
-                        {/* Compact tarima chip — desktop when panel is visible */}
                         {withTarimas && lastTarimaNum && lastTarimaColor && sidebarVisible && (
                           <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${lastTarimaColor.pill}`}>
                             T{lastTarimaNum}
@@ -502,11 +665,10 @@ export default function ValidacionRecepcion() {
           </div>
         )}
 
-        {/* ── Tarimas side panel (desktop, lg+, only when withTarimas + sidebarVisible) ── */}
+        {/* ── Tarimas side panel (desktop lg+) ── */}
         {withTarimas && sidebarVisible && (
           <div className="hidden lg:flex w-72 xl:w-80 flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-sky-50/20 shrink-0 shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.28)]">
-            {/* Panel header */}
-            <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/60 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/60 flex items-center justify-between shrink-0">
               <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
                 <Layers className="w-3.5 h-3.5 text-sky-500" />
                 Tarimas · {totalTarimas}
@@ -517,88 +679,13 @@ export default function ValidacionRecepcion() {
                 </span>
               )}
             </div>
-
-            {/* Tarima cards list */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {tarimaStats.map(ts => {
-                const isActive = ts.num === lastTarimaNum
-                const isExpanded = expandedTarimas.has(ts.num)
-                const pct = ts.total > 0 ? Math.round((ts.validated / ts.total) * 100) : 0
-                return (
-                  <div
-                    key={ts.num}
-                    className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
-                      isActive
-                        ? `${ts.color.bg} border-transparent ring-2 ${ts.color.ring} ring-offset-1 shadow-lg`
-                        : 'bg-white border-warm-200 hover:border-warm-300'
-                    }`}
-                  >
-                    {/* Card header row */}
-                    <button
-                      type="button"
-                      onClick={() => toggleTarima(ts.num)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left"
-                    >
-                      <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
-                        isActive ? 'bg-white/25 text-white' : ts.color.pill
-                      }`}>{ts.num}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className={`font-mono text-xs font-semibold truncate ${isActive ? 'text-white' : 'text-warm-800'}`}>{ts.base}</p>
-                        <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : 'text-warm-400'}`}>{ts.validated}/{ts.total}</p>
-                      </div>
-                      <div className="shrink-0 flex flex-col items-end gap-0.5">
-                        <span className={`text-xs font-bold tabular-nums ${isActive ? 'text-white' : 'text-warm-600'}`}>{pct}%</span>
-                        {isActive && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white/25 text-white leading-none">ACTIVA</span>
-                        )}
-                      </div>
-                      <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-white/60' : 'text-warm-300'}`} />
-                    </button>
-
-                    {/* Progress bar (only when inactive — color bg already communicates active state) */}
-                    {!isActive && (
-                      <div className="px-3 pb-2.5">
-                        <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden">
-                          <div className={`h-full ${ts.color.bar} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Expanded: codes in this tarima */}
-                    {isExpanded && (
-                      <div className={`border-t divide-y ${isActive ? 'border-white/20 divide-white/10' : 'border-warm-100 divide-warm-50'}`}>
-                        {ts.tarLines.map(l => (
-                          <div key={l.id} className={`flex items-center gap-2 px-3 py-1.5 ${isActive ? 'hover:bg-white/10' : 'hover:bg-warm-50'} transition-colors`}>
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                              l.estado_validacion === 'validada' ? 'bg-success-400' :
-                              l.estado_validacion === 'faltante' ? 'bg-danger-400' : 'bg-warm-300'
-                            }`} />
-                            <span className={`font-mono text-[11px] truncate flex-1 ${isActive ? 'text-white/80' : 'text-warm-600'}`}>
-                              {l.custom_box_barcode || '—'}
-                            </span>
-                            <span className={`text-[10px] font-bold shrink-0 ${
-                              l.estado_validacion === 'validada'
-                                ? (isActive ? 'text-white/70' : 'text-success-600')
-                                : l.estado_validacion === 'faltante'
-                                  ? (isActive ? 'text-white/60' : 'text-danger-500')
-                                  : (isActive ? 'text-white/40' : 'text-warm-300')
-                            }`}>
-                              {l.estado_validacion === 'validada' ? '✓' : l.estado_validacion === 'faltante' ? '✗' : '·'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            {renderPanelBody()}
           </div>
         )}
 
       </div>
 
-      {/* ── Mobile scan input (fixed bottom, hidden on sm+) ── */}
+      {/* ── Mobile scan input ── */}
       <div className="sm:hidden shrink-0 bg-white border-t border-warm-100 px-3 py-2.5" style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom, 0px))' }}>
         <div className="relative">
           <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300 pointer-events-none" />
@@ -606,6 +693,62 @@ export default function ValidacionRecepcion() {
         </div>
         <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
       </div>
+
+      {/* ── Mobile tarimas bottom sheet ── */}
+      <AnimatePresence>
+        {withTarimas && mobilePanelOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+              onClick={() => setMobilePanelOpen(false)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="lg:hidden fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
+              style={{ maxHeight: '82dvh' }}
+            >
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-1 shrink-0">
+                <div className="w-10 h-1 bg-warm-200 rounded-full" />
+              </div>
+
+              {/* Sheet header */}
+              <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/60 flex items-center justify-between shrink-0">
+                <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
+                  <Layers className="w-3.5 h-3.5 text-sky-500" />
+                  Tarimas · {totalTarimas}
+                </h3>
+                <div className="flex items-center gap-2">
+                  {lastTarimaNum && lastTarimaColor && (
+                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${lastTarimaColor.pill}`}>
+                      T{lastTarimaNum} activa
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setMobilePanelOpen(false)}
+                    className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {renderPanelBody()}
+
+              {/* Safe area bottom padding */}
+              <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ── Tarima confirm modal ── */}
       <Modal
