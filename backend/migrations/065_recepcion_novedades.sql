@@ -1,8 +1,8 @@
 -- Tabla de novedades manuales por orden de recepción
 CREATE TABLE IF NOT EXISTS inbound_novedades (
-  id          SERIAL PRIMARY KEY,
+  id          BIGSERIAL PRIMARY KEY,
   tenant_id   INTEGER NOT NULL,
-  order_id    INTEGER NOT NULL REFERENCES inbound_orders(id) ON DELETE CASCADE,
+  order_id    UUID NOT NULL REFERENCES inbound_orders(id) ON DELETE CASCADE,
   tipo        VARCHAR(100) NOT NULL,
   codigo      VARCHAR(255),
   created_by  INTEGER REFERENCES usuarios(id),

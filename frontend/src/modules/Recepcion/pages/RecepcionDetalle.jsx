@@ -194,7 +194,7 @@ export default function RecepcionDetalle() {
   const createNovedadMut = useMutation({
     mutationFn: (payload) => createNovedad(id, payload),
     onSuccess: () => {
-      toast.success('Novedad registrada')
+      toast.success(t('rec.toast.novedad_ok'))
       qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
       setNuevoTipo('')
       setNuevoCodigo('')
@@ -205,7 +205,7 @@ export default function RecepcionDetalle() {
   const deleteNovedadMut = useMutation({
     mutationFn: (nid) => deleteNovedad(id, nid),
     onSuccess: () => {
-      toast.success('Novedad eliminada')
+      toast.success(t('rec.toast.novedad_deleted'))
       qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
     },
     onError: () => toast.error(t('toast.error')),
@@ -510,7 +510,7 @@ export default function RecepcionDetalle() {
                     activeTab === 'otros' ? 'border-primary-500 text-primary-700' : 'border-transparent text-warm-500 hover:text-warm-700'
                   }`}
                 >
-                  Otros
+                  {t('rec.otros.tab')}
                   {novedades.length > 0 && (
                     <span className="badge text-[9px] bg-warning-100 text-warning-700 border-0 shrink-0">{novedades.length}</span>
                   )}
@@ -716,14 +716,14 @@ export default function RecepcionDetalle() {
 
             {/* Manual entry form */}
             <div className="card p-4 space-y-3 border border-warm-100/80 shadow-soft">
-              <p className="text-xs font-bold text-warm-600 uppercase tracking-wide">Registrar novedad</p>
+              <p className="text-xs font-bold text-warm-600 uppercase tracking-wide">{t('rec.otros.registrar')}</p>
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
                 <select
                   value={nuevoTipo}
                   onChange={e => setNuevoTipo(e.target.value)}
                   className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 bg-white"
                 >
-                  <option value="">Seleccionar tipo...</option>
+                  <option value="">{t('rec.otros.select_tipo')}</option>
                   {TIPOS_NOVEDAD.map(tipo => (
                     <option key={tipo} value={tipo}>{tipo}</option>
                   ))}
@@ -733,7 +733,7 @@ export default function RecepcionDetalle() {
                   value={nuevoCodigo}
                   onChange={e => setNuevoCodigo(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && nuevoTipo) createNovedadMut.mutate({ tipo: nuevoTipo, codigo: nuevoCodigo }) }}
-                  placeholder="Código (opcional)"
+                  placeholder={t('rec.otros.codigo_placeholder')}
                   className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                   autoComplete="off"
                 />
@@ -744,7 +744,7 @@ export default function RecepcionDetalle() {
                   className="btn-primary flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
                 >
                   <Plus className="w-4 h-4" />
-                  Agregar
+                  {t('rec.otros.agregar')}
                 </button>
               </div>
             </div>
@@ -756,10 +756,10 @@ export default function RecepcionDetalle() {
                   <thead>
                     <tr>
                       <th className={TH}>#</th>
-                      <th className={TH}>Tipo</th>
-                      <th className={TH}>Código</th>
-                      <th className={TH}>Registrado por</th>
-                      <th className={TH}>Fecha/Hora</th>
+                      <th className={TH}>{t('rec.otros.col.tipo')}</th>
+                      <th className={TH}>{t('rec.otros.col.codigo')}</th>
+                      <th className={TH}>{t('rec.otros.col.registrado_por')}</th>
+                      <th className={TH}>{t('rec.otros.col.fecha_hora')}</th>
                       <th className={`${TH} text-right`}>{t('common.actions')}</th>
                     </tr>
                   </thead>
@@ -781,7 +781,7 @@ export default function RecepcionDetalle() {
                             onClick={() => deleteNovedadMut.mutate(n.id)}
                             disabled={deleteNovedadMut.isPending}
                             className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:opacity-30"
-                            title="Eliminar"
+                            title={t('common.delete')}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -790,7 +790,7 @@ export default function RecepcionDetalle() {
                     ))}
                     {novedades.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-3 py-10 text-center text-warm-400 text-sm">Sin registros de novedades</td>
+                        <td colSpan={6} className="px-3 py-10 text-center text-warm-400 text-sm">{t('rec.otros.sin_registros')}</td>
                       </tr>
                     )}
                   </tbody>
