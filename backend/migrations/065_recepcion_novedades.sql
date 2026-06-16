@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS inbound_novedades (
   order_id    UUID NOT NULL REFERENCES inbound_orders(id) ON DELETE CASCADE,
   tipo        VARCHAR(100) NOT NULL,
   codigo      VARCHAR(255),
+  ubicacion   VARCHAR(255),
   created_by  INTEGER REFERENCES usuarios(id),
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );

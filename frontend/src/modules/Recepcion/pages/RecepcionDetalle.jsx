@@ -108,7 +108,7 @@ const TH = 'table-header whitespace-nowrap'
 const TIPOS_NOVEDAD = [
   'Caja con Daños', 'Faltante', 'Sobrante', 'Caja Vacía',
   'Mercancía Suelta', 'Caja Con Faltante', 'Código Duplicado',
-  'Producto Dañada', 'Caja Sin Etiqueta',
+  'Producto Dañada', 'Caja Sin Etiqueta', 'SKU Sueltos',
 ]
 
 const TIPO_META = {
@@ -121,6 +121,7 @@ const TIPO_META = {
   'Código Duplicado':  'bg-sky-100 text-sky-700',
   'Producto Dañada':   'bg-danger-100 text-danger-700',
   'Caja Sin Etiqueta': 'bg-warm-100 text-warm-600',
+  'SKU Sueltos':       'bg-primary-100 text-primary-700',
 }
 
 export default function RecepcionDetalle() {
@@ -147,6 +148,7 @@ export default function RecepcionDetalle() {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [nuevoTipo, setNuevoTipo] = useState('')
   const [nuevoCodigo, setNuevoCodigo] = useState('')
+  const [nuevaUbicacion, setNuevaUbicacion] = useState('')
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['recepcion-order', id],
@@ -198,6 +200,7 @@ export default function RecepcionDetalle() {
       qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
       setNuevoTipo('')
       setNuevoCodigo('')
+      setNuevaUbicacion('')
     },
     onError: () => toast.error(t('toast.error')),
   })
@@ -342,14 +345,15 @@ export default function RecepcionDetalle() {
         i + 1,
         n.tipo || '',
         n.codigo || '',
+        n.ubicacion || '',
         n.created_by_nombre || '',
         n.created_at ? fmtDateTime(n.created_at) : '',
       ])
       const wsOtros = XLSX.utils.aoa_to_sheet([
-        ['#', 'Tipo', 'Código', 'Registrado por', 'Fecha/Hora'],
+        ['#', t('rec.otros.col.tipo'), t('rec.otros.col.codigo'), t('rec.otros.col.ubicacion'), t('rec.otros.col.registrado_por'), t('rec.otros.col.fecha_hora')],
         ...otrosRows,
       ])
-      wsOtros['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 18 }]
+      wsOtros['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 18 }]
       XLSX.utils.book_append_sheet(wb, wsOtros, 'Otros')
     }
 
@@ -717,7 +721,7 @@ export default function RecepcionDetalle() {
             {/* Manual entry form */}
             <div className="card p-4 space-y-3 border border-warm-100/80 shadow-soft">
               <p className="text-xs font-bold text-warm-600 uppercase tracking-wide">{t('rec.otros.registrar')}</p>
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2">
                 <select
                   value={nuevoTipo}
                   onChange={e => setNuevoTipo(e.target.value)}
@@ -732,14 +736,22 @@ export default function RecepcionDetalle() {
                   type="text"
                   value={nuevoCodigo}
                   onChange={e => setNuevoCodigo(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && nuevoTipo) createNovedadMut.mutate({ tipo: nuevoTipo, codigo: nuevoCodigo }) }}
                   placeholder={t('rec.otros.codigo_placeholder')}
                   className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                   autoComplete="off"
                 />
+                <input
+                  type="text"
+                  value={nuevaUbicacion}
+                  onChange={e => setNuevaUbicacion(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && nuevoTipo) createNovedadMut.mutate({ tipo: nuevoTipo, codigo: nuevoCodigo, ubicacion: nuevaUbicacion }) }}
+                  placeholder={t('rec.otros.ubicacion_placeholder')}
+                  className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-100"
+                  autoComplete="off"
+                />
                 <button
                   type="button"
-                  onClick={() => createNovedadMut.mutate({ tipo: nuevoTipo, codigo: nuevoCodigo })}
+                  onClick={() => createNovedadMut.mutate({ tipo: nuevoTipo, codigo: nuevoCodigo, ubicacion: nuevaUbicacion })}
                   disabled={!nuevoTipo || createNovedadMut.isPending}
                   className="btn-primary flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
                 >
@@ -758,6 +770,7 @@ export default function RecepcionDetalle() {
                       <th className={TH}>#</th>
                       <th className={TH}>{t('rec.otros.col.tipo')}</th>
                       <th className={TH}>{t('rec.otros.col.codigo')}</th>
+                      <th className={TH}>{t('rec.otros.col.ubicacion')}</th>
                       <th className={TH}>{t('rec.otros.col.registrado_por')}</th>
                       <th className={TH}>{t('rec.otros.col.fecha_hora')}</th>
                       <th className={`${TH} text-right`}>{t('common.actions')}</th>
@@ -773,6 +786,14 @@ export default function RecepcionDetalle() {
                           </span>
                         </td>
                         <td className="px-3 py-2.5 font-mono text-xs text-warm-700">{n.codigo || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          {n.ubicacion
+                            ? <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-accent-700 bg-accent-50 border border-accent-100 px-2 py-0.5 rounded-full">
+                                <MapPin size={9} className="shrink-0" />{n.ubicacion}
+                              </span>
+                            : <span className="text-xs text-warm-300">—</span>
+                          }
+                        </td>
                         <td className="px-3 py-2.5 text-xs text-warm-500">{n.created_by_nombre || '—'}</td>
                         <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDateTime(n.created_at)}</td>
                         <td className="px-3 py-2.5 text-right">
@@ -790,7 +811,7 @@ export default function RecepcionDetalle() {
                     ))}
                     {novedades.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-3 py-10 text-center text-warm-400 text-sm">{t('rec.otros.sin_registros')}</td>
+                        <td colSpan={7} className="px-3 py-10 text-center text-warm-400 text-sm">{t('rec.otros.sin_registros')}</td>
                       </tr>
                     )}
                   </tbody>

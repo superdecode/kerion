@@ -370,12 +370,12 @@ router.post('/orders/:id/novedades',
   requirePermission('recepcion.validacion', 'actualizar'),
   async (req, res) => {
     try {
-      const { tipo, codigo } = req.body
+      const { tipo, codigo, ubicacion } = req.body
       if (!tipo) return res.status(400).json({ error: 'Tipo requerido' })
       const result = await req.tQuery(
-        `INSERT INTO inbound_novedades (tenant_id, order_id, tipo, codigo, created_by)
-         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-        [req.tenantId, req.params.id, tipo, codigo?.trim() || null, req.user.id]
+        `INSERT INTO inbound_novedades (tenant_id, order_id, tipo, codigo, ubicacion, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [req.tenantId, req.params.id, tipo, codigo?.trim() || null, ubicacion?.trim() || null, req.user.id]
       )
       res.status(201).json({ novedad: result.rows[0] })
     } catch (err) {

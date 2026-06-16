@@ -411,8 +411,8 @@ export default function ValidacionRecepcion() {
   // Ubicacion panel — DropScan-quality design
   const ubFilterChips = [
     { key: null,            label: t('common.all'),           count: allUbicacionGroups.length },
-    { key: 'activa',        label: 'Activa',                  count: ubicacionConfirmed ? 1 : 0 },
-    { key: 'con_registros', label: 'Con registros',           count: allUbicacionGroups.filter(g => g.codes.length > 0).length },
+    { key: 'activa',        label: t('rec.val.ubicacion.filter.activa'),        count: ubicacionConfirmed ? 1 : 0 },
+    { key: 'con_registros', label: t('rec.val.ubicacion.filter.con_registros'), count: allUbicacionGroups.filter(g => g.codes.length > 0).length },
   ]
 
   const renderUbicacionPanelBody = () => (
@@ -918,7 +918,7 @@ export default function ValidacionRecepcion() {
                         <span className="font-mono text-sm font-black text-accent-800 leading-none truncate">
                           {selectedUbicacion || <span className="text-accent-400 font-semibold text-xs">{t('rec.val.ubicacion.panel.sin_ub')}</span>}
                         </span>
-                        <span className="badge bg-accent-600 text-white text-[9px] font-bold border-0 shrink-0">ACTIVA</span>
+                        <span className="badge bg-accent-600 text-white text-[9px] font-bold border-0 shrink-0">{t('rec.val.ubicacion.badge')}</span>
                         <button
                           type="button"
                           onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
@@ -926,7 +926,7 @@ export default function ValidacionRecepcion() {
                           title={t('rec.val.ubicacion.edit')}
                         >
                           <Edit3 size={11} />
-                          <span>Editar ubicación</span>
+                          <span>{t('rec.val.ubicacion.edit')}</span>
                         </button>
                       </div>
                       {/* Counters + history table */}
@@ -934,15 +934,15 @@ export default function ValidacionRecepcion() {
                         <div className="grid grid-cols-3 gap-1.5">
                           <div className="text-center py-1.5 rounded-xl bg-warm-50 border border-warm-100">
                             <p className="text-xl font-black text-warm-800 tabular-nums leading-none">{batchCount}</p>
-                            <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">Lote actual</p>
+                            <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">{t('rec.val.ubicacion.lote_actual')}</p>
                           </div>
                           <div className="text-center py-1.5 rounded-xl bg-warm-50 border border-warm-100">
                             <p className="text-xl font-black text-warm-800 tabular-nums leading-none">{totalUbicacionCodes}</p>
-                            <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">Total</p>
+                            <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">{t('common.total')}</p>
                           </div>
                           <div className="text-center py-1.5 rounded-xl bg-warm-50 border border-warm-100">
                             <p className="text-xl font-black text-warm-800 tabular-nums leading-none">{allUbicacionGroups.length}</p>
-                            <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">Ubicaciones</p>
+                            <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">{t('rec.val.ubicacion.count')}</p>
                           </div>
                         </div>
                         {sortedHistory.length > 0 && (
@@ -953,7 +953,8 @@ export default function ValidacionRecepcion() {
                                   <tr>
                                     <th className="table-header py-1.5 text-[10px]">{t('rec.scan.col.hora')}</th>
                                     <th className="table-header py-1.5 text-[10px]">{t('rec.scan.col.codigo')}</th>
-                                    <th className="table-header py-1.5 text-[10px]">Resultado</th>
+                                    <th className="table-header py-1.5 text-[10px]">{t('rec.scan.col.resultado')}</th>
+                                    <th className="table-header py-1.5 text-[10px] text-right">{t('common.actions')}</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-warm-50">
@@ -975,6 +976,17 @@ export default function ValidacionRecepcion() {
                                             <Icon className="w-2.5 h-2.5 shrink-0" />
                                             {cfg.labelText}
                                           </span>
+                                        </td>
+                                        <td className="px-2 py-1.5 text-right">
+                                          <button
+                                            type="button"
+                                            onClick={() => setConfirmDeleteOpen(true)}
+                                            disabled={i !== 0 || h.result !== 'correcto' || deleteLastMut.isPending}
+                                            className="p-1 rounded-md text-danger-500 hover:bg-danger-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                            title={t('rec.val.delete.tooltip')}
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
                                         </td>
                                       </tr>
                                     )
@@ -1040,6 +1052,17 @@ export default function ValidacionRecepcion() {
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-700 border border-sky-200">
                             <MapPin size={8} />{selectedUbicacion}
                           </span>
+                        )}
+                        {lastResult.result === 'correcto' && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteOpen(true)}
+                            disabled={deleteLastMut.isPending}
+                            className="mt-0.5 p-1.5 rounded-lg text-danger-500 hover:bg-danger-100 disabled:opacity-30 transition-colors"
+                            title={t('rec.val.delete.tooltip')}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
                     </div>
