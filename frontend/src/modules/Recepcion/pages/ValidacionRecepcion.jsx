@@ -261,39 +261,46 @@ export default function ValidacionRecepcion() {
   )
 
   const CHIPS = [
-    { key: null,         label: 'Todos',      count: tarimaStats.length,     inactiveCls: 'bg-warm-100 text-warm-600 border-warm-200',    activeCls: 'bg-warm-700 text-white border-warm-700' },
-    { key: 'completo',   label: 'Completo',   count: tarimaCounts.completo,   inactiveCls: 'bg-success-50 text-success-700 border-success-100', activeCls: 'bg-success-500 text-white border-success-500' },
-    { key: 'en_proceso', label: 'En proceso', count: tarimaCounts.en_proceso, inactiveCls: 'bg-sky-50 text-sky-700 border-sky-100',         activeCls: 'bg-sky-500 text-white border-sky-500' },
-    { key: 'pendiente',  label: 'Pendiente',  count: tarimaCounts.pendiente,  inactiveCls: 'bg-warm-50 text-warm-500 border-warm-200',      activeCls: 'bg-warm-500 text-white border-warm-500' },
+    { key: null,         label: 'Todos',      count: tarimaStats.length,      inactiveCls: 'bg-warm-100/80 text-warm-600 border-warm-200/80 hover:bg-warm-200/60',        activeCls: 'bg-warm-700 text-white border-warm-700' },
+    { key: 'completo',   label: 'Completo',   count: tarimaCounts.completo,   inactiveCls: 'bg-success-50 text-success-700 border-success-200/60 hover:bg-success-100/70', activeCls: 'bg-success-100 text-success-700 border-success-200' },
+    { key: 'en_proceso', label: 'En proceso', count: tarimaCounts.en_proceso, inactiveCls: 'bg-sky-50 text-sky-700 border-sky-200/60 hover:bg-sky-100/70',                activeCls: 'bg-sky-100 text-sky-700 border-sky-200' },
+    { key: 'pendiente',  label: 'Pendiente',  count: tarimaCounts.pendiente,  inactiveCls: 'bg-warm-100/80 text-warm-500 border-warm-200/80 hover:bg-warm-200/60',        activeCls: 'bg-warm-200 text-warm-700 border-warm-300' },
   ]
 
-  // Shared tarima panel body (used by both desktop sidebar and mobile drawer)
+  // Shared tarima panel body — design aligned with Dropscan panel
   const renderPanelBody = () => (
     <>
-      {/* Search + filter chips */}
-      <div className="px-3 pt-3 pb-2 space-y-2 shrink-0 border-b border-warm-100">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300 pointer-events-none" />
+      {/* Header: title + search + chips (mirrors Dropscan's px-4 py-3.5 bg-warm-50/50 pattern) */}
+      <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50 space-y-2.5 shrink-0">
+        {/* Title row */}
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-bold text-warm-700">{t('rec.tarimas.label')} · {totalTarimas}</h4>
+          {lastTarimaNum && lastTarimaColor && (
+            <span className={`badge text-[9px] font-bold ${lastTarimaColor.pill}`}>T{lastTarimaNum} activa</span>
+          )}
+        </div>
+
+        {/* Search — mirrors Dropscan's gradient pill with circular icon */}
+        <div className="flex items-center gap-1.5 rounded-2xl border border-sky-100/80 bg-gradient-to-r from-white via-sky-50/55 to-white px-3 h-10 shadow-[0_12px_26px_-24px_rgba(14,165,233,0.6)] transition-all focus-within:border-sky-300 focus-within:ring-2 focus-within:ring-sky-100">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-100/80 shadow-inner shrink-0">
+            <Search className="w-3 h-3 text-sky-500" />
+          </div>
           <input
             type="text"
             value={tarimaSearch}
             onChange={e => setTarimaSearch(e.target.value)}
             placeholder="Buscar código..."
-            className="w-full pl-8 pr-7 py-1.5 text-xs bg-warm-50 border border-warm-200 rounded-xl focus:border-sky-300 focus:ring-1 focus:ring-sky-100 outline-none placeholder:text-warm-300 font-mono transition-all"
+            className="flex-1 min-w-0 bg-transparent text-xs text-warm-700 outline-none focus-visible:ring-0 placeholder:text-warm-400 font-mono"
           />
           {tarimaSearch && (
-            <button
-              type="button"
-              onClick={() => setTarimaSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300 hover:text-warm-500 transition-colors"
-            >
+            <button type="button" onClick={() => setTarimaSearch('')} className="text-warm-300 hover:text-warm-500 transition-colors shrink-0">
               <X className="w-3 h-3" />
             </button>
           )}
         </div>
 
-        {/* Filter chips row */}
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+        {/* Filter chips — pill/badge style matching Dropscan badge aesthetic */}
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
           {CHIPS.map(chip => {
             const isActive = tarimaFilter === chip.key
             return (
@@ -301,36 +308,26 @@ export default function ValidacionRecepcion() {
                 key={String(chip.key)}
                 type="button"
                 onClick={() => setTarimaFilter(chip.key)}
-                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[11px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
                   isActive ? chip.activeCls : chip.inactiveCls
                 }`}
               >
                 {chip.label}
-                <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
-                  isActive ? 'bg-white/25 text-white' : 'bg-white text-warm-500'
-                }`}>
-                  {chip.count}
-                </span>
+                <span className={`text-[10px] font-bold tabular-nums ${isActive ? 'opacity-75' : 'opacity-55'}`}>{chip.count}</span>
               </button>
             )
           })}
         </div>
 
-        {/* Filtered count indicator */}
         {(tarimaSearch || tarimaFilter) && (
-          <p className="text-[10px] text-warm-400 text-right">
-            {filteredTarimaStats.length} de {tarimaStats.length} tarimas
-          </p>
+          <p className="text-[10px] text-warm-400 text-right leading-none">{filteredTarimaStats.length} de {tarimaStats.length}</p>
         )}
       </div>
 
-      {/* Tarima cards list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      {/* Cards list — mirrors Dropscan's scrollbar-thin bg-warm-50/55 p-3 space-y-2.5 */}
+      <div className="flex-1 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
         {filteredTarimaStats.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 gap-2 text-warm-400">
-            <Search className="w-5 h-5 opacity-40" />
-            <p className="text-xs">Sin resultados</p>
-          </div>
+          <div className="py-8 text-center text-xs text-warm-400">{tarimaSearch ? 'Sin resultados' : 'Sin tarimas'}</div>
         ) : filteredTarimaStats.map(ts => {
           const isActive = ts.num === lastTarimaNum
           const isExpanded = expandedTarimas.has(ts.num)
@@ -338,10 +335,10 @@ export default function ValidacionRecepcion() {
           return (
             <div
               key={ts.num}
-              className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
+              className={`rounded-2xl border overflow-hidden transition-all duration-200 shadow-[0_14px_30px_-24px_rgba(15,23,42,0.32)] ${
                 isActive
-                  ? `${ts.color.bg} border-transparent ring-2 ${ts.color.ring} ring-offset-1 shadow-lg`
-                  : 'bg-white border-warm-200 hover:border-warm-300'
+                  ? `${ts.color.bg} border-transparent ring-2 ${ts.color.ring} ring-offset-1 shadow-[0_18px_34px_-24px_rgba(15,23,42,0.5)]`
+                  : 'border-warm-200/90 bg-white hover:border-sky-100 hover:bg-gradient-to-br hover:from-white hover:to-sky-50/30 hover:shadow-[0_20px_38px_-26px_rgba(14,165,233,0.35)]'
               }`}
             >
               <button
@@ -359,7 +356,7 @@ export default function ValidacionRecepcion() {
                 <div className="shrink-0 flex flex-col items-end gap-0.5">
                   <span className={`text-xs font-bold tabular-nums ${isActive ? 'text-white' : 'text-warm-600'}`}>{pct}%</span>
                   {isActive && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white/25 text-white leading-none">ACTIVA</span>
+                    <span className="badge text-[9px] bg-white/25 text-white border-0">ACTIVA</span>
                   )}
                 </div>
                 <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-white/60' : 'text-warm-300'}`} />
@@ -367,7 +364,7 @@ export default function ValidacionRecepcion() {
 
               {!isActive && (
                 <div className="px-3 pb-2.5">
-                  <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">
                     <div className={`h-full ${ts.color.bar} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
@@ -376,7 +373,7 @@ export default function ValidacionRecepcion() {
               {isExpanded && (
                 <div className={`border-t divide-y ${isActive ? 'border-white/20 divide-white/10' : 'border-warm-100 divide-warm-50'}`}>
                   {ts.tarLines.map(l => (
-                    <div key={l.id} className={`flex items-center gap-2 px-3 py-1.5 ${isActive ? 'hover:bg-white/10' : 'hover:bg-warm-50'} transition-colors`}>
+                    <div key={l.id} className={`flex items-center gap-2 px-3 py-1.5 transition-colors ${isActive ? 'hover:bg-white/10' : 'hover:bg-warm-50/50'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                         l.estado_validacion === 'validada' ? 'bg-success-400' :
                         l.estado_validacion === 'faltante' ? 'bg-danger-400' : 'bg-warm-300'
@@ -651,34 +648,23 @@ export default function ValidacionRecepcion() {
           </div>
         </div>
 
-        {/* ── Panel toggle button (desktop, only when tarimas enabled) ── */}
+        {/* ── Panel toggle button (desktop) — mirrors Dropscan h-10 w-10 shadow-sm ── */}
         {withTarimas && (
           <div className="hidden lg:flex shrink-0 items-start pt-4 pr-1">
             <button
               type="button"
               onClick={() => setSidebarVisible(p => !p)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 hover:bg-warm-50 hover:text-sky-600 transition-colors"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-sky-600"
               title={sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}
             >
-              {sidebarVisible ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+              {sidebarVisible ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
             </button>
           </div>
         )}
 
-        {/* ── Tarimas side panel (desktop lg+) ── */}
+        {/* ── Tarimas side panel (desktop lg+) — mirrors Dropscan w-80 backdrop-blur-2xl ── */}
         {withTarimas && sidebarVisible && (
-          <div className="hidden lg:flex w-72 xl:w-80 flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-sky-50/20 shrink-0 shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.28)]">
-            <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/60 flex items-center justify-between shrink-0">
-              <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
-                <Layers className="w-3.5 h-3.5 text-sky-500" />
-                Tarimas · {totalTarimas}
-              </h3>
-              {lastTarimaNum && lastTarimaColor && (
-                <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${lastTarimaColor.pill}`}>
-                  T{lastTarimaNum} activa
-                </span>
-              )}
-            </div>
+          <div className="hidden lg:flex w-80 flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-sky-50/20 backdrop-blur-2xl shrink-0 animate-fade-in shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.38)]">
             {renderPanelBody()}
           </div>
         )}
@@ -719,26 +705,15 @@ export default function ValidacionRecepcion() {
                 <div className="w-10 h-1 bg-warm-200 rounded-full" />
               </div>
 
-              {/* Sheet header */}
-              <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/60 flex items-center justify-between shrink-0">
-                <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
-                  <Layers className="w-3.5 h-3.5 text-sky-500" />
-                  Tarimas · {totalTarimas}
-                </h3>
-                <div className="flex items-center gap-2">
-                  {lastTarimaNum && lastTarimaColor && (
-                    <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${lastTarimaColor.pill}`}>
-                      T{lastTarimaNum} activa
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setMobilePanelOpen(false)}
-                    className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
+              {/* Close button row */}
+              <div className="flex justify-end px-3 pb-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMobilePanelOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
               {renderPanelBody()}
