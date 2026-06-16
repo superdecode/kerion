@@ -809,10 +809,6 @@ router.post('/scan-event/manual',
       const session = await assertSessionOwnership(req, session_id)
       if (session === null) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
       if (session === false) return res.status(403).json({ success: false, error: 'No autorizado para modificar esta sesión' })
-      if (session.status !== 'open') {
-        return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
-      }
-
       const reasonRes = await req.tQuery(
         'SELECT id, nombre FROM pick_manual_reasons WHERE id = $1 AND tenant_id = $2 AND activo = true',
         [manual_reason_id, req.tenantId]

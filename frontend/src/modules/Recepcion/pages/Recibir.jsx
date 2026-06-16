@@ -196,17 +196,17 @@ export default function Recibir() {
     const sel = orders.filter(o => selected.has(o.id))
     if (!sel.length) return
     const rows = sel.map(o => [
-      o.folio, o.cliente || '', o.inbound_order_no || '', o.tracking_no || '',
+      o.folio, fmtDate(o.created_at), o.cliente || '', o.inbound_order_no || '', o.tracking_no || '',
       o.reference_no || '', o.total_cajas, o.cajas_validadas,
-      t(`rec.status.${o.estado}`), o.responsable_nombre || '', fmtDate(o.created_at),
+      t(`rec.status.${o.estado}`), o.responsable_nombre || '',
     ])
     const ws = XLSX.utils.aoa_to_sheet([[
-      'Folio', 'Cliente', 'Orden WMS', 'Tracking', 'Referencia',
-      'Total Cajas', 'Validadas', 'Estado', 'Responsable', 'Fecha',
+      'Folio', 'Fecha', 'Cliente', 'Orden WMS', 'Tracking', 'Referencia',
+      'Total Cajas', 'Validadas', 'Estado', 'Responsable',
     ], ...rows])
     ws['!cols'] = [
-      { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 16 },
-      { wch: 10 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 14 },
+      { wch: 20 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 16 },
+      { wch: 10 }, { wch: 10 }, { wch: 20 }, { wch: 20 },
     ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Recepcion')
@@ -356,6 +356,7 @@ export default function Recibir() {
                         />
                       </th>
                       <th className={TH}>{t('rec.folio')}</th>
+                      <th className={TH}>{t('rec.created_at')}</th>
                       <th className={TH}>{t('rec.cliente')}</th>
                       <th className={TH}>{t('rec.inbound_order_no')}</th>
                       <th className={TH}>{t('rec.tracking_no')}</th>
@@ -363,7 +364,6 @@ export default function Recibir() {
                       <th className={`${TH} text-right`}>{t('rec.total_cajas')}</th>
                       <th className={`${TH} text-right`}>{t('rec.cajas_validadas')}</th>
                       <th className={TH}>{t('common.status')}</th>
-                      <th className={TH}>{t('rec.created_at')}</th>
                       <th className={`${TH} text-right`}>{t('common.actions')}</th>
                     </tr>
                   </thead>
@@ -380,6 +380,7 @@ export default function Recibir() {
                         <td className="group px-3 py-2.5 font-mono font-semibold text-primary-700 text-xs">
                           <CopyCell value={order.folio} />
                         </td>
+                        <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDate(order.created_at)}</td>
                         <td className="px-3 py-2.5 text-xs text-warm-700 font-medium max-w-[140px] truncate">{order.cliente || '—'}</td>
                         <td className="group px-3 py-2.5 font-mono text-xs text-warm-600"><CopyCell value={order.inbound_order_no} muted /></td>
                         <td className="group px-3 py-2.5 font-mono text-xs text-warm-600"><CopyCell value={order.tracking_no} muted /></td>
@@ -387,7 +388,6 @@ export default function Recibir() {
                         <td className="px-3 py-2.5 text-right text-xs font-medium text-warm-700">{order.total_cajas}</td>
                         <td className="px-3 py-2.5 text-right text-xs font-medium text-success-700">{order.cajas_validadas}</td>
                         <td className="px-3 py-2.5"><EstadoBadge estado={order.estado} t={t} /></td>
-                        <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDate(order.created_at)}</td>
                         <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1 justify-end">
                             <button

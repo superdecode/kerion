@@ -505,7 +505,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
                 onSaveEdit={(event) => updateMut.mutate({ id: event.id, code: editingCode.trim() })}
                 onDelete={(event) => deleteMut.mutate(event.id)}
               />
-              {!isReadOnly && editableSession && canEdit && (
+              {!isReadOnly && canEdit && (
                 <div className="grid grid-cols-[minmax(0,1fr)_12rem_auto] gap-2 rounded-xl border border-warm-100 bg-warm-50/70 p-3">
                   <input
                     className="input-field text-sm font-mono"
@@ -825,7 +825,7 @@ export default function SurtidoRegistros() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const canExport = hasPermission('surtido.registros', 'actualizar')
-  const canEdit = hasPermission('surtido.validacion', 'actualizar')
+  const canEdit = hasPermission('surtido.validacion', 'actualizar') || hasPermission('surtido.registros', 'actualizar')
   const canDelete = hasPermission('surtido.validacion', 'eliminar')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)

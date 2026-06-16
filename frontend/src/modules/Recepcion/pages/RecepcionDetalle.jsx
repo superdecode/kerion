@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -138,8 +138,8 @@ export default function RecepcionDetalle() {
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
     queryFn: () => getScanEvents(id),
-    enabled: activeTab === 'validacion',
     retry: 0,
+    staleTime: 30_000,
   })
 
   const updateLineMutation = useMutation({
@@ -231,6 +231,17 @@ export default function RecepcionDetalle() {
     return eventSortDir === 'asc' ? cmp : -cmp
   })
 
+  // Build a line_id → ubicacion map from scan events (correcto result)
+  const lineUbicacionMap = useMemo(() => {
+    const map = new Map()
+    for (const ev of events) {
+      if (ev.resultado === 'correcto' && ev.line_id && ev.ubicacion) {
+        map.set(ev.line_id, ev.ubicacion)
+      }
+    }
+    return map
+  }, [events])
+
   const handleExportLines = () => {
     const rows = lines.map((l, i) => [
       i + 1, l.box_type || '', l.custom_box_barcode || '', l.sku || '',
@@ -238,22 +249,46 @@ export default function RecepcionDetalle() {
       l.length_oms || '', l.width_oms || '', l.height_oms || '', l.dimension_unit || '',
       l.weight_oms || '', l.weight_unit || '',
       t(`rec.line.status.${l.estado_validacion}`),
+      lineUbicacionMap.get(l.id) || '',
       l.validated_by_nombre || '', l.validated_at ? fmtDateTime(l.validated_at) : '',
     ])
     const ws = XLSX.utils.aoa_to_sheet([
       ['#', 'Box Type', 'Custom Box Barcode', 'SKU', 'Qty/Caja',
        'Length (OMS)', 'Width (OMS)', 'Height (OMS)', 'Dim Unit', 'Weight (OMS)', 'Weight Unit',
-       'Estado', 'Validado por', 'Hora validación'],
+       'Estado', 'Ubicación', 'Validado por', 'Hora validación'],
       ...rows,
     ])
     ws['!cols'] = [
       { wch: 5 }, { wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 10 },
       { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
-      { wch: 18 }, { wch: 20 }, { wch: 18 },
+      { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 18 },
     ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Detalle')
     XLSX.writeFile(wb, `${order.folio}-detalle.xlsx`)
+  }
+
+  const handleExportValidacion = () => {
+    const rows = events.map((ev, i) => [
+      i + 1,
+      ev.codigo_escaneado || '',
+      ev.sku_asociado || '',
+      ev.match_field || '',
+      t(`rec.scan.result.${ev.resultado}`) || ev.resultado,
+      ev.ubicacion || '',
+      ev.scanned_by_nombre || '',
+      ev.scanned_at ? fmtDateTime(ev.scanned_at) : '',
+    ])
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['#', 'Código Escaneado', 'SKU', 'Campo', 'Resultado', 'Ubicación', 'Escaneado por', 'Hora'],
+      ...rows,
+    ])
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 20 }, { wch: 18 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Validación')
+    XLSX.writeFile(wb, `${order.folio}-validacion.xlsx`)
   }
 
   const handleListaRecepcion = async () => {
@@ -499,6 +534,13 @@ export default function RecepcionDetalle() {
         {/* Tab: Validación */}
         {activeTab === 'validacion' && (
           <div className="space-y-3">
+
+            <div className="flex justify-end">
+              <button onClick={handleExportValidacion} className="btn-ghost flex items-center gap-1.5 text-sm">
+                <Download className="w-4 h-4" />
+                {t('rec.btn.exportarValidacion')}
+              </button>
+            </div>
 
             <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
               <div className="table-scroll">

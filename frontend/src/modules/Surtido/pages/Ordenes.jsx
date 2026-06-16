@@ -1587,7 +1587,7 @@ export default function Ordenes() {
             sess.operator_nombre || '',
             e.scanned_at ? formatDateTimeTz(e.scanned_at) : '',
             e.scanned_code || '',
-            e.cell_no || '',
+            sess.ubicacion_nota || '',
             e.scan_result || '',
             sess.notes || '',
           ])

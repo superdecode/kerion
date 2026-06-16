@@ -5,13 +5,13 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowLeft, ScanBarcode, CheckCircle2, XCircle, AlertCircle,
   Layers, PackageCheck, X, Square, ArrowUp, ArrowDown, ArrowUpDown, Trash2,
-  ChevronDown, PanelRightClose, PanelRightOpen, Search, LayoutList, MapPin, Check,
+  ChevronDown, PanelRightClose, PanelRightOpen, Search, LayoutList, MapPin, Check, Edit3,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { getOrder, createSession, updateSession, scanCode, deleteLastValidationRecord } from '../services/recepcionService'
+import { getOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, getScanEvents } from '../services/recepcionService'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 
 function buildTarimaMap(lines) {
@@ -78,12 +78,21 @@ export default function ValidacionRecepcion() {
   const [locationBatches, setLocationBatches] = useState([])
   const [ubicacionSearch, setUbicacionSearch] = useState('')
   const [mobileUbicacionPanelOpen, setMobileUbicacionPanelOpen] = useState(false)
+  const [ubicacionFilter, setUbicacionFilter] = useState(null)
+  const [expandedUbicaciones, setExpandedUbicaciones] = useState(new Set())
 
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['recepcion-order', id],
     queryFn: () => getOrder(id),
     refetchInterval: scanning ? 4000 : false,
   })
+
+  const { data: eventsData } = useQuery({
+    queryKey: ['recepcion-scan-events', id],
+    queryFn: () => getScanEvents(id),
+    refetchInterval: scanning ? 6000 : false,
+  })
+  const serverEvents = eventsData?.events ?? []
 
   const order    = orderData?.order ?? null
   const lines    = orderData?.lines ?? []
@@ -140,18 +149,34 @@ export default function ValidacionRecepcion() {
     })
   }, [])
 
-  // Ubicacion groups: combine completed batches + current active batch
+  const toggleUbicacion = useCallback((key) => {
+    setExpandedUbicaciones(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }, [])
+
+  // Server events grouped by ubicacion (persists across page reloads / different computers)
   const allUbicacionGroups = useMemo(() => {
-    const activeCodes = history.filter(h => h.result === 'correcto')
-    const allBatches = [
-      ...locationBatches,
-      ...(activeCodes.length > 0 ? [{ ubicacion: selectedUbicacion, codes: activeCodes }] : []),
-    ]
     const map = new Map()
-    for (const batch of allBatches) {
-      const key = batch.ubicacion ?? ''
-      const existing = map.get(key) ?? { ubicacion: batch.ubicacion, codes: [] }
-      existing.codes = [...existing.codes, ...batch.codes]
+    // Load from server events (source of truth)
+    for (const ev of serverEvents) {
+      if (ev.resultado !== 'correcto') continue
+      const key = ev.ubicacion ?? ''
+      const existing = map.get(key) ?? { ubicacion: ev.ubicacion || null, codes: [] }
+      existing.codes.push({ id: ev.id, code: ev.codigo_escaneado, scannedAt: ev.scanned_at })
+      map.set(key, existing)
+    }
+    // Merge current in-session history (optimistic — may not yet be in server events)
+    const activeCodes = history.filter(h => h.result === 'correcto')
+    if (activeCodes.length > 0) {
+      const key = selectedUbicacion ?? ''
+      const existing = map.get(key) ?? { ubicacion: selectedUbicacion, codes: [] }
+      const serverIds = new Set(existing.codes.map(c => c.id))
+      for (const h of activeCodes) {
+        if (!serverIds.has(h.id)) existing.codes.push({ id: h.id, code: h.code, scannedAt: h.scannedAt })
+      }
       map.set(key, existing)
     }
     return Array.from(map.values()).sort((a, b) => {
@@ -159,12 +184,15 @@ export default function ValidacionRecepcion() {
       if (!b.ubicacion) return -1
       return a.ubicacion.localeCompare(b.ubicacion)
     })
-  }, [locationBatches, history, selectedUbicacion])
+  }, [serverEvents, history, selectedUbicacion])
 
   const filteredUbicacionGroups = useMemo(() => {
+    let result = allUbicacionGroups
+    if (ubicacionFilter === 'activa') result = result.filter(g => g.ubicacion === selectedUbicacion && ubicacionConfirmed)
+    if (ubicacionFilter === 'con_registros') result = result.filter(g => g.codes.length > 0)
     const q = ubicacionSearch.trim().toLowerCase()
-    if (!q) return allUbicacionGroups
-    return allUbicacionGroups
+    if (!q) return result
+    return result
       .map(g => ({
         ...g,
         codes: g.codes.filter(c =>
@@ -173,7 +201,7 @@ export default function ValidacionRecepcion() {
         ),
       }))
       .filter(g => g.codes.length > 0 || (g.ubicacion ?? '').toLowerCase().includes(q))
-  }, [allUbicacionGroups, ubicacionSearch])
+  }, [allUbicacionGroups, ubicacionSearch, ubicacionFilter, selectedUbicacion, ubicacionConfirmed])
 
   const totalUbicacionCodes = allUbicacionGroups.reduce((s, g) => s + g.codes.length, 0)
 
@@ -231,6 +259,10 @@ export default function ValidacionRecepcion() {
       setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado })
       if (ev.resultado === 'no_encontrado') {
         setRejectModal({ open: true, code: ev.codigo_escaneado })
+      }
+      if (ev.resultado === 'duplicado') {
+        playDupAudio()
+        setDupModal({ open: true, code: ev.codigo_escaneado, entry: { scannedAt: null, scannedBy: '—' } })
       }
       if (ev.resultado === 'correcto') {
         setHistory(prev => [{
@@ -310,6 +342,14 @@ export default function ValidacionRecepcion() {
         refocus()
         return
       }
+      // Also check server events for cross-session / cross-computer duplicates
+      const serverDup = serverEvents.find(ev => ev.resultado === 'correcto' && ev.codigo_escaneado === code)
+      if (serverDup) {
+        playDupAudio()
+        setDupModal({ open: true, code, entry: { scannedAt: serverDup.scanned_at, scannedBy: serverDup.scanned_by_nombre || '—' } })
+        refocus()
+        return
+      }
       scanMut.mutate({ codigo: code, ubicacion: selectedUbicacion })
     }
   }
@@ -337,7 +377,7 @@ export default function ValidacionRecepcion() {
     setUbicacionConfirmed(false)
     setLocationInputValue('')
     setSelectedUbicacion(null)
-    setTimeout(() => locationRef.current?.focus(), 80)
+    setTimeout(() => locationRef.current?.focus(), 150)
   }, [history, selectedUbicacion])
 
   const handleHistorySort = (key) => {
@@ -362,17 +402,31 @@ export default function ValidacionRecepcion() {
     { key: 'pendiente',  label: t('rec.line.status.pendiente'),   count: tarimaCounts.pendiente },
   ]
 
-  // Ubicacion panel body — shown when withTarimas is false
+  // Ubicacion panel — DropScan-quality design
+  const ubFilterChips = [
+    { key: null,            label: t('common.all'),           count: allUbicacionGroups.length },
+    { key: 'activa',        label: 'Activa',                  count: ubicacionConfirmed ? 1 : 0 },
+    { key: 'con_registros', label: 'Con registros',           count: allUbicacionGroups.filter(g => g.codes.length > 0).length },
+  ]
+
   const renderUbicacionPanelBody = () => (
     <>
+      {/* ── Panel header ── */}
       <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50 space-y-2.5 shrink-0">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-bold text-warm-700">{t('rec.val.ubicacion.panel.title')} · {allUbicacionGroups.length}</h4>
-          <span className="text-[10px] font-semibold text-warm-400 tabular-nums">{totalUbicacionCodes} {t('rec.scan.historial').toLowerCase()}</span>
+          <h4 className="text-sm font-bold text-warm-700">
+            {t('rec.val.ubicacion.panel.title')}
+            <span className="ml-1.5 badge bg-accent-100 text-accent-700 border-0 text-[9px]">{allUbicacionGroups.length}</span>
+          </h4>
+          <span className="text-[10px] font-semibold text-warm-400 tabular-nums">
+            {totalUbicacionCodes} escaneos
+          </span>
         </div>
-        <div className="flex items-center gap-1.5 rounded-2xl border border-accent-100/80 bg-gradient-to-r from-white via-accent-50/55 to-white px-3 h-10 shadow-sm transition-all focus-within:border-accent-300 focus-within:ring-2 focus-within:ring-accent-100">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-100/80 shadow-inner shrink-0">
-            <Search className="w-3 h-3 text-accent-500" />
+
+        {/* Search — DropScan gradient pill */}
+        <div className="flex items-center gap-1.5 rounded-2xl border border-accent-100/80 bg-gradient-to-r from-white via-accent-50/55 to-white px-3 h-11 shadow-[0_12px_26px_-24px_rgba(124,58,237,0.55)] transition-all focus-within:border-accent-300 focus-within:ring-2 focus-within:ring-accent-100">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-100/80 shadow-inner shrink-0">
+            <Search className="w-3.5 h-3.5 text-accent-500" />
           </div>
           <input
             type="text"
@@ -387,58 +441,107 @@ export default function ValidacionRecepcion() {
             </button>
           )}
         </div>
-        {ubicacionSearch && (
+
+        {/* Filter chips */}
+        <div className="flex gap-1.5 flex-wrap">
+          {ubFilterChips.map(chip => {
+            const isOn = ubicacionFilter === chip.key
+            return (
+              <button
+                key={String(chip.key)}
+                type="button"
+                onClick={() => setUbicacionFilter(isOn ? null : chip.key)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${
+                  isOn
+                    ? 'bg-accent-600 text-white shadow-sm'
+                    : 'bg-warm-100 text-warm-500 hover:bg-accent-50 hover:text-accent-700'
+                }`}
+              >
+                {chip.label}
+                <span className={`text-[9px] font-bold ${isOn ? 'text-white/70' : 'text-warm-400'}`}>
+                  {chip.count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {(ubicacionSearch || ubicacionFilter) && (
           <p className="text-[10px] text-warm-400 text-right leading-none">
             {filteredUbicacionGroups.length} de {allUbicacionGroups.length}
           </p>
         )}
       </div>
 
+      {/* ── Card list ── */}
       <div className="flex-1 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
         {filteredUbicacionGroups.length === 0 ? (
-          <div className="py-8 text-center text-xs text-warm-400">
-            {ubicacionSearch ? t('rec.val.ubicacion.panel.no_results') : t('rec.val.ubicacion.panel.sin_registros')}
+          <div className="py-10 text-center space-y-1.5">
+            <MapPin className="w-7 h-7 text-warm-200 mx-auto" />
+            <p className="text-xs text-warm-400">
+              {ubicacionSearch || ubicacionFilter
+                ? t('rec.val.ubicacion.panel.no_results')
+                : t('rec.val.ubicacion.panel.sin_registros')}
+            </p>
           </div>
-        ) : filteredUbicacionGroups.map((g, gi) => {
+        ) : filteredUbicacionGroups.map((g) => {
           const isActive = g.ubicacion === selectedUbicacion && ubicacionConfirmed
+          const maxCodes = totalUbicacionCodes > 0 ? Math.max(...allUbicacionGroups.map(x => x.codes.length)) : 1
+          const pct = maxCodes > 0 ? Math.round((g.codes.length / maxCodes) * 100) : 0
+          const cardKey = g.ubicacion ?? '__sin__'
+          const isExpanded = expandedUbicaciones.has(cardKey)
           return (
-            <div key={g.ubicacion ?? '__sin__'} className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
-              isActive
-                ? 'bg-accent-600 border-transparent ring-2 ring-accent-700 ring-offset-1'
-                : 'border-warm-200/90 bg-white hover:border-accent-100 hover:bg-gradient-to-br hover:from-white hover:to-accent-50/30'
-            }`}>
-              <div className="flex items-center gap-2.5 px-3 py-2.5">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                  isActive ? 'bg-white/25' : 'bg-accent-50'
-                }`}>
-                  <MapPin className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-accent-600'}`} />
+            <div
+              key={cardKey}
+              className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
+                isActive
+                  ? 'border-accent-200 bg-gradient-to-br from-accent-50 via-white to-accent-50/50 shadow-[0_18px_34px_-24px_rgba(124,58,237,0.38)]'
+                  : 'border-accent-100/60 bg-gradient-to-br from-white via-accent-50/20 to-accent-50/35 shadow-[0_14px_30px_-24px_rgba(124,58,237,0.16)] hover:border-accent-200 hover:to-accent-50/55 hover:shadow-[0_20px_38px_-26px_rgba(124,58,237,0.28)]'
+              }`}
+            >
+              {/* Card header — clickable to expand/collapse */}
+              <button
+                type="button"
+                onClick={() => toggleUbicacion(cardKey)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+              >
+                <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-accent-100' : 'bg-accent-100/60'}`}>
+                  <MapPin className={`w-3 h-3 ${isActive ? 'text-accent-600' : 'text-accent-500'}`} />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs font-semibold truncate ${isActive ? 'text-white' : 'text-warm-800'}`}>
-                    {g.ubicacion || t('rec.val.ubicacion.panel.sin_ub')}
-                  </p>
-                  <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : 'text-warm-400'}`}>
-                    {g.codes.length} {t('rec.scan.historial').toLowerCase()}
-                  </p>
+                <span className={`text-xs font-bold font-mono truncate flex-1 ${isActive ? 'text-accent-800' : 'text-warm-800'}`}>
+                  {g.ubicacion || t('rec.val.ubicacion.panel.sin_ub')}
+                </span>
+                {isActive
+                  ? <span className="badge bg-accent-100 text-accent-700 text-[9px] border-0 shrink-0">ACTIVA</span>
+                  : <span className="badge bg-accent-50 text-accent-600 border border-accent-100 text-[9px] shrink-0">{g.codes.length}</span>
+                }
+                <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-accent-400' : 'text-warm-300'}`} />
+              </button>
+
+              {/* Progress bar — always visible */}
+              <div className="px-3 pb-2.5">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-[10px] font-medium ${isActive ? 'text-accent-600' : 'text-accent-500/70'}`}>
+                    {g.codes.length} escaneos
+                  </span>
                 </div>
-                {isActive && (
-                  <span className="badge text-[9px] bg-white/25 text-white border-0 shrink-0">ACTIVA</span>
-                )}
+                <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${isActive ? 'bg-gradient-to-r from-accent-400 to-accent-500' : 'bg-gradient-to-r from-accent-300 to-accent-400'}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
               </div>
-              {g.codes.length > 0 && (
-                <div className={`border-t divide-y max-h-36 overflow-y-auto ${
-                  isActive ? 'border-white/20 divide-white/10' : 'border-warm-100 divide-warm-50'
-                }`}>
+
+              {/* Expandable code list */}
+              {isExpanded && g.codes.length > 0 && (
+                <div className={`border-t ${isActive ? 'border-accent-100' : 'border-accent-100/40'} divide-y divide-warm-50 max-h-36 overflow-y-auto`}>
                   {g.codes.map((c, ci) => (
-                    <div key={c.id || ci} className={`flex items-center gap-2 px-3 py-1.5 ${
-                      isActive ? 'hover:bg-white/10' : 'hover:bg-warm-50/50'
-                    }`}>
-                      <Check className={`w-3 h-3 shrink-0 ${isActive ? 'text-white/60' : 'text-success-400'}`} />
-                      <span className={`font-mono text-[11px] truncate flex-1 ${isActive ? 'text-white/80' : 'text-warm-600'}`}>
-                        {c.code}
-                      </span>
+                    <div key={c.id || ci} className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent-50/30 transition-colors">
+                      <Check className="w-2.5 h-2.5 shrink-0 text-success-400" />
+                      <span className="font-mono text-[10px] truncate flex-1 text-warm-600">{c.code}</span>
                       {c.scannedAt && (
-                        <span className={`text-[10px] tabular-nums shrink-0 ${isActive ? 'text-white/40' : 'text-warm-300'}`}>
+                        <span className="text-[9px] tabular-nums shrink-0 text-warm-300">
                           {new Date(c.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
@@ -743,77 +846,128 @@ export default function ValidacionRecepcion() {
               )}
             </div>
 
-            {/* ── Ubicacion input (desktop, when not in tarimas mode) ── */}
-            {!withTarimas && (
-              <div className="hidden sm:block card p-3 sm:p-4 sticky top-0 z-[10] bg-white/95 backdrop-blur-sm">
-                {!ubicacionConfirmed ? (
-                  <>
-                    <p className="text-xs font-semibold text-accent-700 mb-2 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5" />
-                      {t('rec.val.ubicacion.label')}
-                    </p>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-300 pointer-events-none" />
-                        <input
-                          ref={locationRef}
-                          type="text"
-                          value={locationInputValue}
-                          onChange={e => setLocationInputValue(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') tryConfirmUbicacion(locationInputValue) }}
-                          placeholder={t('rec.val.ubicacion.placeholder')}
-                          className="w-full pl-12 pr-4 py-3.5 text-lg bg-white border-2 border-accent-200 rounded-2xl focus:border-accent-500 focus:ring-2 focus:ring-accent-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"
-                          autoComplete="off"
-                          autoCorrect="off"
-                          spellCheck={false}
-                          inputMode="none"
-                        />
+            {/* ── Ubicación — unified card: input → summary in one block ── */}
+            {!withTarimas && (() => {
+              const batchCodes = history.filter(h => h.result === 'correcto')
+              const batchCount = batchCodes.length
+              return (
+                <div className="hidden sm:block card overflow-hidden border border-accent-100 sticky top-0 z-[10] bg-white/97 backdrop-blur-sm">
+                  {!ubicacionConfirmed ? (
+                    /* ─── INPUT MODE ─── */
+                    <div className="p-3">
+                      <p className="text-[11px] font-bold text-accent-700 mb-2 flex items-center gap-1.5">
+                        <MapPin className="w-3 h-3" />
+                        {t('rec.val.ubicacion.label')}
+                      </p>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-accent-400 pointer-events-none" />
+                          <input
+                            ref={locationRef}
+                            type="text"
+                            value={locationInputValue}
+                            onChange={e => setLocationInputValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') tryConfirmUbicacion(locationInputValue) }}
+                            placeholder={t('rec.val.ubicacion.placeholder')}
+                            className="w-full pl-9 pr-3 py-2.5 border border-accent-200 rounded-xl text-sm font-mono focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-100 transition-all bg-white"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            inputMode="none"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => tryConfirmUbicacion(locationInputValue)}
+                          disabled={!locationInputValue.trim()}
+                          className="px-4 py-2 rounded-xl bg-accent-600 text-white text-sm font-semibold hover:bg-accent-700 disabled:opacity-40 transition-colors"
+                        >
+                          {t('rec.val.ubicacion.confirm')}
+                        </button>
                       </div>
                       <button
                         type="button"
-                        onClick={() => tryConfirmUbicacion(locationInputValue)}
-                        disabled={!locationInputValue.trim()}
-                        className="px-5 py-2 rounded-2xl bg-accent-600 text-white text-sm font-semibold hover:bg-accent-700 disabled:opacity-40 transition-colors"
+                        onClick={() => tryConfirmUbicacion('')}
+                        className="mt-1.5 text-[11px] text-warm-400 hover:text-warm-600 transition-colors"
                       >
-                        {t('rec.val.ubicacion.confirm')}
+                        {t('rec.val.ubicacion.skip')}
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => tryConfirmUbicacion('')}
-                      className="mt-1.5 text-[11px] text-warm-400 hover:text-warm-600 transition-colors"
-                    >
-                      {t('rec.val.ubicacion.skip')}
-                    </button>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center gap-2 flex-1 px-3 py-2.5 rounded-xl border ${
-                      selectedUbicacion ? 'bg-accent-50 border-accent-200' : 'bg-warm-50 border-warm-200'
-                    }`}>
-                      <MapPin className={`w-4 h-4 shrink-0 ${selectedUbicacion ? 'text-accent-600' : 'text-warm-400'}`} />
-                      <span className={`text-sm font-mono font-semibold ${selectedUbicacion ? 'text-accent-700' : 'text-warm-500'}`}>
-                        {selectedUbicacion || t('rec.val.ubicacion.panel.sin_ub')}
-                      </span>
-                      <span className="text-[11px] text-accent-500 ml-1">{t('rec.val.ubicacion.active')}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
-                      className="text-xs text-warm-400 hover:text-warm-600 transition-colors px-2 py-1.5 rounded-lg hover:bg-warm-100"
-                    >
-                      {t('rec.val.ubicacion.edit')}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                  ) : (
+                    /* ─── SUMMARY MODE ─── */
+                    <>
+                      {/* Compact header: location name + ACTIVA badge + edit */}
+                      <div className="flex items-center gap-2 px-3 py-2 bg-accent-50/70 border-b border-accent-100">
+                        <div className="w-5 h-5 rounded-md bg-accent-100 flex items-center justify-center shrink-0">
+                          <MapPin className="w-3 h-3 text-accent-600" />
+                        </div>
+                        <span className="font-mono text-sm font-black text-accent-800 leading-none truncate">
+                          {selectedUbicacion || <span className="text-accent-400 font-semibold text-xs">{t('rec.val.ubicacion.panel.sin_ub')}</span>}
+                        </span>
+                        <span className="badge bg-accent-600 text-white text-[9px] font-bold border-0 shrink-0">ACTIVA</span>
+                        <button
+                          type="button"
+                          onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
+                          className="ml-auto flex items-center gap-1 text-warm-400 hover:text-accent-600 transition-colors rounded-lg px-2 py-1 hover:bg-accent-50 text-[10px] font-medium"
+                          title={t('rec.val.ubicacion.edit')}
+                        >
+                          <Edit3 size={11} />
+                          <span>Editar ubicación</span>
+                        </button>
+                      </div>
+                      {/* Counters + code list */}
+                      <div className="p-3 space-y-2">
+                        <div className="grid grid-cols-3 gap-1.5">
+                          <div className="text-center py-1.5 rounded-xl bg-warm-50 border border-warm-100">
+                            <p className="text-xl font-black text-warm-800 tabular-nums leading-none">{batchCount}</p>
+                            <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">Lote actual</p>
+                          </div>
+                          <div className="text-center py-1.5 rounded-xl bg-warm-50 border border-warm-100">
+                            <p className="text-xl font-black text-warm-800 tabular-nums leading-none">{totalUbicacionCodes}</p>
+                            <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">Total</p>
+                          </div>
+                          <div className="text-center py-1.5 rounded-xl bg-warm-50 border border-warm-100">
+                            <p className="text-xl font-black text-warm-800 tabular-nums leading-none">{allUbicacionGroups.length}</p>
+                            <p className="text-[9px] text-warm-400 uppercase tracking-wide font-bold mt-0.5">Ubicaciones</p>
+                          </div>
+                        </div>
+                        {batchCodes.length > 0 && (
+                          <div className="rounded-xl border border-warm-100 divide-y divide-warm-50 max-h-32 overflow-y-auto">
+                            {batchCodes.map((c, ci) => (
+                              <div key={c.id || ci} className="flex items-center gap-2 px-3 py-1.5 hover:bg-warm-50/50 transition-colors">
+                                <Check className="w-3 h-3 shrink-0 text-success-400" />
+                                <span className="font-mono text-[11px] truncate flex-1 text-warm-700">{c.code}</span>
+                                {c.scannedAt && (
+                                  <span className="text-[10px] tabular-nums shrink-0 text-warm-300">
+                                    {new Date(c.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {batchCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={completarUbicacion}
+                            className="w-full py-1.5 rounded-xl bg-accent-600 text-white text-xs font-semibold hover:bg-accent-700 transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <Check className="w-3 h-3" />
+                            {t('rec.val.btn.completar')}
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* ── Desktop scan input ── */}
-            <div className={`hidden sm:block card p-3 sm:p-4 sticky top-0 z-[10] bg-white/95 backdrop-blur-sm ${!withTarimas && !ubicacionConfirmed ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className={`hidden sm:block card p-3 sm:p-4 sticky top-0 z-[10] bg-gradient-to-br from-sky-50/40 via-white to-white border-sky-100 shadow-[0_6px_22px_-12px_rgba(14,165,233,0.22)] backdrop-blur-sm ${!withTarimas && !ubicacionConfirmed ? 'opacity-40 pointer-events-none' : ''}`}>
               <div className="relative">
-                <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300 pointer-events-none" />
-                <input ref={scanRefDesktop} {...scanInputProps} />
+                <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-sky-500 pointer-events-none" />
+                <input ref={scanRefDesktop} {...scanInputProps} className="w-full pl-12 pr-4 py-3.5 text-lg bg-sky-50/30 border-2 border-sky-100 rounded-2xl focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-warm-900" />
               </div>
               <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
             </div>
@@ -851,6 +1005,11 @@ export default function ValidacionRecepcion() {
                         {withTarimas && lastTarimaNum && lastTarimaColor && sidebarVisible && (
                           <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${lastTarimaColor.pill}`}>
                             T{lastTarimaNum}
+                          </span>
+                        )}
+                        {!withTarimas && selectedUbicacion && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-700 border border-sky-200">
+                            <MapPin size={8} />{selectedUbicacion}
                           </span>
                         )}
                       </div>
@@ -907,7 +1066,7 @@ export default function ValidacionRecepcion() {
                             {!withTarimas && (
                               <td className="px-3 py-2">
                                 {h.ubicacion
-                                  ? <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-accent-700 bg-accent-50 border border-accent-100 px-2 py-0.5 rounded-full">
+                                  ? <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-sky-700 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
                                       <MapPin size={9} className="shrink-0" />{h.ubicacion}
                                     </span>
                                   : <span className="text-warm-300">—</span>
@@ -945,12 +1104,12 @@ export default function ValidacionRecepcion() {
         </div>
 
         {/* ── Panel toggle button (desktop) ── */}
-        {(withTarimas || (!withTarimas && allUbicacionGroups.length > 0)) && (
+        {(withTarimas || !withTarimas) && (
           <div className="hidden lg:flex shrink-0 items-start pt-4 pr-1">
             <button
               type="button"
               onClick={() => setSidebarVisible(p => !p)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-sky-600"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-accent-600"
               title={sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}
             >
               {sidebarVisible ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
@@ -959,8 +1118,12 @@ export default function ValidacionRecepcion() {
         )}
 
         {/* ── Side panel (desktop lg+) ── */}
-        {sidebarVisible && (withTarimas || (!withTarimas && allUbicacionGroups.length > 0)) && (
-          <div className="hidden lg:flex w-80 flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-sky-50/20 backdrop-blur-2xl shrink-0 animate-fade-in shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.38)]">
+        {sidebarVisible && (
+          <div className={`hidden lg:flex w-[400px] flex-col border-l border-warm-100 backdrop-blur-2xl shrink-0 animate-fade-in ${
+            withTarimas
+              ? 'bg-gradient-to-b from-white via-white to-sky-50/20 shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.38)]'
+              : 'bg-gradient-to-b from-white via-white to-accent-50/20 shadow-[-16px_0_34px_-28px_rgba(124,58,237,0.38)]'
+          }`}>
             {withTarimas ? renderPanelBody() : renderUbicacionPanelBody()}
           </div>
         )}
@@ -981,7 +1144,7 @@ export default function ValidacionRecepcion() {
                 onChange={e => setLocationInputValue(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); tryConfirmUbicacion(locationInputValue) } }}
                 placeholder={t('rec.val.ubicacion.placeholder')}
-                className="w-full pl-9 pr-16 py-2.5 text-sm border border-accent-300 rounded-xl bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-400 placeholder:text-accent-300"
+                className="w-full pl-9 pr-16 py-2.5 text-sm border border-accent-200 rounded-xl bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-300 placeholder:text-accent-300"
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
                 <button
@@ -1005,19 +1168,27 @@ export default function ValidacionRecepcion() {
 
         {/* Active ubicacion badge on mobile */}
         {!withTarimas && ubicacionConfirmed && (
-          <div className="mb-2 flex items-center justify-between px-1">
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-accent-700 bg-accent-50 border border-accent-200 px-2 py-1 rounded-full">
-              <MapPin size={10} />{selectedUbicacion || t('rec.val.ubicacion.skip')}
+          <div className="mb-2 flex items-center gap-2 px-1">
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-accent-700 bg-accent-50 border border-accent-200 px-2 py-1 rounded-full flex-1 min-w-0 truncate">
+              <MapPin size={10} className="shrink-0" />{selectedUbicacion || t('rec.val.ubicacion.skip')}
             </span>
-            <button type="button" onClick={completarUbicacion} className="text-[10px] text-accent-600 hover:text-accent-800 font-medium">
+            <button
+              type="button"
+              onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-warm-400 hover:text-accent-600 shrink-0"
+            >
+              <Edit3 size={11} />
+              <span>Editar</span>
+            </button>
+            <button type="button" onClick={completarUbicacion} className="text-[10px] text-accent-600 hover:text-accent-800 font-semibold shrink-0">
               {t('rec.val.btn.completar')}
             </button>
           </div>
         )}
 
         <div className={`relative ${!withTarimas && !ubicacionConfirmed ? 'opacity-40 pointer-events-none' : ''}`}>
-          <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-300 pointer-events-none" />
-          <input ref={scanRefMobile} {...scanInputProps} />
+          <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-sky-500 pointer-events-none" />
+          <input ref={scanRefMobile} {...scanInputProps} className="w-full pl-12 pr-4 py-3.5 text-lg bg-sky-50/30 border-2 border-sky-100 rounded-2xl focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-warm-900" />
         </div>
         <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
       </div>
