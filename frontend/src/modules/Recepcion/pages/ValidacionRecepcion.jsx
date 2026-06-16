@@ -1053,17 +1053,6 @@ export default function ValidacionRecepcion() {
                             <MapPin size={8} />{selectedUbicacion}
                           </span>
                         )}
-                        {lastResult.result === 'correcto' && (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDeleteOpen(true)}
-                            disabled={deleteLastMut.isPending}
-                            className="mt-0.5 p-1.5 rounded-lg text-danger-500 hover:bg-danger-100 disabled:opacity-30 transition-colors"
-                            title={t('rec.val.delete.tooltip')}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
                       </div>
                     </div>
                   </motion.div>
