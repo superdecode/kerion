@@ -19,3 +19,6 @@ export const searchByCode = (code) => api.get('/recepcion/orders/search-by-code'
 export const getNovedades = (orderId) => api.get(`/recepcion/orders/${orderId}/novedades`).then(r => r.data)
 export const createNovedad = (orderId, payload) => api.post(`/recepcion/orders/${orderId}/novedades`, payload).then(r => r.data)
 export const deleteNovedad = (orderId, novedadId) => api.delete(`/recepcion/orders/${orderId}/novedades/${novedadId}`).then(r => r.data)
+export const getNovedadTipos = () => api.get('/recepcion/novedad-tipos').then(r => r.data)
+export const createNovedadTipo = (payload) => api.post('/recepcion/novedad-tipos', payload).then(r => r.data)
+export const deleteNovedadTipo = (id) => api.delete(`/recepcion/novedad-tipos/${id}`).then(r => r.data)

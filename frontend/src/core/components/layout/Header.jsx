@@ -9,7 +9,7 @@ import api from '../../services/api'
 import { useToastStore } from '../../stores/toastStore'
 import {
   Search, X, User, LogOut, Key, Settings, Globe, ChevronDown,
-  Shield, Clock, Activity, HelpCircle, Edit3, Check
+  Shield, Clock, Activity, HelpCircle, Edit3, Check, Tags, Trash2, Plus
 } from 'lucide-react'
 import { useTourStore } from '../../stores/tourStore'
 import { tourHelpVisible } from './OnboardingTour'
@@ -26,7 +26,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
   const [changePassError, setChangePassError] = useState('')
   const [changePassLoading, setChangePassLoading] = useState(false)
   const [changePassSuccess, setChangePassSuccess] = useState(false)
-  const { user, logout, updateTimezone, updateProfile } = useAuthStore()
+  const { user, logout, updateTimezone, updateProfile, hasPermission } = useAuthStore()
   const { locale, setLocale, t } = useI18nStore()
   const triggerTour = useTourStore((s) => s.trigger)
   const showTourHelp = tourHelpVisible(user?.id)
@@ -34,8 +34,50 @@ export default function Header({ title, subtitle, actions, showSearch = false })
   const [profileDraft, setProfileDraft] = useState({ nombre: '', apellido: '' })
   const [editingName, setEditingName] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
+  const [tiposOpen, setTiposOpen] = useState(false)
+  const [tipos, setTipos] = useState([])
+  const [tiposLoading, setTiposLoading] = useState(false)
+  const [nuevoTipoNombre, setNuevoTipoNombre] = useState('')
+  const [tiposSaving, setTiposSaving] = useState(false)
   const navigate = useNavigate()
   const menuRef = useRef(null)
+
+  const canManageTipos = hasPermission('recepcion.validacion', 'actualizar')
+
+  useEffect(() => {
+    if (!tiposOpen) return
+    let active = true
+    setTiposLoading(true)
+    api.get('/recepcion/novedad-tipos')
+      .then(res => { if (active) setTipos(res.data.tipos || []) })
+      .catch(() => {})
+      .finally(() => { if (active) setTiposLoading(false) })
+    return () => { active = false }
+  }, [tiposOpen])
+
+  const handleCreateTipo = async () => {
+    const nombre = nuevoTipoNombre.trim()
+    if (!nombre || tiposSaving) return
+    setTiposSaving(true)
+    try {
+      const res = await api.post('/recepcion/novedad-tipos', { nombre })
+      setTipos(prev => [...prev, res.data.tipo].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      setNuevoTipoNombre('')
+    } catch {
+      // ignore
+    } finally {
+      setTiposSaving(false)
+    }
+  }
+
+  const handleDeleteTipo = async (id) => {
+    try {
+      await api.delete(`/recepcion/novedad-tipos/${id}`)
+      setTipos(prev => prev.filter(t => t.id !== id))
+    } catch {
+      // ignore
+    }
+  }
 
   const initials = user?.nombre_completo
     ? user.nombre_completo.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -151,6 +193,17 @@ export default function Header({ title, subtitle, actions, showSearch = false })
               </button>
             )}
           </div>
+        )}
+
+        {/* Tipos de incidencia management */}
+        {canManageTipos && (
+          <button
+            onClick={() => { setTiposOpen(true); setUserMenuOpen(false) }}
+            className="p-2.5 rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50 transition-all duration-200"
+            title="Gestión de tipos de incidencia"
+          >
+            <Tags className="w-[18px] h-[18px]" />
+          </button>
         )}
 
         {/* User menu */}
@@ -537,6 +590,73 @@ export default function Header({ title, subtitle, actions, showSearch = false })
               </div>
             )
           })()}
+        </div>
+      </Modal>
+
+      {/* Tipos de incidencia Modal */}
+      <Modal
+        isOpen={tiposOpen}
+        onClose={() => { setTiposOpen(false); setNuevoTipoNombre('') }}
+        title="Gestión de tipos de incidencia"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={nuevoTipoNombre}
+              onChange={e => setNuevoTipoNombre(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreateTipo()}
+              placeholder="Nombre del tipo..."
+              className="flex-1 px-3 py-2 rounded-xl border border-warm-200 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={handleCreateTipo}
+              disabled={!nuevoTipoNombre.trim() || tiposSaving}
+              className="btn-primary inline-flex items-center gap-1.5 px-3 py-2 text-sm disabled:opacity-50 whitespace-nowrap"
+            >
+              {tiposSaving
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <Plus className="w-4 h-4" />}
+              Agregar
+            </button>
+          </div>
+
+          <div className="border border-warm-100 rounded-xl overflow-hidden">
+            {tiposLoading ? (
+              <div className="py-8 text-center text-sm text-warm-400">Cargando...</div>
+            ) : tipos.length === 0 ? (
+              <div className="py-8 text-center text-sm text-warm-400">Sin tipos configurados</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="table-header">Nombre</th>
+                    <th className="table-header text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-warm-50">
+                  {tipos.map(tipo => (
+                    <tr key={tipo.id} className="table-row">
+                      <td className="px-3 py-2.5 text-warm-700 text-xs font-medium">{tipo.nombre}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTipo(tipo.id)}
+                          className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </Modal>
     </>

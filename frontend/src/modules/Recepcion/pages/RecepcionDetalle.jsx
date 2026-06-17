@@ -13,7 +13,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad } from '../services/recepcionService'
+import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos } from '../services/recepcionService'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
 import * as XLSX from 'xlsx'
@@ -169,6 +169,13 @@ export default function RecepcionDetalle() {
     queryFn: () => getNovedades(id),
     retry: 0,
     staleTime: 30_000,
+  })
+
+  const { data: tiposData } = useQuery({
+    queryKey: ['recepcion-novedad-tipos'],
+    queryFn: getNovedadTipos,
+    retry: 0,
+    staleTime: 60_000,
   })
 
   const updateLineMutation = useMutation({
@@ -751,8 +758,8 @@ export default function RecepcionDetalle() {
                   className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 bg-white"
                 >
                   <option value="">{t('rec.otros.select_tipo')}</option>
-                  {TIPOS_NOVEDAD.map(tipo => (
-                    <option key={tipo} value={tipo}>{tipo}</option>
+                  {(tiposData?.tipos?.length > 0 ? tiposData.tipos.map(t => t.nombre) : TIPOS_NOVEDAD).map(nombre => (
+                    <option key={nombre} value={nombre}>{nombre}</option>
                   ))}
                 </select>
                 <input

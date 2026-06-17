@@ -256,8 +256,7 @@ router.get('/orders/:id/scan-events',
          FROM inbound_scan_events e
          LEFT JOIN usuarios u ON u.id = e.scanned_by
          WHERE e.order_id=$1 AND e.tenant_id=$2
-         ORDER BY e.scanned_at DESC
-         LIMIT 1000`,
+         ORDER BY e.scanned_at DESC`,
         [req.params.id, req.tenantId]
       )
       res.json({ events: result.rows })
@@ -441,6 +440,7 @@ router.post('/orders/:id/novedades',
       )
       res.status(201).json({ novedad: result.rows[0] })
     } catch (err) {
+      console.error('[recepcion] novedad create:', err.message, '\n', err.stack)
       res.status(500).json({ error: 'Error al registrar novedad' })
     }
   }
@@ -459,6 +459,66 @@ router.delete('/orders/:id/novedades/:nid',
       res.json({ ok: true })
     } catch (err) {
       res.status(500).json({ error: 'Error al eliminar novedad' })
+    }
+  }
+)
+
+// GET /novedad-tipos — list active tipos for this tenant
+router.get('/novedad-tipos',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'ver'),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `SELECT id, nombre, created_at FROM inbound_novedad_tipos
+         WHERE tenant_id=$1 AND activo=true ORDER BY nombre ASC`,
+        [req.tenantId]
+      )
+      res.json({ tipos: result.rows })
+    } catch (err) {
+      console.error('[recepcion] novedad-tipos get:', err.message)
+      res.status(500).json({ error: 'Error al obtener tipos' })
+    }
+  }
+)
+
+// POST /novedad-tipos — create a tipo
+router.post('/novedad-tipos',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'actualizar'),
+  async (req, res) => {
+    try {
+      const nombre = (req.body.nombre || '').trim()
+      if (!nombre) return res.status(400).json({ error: 'Nombre requerido' })
+      const result = await req.tQuery(
+        `INSERT INTO inbound_novedad_tipos (tenant_id, nombre)
+         VALUES ($1, $2)
+         ON CONFLICT (tenant_id, lower(nombre)) DO UPDATE SET activo=true
+         RETURNING id, nombre, created_at`,
+        [req.tenantId, nombre]
+      )
+      res.status(201).json({ tipo: result.rows[0] })
+    } catch (err) {
+      console.error('[recepcion] novedad-tipos create:', err.message)
+      res.status(500).json({ error: 'Error al crear tipo' })
+    }
+  }
+)
+
+// DELETE /novedad-tipos/:id — soft delete a tipo
+router.delete('/novedad-tipos/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'actualizar'),
+  async (req, res) => {
+    try {
+      await req.tQuery(
+        `UPDATE inbound_novedad_tipos SET activo=false WHERE id=$1 AND tenant_id=$2`,
+        [req.params.id, req.tenantId]
+      )
+      res.json({ ok: true })
+    } catch (err) {
+      console.error('[recepcion] novedad-tipos delete:', err.message)
+      res.status(500).json({ error: 'Error al eliminar tipo' })
     }
   }
 )
