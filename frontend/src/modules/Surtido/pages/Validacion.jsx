@@ -876,12 +876,15 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const locationRef = useRef(null)
   const autoFinalizeLockRef = useRef(false)
   const sessionCreateFiredRef = useRef(false)
+  const scannedOkCodesRef = useRef(new Set())
+  const pendingSyncRef = useRef([])
+  const isSyncingRef = useRef(false)
   const sidebarStorageKey = `kirion_surtido_validation_sidebar_${user?.id || 'guest'}`
   const sessionCompleteLocked = showCompletionModal || !!completionSnapshot
 
   const firstScanTs = useMemo(() => {
     const ts = history.map(h => h.ts).filter(Boolean)
-    return ts.length > 0 ? Math.min(...ts) : null
+    return ts.length > 0 ? ts.reduce((min, t) => (t < min ? t : min), Infinity) : null
   }, [history])
 
   const sessionElapsed = useSessionTimer(firstScanTs || sessionStart)
@@ -1085,18 +1088,27 @@ const { data: reasonsData } = useQuery({
     })
   }, [step, isActive, pendingSync.length, isSyncing, sessionCompleteLocked, totalExpected, counts.ok, counts.rejected, canDelete, canUpdate]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep refs in sync so the stable interval can always read current values
+  useEffect(() => { pendingSyncRef.current = pendingSync }, [pendingSync])
+  useEffect(() => { isSyncingRef.current = isSyncing }, [isSyncing])
+
   useEffect(() => {
     const interval = setInterval(async () => {
-      if (pendingSync.length === 0 || isSyncing) return
+      if (pendingSyncRef.current.length === 0 || isSyncingRef.current) return
+      isSyncingRef.current = true
       setIsSyncing(true)
+      const batch = [...pendingSyncRef.current]
       try {
-        const results = await Promise.allSettled(pendingSync.map(e => addScanEvent(e.payload)))
-        const synced = pendingSync.filter((_, i) => results[i].status === 'fulfilled').map(e => e.key)
+        const results = await Promise.allSettled(batch.map(e => addScanEvent(e.payload)))
+        const synced = batch.filter((_, i) => results[i].status === 'fulfilled').map(e => e.key)
         setPendingSync(p => p.filter(e => !synced.includes(e.key)))
-      } finally { setIsSyncing(false) }
+      } finally {
+        isSyncingRef.current = false
+        setIsSyncing(false)
+      }
     }, 30000)
     return () => clearInterval(interval)
-  }, [pendingSync, isSyncing])
+  }, []) // stable — never recreated
 
   const persistSession = (newObc, newSessionId, newStart, ubicacion) => {
     sessionStorage.setItem(storageKey, JSON.stringify({
@@ -1107,6 +1119,7 @@ const { data: reasonsData } = useQuery({
 
   const clearSession = () => {
     sessionStorage.removeItem(storageKey)
+    scannedOkCodesRef.current = new Set()
     setStep('search'); setObc(null); setSessionId(null); setSessionStart(null)
     setLastScan(null); setHistory([]); setCounts({ ok: 0, rejected: 0 })
     setItemCounts(new Map()); setPendingSync([]); setSelectedUbicacion(null)
@@ -1171,8 +1184,9 @@ const { data: reasonsData } = useQuery({
       const norm = normalizeCodeFast(payload?.normalized_code || manualEntry.code)
       const matched = findMatchedItem(norm, packageMap, productMap)
       playSound('success')
+      scannedOkCodesRef.current.add(norm)
       setLastScan({ code: norm, result: 'ok' })
-      setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h])
+      setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
       setCounts(c => ({ ...c, ok: c.ok + 1 }))
       if (matched) {
         setItemCounts(m => {
@@ -1208,11 +1222,11 @@ const { data: reasonsData } = useQuery({
   const doScan = useCallback((rawCode) => {
     if (!canCreate || !rawCode.trim() || !sessionId) return
     const norm = normalizeScanCode(rawCode)
-    const isDup = history.some(h => h.code === norm && h.result === 'ok')
+    const isDup = scannedOkCodesRef.current.has(norm)
     if (isDup) {
       playSound('warning')
       setLastScan({ code: norm, result: 'duplicate' })
-      setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h])
+      setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h].slice(0, 500))
       toast.warning(t('surtido.validacion.duplicate') + ': ' + norm)
       addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'duplicate', quantity: 1, _dedupeKey: `DUP_${norm}_${Date.now()}` })
       return
@@ -1221,15 +1235,16 @@ const { data: reasonsData } = useQuery({
     if (!matched) {
       playSound('reject')
       setLastScan({ code: norm, result: 'rejected' })
-      setHistory(h => [{ code: norm, result: 'rejected', ts: Date.now() }, ...h])
+      setHistory(h => [{ code: norm, result: 'rejected', ts: Date.now() }, ...h].slice(0, 500))
       setCounts(c => ({ ...c, rejected: c.rejected + 1 }))
       setRejectedBoxModal({ open: true, code: norm })
       addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'not_found', quantity: 1, _dedupeKey: `NF_${norm}_${Date.now()}` })
       return
     }
     playSound('success')
+    scannedOkCodesRef.current.add(norm)
     setLastScan({ code: norm, result: 'ok' })
-    setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h])
+    setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
     setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
     const ts = Date.now()
@@ -1239,7 +1254,7 @@ const { data: reasonsData } = useQuery({
       matched_sku: matched.type === 'sku' ? matched.sku : null,
       scan_result: 'ok', quantity: 1, _dedupeKey: `OK_${norm}_${ts}`,
     })
-  }, [sessionId, history, packageMap, productMap, addEventMut, t])
+  }, [sessionId, packageMap, productMap, addEventMut, t])
 
   function addCodeToSession(code) {
     const norm = normalizeScanCode(code)
@@ -1250,8 +1265,9 @@ const { data: reasonsData } = useQuery({
       return
     }
     playSound('success')
+    scannedOkCodesRef.current.add(norm)
     setLastScan({ code: norm, result: 'ok' })
-    setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h])
+    setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
     setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
     if (sessionId) {
@@ -1648,10 +1664,10 @@ const { data: reasonsData } = useQuery({
             </div>
 
             {activeTab === 'registros' && (
-              <ScanFeedTable items={history.filter(h => h.result === 'ok')} t={t} />
+              <ScanFeedTable items={history.filter(h => h.result === 'ok').slice(0, 200)} t={t} />
             )}
             {activeTab === 'rechazados' && (
-              <RejectedTable items={rejectedHistory} t={t} />
+              <RejectedTable items={rejectedHistory.slice(0, 200)} t={t} />
             )}
           </div>
         </div>

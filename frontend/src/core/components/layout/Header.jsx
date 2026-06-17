@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import SearchBar from '../common/SearchBar'
 import Modal from '../common/Modal'
@@ -40,9 +40,11 @@ export default function Header({ title, subtitle, actions, showSearch = false })
   const [nuevoTipoNombre, setNuevoTipoNombre] = useState('')
   const [tiposSaving, setTiposSaving] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   const menuRef = useRef(null)
 
-  const canManageTipos = hasPermission('recepcion.validacion', 'actualizar')
+  const isRecepcionModule = location.pathname.toLowerCase().startsWith('/recepcion')
+  const canManageTipos = isRecepcionModule && hasPermission('recepcion.validacion', 'actualizar')
 
   useEffect(() => {
     if (!tiposOpen) return
