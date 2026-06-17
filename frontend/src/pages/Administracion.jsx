@@ -33,6 +33,7 @@ const MODULE_GROUPS = [
     group: 'Devoluciones',
     groupKey: 'perm.group.devoluciones',
     modules: [
+      { key: 'devoluciones.dashboard',  label: 'Dashboard',  labelKey: 'perm.sub.dashboard' },
       { key: 'devoluciones.entradas',   label: 'Entradas',   labelKey: 'perm.sub.dev.entradas' },
       { key: 'devoluciones.inventario', label: 'Inventario', labelKey: 'perm.sub.dev.inventario' },
       { key: 'devoluciones.salidas',    label: 'Salidas',    labelKey: 'perm.sub.dev.salidas' },
@@ -42,13 +43,15 @@ const MODULE_GROUPS = [
     group: 'Recepción',
     groupKey: 'perm.group.recepcion',
     modules: [
-      { key: 'recepcion.recibir', label: 'Recibir', labelKey: 'perm.sub.recepcion.recibir' },
+      { key: 'recepcion.dashboard', label: 'Dashboard', labelKey: 'perm.sub.dashboard' },
+      { key: 'recepcion.recibir',   label: 'Recibir',   labelKey: 'perm.sub.recepcion.recibir' },
     ]
   },
   {
     group: 'Inventario',
     groupKey: 'perm.group.inventario',
     modules: [
+      { key: 'inventario.dashboard', label: 'Dashboard', labelKey: 'perm.sub.dashboard' },
       { key: 'inventario.escaneo',   label: 'Escaneo',   labelKey: 'perm.sub.inventario.escaneo' },
       { key: 'inventario.registros', label: 'Registros', labelKey: 'perm.sub.inventario.registros' },
       { key: 'inventario.rastreo',   label: 'Rastreo',   labelKey: 'perm.sub.inventario.rastreo' },
@@ -58,6 +61,7 @@ const MODULE_GROUPS = [
     group: 'Surtido',
     groupKey: 'perm.group.surtido',
     modules: [
+      { key: 'surtido.dashboard',  label: 'Dashboard', labelKey: 'perm.sub.dashboard' },
       { key: 'surtido.validacion', label: 'Validar',   labelKey: 'perm.sub.surtido.validar' },
       { key: 'surtido.ordenes',    label: 'Órdenes',   labelKey: 'perm.sub.surtido.ordenes' },
       { key: 'surtido.registros',  label: 'Registros', labelKey: 'perm.sub.surtido.registros' },
@@ -67,8 +71,9 @@ const MODULE_GROUPS = [
     group: 'Despacho',
     groupKey: 'perm.group.despacho',
     modules: [
-      { key: 'despacho.ordenes', label: 'Órdenes', labelKey: 'perm.sub.despacho.ordenes' },
-      { key: 'despacho.folios',  label: 'Folios',  labelKey: 'perm.sub.despacho.folios' },
+      { key: 'despacho.dashboard', label: 'Dashboard', labelKey: 'perm.sub.dashboard' },
+      { key: 'despacho.ordenes',   label: 'Órdenes',   labelKey: 'perm.sub.despacho.ordenes' },
+      { key: 'despacho.folios',    label: 'Folios',    labelKey: 'perm.sub.despacho.folios' },
     ]
   },
   {
