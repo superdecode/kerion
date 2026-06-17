@@ -14,6 +14,7 @@ const PICK_SCAN_RESULTS = new Set(['ok', 'unexpected', 'duplicate', 'not_found']
 const INV_SCAN_STATUSES = new Set(['ok', 'blocked', 'nowms'])
 const ORDER_TRACKING_STATUSES = new Set(['pending_assignment', 'assigned', 'sorting', 'pending_validation', 'validating', 'complete', 'partial', 'cancelled'])
 const CLOSED_ORDER_TRACKING_STATUSES = new Set(['complete', 'partial'])
+const _tableColumnCache = new Map()
 
 // ── Sheet CSV cache (per tenant+url, stale-while-revalidate) ───────────────
 const _csvCache = new Map()
@@ -110,6 +111,62 @@ function normalizeOptionalText(value) {
 function parsePositiveInt(value, fallback = 1) {
   const parsed = Number.parseInt(value, 10)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
+async function runDbQuery(queryable, text, params = []) {
+  if (typeof queryable.tQuery === 'function') return queryable.tQuery(text, params)
+  return queryable.query(text, params)
+}
+
+async function getPublicTableColumns(queryable, tableName) {
+  if (_tableColumnCache.has(tableName)) return _tableColumnCache.get(tableName)
+  const result = await runDbQuery(
+    queryable,
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = $1`,
+    [tableName]
+  )
+  const cols = new Set(result.rows.map((row) => row.column_name))
+  _tableColumnCache.set(tableName, cols)
+  return cols
+}
+
+function buildPickOrderTrackingSelect(columns) {
+  const preferred = [
+    'id', 'tenant_id', 'outbound_order_no', 'third_order_no',
+    'surtidor_id', 'surtidor_nombre', 'status', 'notes',
+    'assigned_at', 'assigned_by',
+    'sorting_started_at', 'sorting_completed_at',
+    'validation_started_at', 'validation_completed_at', 'validated_by',
+    'tiene_faltantes', 'tiene_anormalidades', 'tiene_reparacion', 'tiene_rastreo',
+    'created_at', 'updated_at',
+  ]
+  const selected = preferred.filter((column) => columns.has(column))
+  if (selected.length === 0) return 'ot.*'
+  return selected.map((column) => `ot.${column}`).join(', ')
+}
+
+function buildPickSessionsStatsSubquery(sessionColumns, includeSessionCount = false) {
+  const aggregates = []
+  if (includeSessionCount) aggregates.push('COUNT(*) as session_count')
+  aggregates.push(
+    sessionColumns.has('total_scanned')
+      ? 'SUM(COALESCE(total_scanned, 0)) as total_scanned'
+      : '0::bigint as total_scanned'
+  )
+  aggregates.push(
+    sessionColumns.has('total_expected')
+      ? 'MAX(COALESCE(total_expected, 0)) as total_expected'
+      : '0::bigint as total_expected'
+  )
+  return `
+    SELECT outbound_order_no, tenant_id,
+           ${aggregates.join(',\n           ')}
+    FROM pick_sessions
+    WHERE tenant_id = $1
+    GROUP BY outbound_order_no, tenant_id
+  `
 }
 
 async function generateInventorySectionCode(client, tenantId, tz, referenceDate = null) {
@@ -1789,22 +1846,19 @@ router.get('/order-tracking',
   requirePermission('surtido.ordenes', 'ver'),
   async (req, res) => {
     try {
+      const [trackingColumns, sessionColumns] = await Promise.all([
+        getPublicTableColumns(req, 'pick_order_tracking'),
+        getPublicTableColumns(req, 'pick_sessions'),
+      ])
       const rows = await req.tQuery(
-        `SELECT ot.*, s.nombre as surtidor_nombre_actual,
+        `SELECT ${buildPickOrderTrackingSelect(trackingColumns)}, s.nombre as surtidor_nombre_actual,
                 COALESCE(stats.session_count, 0) as session_count,
                 COALESCE(stats.total_scanned, 0) as total_scanned,
                 COALESCE(stats.total_expected, 0) as total_expected
          FROM pick_order_tracking ot
          LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id
-         LEFT JOIN (
-           SELECT outbound_order_no, tenant_id,
-                  COUNT(*) as session_count,
-                  SUM(total_scanned) as total_scanned,
-                  MAX(total_expected) as total_expected
-           FROM pick_sessions
-           WHERE tenant_id = $1
-           GROUP BY outbound_order_no, tenant_id
-         ) stats ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
+         LEFT JOIN (${buildPickSessionsStatsSubquery(sessionColumns, true)}) stats
+           ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
          WHERE ot.tenant_id = $1
          ORDER BY ot.updated_at DESC`,
         [req.tenantId]
@@ -1822,25 +1876,32 @@ router.get('/order-tracking/:obc',
   requirePermission('surtido.validacion', 'ver'),
   async (req, res) => {
     try {
+      const [trackingColumns, sessionColumns] = await Promise.all([
+        getPublicTableColumns(req, 'pick_order_tracking'),
+        getPublicTableColumns(req, 'pick_sessions'),
+      ])
+      const detailStatsSubquery = `
+        SELECT outbound_order_no, tenant_id,
+               ${sessionColumns.has('total_scanned') ? 'SUM(COALESCE(total_scanned, 0))' : '0::bigint'} as total_scanned,
+               ${sessionColumns.has('total_expected') ? 'MAX(COALESCE(total_expected, 0))' : '0::bigint'} as total_expected
+        FROM pick_sessions
+        WHERE tenant_id = $1 AND outbound_order_no = $2
+        GROUP BY outbound_order_no, tenant_id
+      `
       const row = await req.tQuery(
-        `SELECT ot.*, s.nombre as surtidor_nombre_actual,
+        `SELECT ${buildPickOrderTrackingSelect(trackingColumns)}, s.nombre as surtidor_nombre_actual,
                 COALESCE(stats.total_scanned, 0) as total_scanned,
                 COALESCE(stats.total_expected, 0) as total_expected
          FROM pick_order_tracking ot
          LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id
-         LEFT JOIN (
-           SELECT outbound_order_no, tenant_id,
-                  SUM(total_scanned) as total_scanned,
-                  MAX(total_expected) as total_expected
-           FROM pick_sessions
-           WHERE tenant_id = $1 AND outbound_order_no = $2
-           GROUP BY outbound_order_no, tenant_id
-         ) stats ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
+         LEFT JOIN (${detailStatsSubquery}) stats
+           ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
          WHERE ot.tenant_id = $1 AND ot.outbound_order_no = $2`,
         [req.tenantId, req.params.obc]
       )
       res.json({ success: true, data: row.rows[0] || null })
     } catch (err) {
+      console.error('GET order-tracking by obc error:', err.message, '| obc:', req.params.obc)
       res.status(500).json({ success: false, error: 'Error obteniendo seguimiento' })
     }
   }
@@ -1986,6 +2047,7 @@ router.put('/order-tracking/:obc',
   async (req, res) => {
     try {
       const { surtidor_id, status, notes, third_order_no } = req.body
+      const trackingColumns = await getPublicTableColumns(req, 'pick_order_tracking')
       if (status !== undefined && !ORDER_TRACKING_STATUSES.has(String(status))) {
         return res.status(400).json({ success: false, error: 'Estado de orden inválido' })
       }
@@ -2005,6 +2067,7 @@ router.put('/order-tracking/:obc',
 
       if (existing.rows.length === 0) {
         const created = await req.tTransaction(async (client) => {
+          const txTrackingColumns = await getPublicTableColumns(client, 'pick_order_tracking')
           const limitCheck = await checkModuleLimitForUpdate(
             client,
             req.tenantId,
@@ -2021,13 +2084,38 @@ router.put('/order-tracking/:obc',
             throw err
           }
 
+          const insertColumns = ['tenant_id', 'outbound_order_no']
+          const insertValues = [req.tenantId, req.params.obc]
+          let ip = 3
+          if (txTrackingColumns.has('third_order_no')) {
+            insertColumns.push('third_order_no')
+            insertValues.push(normalizeOptionalText(third_order_no))
+          }
+          if (txTrackingColumns.has('surtidor_id')) {
+            insertColumns.push('surtidor_id')
+            insertValues.push(surtidor_id || null)
+          }
+          if (txTrackingColumns.has('surtidor_nombre')) {
+            insertColumns.push('surtidor_nombre')
+            insertValues.push(surtidorNombre)
+          }
+          if (txTrackingColumns.has('status')) {
+            insertColumns.push('status')
+            insertValues.push(status || 'pending_assignment')
+          }
+          if (txTrackingColumns.has('notes')) {
+            insertColumns.push('notes')
+            insertValues.push(normalizeOptionalText(notes))
+          }
+          if (txTrackingColumns.has('assigned_at')) {
+            insertColumns.push('assigned_at')
+            insertValues.push(surtidor_id ? new Date() : null)
+          }
+          const placeholders = insertColumns.map((_, index) => `$${index + 1}`).join(', ')
           const result = await client.query(
-            `INSERT INTO pick_order_tracking
-               (tenant_id, outbound_order_no, third_order_no, surtidor_id, surtidor_nombre, status, notes, assigned_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [req.tenantId, req.params.obc, normalizeOptionalText(third_order_no), surtidor_id || null,
-             surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes),
-             surtidor_id ? new Date() : null]
+            `INSERT INTO pick_order_tracking (${insertColumns.join(', ')})
+             VALUES (${placeholders}) RETURNING *`,
+            insertValues
           )
           return result.rows[0]
         })
@@ -2042,31 +2130,36 @@ router.put('/order-tracking/:obc',
         return res.status(409).json({ success: false, error: 'No se puede modificar surtidor o estatus en órdenes completadas o parciales' })
       }
 
-      const fields = ['updated_at = now()']
+      const fields = trackingColumns.has('updated_at') ? ['updated_at = now()'] : []
       const params = []
       let p = 1
-      if (status !== undefined) {
+      if (status !== undefined && trackingColumns.has('status')) {
         fields.push(`status = $${p++}`); params.push(status)
         const userNombre = req.fullUser?.nombre_completo || null
         if (status === 'assigned') {
-          fields.push(`assigned_at = now()`)
-          fields.push(`assigned_by = $${p++}`); params.push(userNombre)
+          if (trackingColumns.has('assigned_at')) fields.push(`assigned_at = now()`)
+          if (trackingColumns.has('assigned_by')) { fields.push(`assigned_by = $${p++}`); params.push(userNombre) }
         }
-        if (status === 'sorting')            fields.push(`sorting_started_at = now()`)
-        if (status === 'pending_validation') fields.push(`sorting_completed_at = now()`)
-        if (status === 'validating')         fields.push(`validation_started_at = now()`)
+        if (status === 'sorting' && trackingColumns.has('sorting_started_at'))            fields.push(`sorting_started_at = now()`)
+        if (status === 'pending_validation' && trackingColumns.has('sorting_completed_at')) fields.push(`sorting_completed_at = now()`)
+        if (status === 'validating' && trackingColumns.has('validation_started_at'))         fields.push(`validation_started_at = now()`)
         if (status === 'complete') {
-          fields.push(`validation_completed_at = now()`)
-          fields.push(`validated_by = $${p++}`); params.push(userNombre)
+          if (trackingColumns.has('validation_completed_at')) fields.push(`validation_completed_at = now()`)
+          if (trackingColumns.has('validated_by')) { fields.push(`validated_by = $${p++}`); params.push(userNombre) }
         }
       }
-      if (surtidor_id !== undefined) {
+      if (surtidor_id !== undefined && trackingColumns.has('surtidor_id')) {
         fields.push(`surtidor_id = $${p++}`); params.push(surtidor_id || null)
-        fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
-        if (surtidor_id) fields.push(`assigned_at = COALESCE(assigned_at, now())`)
+        if (trackingColumns.has('surtidor_nombre')) {
+          fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
+        }
+        if (surtidor_id && trackingColumns.has('assigned_at')) fields.push(`assigned_at = COALESCE(assigned_at, now())`)
       }
-      if (third_order_no !== undefined) { fields.push(`third_order_no = $${p++}`); params.push(normalizeOptionalText(third_order_no)) }
-      if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
+      if (third_order_no !== undefined && trackingColumns.has('third_order_no')) { fields.push(`third_order_no = $${p++}`); params.push(normalizeOptionalText(third_order_no)) }
+      if (notes !== undefined && trackingColumns.has('notes')) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
+      if (fields.length === 0) {
+        return res.status(200).json({ success: true, data: existing.rows[0] || null })
+      }
       params.push(req.tenantId, req.params.obc)
 
       const result = await req.tQuery(

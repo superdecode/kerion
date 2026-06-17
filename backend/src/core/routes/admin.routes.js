@@ -667,7 +667,12 @@ router.post('/tenants/:id/reset-password', authenticateAdmin, async (req, res) =
     const user = userRes.rows[0]
 
     await query(
-      `UPDATE usuarios SET password_hash = $1, force_password_change = true, updated_at = now() WHERE id = $2`,
+      `UPDATE usuarios
+       SET password_hash = $1,
+           force_password_change = true,
+           must_change_password = true,
+           updated_at = now()
+       WHERE id = $2`,
       [hash, user.id]
     )
 

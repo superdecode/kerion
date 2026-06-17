@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import api, { setBackendStatusCallback } from '../services/api.js'
+import api, { setBackendStatusCallback, setUnauthorizedCallback } from '../services/api.js'
 import { mockLogin, mockAuthMe } from '../services/mockAuth.js'
 import { setTimezone } from '../utils/dateFormat.js'
 
@@ -321,4 +321,13 @@ export const useAuthStore = create(
 // This runs once at module load — no circular imports because api.js doesn't import authStore.
 setBackendStatusCallback((online) => {
   useAuthStore.setState({ backendOnline: online })
+})
+
+setUnauthorizedCallback(() => {
+  useAuthStore.setState({
+    user: null,
+    token: null,
+    isAuthenticated: false,
+    enabledModules: [],
+  })
 })

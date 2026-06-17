@@ -86,7 +86,7 @@ export default function ValidacionRecepcion() {
   const { t } = useI18nStore()
   const toast = useToastStore()
   const qc = useQueryClient()
-  const { hasPermission } = useAuthStore()
+  const { hasPermission, isAuthenticated, token } = useAuthStore()
   const canDeleteScan = hasPermission('recepcion.recibir', 'actualizar')
 
   const scanRefDesktop = useRef(null)
@@ -141,16 +141,22 @@ export default function ValidacionRecepcion() {
   // Force close
   const [forceCloseOpen, setForceCloseOpen] = useState(false)
 
+  const canQueryRecepcion = isAuthenticated && Boolean(token)
+
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['recepcion-order', id],
     queryFn: () => getOrder(id),
-    refetchInterval: scanning ? 4000 : false,
+    enabled: canQueryRecepcion,
+    retry: false,
+    refetchInterval: canQueryRecepcion && scanning ? 4000 : false,
   })
 
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
     queryFn: () => getScanEvents(id),
-    refetchInterval: scanning ? 6000 : false,
+    enabled: canQueryRecepcion,
+    retry: false,
+    refetchInterval: canQueryRecepcion && scanning ? 6000 : false,
   })
   const serverEvents = eventsData?.events ?? []
 

@@ -130,7 +130,7 @@ export default function RecepcionDetalle() {
   const qc = useQueryClient()
   const { t } = useI18nStore()
   const toast = useToastStore()
-  const { hasPermission } = useAuthStore()
+  const { hasPermission, isAuthenticated, token } = useAuthStore()
 
   const [activeTab, setActiveTab] = useState('detalle')
   const [lineSearch, setLineSearch] = useState('')
@@ -161,31 +161,37 @@ export default function RecepcionDetalle() {
     setNuevaUbicacion('')
   }, [id])
 
+  const canQueryRecepcion = isAuthenticated && Boolean(token)
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ['recepcion-order', id],
     queryFn: () => getOrder(id),
-    retry: 1,
+    enabled: canQueryRecepcion,
+    retry: false,
     staleTime: 30_000,
   })
 
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
     queryFn: () => getScanEvents(id),
-    retry: 0,
+    enabled: canQueryRecepcion,
+    retry: false,
     staleTime: 30_000,
   })
 
   const { data: novedadesData } = useQuery({
     queryKey: ['recepcion-novedades', id],
     queryFn: () => getNovedades(id),
-    retry: 0,
+    enabled: canQueryRecepcion,
+    retry: false,
     staleTime: 30_000,
   })
 
   const { data: tiposData } = useQuery({
     queryKey: ['recepcion-novedad-tipos'],
     queryFn: getNovedadTipos,
-    retry: 0,
+    enabled: canQueryRecepcion,
+    retry: false,
     staleTime: 60_000,
   })
 

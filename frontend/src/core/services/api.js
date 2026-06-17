@@ -46,6 +46,11 @@ export function setBackendStatusCallback(cb) {
   _onBackendStatus = cb
 }
 
+let _onUnauthorized = null
+export function setUnauthorizedCallback(cb) {
+  _onUnauthorized = cb
+}
+
 function isProtectedAuthRequest(config) {
   const url = String(config?.url || '')
   return url.includes('/auth/login') || url.includes('/auth/logout')
@@ -107,7 +112,9 @@ api.interceptors.response.use(
       if (!isLoginRequest && !isHandling401) {
         isHandling401 = true
 
-        // Clear auth state via localStorage (Zustand persist will pick this up)
+        _onUnauthorized?.()
+
+        // Clear auth state via localStorage as a fallback
         localStorage.removeItem('wms-auth')
 
         // Use soft redirect instead of hard reload to prevent login loops.

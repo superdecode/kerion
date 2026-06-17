@@ -109,7 +109,10 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' })
     }
 
-    await query('UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = $1', [user.id])
+    await query(
+      'UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2',
+      [user.id, tenant.id]
+    )
 
     const permisos = normalizePermisos(user.permisos_override || user.rol_permisos || {})
 

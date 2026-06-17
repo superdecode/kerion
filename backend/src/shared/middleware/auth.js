@@ -34,6 +34,16 @@ export async function authenticateToken(req, res, next) {
     }
   }
 
+  if (req.tenantId) {
+    if (!decoded.tenant_id) {
+      return res.status(403).json({ error: 'Token sin tenant válido' })
+    }
+    if (decoded.tenant_id !== req.tenantId) {
+      console.warn('[auth] tenant mismatch token=%s route=%s', decoded.tenant_id, req.tenantId)
+      return res.status(403).json({ error: 'Token no pertenece a este tenant' })
+    }
+  }
+
   req.user = decoded
   req.token = token
   next()
@@ -61,9 +71,11 @@ export async function auditLog(req, action, entityType, entityId, details) {
 
 export async function loadFullUser(req, res, next) {
   try {
-    // Scope to the tenant from the JWT claim so a token from tenant A cannot
-    // load a user from tenant B even if both have the same numeric user id.
-    const tenantId = req.user.tenant_id || req.tenantId
+    if (req.tenantId && req.user?.tenant_id && req.user.tenant_id !== req.tenantId) {
+      return res.status(403).json({ error: 'Token no pertenece a este tenant' })
+    }
+
+    const tenantId = req.tenantId || req.user?.tenant_id
 
     // Use tenantQuery so that SET LOCAL app.tenant_id is applied within the
     // transaction — required because usuarios and roles have FORCE ROW LEVEL

@@ -72,7 +72,7 @@ function CopyCell({ value, className = '', muted = false }) {
 export default function Recibir() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { hasPermission, canDelete } = useAuthStore()
+  const { hasPermission, canDelete, isAuthenticated, token } = useAuthStore()
   const toast = useToastStore()
   const { t } = useI18nStore()
 
@@ -104,22 +104,30 @@ export default function Recibir() {
     limit: pageSize,
   }), [qFilter, estados, clienteFilter, fechaDesde, fechaHasta, page, pageSize])
 
+  const canQueryRecepcion = isAuthenticated && Boolean(token)
+
   const { data, isLoading } = useQuery({
     queryKey: ['recepcion-orders', params],
     queryFn: () => listOrders(params),
+    enabled: canQueryRecepcion,
+    retry: false,
   })
 
   const { data: clientesData } = useQuery({
     queryKey: ['recepcion-clientes'],
     queryFn: listClientes,
+    enabled: canQueryRecepcion,
+    retry: false,
     staleTime: 60_000,
   })
 
   const { data: activeData, isLoading: activeLoading } = useQuery({
     queryKey: ['recepcion-orders-active'],
     queryFn: () => listOrders({ limit: 200 }),
+    enabled: canQueryRecepcion,
+    retry: false,
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: canQueryRecepcion ? 60_000 : false,
   })
   const activeOrders = useMemo(() =>
     (activeData?.orders || []).filter(o => o.estado !== 'completo' && o.estado !== 'cancelado'),
@@ -154,7 +162,8 @@ export default function Recibir() {
   const { data: tiposData } = useQuery({
     queryKey: ['recepcion-novedad-tipos'],
     queryFn: getNovedadTipos,
-    retry: 0,
+    enabled: canQueryRecepcion,
+    retry: false,
     staleTime: 60_000,
   })
 

@@ -106,6 +106,36 @@ const PERM_LEVELS = [
 
 const LEVEL_ORDER = ['sin_acceso', 'ver', 'crear', 'actualizar', 'eliminar']
 
+function CopyHoverText({ value, className = '' }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async (event) => {
+    event.stopPropagation()
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(String(value))
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch { /* ignore */ }
+  }
+
+  return (
+    <div className={`group inline-flex max-w-full items-center gap-1.5 ${className}`}>
+      <span className="truncate">{value || '—'}</span>
+      {value ? (
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="shrink-0 rounded p-0.5 text-warm-300 opacity-0 transition-all hover:bg-warm-100 hover:text-primary-600 group-hover:opacity-100"
+          title="Copiar"
+        >
+          {copied ? <Check className="h-3.5 w-3.5 text-success-500" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 // Legacy level mapping (for data that wasn't fully migrated)
 const LEGACY_MAP = { total: 'eliminar', gestion: 'actualizar', escritura: 'crear', lectura: 'ver' }
 function normalizeLevel(level) {
@@ -544,7 +574,9 @@ function UsersTab({ canEdit, canDel }) {
                           <span className="font-semibold text-warm-800">{u.nombre_completo}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-warm-600">{u.email}</td>
+                      <td className="px-4 py-3 text-warm-600">
+                        <CopyHoverText value={u.email} />
+                      </td>
                       <td className="px-4 py-3 font-mono text-warm-500">{u.codigo}</td>
                       <td className="px-4 py-3">
                         <span className="badge bg-primary-100 text-primary-700">{role?.nombre || u.rol_nombre || t('admin.sinRol')}</span>
