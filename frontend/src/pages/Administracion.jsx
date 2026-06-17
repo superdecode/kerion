@@ -90,7 +90,6 @@ const MODULE_GROUPS = [
     group: 'Sistema',
     groupKey: 'admin.group.sistema',
     modules: [
-      { key: 'global.inicio',        label: 'Inicio',         labelKey: 'perm.sub.inicio' },
       { key: 'global.administracion',label: 'Administración', labelKey: 'perm.sub.administracion' },
       { key: 'sistema.wms',          label: 'Conexión WMS',   labelKey: 'perm.sub.sistema.wms' },
     ]

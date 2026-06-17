@@ -4,17 +4,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
   Search, X, Eye, Trash2, Download, PackageCheck, Copy, Check,
-  ScanBarcode, Printer, Clock, Filter,
+  ScanBarcode, Printer, Clock, Filter, Tags, Plus, Edit3,
 } from 'lucide-react'
 import RecepcionMobileHub from '../components/RecepcionMobileHub'
 import Header from '../../../core/components/layout/Header'
+import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { listOrders, listClientes, deleteOrder } from '../services/recepcionService'
+import { listOrders, listClientes, deleteOrder, getNovedadTipos, createNovedadTipo, updateNovedadTipo, deleteNovedadTipo } from '../services/recepcionService'
 import { fmtDate } from '../../../core/utils/dateFormat'
 import ImportarOrdenModal from '../components/ImportarOrdenModal'
 import ListaRecepcionSelectorModal from '../components/ListaRecepcionSelectorModal'
@@ -88,6 +89,10 @@ export default function Recibir() {
   const [deleteRow, setDeleteRow] = useState(null)
   const [selected, setSelected] = useState(new Set())
   const [bulkDelOpen, setBulkDelOpen] = useState(false)
+  const [tiposModalOpen, setTiposModalOpen] = useState(false)
+  const [nuevoTipoNombre, setNuevoTipoNombre] = useState('')
+  const [editingTipoId, setEditingTipoId] = useState(null)
+  const [editingTipoNombre, setEditingTipoNombre] = useState('')
 
   const params = useMemo(() => ({
     q: qFilter || undefined,
@@ -146,6 +151,31 @@ export default function Recibir() {
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
 
+  const { data: tiposData } = useQuery({
+    queryKey: ['recepcion-novedad-tipos'],
+    queryFn: getNovedadTipos,
+    retry: 0,
+    staleTime: 60_000,
+  })
+
+  const createTipoMut = useMutation({
+    mutationFn: (payload) => createNovedadTipo(payload),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recepcion-novedad-tipos'] }); setNuevoTipoNombre('') },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  const updateTipoMut = useMutation({
+    mutationFn: ({ id, nombre }) => updateNovedadTipo(id, { nombre }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['recepcion-novedad-tipos'] }); setEditingTipoId(null); setEditingTipoNombre('') },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  const deleteTipoMut = useMutation({
+    mutationFn: (id) => deleteNovedadTipo(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['recepcion-novedad-tipos'] }),
+    onError: () => toast.error(t('toast.error')),
+  })
+
   const orders = data?.orders || []
   const total = data?.total || 0
   const clienteOptions = (clientesData?.clientes || []).map(c => ({ value: c, label: c }))
@@ -160,6 +190,7 @@ export default function Recibir() {
   const canCreate = hasPermission('recepcion.recibir', 'crear')
   const canDel = canDelete('recepcion.recibir')
   const canValidate = hasPermission('recepcion.recibir', 'actualizar')
+  const canManageTipos = hasPermission('recepcion.validacion', 'actualizar')
   const hasActiveFilters =
     Boolean(q.trim()) || Boolean(qFilter.trim()) ||
     estados.length > 0 || clienteFilter.length > 0 ||
@@ -236,6 +267,15 @@ export default function Recibir() {
               >
                 <Printer size={15} />
                 {t('rec.btn.listaRecepcion')}
+              </button>
+            )}
+            {canManageTipos && (
+              <button
+                onClick={() => setTiposModalOpen(true)}
+                className="btn-ghost hidden sm:inline-flex items-center gap-1.5 text-sm h-9 px-3"
+              >
+                <Tags size={15} />
+                {t('rec.tipos.btn_header')}
               </button>
             )}
           </div>
@@ -479,6 +519,121 @@ export default function Recibir() {
           </div>
         </div>
       )}
+
+      {/* Tipos de incidencia modal */}
+      <Modal
+        isOpen={tiposModalOpen}
+        onClose={() => { setTiposModalOpen(false); setNuevoTipoNombre(''); setEditingTipoId(null); setEditingTipoNombre('') }}
+        title={t('rec.tipos.title')}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={nuevoTipoNombre}
+              onChange={e => setNuevoTipoNombre(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && nuevoTipoNombre.trim() && createTipoMut.mutate({ nombre: nuevoTipoNombre.trim() })}
+              placeholder={t('rec.tipos.placeholder')}
+              className="flex-1 px-3 py-2 rounded-xl border border-warm-200 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={() => nuevoTipoNombre.trim() && createTipoMut.mutate({ nombre: nuevoTipoNombre.trim() })}
+              disabled={!nuevoTipoNombre.trim() || createTipoMut.isPending}
+              className="btn-primary inline-flex items-center gap-1.5 px-3 py-2 text-sm disabled:opacity-50 whitespace-nowrap"
+            >
+              {createTipoMut.isPending
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <Plus className="w-4 h-4" />}
+              {t('rec.tipos.add')}
+            </button>
+          </div>
+          <div className="border border-warm-100 rounded-xl overflow-hidden">
+            {(tiposData?.tipos || []).length === 0 ? (
+              <div className="py-8 text-center text-sm text-warm-400">{t('rec.tipos.empty')}</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="table-header">{t('common.name')}</th>
+                    <th className="table-header text-right">{t('common.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-warm-50">
+                  {(tiposData?.tipos || []).map(tipo => (
+                    <tr key={tipo.id} className="table-row">
+                      <td className="px-3 py-2.5">
+                        {editingTipoId === tipo.id ? (
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editingTipoNombre}
+                            onChange={e => setEditingTipoNombre(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && editingTipoNombre.trim()) updateTipoMut.mutate({ id: tipo.id, nombre: editingTipoNombre.trim() })
+                              if (e.key === 'Escape') { setEditingTipoId(null); setEditingTipoNombre('') }
+                            }}
+                            className="w-full px-2 py-1 rounded-lg border border-primary-300 text-xs font-medium outline-none focus:ring-2 focus:ring-primary-100"
+                          />
+                        ) : (
+                          <span className="text-warm-700 text-xs font-medium">{tipo.nombre}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="inline-flex items-center gap-0.5">
+                          {editingTipoId === tipo.id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => editingTipoNombre.trim() && updateTipoMut.mutate({ id: tipo.id, nombre: editingTipoNombre.trim() })}
+                                disabled={!editingTipoNombre.trim() || updateTipoMut.isPending}
+                                className="inline-flex rounded-lg p-1.5 text-success-600 hover:bg-success-50 disabled:opacity-30"
+                                title={t('common.save')}
+                              >
+                                {updateTipoMut.isPending
+                                  ? <div className="w-3.5 h-3.5 border-2 border-success-600 border-t-transparent rounded-full animate-spin" />
+                                  : <Check className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setEditingTipoId(null); setEditingTipoNombre('') }}
+                                className="inline-flex rounded-lg p-1.5 text-warm-400 hover:bg-warm-50"
+                                title={t('common.cancel')}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => { setEditingTipoId(tipo.id); setEditingTipoNombre(tipo.nombre) }}
+                              className="inline-flex rounded-lg p-1.5 text-warm-400 hover:bg-warm-50 hover:text-primary-600"
+                              title={t('common.edit')}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => deleteTipoMut.mutate(tipo.id)}
+                            disabled={deleteTipoMut.isPending || editingTipoId === tipo.id}
+                            className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:opacity-30"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       <ImportarOrdenModal
         isOpen={showImport}

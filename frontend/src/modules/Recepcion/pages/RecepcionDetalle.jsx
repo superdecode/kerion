@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Copy, Check, PackageCheck, ScanBarcode, Printer,
   Download, Trash2, CheckCircle2, Clock, Search, X,
-  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, MapPin, Plus,
+  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, MapPin, Plus, Tags, Edit3,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -13,9 +13,10 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos } from '../services/recepcionService'
+import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos, createNovedadTipo, updateNovedadTipo, deleteNovedadTipo } from '../services/recepcionService'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
+import { normalizeCode } from '../../Shared/Wms/normalizeCode'
 import * as XLSX from 'xlsx'
 
 const ESTADO_META = {
@@ -118,6 +119,11 @@ const TIPO_META = {
   'SKU Sueltos':       'bg-primary-100 text-primary-700',
 }
 
+function normalizeNovedadCode(value) {
+  const normalized = normalizeCode(value)
+  return normalized || ''
+}
+
 export default function RecepcionDetalle() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -129,6 +135,7 @@ export default function RecepcionDetalle() {
   const [activeTab, setActiveTab] = useState('detalle')
   const [lineSearch, setLineSearch] = useState('')
   const [eventSearch, setEventSearch] = useState('')
+  const [novedadSearch, setNovedadSearch] = useState('')
   const [lineStatusModal, setLineStatusModal] = useState(null)
   const [pendingStatus, setPendingStatus] = useState('')
   const [pendingNota, setPendingNota] = useState('')
@@ -143,6 +150,16 @@ export default function RecepcionDetalle() {
   const [nuevoTipo, setNuevoTipo] = useState('')
   const [nuevoCodigo, setNuevoCodigo] = useState('')
   const [nuevaUbicacion, setNuevaUbicacion] = useState('')
+  const [tiposModalOpen, setTiposModalOpen] = useState(false)
+  const [nuevoTipoNombreLocal, setNuevoTipoNombreLocal] = useState('')
+  const [editingTipoId, setEditingTipoId] = useState(null)
+  const [editingTipoNombre, setEditingTipoNombre] = useState('')
+
+  useEffect(() => {
+    setNuevoTipo('')
+    setNuevoCodigo('')
+    setNuevaUbicacion('')
+  }, [id])
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['recepcion-order', id],
@@ -210,7 +227,6 @@ export default function RecepcionDetalle() {
     onSuccess: () => {
       toast.success(t('rec.toast.novedad_ok'))
       qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
-      setNuevoTipo('')
       setNuevoCodigo('')
       setNuevaUbicacion('')
     },
@@ -226,10 +242,49 @@ export default function RecepcionDetalle() {
     onError: () => toast.error(t('toast.error')),
   })
 
+  const createTipoMut = useMutation({
+    mutationFn: (payload) => createNovedadTipo(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['recepcion-novedad-tipos'] })
+      setNuevoTipoNombreLocal('')
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  const updateTipoMut = useMutation({
+    mutationFn: ({ id, nombre }) => updateNovedadTipo(id, { nombre }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['recepcion-novedad-tipos'] })
+      setEditingTipoId(null)
+      setEditingTipoNombre('')
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  const deleteTipoMut = useMutation({
+    mutationFn: (tid) => deleteNovedadTipo(tid),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['recepcion-novedad-tipos'] }),
+    onError: () => toast.error(t('toast.error')),
+  })
+
   const canValidate = hasPermission('recepcion.recibir', 'actualizar')
   const canEdit = hasPermission('recepcion.recibir', 'actualizar')
   const canCreate = hasPermission('recepcion.recibir', 'crear')
   const canDeleteEvents = hasPermission('recepcion.recibir', 'eliminar')
+  const canManageTipos = hasPermission('recepcion.validacion', 'actualizar')
+
+  const submitNuevaNovedad = () => {
+    if (!nuevoTipo || createNovedadMut.isPending) return
+
+    const normalizedCodigo = normalizeNovedadCode(nuevoCodigo)
+    if (nuevoCodigo !== normalizedCodigo) setNuevoCodigo(normalizedCodigo)
+
+    createNovedadMut.mutate({
+      tipo: nuevoTipo,
+      codigo: normalizedCodigo,
+      ubicacion: nuevaUbicacion,
+    })
+  }
 
   const lineUbicacionMap = useMemo(() => {
     const map = new Map()
@@ -296,6 +351,10 @@ export default function RecepcionDetalle() {
     ? events.filter(e => [e.codigo_escaneado, e.sku_asociado, e.resultado, e.scanned_by_nombre].some(v => String(v || '').toLowerCase().includes(eventSearch.toLowerCase())))
     : events
 
+  const filteredNovedades = novedadSearch
+    ? novedades.filter(n => [n.tipo, n.codigo, n.ubicacion, n.created_by_nombre].some(v => String(v || '').toLowerCase().includes(novedadSearch.toLowerCase())))
+    : novedades
+
   const sortedEvents = [...filteredEvents].sort((a, b) => {
     const av = a?.[eventSortKey] ?? ''
     const bv = b?.[eventSortKey] ?? ''
@@ -305,7 +364,7 @@ export default function RecepcionDetalle() {
     return eventSortDir === 'asc' ? cmp : -cmp
   })
 
-  const handleExportLines = () => {
+  const handleExportWorkbook = () => {
     const wb = XLSX.utils.book_new()
 
     // Sheet 1: Detalle
@@ -352,27 +411,88 @@ export default function RecepcionDetalle() {
     XLSX.utils.book_append_sheet(wb, wsValid, 'Validación')
 
     // Sheet 3: Otros
-    if (novedades.length > 0) {
-      const otrosRows = novedades.map((n, i) => [
+    const otrosRows = novedades.map((n, i) => [
+      i + 1,
+      n.tipo || '',
+      n.codigo || '',
+      n.ubicacion || '',
+      n.created_by_nombre || '',
+      n.created_at ? fmtDateTime(n.created_at) : '',
+    ])
+    const wsOtros = XLSX.utils.aoa_to_sheet([
+      ['#', t('rec.otros.col.tipo'), t('rec.otros.col.codigo'), t('rec.otros.col.ubicacion'), t('rec.otros.col.registrado_por'), t('rec.otros.col.fecha_hora')],
+      ...otrosRows,
+    ])
+    wsOtros['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 18 }]
+    XLSX.utils.book_append_sheet(wb, wsOtros, 'Otros')
+
+    XLSX.writeFile(wb, `${order.folio}-recepcion.xlsx`)
+  }
+
+  const handleExportDetalle = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['#', 'Box Type', 'Custom Box Barcode', 'SKU', 'Qty/Caja',
+       'Length (OMS)', 'Width (OMS)', 'Height (OMS)', 'Dim Unit', 'Weight (OMS)', 'Weight Unit',
+       'Estado', 'Ubicación', 'Validado por', 'Hora validación'],
+      ...sortedLines.map((l, i) => [
+        i + 1, l.box_type || '', l.custom_box_barcode || '', l.sku || '',
+        l.qty_per_box || '',
+        l.length_oms || '', l.width_oms || '', l.height_oms || '', l.dimension_unit || '',
+        l.weight_oms || '', l.weight_unit || '',
+        t(`rec.line.status.${l.estado_validacion}`),
+        lineUbicacionMap.get(l.id) || '',
+        l.validated_by_nombre || '', l.validated_at ? fmtDateTime(l.validated_at) : '',
+      ]),
+    ])
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 10 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
+      { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 18 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Detalle')
+    XLSX.writeFile(wb, `${order.folio}-detalle.xlsx`)
+  }
+
+  const handleExportValidacion = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['#', 'Código Escaneado', 'SKU', 'Campo', 'Resultado', 'Ubicación', 'Escaneado por', 'Hora'],
+      ...sortedEvents.map((ev, i) => [
+        i + 1,
+        ev.codigo_escaneado || '',
+        ev.sku_asociado || '',
+        ev.match_field || '',
+        t(`rec.scan.result.${ev.resultado}`) || ev.resultado,
+        ev.ubicacion || '',
+        ev.scanned_by_nombre || '',
+        ev.scanned_at ? fmtDateTime(ev.scanned_at) : '',
+      ]),
+    ])
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 20 }, { wch: 18 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Validación')
+    XLSX.writeFile(wb, `${order.folio}-validacion.xlsx`)
+  }
+
+  const handleExportOtros = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['#', t('rec.otros.col.tipo'), t('rec.otros.col.codigo'), t('rec.otros.col.ubicacion'), t('rec.otros.col.registrado_por'), t('rec.otros.col.fecha_hora')],
+      ...filteredNovedades.map((n, i) => [
         i + 1,
         n.tipo || '',
         n.codigo || '',
         n.ubicacion || '',
         n.created_by_nombre || '',
         n.created_at ? fmtDateTime(n.created_at) : '',
-      ])
-      const wsOtros = XLSX.utils.aoa_to_sheet([
-        ['#', t('rec.otros.col.tipo'), t('rec.otros.col.codigo'), t('rec.otros.col.ubicacion'), t('rec.otros.col.registrado_por'), t('rec.otros.col.fecha_hora')],
-        ...otrosRows,
-      ])
-      wsOtros['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 18 }]
-      XLSX.utils.book_append_sheet(wb, wsOtros, 'Otros')
-    }
-
-    XLSX.writeFile(wb, `${order.folio}-recepcion.xlsx`)
+      ]),
+    ])
+    ws['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 18 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Otros')
+    XLSX.writeFile(wb, `${order.folio}-otros.xlsx`)
   }
-
-  const handleExportValidacion = handleExportLines
 
   const handleListaRecepcion = async () => {
     setListaPreviewLoading(true)
@@ -416,10 +536,19 @@ export default function RecepcionDetalle() {
                 {t('rec.btn.listaRecepcion')}
               </button>
             )}
-            <button onClick={handleExportLines} className="btn-ghost flex items-center gap-1.5 text-sm">
+            <button onClick={handleExportWorkbook} className="btn-ghost flex items-center gap-1.5 text-sm">
               <Download className="w-4 h-4" />
               {t('rec.btn.exportar')}
             </button>
+            {canManageTipos && (
+              <button
+                onClick={() => setTiposModalOpen(true)}
+                className="btn-ghost flex items-center gap-1.5 text-sm"
+              >
+                <Tags className="w-4 h-4" />
+                {t('rec.tipos.btn_header')}
+              </button>
+            )}
             {canValidate && (
               <button
                 onClick={() => navigate(`/recepcion/recibir/${id}/validar`)}
@@ -495,19 +624,32 @@ export default function RecepcionDetalle() {
             : hasErrors
               ? 'border-danger-200 bg-danger-50 text-danger-700'
               : 'border-warning-200 bg-warning-50 text-warning-700'
-          const currentSearch = activeTab === 'detalle' ? lineSearch : activeTab === 'validacion' ? eventSearch : ''
-          const setCurrentSearch = activeTab === 'detalle' ? setLineSearch : activeTab === 'validacion' ? setEventSearch : () => {}
-          const showSearch = activeTab !== 'otros'
+          const currentSearch = activeTab === 'detalle'
+            ? lineSearch
+            : activeTab === 'validacion'
+              ? eventSearch
+              : novedadSearch
+          const setCurrentSearch = activeTab === 'detalle'
+            ? setLineSearch
+            : activeTab === 'validacion'
+              ? setEventSearch
+              : setNovedadSearch
+          const handleInlineExport = activeTab === 'detalle'
+            ? handleExportDetalle
+            : activeTab === 'validacion'
+              ? handleExportValidacion
+              : handleExportOtros
           return (
             <div className="flex items-center gap-2 border-b border-warm-100 pb-0 overflow-x-auto">
               <div className="flex gap-1 shrink-0">
                 <button
                   onClick={() => setActiveTab('detalle')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                     activeTab === 'detalle' ? 'border-primary-500 text-primary-700' : 'border-transparent text-warm-500 hover:text-warm-700'
                   }`}
                 >
                   {t('rec.scan.tab.detalle')}
+                  <span className={`badge border-0 shrink-0 ${chipCls}`}>{validadas}/{totalBase}</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('validacion')}
@@ -533,23 +675,24 @@ export default function RecepcionDetalle() {
                 </button>
               </div>
               <div className="ml-auto flex items-center gap-2 pb-1.5 shrink-0">
-                {showSearch && (
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300 pointer-events-none" />
-                    <input
-                      value={currentSearch}
-                      onChange={e => setCurrentSearch(e.target.value)}
-                      placeholder={`${t('common.search')}...`}
-                      className="pl-8 pr-3 py-1.5 rounded-lg border border-warm-200 text-sm focus:outline-none focus:border-sky-400 w-44 sm:w-52"
-                    />
-                    {currentSearch && (
-                      <button onClick={() => setCurrentSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                )}
-                <span className={`badge ${chipCls} shrink-0`}>{validadas}/{totalBase}</span>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300 pointer-events-none" />
+                  <input
+                    value={currentSearch}
+                    onChange={e => setCurrentSearch(e.target.value)}
+                    placeholder={`${t('common.search')}...`}
+                    className="pl-8 pr-8 py-1.5 rounded-lg border border-warm-200 text-sm focus:outline-none focus:border-sky-400 w-44 sm:w-52"
+                  />
+                  {currentSearch && (
+                    <button onClick={() => setCurrentSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <button onClick={handleInlineExport} className="btn-ghost flex items-center gap-1.5 text-sm">
+                  <Download className="w-4 h-4" />
+                  {t('rec.btn.exportar')}
+                </button>
               </div>
             </div>
           )
@@ -637,13 +780,6 @@ export default function RecepcionDetalle() {
         {/* Tab: Validación */}
         {activeTab === 'validacion' && (
           <div className="space-y-3">
-
-            <div className="flex justify-end">
-              <button onClick={handleExportLines} className="btn-ghost flex items-center gap-1.5 text-sm">
-                <Download className="w-4 h-4" />
-                {t('rec.btn.exportarValidacion')}
-              </button>
-            </div>
 
             <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
               <div className="table-scroll">
@@ -759,7 +895,8 @@ export default function RecepcionDetalle() {
                 <input
                   type="text"
                   value={nuevoCodigo}
-                  onChange={e => setNuevoCodigo(e.target.value)}
+                  onChange={e => setNuevoCodigo(normalizeNovedadCode(e.target.value))}
+                  onBlur={() => setNuevoCodigo((current) => normalizeNovedadCode(current))}
                   placeholder={t('rec.otros.codigo_placeholder')}
                   className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
                   autoComplete="off"
@@ -768,14 +905,14 @@ export default function RecepcionDetalle() {
                   type="text"
                   value={nuevaUbicacion}
                   onChange={e => setNuevaUbicacion(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && nuevoTipo) createNovedadMut.mutate({ tipo: nuevoTipo, codigo: nuevoCodigo, ubicacion: nuevaUbicacion }) }}
+                  onKeyDown={e => { if (e.key === 'Enter' && nuevoTipo) submitNuevaNovedad() }}
                   placeholder={t('rec.otros.ubicacion_placeholder')}
                   className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-100"
                   autoComplete="off"
                 />
                 <button
                   type="button"
-                  onClick={() => createNovedadMut.mutate({ tipo: nuevoTipo, codigo: nuevoCodigo, ubicacion: nuevaUbicacion })}
+                  onClick={submitNuevaNovedad}
                   disabled={!nuevoTipo || createNovedadMut.isPending}
                   className="btn-primary flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
                 >
@@ -801,7 +938,7 @@ export default function RecepcionDetalle() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warm-50">
-                    {novedades.map((n, i) => (
+                    {filteredNovedades.map((n, i) => (
                       <tr key={n.id} className="table-row">
                         <td className="px-3 py-2.5 text-warm-400 text-xs tabular-nums">{i + 1}</td>
                         <td className="px-3 py-2.5">
@@ -833,7 +970,7 @@ export default function RecepcionDetalle() {
                         </td>
                       </tr>
                     ))}
-                    {novedades.length === 0 && (
+                    {filteredNovedades.length === 0 && (
                       <tr>
                         <td colSpan={7} className="px-3 py-10 text-center text-warm-400 text-sm">{t('rec.otros.sin_registros')}</td>
                       </tr>
@@ -882,6 +1019,121 @@ export default function RecepcionDetalle() {
           </div>
         </div>
       )}
+
+      {/* Tipos de incidencia modal */}
+      <Modal
+        isOpen={tiposModalOpen}
+        onClose={() => { setTiposModalOpen(false); setNuevoTipoNombreLocal(''); setEditingTipoId(null); setEditingTipoNombre('') }}
+        title={t('rec.tipos.title')}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={nuevoTipoNombreLocal}
+              onChange={e => setNuevoTipoNombreLocal(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && nuevoTipoNombreLocal.trim() && createTipoMut.mutate({ nombre: nuevoTipoNombreLocal.trim() })}
+              placeholder={t('rec.tipos.placeholder')}
+              className="flex-1 px-3 py-2 rounded-xl border border-warm-200 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={() => nuevoTipoNombreLocal.trim() && createTipoMut.mutate({ nombre: nuevoTipoNombreLocal.trim() })}
+              disabled={!nuevoTipoNombreLocal.trim() || createTipoMut.isPending}
+              className="btn-primary inline-flex items-center gap-1.5 px-3 py-2 text-sm disabled:opacity-50 whitespace-nowrap"
+            >
+              {createTipoMut.isPending
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <Plus className="w-4 h-4" />}
+              {t('rec.tipos.add')}
+            </button>
+          </div>
+          <div className="border border-warm-100 rounded-xl overflow-hidden">
+            {(tiposData?.tipos || []).length === 0 ? (
+              <div className="py-8 text-center text-sm text-warm-400">{t('rec.tipos.empty')}</div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="table-header">{t('common.name')}</th>
+                    <th className="table-header text-right">{t('common.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-warm-50">
+                  {(tiposData?.tipos || []).map(tipo => (
+                    <tr key={tipo.id} className="table-row">
+                      <td className="px-3 py-2.5">
+                        {editingTipoId === tipo.id ? (
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editingTipoNombre}
+                            onChange={e => setEditingTipoNombre(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && editingTipoNombre.trim()) updateTipoMut.mutate({ id: tipo.id, nombre: editingTipoNombre.trim() })
+                              if (e.key === 'Escape') { setEditingTipoId(null); setEditingTipoNombre('') }
+                            }}
+                            className="w-full px-2 py-1 rounded-lg border border-primary-300 text-xs font-medium outline-none focus:ring-2 focus:ring-primary-100"
+                          />
+                        ) : (
+                          <span className="text-warm-700 text-xs font-medium">{tipo.nombre}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="inline-flex items-center gap-0.5">
+                          {editingTipoId === tipo.id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => editingTipoNombre.trim() && updateTipoMut.mutate({ id: tipo.id, nombre: editingTipoNombre.trim() })}
+                                disabled={!editingTipoNombre.trim() || updateTipoMut.isPending}
+                                className="inline-flex rounded-lg p-1.5 text-success-600 hover:bg-success-50 disabled:opacity-30"
+                                title={t('common.save')}
+                              >
+                                {updateTipoMut.isPending
+                                  ? <div className="w-3.5 h-3.5 border-2 border-success-600 border-t-transparent rounded-full animate-spin" />
+                                  : <Check className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setEditingTipoId(null); setEditingTipoNombre('') }}
+                                className="inline-flex rounded-lg p-1.5 text-warm-400 hover:bg-warm-50"
+                                title={t('common.cancel')}
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => { setEditingTipoId(tipo.id); setEditingTipoNombre(tipo.nombre) }}
+                              className="inline-flex rounded-lg p-1.5 text-warm-400 hover:bg-warm-50 hover:text-primary-600"
+                              title={t('common.edit')}
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => deleteTipoMut.mutate(tipo.id)}
+                            disabled={deleteTipoMut.isPending || editingTipoId === tipo.id}
+                            className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:opacity-30"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </Modal>
 
       <ListaRecepcionPreviewModal
         isOpen={listaPreviewOpen}

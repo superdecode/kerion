@@ -139,7 +139,7 @@ router.post('/orders/:id/scan',
       const normalizedCode = normalizeScanCode(rawCode)
       const scanVariations = new Set(generateCodeVariations(rawCode, true))
 
-      const [orderRes, linesRes] = await Promise.all([
+      const [orderRes, linesRes, successEventsRes] = await Promise.all([
         req.tQuery(
           `SELECT id, estado FROM inbound_orders WHERE id=$1 AND tenant_id=$2`,
           [req.params.id, req.tenantId]
@@ -148,10 +148,56 @@ router.post('/orders/:id/scan',
           `SELECT * FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2 ORDER BY created_at ASC`,
           [req.params.id, req.tenantId]
         ),
+        req.tQuery(
+          `SELECT e.*, u.nombre_completo AS scanned_by_nombre
+           FROM inbound_scan_events e
+           LEFT JOIN usuarios u ON u.id = e.scanned_by
+           WHERE e.order_id=$1 AND e.tenant_id=$2 AND e.resultado='correcto'
+           ORDER BY e.scanned_at DESC, e.id DESC`,
+          [req.params.id, req.tenantId]
+        ),
       ])
       if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
 
       const lines = linesRes.rows
+      const successEvents = successEventsRes.rows
+
+      const previousSuccess = successEvents.find((event) => {
+        const code = normalizeCodeFast(event.codigo_escaneado || '')
+        if (!code) return false
+        return generateCodeVariations(code, false).some((variant) => scanVariations.has(variant))
+      })
+
+      if (previousSuccess) {
+        const line = lines.find((entry) => entry.id === previousSuccess.line_id) || null
+        const eventRes = await req.tQuery(
+          `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
+           VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
+           RETURNING *`,
+          [
+            req.tenantId,
+            req.params.id,
+            previousSuccess.line_id || null,
+            normalizedCode || rawCode,
+            previousSuccess.match_field || null,
+            previousSuccess.sku_asociado || line?.sku || null,
+            req.user.id,
+            ubicacion || null,
+          ]
+        )
+        return res.json({
+          resultado: 'duplicado',
+          codigo: normalizedCode || rawCode,
+          line,
+          event: eventRes.rows[0],
+          previous_event: {
+            id: previousSuccess.id,
+            codigo_escaneado: previousSuccess.codigo_escaneado,
+            scanned_at: previousSuccess.scanned_at,
+            scanned_by_nombre: previousSuccess.scanned_by_nombre || null,
+          },
+        })
+      }
 
       const customMatches = lines.filter((line) => {
         const code = normalizeCodeFast(line.custom_box_barcode || '')
@@ -161,17 +207,6 @@ router.post('/orders/:id/scan',
 
       let line = customMatches.find((entry) => entry.estado_validacion === 'pendiente') || customMatches[0] || null
       let matchField = line ? 'custom_box_barcode' : null
-
-      if (!line) {
-        const boxTypeMatches = lines.filter((entry) => {
-          const code = normalizeCodeFast(entry.box_type || '')
-          if (!code) return false
-          return generateCodeVariations(code, false).some((variant) => scanVariations.has(variant))
-        })
-
-        line = boxTypeMatches.find((entry) => entry.estado_validacion === 'pendiente') || boxTypeMatches[0] || null
-        matchField = line ? 'box_type' : null
-      }
 
       if (!line) {
         const eventRes = await req.tQuery(
@@ -433,10 +468,11 @@ router.post('/orders/:id/novedades',
     try {
       const { tipo, codigo, ubicacion } = req.body
       if (!tipo) return res.status(400).json({ error: 'Tipo requerido' })
+      const normalizedCodigo = normalizeScanCode(codigo)
       const result = await req.tQuery(
         `INSERT INTO inbound_novedades (tenant_id, order_id, tipo, codigo, ubicacion, created_by)
          VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [req.tenantId, req.params.id, tipo, codigo?.trim() || null, ubicacion?.trim() || null, req.user.id]
+        [req.tenantId, req.params.id, tipo, normalizedCodigo || null, ubicacion?.trim() || null, req.user.id]
       )
       res.status(201).json({ novedad: result.rows[0] })
     } catch (err) {
@@ -501,6 +537,27 @@ router.post('/novedad-tipos',
     } catch (err) {
       console.error('[recepcion] novedad-tipos create:', err.message)
       res.status(500).json({ error: 'Error al crear tipo' })
+    }
+  }
+)
+
+// PUT /novedad-tipos/:id — rename a tipo
+router.put('/novedad-tipos/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'actualizar'),
+  async (req, res) => {
+    const nombre = (req.body.nombre || '').trim()
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' })
+    try {
+      const { rows } = await req.tQuery(
+        `UPDATE inbound_novedad_tipos SET nombre=$1 WHERE id=$2 AND tenant_id=$3 AND activo=true RETURNING id, nombre`,
+        [nombre, req.params.id, req.tenantId]
+      )
+      if (!rows.length) return res.status(404).json({ error: 'Tipo no encontrado' })
+      res.json({ tipo: rows[0] })
+    } catch (err) {
+      console.error('[recepcion] novedad-tipos update:', err.message)
+      res.status(500).json({ error: 'Error al actualizar tipo' })
     }
   }
 )

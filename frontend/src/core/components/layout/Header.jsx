@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import SearchBar from '../common/SearchBar'
 import Modal from '../common/Modal'
@@ -9,13 +9,23 @@ import api from '../../services/api'
 import { useToastStore } from '../../stores/toastStore'
 import {
   Search, X, User, LogOut, Key, Settings, Globe, ChevronDown,
-  Shield, Clock, Activity, HelpCircle, Edit3, Check, Tags, Trash2, Plus
+  Shield, Clock, Activity, HelpCircle, Edit3, Check
 } from 'lucide-react'
 import { useTourStore } from '../../stores/tourStore'
 import { tourHelpVisible } from './OnboardingTour'
 
 const DISPLAY_PARENT = { fep: 'dropscan' }
-const ALLOWED_PERM_MODULES = new Set(['dropscan', 'devoluciones', 'inventario', 'surtido', 'global', 'sistema'])
+// Sidebar order, excludes 'global' (dashboard is universal)
+const PERM_MODULE_ORDER = ['dropscan', 'devoluciones', 'recepcion', 'inventario', 'surtido', 'despacho', 'anormalidades', 'sistema']
+const PERM_LEVEL_ORDER = ['eliminar', 'actualizar', 'crear', 'ver']
+function getHighestLevel(perms) {
+  if (typeof perms !== 'object') return perms
+  const levels = Object.values(perms)
+  for (const lvl of PERM_LEVEL_ORDER) {
+    if (levels.includes(lvl)) return lvl
+  }
+  return levels[0] || 'ver'
+}
 
 export default function Header({ title, subtitle, actions, showSearch = false }) {
   const [searchOpen, setSearchOpen] = useState(false)
@@ -26,7 +36,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
   const [changePassError, setChangePassError] = useState('')
   const [changePassLoading, setChangePassLoading] = useState(false)
   const [changePassSuccess, setChangePassSuccess] = useState(false)
-  const { user, logout, updateTimezone, updateProfile, hasPermission } = useAuthStore()
+  const { user, logout, updateTimezone, updateProfile } = useAuthStore()
   const { locale, setLocale, t } = useI18nStore()
   const triggerTour = useTourStore((s) => s.trigger)
   const showTourHelp = tourHelpVisible(user?.id)
@@ -34,52 +44,8 @@ export default function Header({ title, subtitle, actions, showSearch = false })
   const [profileDraft, setProfileDraft] = useState({ nombre: '', apellido: '' })
   const [editingName, setEditingName] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
-  const [tiposOpen, setTiposOpen] = useState(false)
-  const [tipos, setTipos] = useState([])
-  const [tiposLoading, setTiposLoading] = useState(false)
-  const [nuevoTipoNombre, setNuevoTipoNombre] = useState('')
-  const [tiposSaving, setTiposSaving] = useState(false)
   const navigate = useNavigate()
-  const location = useLocation()
   const menuRef = useRef(null)
-
-  const isRecepcionModule = location.pathname.toLowerCase().startsWith('/recepcion')
-  const canManageTipos = isRecepcionModule && hasPermission('recepcion.validacion', 'actualizar')
-
-  useEffect(() => {
-    if (!tiposOpen) return
-    let active = true
-    setTiposLoading(true)
-    api.get('/recepcion/novedad-tipos')
-      .then(res => { if (active) setTipos(res.data.tipos || []) })
-      .catch(() => {})
-      .finally(() => { if (active) setTiposLoading(false) })
-    return () => { active = false }
-  }, [tiposOpen])
-
-  const handleCreateTipo = async () => {
-    const nombre = nuevoTipoNombre.trim()
-    if (!nombre || tiposSaving) return
-    setTiposSaving(true)
-    try {
-      const res = await api.post('/recepcion/novedad-tipos', { nombre })
-      setTipos(prev => [...prev, res.data.tipo].sort((a, b) => a.nombre.localeCompare(b.nombre)))
-      setNuevoTipoNombre('')
-    } catch {
-      // ignore
-    } finally {
-      setTiposSaving(false)
-    }
-  }
-
-  const handleDeleteTipo = async (id) => {
-    try {
-      await api.delete(`/recepcion/novedad-tipos/${id}`)
-      setTipos(prev => prev.filter(t => t.id !== id))
-    } catch {
-      // ignore
-    }
-  }
 
   const initials = user?.nombre_completo
     ? user.nombre_completo.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -154,7 +120,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
 
   return (
     <>
-      <header className="h-16 bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6 flex items-center gap-3 shrink-0 sticky top-0 z-10">
+      <header className="h-16 bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6 flex items-center gap-3 shrink-0 sticky top-0 z-[110]">
         {/* Title */}
         <div className="flex-1 min-w-0">
           {title && (
@@ -195,16 +161,6 @@ export default function Header({ title, subtitle, actions, showSearch = false })
               </button>
             )}
           </div>
-        )}
-
-        {/* Tipos de incidencia management */}
-        {canManageTipos && (
-          <button
-            onClick={() => { setTiposOpen(true); setUserMenuOpen(false) }}
-            className="btn-ghost text-xs flex items-center gap-1.5"
-          >
-            <Tags size={14} /> {t('rec.tipos.btn_header')}
-          </button>
         )}
 
         {/* User menu */}
@@ -464,11 +420,26 @@ export default function Header({ title, subtitle, actions, showSearch = false })
               <p className="text-sm font-semibold text-success-600">{t('common.active')}</p>
             </div>
             <div className="p-3 rounded-xl bg-warm-50">
-              <div className="flex items-center gap-2 text-warm-400 mb-1">
+              <div className="flex items-center gap-2 text-warm-400 mb-2">
                 <Globe className="w-3.5 h-3.5" />
                 <span className="text-[10px] uppercase tracking-wider font-bold">{t('profile.language')}</span>
               </div>
-              <p className="text-sm font-semibold text-warm-700">{locale === 'es' ? t('auth.languageEs') : t('auth.languageZh')}</p>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setLocale('es')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${locale === 'es' ? 'bg-primary-600 text-white' : 'bg-white border border-warm-200 text-warm-500 hover:border-primary-300'}`}
+                >
+                  ES
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocale('zh')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${locale === 'zh' ? 'bg-primary-600 text-white' : 'bg-white border border-warm-200 text-warm-500 hover:border-primary-300'}`}
+                >
+                  中文
+                </button>
+              </div>
             </div>
             <div className="p-3 rounded-xl bg-warm-50 col-span-2">
               <div className="flex items-center gap-2 text-warm-400 mb-1.5">
@@ -555,38 +526,34 @@ export default function Header({ title, subtitle, actions, showSearch = false })
 
           {/* Permissions */}
           {user?.permisos && (() => {
-            const displayPerms = Object.entries(user.permisos).reduce((acc, [mod, perms]) => {
+            const raw = Object.entries(user.permisos).reduce((acc, [mod, perms]) => {
               const parent = DISPLAY_PARENT[mod] || mod
-              if (!ALLOWED_PERM_MODULES.has(parent)) return acc
+              if (!PERM_MODULE_ORDER.includes(parent)) return acc
               if (typeof perms === 'object') {
                 return { ...acc, [parent]: { ...(acc[parent] || {}), ...perms } }
               }
               return { ...acc, [parent]: perms }
             }, {})
+            const entries = PERM_MODULE_ORDER.filter(m => m in raw).map(m => [m, raw[m]])
+            if (!entries.length) return null
             return (
               <div>
-                <h4 className="text-xs font-bold text-warm-400 uppercase tracking-wider mb-3">{t('profile.assignedPermissions')}</h4>
-                <div className="space-y-2">
-                  {Object.entries(displayPerms).map(([mod, perms]) => (
-                    <div key={mod} className="p-3 rounded-xl border border-warm-100 bg-white">
-                      <p className="text-xs font-bold text-warm-600 uppercase mb-2">{t(`perm.mod.${mod}`)}</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {typeof perms === 'object' ? Object.entries(perms).map(([sub, level]) => (
-                          <span key={sub} className={`badge text-[10px] ${
-                            level === 'eliminar' ? 'bg-primary-100 text-primary-700' :
-                            level === 'actualizar' ? 'bg-accent-100 text-accent-700' :
-                            level === 'crear' ? 'bg-success-100 text-success-700' :
-                            level === 'ver' ? 'bg-warning-100 text-warning-700' :
-                            'bg-warm-100 text-warm-500'
-                          }`}>
-                            {t(`perm.sub.${sub}`)}: {t(`perm.${level}`)}
-                          </span>
-                        )) : (
-                          <span className="badge bg-primary-100 text-primary-700 text-[10px]">{t(`perm.${perms}`)}</span>
-                        )}
+                <h4 className="text-xs font-bold text-warm-400 uppercase tracking-wider mb-2">{t('profile.assignedPermissions')}</h4>
+                <div className="space-y-1.5">
+                  {entries.map(([mod, perms]) => {
+                    const level = getHighestLevel(perms)
+                    return (
+                      <div key={mod} className="flex items-center justify-between px-3 py-2 rounded-lg bg-warm-50 border border-warm-100">
+                        <span className="text-xs font-semibold text-warm-700">{t(`perm.mod.${mod}`)}</span>
+                        <span className={`badge text-[10px] ${
+                          level === 'eliminar' ? 'bg-primary-100 text-primary-700' :
+                          level === 'actualizar' ? 'bg-accent-100 text-accent-700' :
+                          level === 'crear' ? 'bg-success-100 text-success-700' :
+                          'bg-warning-100 text-warning-700'
+                        }`}>{t(`perm.${level}`)}</span>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -594,72 +561,6 @@ export default function Header({ title, subtitle, actions, showSearch = false })
         </div>
       </Modal>
 
-      {/* Tipos de incidencia Modal */}
-      <Modal
-        isOpen={tiposOpen}
-        onClose={() => { setTiposOpen(false); setNuevoTipoNombre('') }}
-        title={t('rec.tipos.title')}
-        size="md"
-      >
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={nuevoTipoNombre}
-              onChange={e => setNuevoTipoNombre(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleCreateTipo()}
-              placeholder={t('rec.tipos.placeholder')}
-              className="flex-1 px-3 py-2 rounded-xl border border-warm-200 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-              autoComplete="off"
-            />
-            <button
-              type="button"
-              onClick={handleCreateTipo}
-              disabled={!nuevoTipoNombre.trim() || tiposSaving}
-              className="btn-primary inline-flex items-center gap-1.5 px-3 py-2 text-sm disabled:opacity-50 whitespace-nowrap"
-            >
-              {tiposSaving
-                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                : <Plus className="w-4 h-4" />}
-              {t('rec.tipos.add')}
-            </button>
-          </div>
-
-          <div className="border border-warm-100 rounded-xl overflow-hidden">
-            {tiposLoading ? (
-              <div className="py-8 text-center text-sm text-warm-400">{t('common.loading')}</div>
-            ) : tipos.length === 0 ? (
-              <div className="py-8 text-center text-sm text-warm-400">{t('rec.tipos.empty')}</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="table-header">{t('common.name')}</th>
-                    <th className="table-header text-right">{t('common.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-warm-50">
-                  {tipos.map(tipo => (
-                    <tr key={tipo.id} className="table-row">
-                      <td className="px-3 py-2.5 text-warm-700 text-xs font-medium">{tipo.nombre}</td>
-                      <td className="px-3 py-2.5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTipo(tipo.id)}
-                          className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50"
-                          title={t('common.delete')}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      </Modal>
     </>
   )
 }

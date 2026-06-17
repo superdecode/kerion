@@ -693,12 +693,20 @@ const translations = {
     'export.exporting': '导出中...',
 
     // Permission Levels / 权限级别
+    'perm.ver': '查看',
+    'perm.crear': '创建',
+    'perm.actualizar': '编辑',
     'perm.eliminar': '删除',
 
     // Permission Modules / 权限模块
-    'perm.mod.global': '全局',
-    'perm.mod.dropscan': 'Dropscan',
-    'perm.mod.inventory': '库存',
+    'perm.mod.dropscan': 'DropScan',
+    'perm.mod.devoluciones': '退货',
+    'perm.mod.recepcion': '收货',
+    'perm.mod.inventario': '库存',
+    'perm.mod.surtido': '分拣',
+    'perm.mod.despacho': '发货',
+    'perm.mod.anormalidades': '异常',
+    'perm.mod.sistema': '系统',
 
     // Permission Sub-categories / 权限子类
     'perm.sub.dashboard': '看板',
@@ -2933,7 +2941,7 @@ const translations = {
     'rec.otros.sin_registros': '暂无异常记录',
     'rec.toast.novedad_ok': '记录成功',
     'rec.toast.novedad_deleted': '记录已删除',
-    'rec.tipos.btn_header': '异常类型',
+    'rec.tipos.btn_header': '收货异常类型',
     'rec.tipos.title': '管理异常类型',
     'rec.tipos.placeholder': '类型名称...',
     'rec.tipos.add': '添加类型',
@@ -3727,11 +3735,19 @@ const translations = {
     'export.exporting': 'Exportando...',
     // Permission Levels / Niveles de Permiso
     'perm.sin_acceso': 'Sin Acceso',
+    'perm.ver': 'Ver',
+    'perm.crear': 'Crear',
+    'perm.actualizar': 'Editar',
     'perm.eliminar': 'Eliminar',
     // Permission Modules
-    'perm.mod.global': 'Global',
-    'perm.mod.dropscan': 'Dropscan',
-    'perm.mod.inventory': 'Inventario',
+    'perm.mod.dropscan': 'DropScan',
+    'perm.mod.devoluciones': 'Devoluciones',
+    'perm.mod.recepcion': 'Recepción',
+    'perm.mod.inventario': 'Inventario',
+    'perm.mod.surtido': 'Surtido',
+    'perm.mod.despacho': 'Despacho',
+    'perm.mod.anormalidades': 'Anormalidades',
+    'perm.mod.sistema': 'Sistema',
     // Permission Sub-categories
     'perm.sub.dashboard': 'Dashboard',
     'perm.sub.administracion': 'Administración',

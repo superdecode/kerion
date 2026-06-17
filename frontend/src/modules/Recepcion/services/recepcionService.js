@@ -21,4 +21,5 @@ export const createNovedad = (orderId, payload) => api.post(`/recepcion/orders/$
 export const deleteNovedad = (orderId, novedadId) => api.delete(`/recepcion/orders/${orderId}/novedades/${novedadId}`).then(r => r.data)
 export const getNovedadTipos = () => api.get('/recepcion/novedad-tipos').then(r => r.data)
 export const createNovedadTipo = (payload) => api.post('/recepcion/novedad-tipos', payload).then(r => r.data)
+export const updateNovedadTipo = (id, payload) => api.put(`/recepcion/novedad-tipos/${id}`, payload).then(r => r.data)
 export const deleteNovedadTipo = (id) => api.delete(`/recepcion/novedad-tipos/${id}`).then(r => r.data)

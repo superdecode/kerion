@@ -15,6 +15,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, getScanEvents } from '../services/recepcionService'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
+import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 
 function buildTarimaMap(lines, groupOptions = null) {
   const basesInOrder = []
@@ -72,6 +73,11 @@ const RESULT_CFG_BASE = {
   duplicado:      { bg: 'bg-warning-50/90 border-warning-200', icon: AlertCircle,   iconCls: 'text-warning-500', label: 'text-warning-600', labelKey: 'rec.val.result.duplicado' },
   no_encontrado:  { bg: 'bg-danger-50/90  border-danger-200',  icon: XCircle,       iconCls: 'text-danger-500',  label: 'text-danger-600',  labelKey: 'rec.val.result.no_encontrado' },
   fuera_seccion:  { bg: 'bg-sky-50/90 border-sky-200',         icon: Layers,        iconCls: 'text-sky-500',     label: 'text-sky-600',     labelKey: 'rec.tarimas.sections.fuera_seccion' },
+}
+
+function codesMatch(left, right) {
+  const leftVars = new Set(generateCodeVariations(normalizeScanCode(left), false))
+  return generateCodeVariations(normalizeScanCode(right), false).some((variant) => leftVars.has(variant))
 }
 
 export default function ValidacionRecepcion() {
@@ -354,7 +360,14 @@ export default function ValidacionRecepcion() {
       }
       if (ev.resultado === 'duplicado') {
         playDupAudio()
-        setDupModal({ open: true, code: ev.codigo_escaneado, entry: { scannedAt: null, scannedBy: '—' } })
+        setDupModal({
+          open: true,
+          code: ev.codigo_escaneado,
+          entry: {
+            scannedAt: data.previous_event?.scanned_at || null,
+            scannedBy: data.previous_event?.scanned_by_nombre || '—',
+          },
+        })
       }
       if (ev.resultado === 'correcto') {
         setHistory(prev => [{
@@ -438,7 +451,7 @@ export default function ValidacionRecepcion() {
     if (e.key === 'Enter' && e.target.value.trim()) {
       const code = e.target.value.trim()
       e.target.value = ''
-      const existing = history.find(h => h.code === code)
+      const existing = history.find(h => codesMatch(h.code, code))
       if (existing) {
         playDupAudio()
         setDupModal({ open: true, code, entry: existing })
@@ -446,7 +459,7 @@ export default function ValidacionRecepcion() {
         return
       }
       // Also check server events for cross-session / cross-computer duplicates
-      const serverDup = serverEvents.find(ev => ev.resultado === 'correcto' && ev.codigo_escaneado === code)
+      const serverDup = serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
       if (serverDup) {
         playDupAudio()
         setDupModal({ open: true, code, entry: { scannedAt: serverDup.scanned_at, scannedBy: serverDup.scanned_by_nombre || '—' } })
