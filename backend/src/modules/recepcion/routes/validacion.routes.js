@@ -83,16 +83,18 @@ router.post('/orders/:id/sessions',
   async (req, res) => {
     try {
       const { tarimas_enabled } = req.body
-      const result = await req.tQuery(
-        `INSERT INTO inbound_validation_sessions (tenant_id, order_id, user_id, tarimas_enabled)
-         VALUES ($1,$2,$3,$4) RETURNING *`,
-        [req.tenantId, req.params.id, req.user.id, Boolean(tarimas_enabled)]
-      )
-      await req.tQuery(
-        `UPDATE inbound_orders SET estado='en_validacion', updated_at=now()
-         WHERE id=$1 AND tenant_id=$2 AND estado='pendiente_validacion'`,
-        [req.params.id, req.tenantId]
-      )
+      const [result] = await Promise.all([
+        req.tQuery(
+          `INSERT INTO inbound_validation_sessions (tenant_id, order_id, user_id, tarimas_enabled)
+           VALUES ($1,$2,$3,$4) RETURNING *`,
+          [req.tenantId, req.params.id, req.user.id, Boolean(tarimas_enabled)]
+        ),
+        req.tQuery(
+          `UPDATE inbound_orders SET estado='en_validacion', updated_at=now()
+           WHERE id=$1 AND tenant_id=$2 AND estado='pendiente_validacion'`,
+          [req.params.id, req.tenantId]
+        ),
+      ])
       res.status(201).json({ session: result.rows[0] })
     } catch (err) {
       console.error('[recepcion] session create:', err.message)
@@ -137,16 +139,17 @@ router.post('/orders/:id/scan',
       const normalizedCode = normalizeScanCode(rawCode)
       const scanVariations = new Set(generateCodeVariations(rawCode, true))
 
-      const orderRes = await req.tQuery(
-        `SELECT id, estado FROM inbound_orders WHERE id=$1 AND tenant_id=$2`,
-        [req.params.id, req.tenantId]
-      )
+      const [orderRes, linesRes] = await Promise.all([
+        req.tQuery(
+          `SELECT id, estado FROM inbound_orders WHERE id=$1 AND tenant_id=$2`,
+          [req.params.id, req.tenantId]
+        ),
+        req.tQuery(
+          `SELECT * FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2 ORDER BY created_at ASC`,
+          [req.params.id, req.tenantId]
+        ),
+      ])
       if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
-
-      const linesRes = await req.tQuery(
-        `SELECT * FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2 ORDER BY created_at ASC`,
-        [req.params.id, req.tenantId]
-      )
 
       const lines = linesRes.rows
 
@@ -199,25 +202,25 @@ router.post('/orders/:id/scan',
         })
       }
 
-      // Mark validated
+      // Mark validated, then fire event INSERT + stats COUNT in parallel
       await req.tQuery(
         `UPDATE inbound_lines SET estado_validacion='validada', validated_by=$3, validated_at=now()
          WHERE id=$1 AND tenant_id=$2`,
         [line.id, req.tenantId, req.user.id]
       )
-      const eventRes = await req.tQuery(
-        `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
-         VALUES ($1,$2,$3,$4,$5,$6,'correcto',$7,$8)
-         RETURNING *`,
-        [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
-      )
-
-      // Update order counters
-      const statsRes = await req.tQuery(
-        `SELECT COUNT(*) FILTER (WHERE estado_validacion='validada') AS validadas, COUNT(*) AS total
-         FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2`,
-        [req.params.id, req.tenantId]
-      )
+      const [eventRes, statsRes] = await Promise.all([
+        req.tQuery(
+          `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
+           VALUES ($1,$2,$3,$4,$5,$6,'correcto',$7,$8)
+           RETURNING *`,
+          [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
+        ),
+        req.tQuery(
+          `SELECT COUNT(*) FILTER (WHERE estado_validacion='validada') AS validadas, COUNT(*) AS total
+           FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2`,
+          [req.params.id, req.tenantId]
+        ),
+      ])
       const validadas = parseInt(statsRes.rows[0].validadas)
       const total = parseInt(statsRes.rows[0].total)
       const newEstado = validadas === total ? 'completo' : 'en_validacion'
@@ -253,7 +256,8 @@ router.get('/orders/:id/scan-events',
          FROM inbound_scan_events e
          LEFT JOIN usuarios u ON u.id = e.scanned_by
          WHERE e.order_id=$1 AND e.tenant_id=$2
-         ORDER BY e.scanned_at DESC`,
+         ORDER BY e.scanned_at DESC
+         LIMIT 1000`,
         [req.params.id, req.tenantId]
       )
       res.json({ events: result.rows })

@@ -292,10 +292,11 @@ export default function FolioDetalle() {
     queryKey: ['despacho-folio', folioId],
     queryFn: () => getFolio(folioId),
     enabled: !!folioId,
+    staleTime: 30_000,
   })
 
-  const { data: conductoresData } = useQuery({ queryKey: ['despacho-conductores'], queryFn: getConductores })
-  const { data: unidadesData } = useQuery({ queryKey: ['despacho-unidades'], queryFn: getUnidades })
+  const { data: conductoresData } = useQuery({ queryKey: ['despacho-conductores'], queryFn: getConductores, staleTime: 10 * 60_000 })
+  const { data: unidadesData } = useQuery({ queryKey: ['despacho-unidades'], queryFn: getUnidades, staleTime: 10 * 60_000 })
 
   const folio = data?.folio
   const orders = data?.orders ?? []

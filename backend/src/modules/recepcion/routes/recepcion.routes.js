@@ -251,24 +251,24 @@ router.get('/orders/:id',
   requirePermission('recepcion.recibir', 'ver'),
   async (req, res) => {
     try {
-      const orderRes = await req.tQuery(
-        `SELECT o.*, u.nombre_completo AS responsable_nombre
-         FROM inbound_orders o
-         LEFT JOIN usuarios u ON u.id = o.responsable_id
-         WHERE o.id=$1 AND o.tenant_id=$2`,
-        [req.params.id, req.tenantId]
-      )
+      const [orderRes, linesRes] = await Promise.all([
+        req.tQuery(
+          `SELECT o.*, u.nombre_completo AS responsable_nombre
+           FROM inbound_orders o
+           LEFT JOIN usuarios u ON u.id = o.responsable_id
+           WHERE o.id=$1 AND o.tenant_id=$2`,
+          [req.params.id, req.tenantId]
+        ),
+        req.tQuery(
+          `SELECT l.*, u.nombre_completo AS validated_by_nombre
+           FROM inbound_lines l
+           LEFT JOIN usuarios u ON u.id = l.validated_by
+           WHERE l.order_id=$1 AND l.tenant_id=$2
+           ORDER BY l.created_at ASC`,
+          [req.params.id, req.tenantId]
+        ),
+      ])
       if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
-
-      const linesRes = await req.tQuery(
-        `SELECT l.*, u.nombre_completo AS validated_by_nombre
-         FROM inbound_lines l
-         LEFT JOIN usuarios u ON u.id = l.validated_by
-         WHERE l.order_id=$1 AND l.tenant_id=$2
-         ORDER BY l.created_at ASC`,
-        [req.params.id, req.tenantId]
-      )
-
       res.json({ order: orderRes.rows[0], lines: linesRes.rows })
     } catch (err) {
       res.status(500).json({ error: 'Error al obtener detalle de orden' })

@@ -20,31 +20,33 @@ async function generateFolioNumero(req) {
 }
 
 async function getFolioDetail(req, folioId) {
-  const folioRes = await req.tQuery(
-    `SELECT f.*,
-            c.nombre AS conductor_nombre, c.licencia AS conductor_licencia, c.telefono AS conductor_telefono,
-            u.placa AS unidad_placa, u.tipo AS unidad_tipo,
-            us.nombre_completo AS operador_nombre,
-            COUNT(fo.id) AS total_ordenes
-     FROM dispatch_folios f
-     LEFT JOIN dispatch_conductores c ON c.id = f.conductor_id
-     LEFT JOIN dispatch_unidades u ON u.id = f.unidad_id
-     LEFT JOIN usuarios us ON us.id = f.operador_id
-     LEFT JOIN dispatch_folio_orders fo ON fo.folio_id = f.id
-     WHERE f.id = $1 AND f.tenant_id = $2
-     GROUP BY f.id, c.nombre, c.licencia, c.telefono, u.placa, u.tipo, us.nombre_completo`,
-    [folioId, req.tenantId]
-  )
+  // Fetch folio header and orders list in parallel
+  const [folioRes, ordersRes] = await Promise.all([
+    req.tQuery(
+      `SELECT f.*,
+              c.nombre AS conductor_nombre, c.licencia AS conductor_licencia, c.telefono AS conductor_telefono,
+              u.placa AS unidad_placa, u.tipo AS unidad_tipo,
+              us.nombre_completo AS operador_nombre,
+              COUNT(fo.id) AS total_ordenes
+       FROM dispatch_folios f
+       LEFT JOIN dispatch_conductores c ON c.id = f.conductor_id
+       LEFT JOIN dispatch_unidades u ON u.id = f.unidad_id
+       LEFT JOIN usuarios us ON us.id = f.operador_id
+       LEFT JOIN dispatch_folio_orders fo ON fo.folio_id = f.id
+       WHERE f.id = $1 AND f.tenant_id = $2
+       GROUP BY f.id, c.nombre, c.licencia, c.telefono, u.placa, u.tipo, us.nombre_completo`,
+      [folioId, req.tenantId]
+    ),
+    req.tQuery(
+      `SELECT o.*, COALESCE(ps.total_scanned, 0) AS surtido_validadas
+       FROM dispatch_folio_orders o
+       LEFT JOIN pick_sessions ps ON ps.outbound_order_no = o.outbound_order_no AND ps.tenant_id = o.tenant_id
+       WHERE o.folio_id = $1 AND o.tenant_id = $2
+       ORDER BY o.created_at ASC`,
+      [folioId, req.tenantId]
+    ),
+  ])
   if (folioRes.rows.length === 0) return null
-
-  const ordersRes = await req.tQuery(
-    `SELECT o.*, COALESCE(ps.total_scanned, 0) AS surtido_validadas
-     FROM dispatch_folio_orders o
-     LEFT JOIN pick_sessions ps ON ps.outbound_order_no = o.outbound_order_no AND ps.tenant_id = o.tenant_id
-     WHERE o.folio_id = $1 AND o.tenant_id = $2
-     ORDER BY o.created_at ASC`,
-    [folioId, req.tenantId]
-  )
 
   const orderIds = ordersRes.rows.map(o => o.id)
   const scansMap = {}

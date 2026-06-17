@@ -154,7 +154,7 @@ export default function RecepcionDetalle() {
     queryKey: ['recepcion-order', id],
     queryFn: () => getOrder(id),
     retry: 1,
-    staleTime: 0,
+    staleTime: 30_000,
   })
 
   const { data: eventsData } = useQuery({
