@@ -79,6 +79,15 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     })
   }
 
+  function selectAllBoxes() {
+    const allCodes = new Set((outboundDetail?.packageList || []).map(b => b.customizeCode).filter(Boolean))
+    setSelectedBoxes(allCodes)
+  }
+
+  function clearSelectedBoxes() {
+    setSelectedBoxes(new Set())
+  }
+
   function handleScanKeyDown(e) {
     if (e.key !== 'Enter') return
     const code = scanInput.trim().toUpperCase()
@@ -228,7 +237,26 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                       {outboundDetail.customerCode && ` — ${outboundDetail.customerCode}`}
                     </span>
                   </div>
-                  <span className="text-xs text-primary-600 font-semibold">{selectedBoxes.size} seleccionadas</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-primary-600 font-semibold">{selectedBoxes.size} seleccionadas</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={selectAllBoxes}
+                        className="text-[11px] font-semibold text-primary-600 hover:text-primary-700"
+                      >
+                        Marcar todo
+                      </button>
+                      <span className="text-warm-300">·</span>
+                      <button
+                        type="button"
+                        onClick={clearSelectedBoxes}
+                        className="text-[11px] font-semibold text-warm-500 hover:text-warm-700"
+                      >
+                        Desmarcar
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div className="max-h-[220px] overflow-y-auto divide-y divide-warm-100">
                   {(outboundDetail.packageList || []).map((b, i) => {
