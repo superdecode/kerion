@@ -120,14 +120,24 @@ async function runDbQuery(queryable, text, params = []) {
 
 async function getPublicTableColumns(queryable, tableName) {
   if (_tableColumnCache.has(tableName)) return _tableColumnCache.get(tableName)
-  const result = await runDbQuery(
-    queryable,
-    `SELECT column_name
-     FROM information_schema.columns
-     WHERE table_schema = 'public' AND table_name = $1`,
-    [tableName]
-  )
-  const cols = new Set(result.rows.map((row) => row.column_name))
+  const allowedTables = new Set(['pick_order_tracking', 'pick_sessions'])
+  if (!allowedTables.has(tableName)) {
+    throw new Error(`Unsupported table for column introspection: ${tableName}`)
+  }
+  let cols
+  try {
+    const probe = await runDbQuery(queryable, `SELECT * FROM ${tableName} LIMIT 0`, [])
+    cols = new Set((probe.fields || []).map((field) => field.name))
+  } catch {
+    const result = await runDbQuery(
+      queryable,
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1`,
+      [tableName]
+    )
+    cols = new Set(result.rows.map((row) => row.column_name))
+  }
   _tableColumnCache.set(tableName, cols)
   return cols
 }
@@ -1913,6 +1923,7 @@ router.post('/order-tracking/bulk',
   async (req, res) => {
     try {
       const { obcs, surtidor_id, status, notes } = req.body
+      const trackingColumns = await getPublicTableColumns(req, 'pick_order_tracking')
       if (!Array.isArray(obcs) || obcs.length === 0) {
         return res.status(400).json({ success: false, error: 'Lista de órdenes (obcs) es requerida' })
       }
@@ -1927,6 +1938,7 @@ router.post('/order-tracking/bulk',
       }
 
       const results = await req.tTransaction(async (client) => {
+        const txTrackingColumns = await getPublicTableColumns(client, 'pick_order_tracking')
         const userNombre = req.fullUser?.nombre_completo || null
 
         // 1. Fetch all existing rows in one query (eliminates N SELECTs)
@@ -1979,40 +1991,72 @@ router.post('/order-tracking/bulk',
 
         // 4. INSERT all new OBCs in one UNNEST query
         if (newObcs.length > 0) {
+          const insertColumns = ['tenant_id', 'outbound_order_no']
+          const insertValues = [req.tenantId, newObcs]
+          if (txTrackingColumns.has('surtidor_id')) {
+            insertColumns.push('surtidor_id')
+            insertValues.push(surtidor_id || null)
+          }
+          if (txTrackingColumns.has('surtidor_nombre')) {
+            insertColumns.push('surtidor_nombre')
+            insertValues.push(surtidorNombre)
+          }
+          if (txTrackingColumns.has('status')) {
+            insertColumns.push('status')
+            insertValues.push(status || 'pending_assignment')
+          }
+          if (txTrackingColumns.has('notes')) {
+            insertColumns.push('notes')
+            insertValues.push(normalizeOptionalText(notes))
+          }
+          if (txTrackingColumns.has('assigned_at')) {
+            insertColumns.push('assigned_at')
+            insertValues.push(surtidor_id ? new Date() : null)
+          }
+          const selectExpressions = insertColumns.map((column, index) => {
+            const paramRef = `$${index + 1}`
+            return column === 'outbound_order_no' ? `unnest(${paramRef}::text[])` : paramRef
+          }).join(', ')
           const resInsert = await client.query(
-            `INSERT INTO pick_order_tracking
-               (tenant_id, outbound_order_no, surtidor_id, surtidor_nombre, status, notes)
-             SELECT $1, unnest($2::text[]), $3, $4, $5, $6 RETURNING *`,
-            [req.tenantId, newObcs, surtidor_id || null, surtidorNombre, status || 'pending_assignment', normalizeOptionalText(notes)]
+            `INSERT INTO pick_order_tracking (${insertColumns.join(', ')})
+             SELECT ${selectExpressions} RETURNING *`,
+            insertValues
           )
           inserted.push(...resInsert.rows)
         }
 
         // 5. UPDATE all existing OBCs in one ANY query
         if (updateObcs.length > 0) {
-          const fields = ['updated_at = now()']
+          const fields = txTrackingColumns.has('updated_at') ? ['updated_at = now()'] : []
           const params = []
           let p = 1
-          if (status !== undefined) {
+          if (status !== undefined && txTrackingColumns.has('status')) {
             fields.push(`status = $${p++}`); params.push(status)
             if (status === 'assigned') {
-              fields.push(`assigned_at = now()`)
-              fields.push(`assigned_by = $${p++}`); params.push(userNombre)
+              if (txTrackingColumns.has('assigned_at')) fields.push(`assigned_at = now()`)
+              if (txTrackingColumns.has('assigned_by')) { fields.push(`assigned_by = $${p++}`); params.push(userNombre) }
             }
-            if (status === 'sorting')            fields.push(`sorting_started_at = now()`)
-            if (status === 'pending_validation') fields.push(`sorting_completed_at = now()`)
-            if (status === 'validating')         fields.push(`validation_started_at = now()`)
+            if (status === 'sorting' && txTrackingColumns.has('sorting_started_at'))            fields.push(`sorting_started_at = now()`)
+            if (status === 'pending_validation' && txTrackingColumns.has('sorting_completed_at')) fields.push(`sorting_completed_at = now()`)
+            if (status === 'validating' && txTrackingColumns.has('validation_started_at'))         fields.push(`validation_started_at = now()`)
             if (status === 'complete') {
-              fields.push(`validation_completed_at = now()`)
-              fields.push(`validated_by = $${p++}`); params.push(userNombre)
+              if (txTrackingColumns.has('validation_completed_at')) fields.push(`validation_completed_at = now()`)
+              if (txTrackingColumns.has('validated_by')) { fields.push(`validated_by = $${p++}`); params.push(userNombre) }
             }
           }
-          if (surtidor_id !== undefined) {
+          if (surtidor_id !== undefined && txTrackingColumns.has('surtidor_id')) {
             fields.push(`surtidor_id = $${p++}`); params.push(surtidor_id || null)
-            fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
-            if (surtidor_id) fields.push(`assigned_at = COALESCE(assigned_at, now())`)
+            if (txTrackingColumns.has('surtidor_nombre')) {
+              fields.push(`surtidor_nombre = $${p++}`); params.push(surtidorNombre)
+            }
+            if (surtidor_id && txTrackingColumns.has('assigned_at')) fields.push(`assigned_at = COALESCE(assigned_at, now())`)
           }
-          if (notes !== undefined) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
+          if (notes !== undefined && txTrackingColumns.has('notes')) {
+            fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes))
+          }
+          if (fields.length === 0) {
+            return [...inserted]
+          }
 
           params.push(req.tenantId, updateObcs)
           const resUpdate = await client.query(
