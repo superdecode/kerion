@@ -105,12 +105,6 @@ function GeneralInfoBlock({ icon: Icon, label, value, tone = 'warm', mono = fals
 
 const TH = 'table-header whitespace-nowrap'
 
-const TIPOS_NOVEDAD = [
-  'Caja con Daños', 'Faltante', 'Sobrante', 'Caja Vacía',
-  'Mercancía Suelta', 'Caja Con Faltante', 'Código Duplicado',
-  'Producto Dañada', 'Caja Sin Etiqueta', 'SKU Sueltos',
-]
-
 const TIPO_META = {
   'Caja con Daños':    'bg-orange-100 text-orange-700',
   'Faltante':          'bg-danger-100 text-danger-700',
@@ -758,8 +752,8 @@ export default function RecepcionDetalle() {
                   className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 bg-white"
                 >
                   <option value="">{t('rec.otros.select_tipo')}</option>
-                  {(tiposData?.tipos?.length > 0 ? tiposData.tipos.map(t => t.nombre) : TIPOS_NOVEDAD).map(nombre => (
-                    <option key={nombre} value={nombre}>{nombre}</option>
+                  {(tiposData?.tipos || []).map(tipo => (
+                    <option key={tipo.id} value={tipo.nombre}>{tipo.nombre}</option>
                   ))}
                 </select>
                 <input

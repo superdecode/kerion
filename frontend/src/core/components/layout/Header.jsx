@@ -201,10 +201,9 @@ export default function Header({ title, subtitle, actions, showSearch = false })
         {canManageTipos && (
           <button
             onClick={() => { setTiposOpen(true); setUserMenuOpen(false) }}
-            className="p-2.5 rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50 transition-all duration-200"
-            title="Gestión de tipos de incidencia"
+            className="btn-ghost text-xs flex items-center gap-1.5"
           >
-            <Tags className="w-[18px] h-[18px]" />
+            <Tags size={14} /> {t('rec.tipos.btn_header')}
           </button>
         )}
 
@@ -599,7 +598,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
       <Modal
         isOpen={tiposOpen}
         onClose={() => { setTiposOpen(false); setNuevoTipoNombre('') }}
-        title="Gestión de tipos de incidencia"
+        title={t('rec.tipos.title')}
         size="md"
       >
         <div className="space-y-4">
@@ -609,7 +608,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
               value={nuevoTipoNombre}
               onChange={e => setNuevoTipoNombre(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleCreateTipo()}
-              placeholder="Nombre del tipo..."
+              placeholder={t('rec.tipos.placeholder')}
               className="flex-1 px-3 py-2 rounded-xl border border-warm-200 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
               autoComplete="off"
             />
@@ -622,21 +621,21 @@ export default function Header({ title, subtitle, actions, showSearch = false })
               {tiposSaving
                 ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 : <Plus className="w-4 h-4" />}
-              Agregar
+              {t('rec.tipos.add')}
             </button>
           </div>
 
           <div className="border border-warm-100 rounded-xl overflow-hidden">
             {tiposLoading ? (
-              <div className="py-8 text-center text-sm text-warm-400">Cargando...</div>
+              <div className="py-8 text-center text-sm text-warm-400">{t('common.loading')}</div>
             ) : tipos.length === 0 ? (
-              <div className="py-8 text-center text-sm text-warm-400">Sin tipos configurados</div>
+              <div className="py-8 text-center text-sm text-warm-400">{t('rec.tipos.empty')}</div>
             ) : (
               <table className="w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="table-header">Nombre</th>
-                    <th className="table-header text-right">Acciones</th>
+                    <th className="table-header">{t('common.name')}</th>
+                    <th className="table-header text-right">{t('common.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
@@ -648,7 +647,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
                           type="button"
                           onClick={() => handleDeleteTipo(tipo.id)}
                           className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50"
-                          title="Eliminar"
+                          title={t('common.delete')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
