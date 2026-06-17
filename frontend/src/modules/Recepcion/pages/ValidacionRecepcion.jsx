@@ -3,15 +3,16 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  ArrowLeft, ScanBarcode, CheckCircle2, XCircle, AlertCircle,
+  ArrowLeft, ScanBarcode, CheckCircle2, XCircle, AlertCircle, AlertTriangle,
   Layers, PackageCheck, X, Square, ArrowUp, ArrowDown, ArrowUpDown, Trash2,
   ChevronDown, PanelRightClose, PanelRightOpen, Search, LayoutList, MapPin, Check, Edit3,
+  ToggleLeft, ToggleRight,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { getOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, getScanEvents } from '../services/recepcionService'
+import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, getScanEvents } from '../services/recepcionService'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 
 function buildTarimaMap(lines) {
@@ -37,9 +38,10 @@ const TARIMA_PALETTE = [
 function getTarimaColor(num) { return TARIMA_PALETTE[(num - 1) % TARIMA_PALETTE.length] }
 
 const RESULT_CFG_BASE = {
-  correcto:      { bg: 'bg-success-50/90 border-success-200', icon: CheckCircle2, iconCls: 'text-success-500', label: 'text-success-600', labelKey: 'rec.val.result.correcto' },
-  duplicado:     { bg: 'bg-warning-50/90 border-warning-200', icon: AlertCircle,  iconCls: 'text-warning-500', label: 'text-warning-600', labelKey: 'rec.val.result.duplicado' },
-  no_encontrado: { bg: 'bg-danger-50/90  border-danger-200',  icon: XCircle,      iconCls: 'text-danger-500',  label: 'text-danger-600',  labelKey: 'rec.val.result.no_encontrado' },
+  correcto:       { bg: 'bg-success-50/90 border-success-200', icon: CheckCircle2,  iconCls: 'text-success-500', label: 'text-success-600', labelKey: 'rec.val.result.correcto' },
+  duplicado:      { bg: 'bg-warning-50/90 border-warning-200', icon: AlertCircle,   iconCls: 'text-warning-500', label: 'text-warning-600', labelKey: 'rec.val.result.duplicado' },
+  no_encontrado:  { bg: 'bg-danger-50/90  border-danger-200',  icon: XCircle,       iconCls: 'text-danger-500',  label: 'text-danger-600',  labelKey: 'rec.val.result.no_encontrado' },
+  fuera_seccion:  { bg: 'bg-sky-50/90 border-sky-200',         icon: Layers,        iconCls: 'text-sky-500',     label: 'text-sky-600',     labelKey: 'rec.tarimas.sections.fuera_seccion' },
 }
 
 export default function ValidacionRecepcion() {
@@ -81,6 +83,15 @@ export default function ValidacionRecepcion() {
   const [ubicacionFilter, setUbicacionFilter] = useState(null)
   const [expandedUbicaciones, setExpandedUbicaciones] = useState(new Set())
 
+  // Sections mode (tarimas split by section)
+  const [sectionMode, setSectionMode] = useState(false)
+  const [maxTarimasPerSection, setMaxTarimasPerSection] = useState(20)
+  const [currentSectionIdx, setCurrentSectionIdx] = useState(0)
+  const [heldCodes, setHeldCodes] = useState([])
+
+  // Force close
+  const [forceCloseOpen, setForceCloseOpen] = useState(false)
+
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['recepcion-order', id],
     queryFn: () => getOrder(id),
@@ -104,6 +115,11 @@ export default function ValidacionRecepcion() {
 
   const tarimaMap    = useMemo(() => buildTarimaMap(lines), [lines])
   const totalTarimas = tarimaMap.size
+
+  const totalSections  = sectionMode && maxTarimasPerSection > 0 ? Math.ceil(totalTarimas / maxTarimasPerSection) : 1
+  const sectionStart   = sectionMode ? currentSectionIdx * maxTarimasPerSection + 1 : 1
+  const sectionEnd     = sectionMode ? Math.min((currentSectionIdx + 1) * maxTarimasPerSection, totalTarimas) : totalTarimas
+  const isInSection    = (num) => num >= sectionStart && num <= sectionEnd
 
   const lastTarimaNum = useMemo(() => {
     if (!withTarimas || !lastResult?.code) return null
@@ -325,6 +341,17 @@ export default function ValidacionRecepcion() {
     onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar'),
   })
 
+  const forceCloseMut = useMutation({
+    mutationFn: () => updateOrder(id, { estado: 'completo' }),
+    onSuccess: () => {
+      toast.success(t('rec.val.forceClose.success'))
+      qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
+      setForceCloseOpen(false)
+      navigate('/recepcion/recibir')
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
   const playDupAudio = useCallback(() => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)()
@@ -355,6 +382,16 @@ export default function ValidacionRecepcion() {
         setDupModal({ open: true, code, entry: { scannedAt: serverDup.scanned_at, scannedBy: serverDup.scanned_by_nombre || '—' } })
         refocus()
         return
+      }
+      if (withTarimas && sectionMode) {
+        const base = extractBaseCode(code)
+        const tarimaNum = base ? tarimaMap.get(base) : null
+        if (tarimaNum && !isInSection(tarimaNum)) {
+          setHeldCodes(prev => [...prev.filter(h => h.code !== code), { code, base, tarimaNum }])
+          setLastResult({ result: 'fuera_seccion', code, tarimaNum })
+          refocus()
+          return
+        }
       }
       scanMut.mutate({ codigo: code, ubicacion: selectedUbicacion })
     }
@@ -418,21 +455,84 @@ export default function ValidacionRecepcion() {
   const renderUbicacionPanelBody = () => (
     <>
       {/* ── Panel header ── */}
-      <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50 space-y-2.5 shrink-0">
+      <div className="px-4 pt-3.5 pb-3 border-b border-primary-100/60 bg-white/95 space-y-2.5 shrink-0">
+        {/* Title row */}
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-bold text-warm-700">
             {t('rec.val.ubicacion.panel.title')}
-            <span className="ml-1.5 badge bg-accent-100 text-accent-700 border-0 text-[9px]">{allUbicacionGroups.length}</span>
+            <span className="ml-1.5 badge bg-primary-100 text-primary-700 border-0 text-[9px]">{allUbicacionGroups.length}</span>
           </h4>
           <span className="text-[10px] font-semibold text-warm-400 tabular-nums">
             {totalUbicacionCodes} escaneos
           </span>
         </div>
 
-        {/* Search — DropScan gradient pill */}
-        <div className="flex items-center gap-1.5 rounded-2xl border border-accent-100/80 bg-gradient-to-r from-white via-accent-50/55 to-white px-3 h-11 shadow-[0_12px_26px_-24px_rgba(124,58,237,0.55)] transition-all focus-within:border-accent-300 focus-within:ring-2 focus-within:ring-accent-100">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-100/80 shadow-inner shrink-0">
-            <Search className="w-3.5 h-3.5 text-accent-500" />
+        {/* Active ubicación card — above search (mirrors Surtido active order card) */}
+        {ubicacionConfirmed && (
+          <div className="rounded-2xl border border-primary-200/80 bg-gradient-to-br from-primary-50 via-white to-accent-50/60 shadow-[0_14px_30px_-22px_rgba(37,99,235,0.45)] ring-1 ring-primary-100/80 overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2.5">
+              <div className="w-7 h-7 rounded-xl bg-primary-100 flex items-center justify-center shrink-0">
+                <MapPin className="w-3.5 h-3.5 text-primary-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-mono text-xs font-black text-primary-800 truncate">
+                  {selectedUbicacion || <span className="text-primary-400 font-semibold">{t('rec.val.ubicacion.panel.sin_ub')}</span>}
+                </p>
+                <p className="text-[10px] text-primary-400 mt-0.5 tabular-nums">
+                  {history.filter(h => h.result === 'correcto').length} {t('rec.val.ubicacion.lote_actual')}
+                </p>
+              </div>
+              <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">{t('rec.val.ubicacion.badge')}</span>
+              <button
+                type="button"
+                onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
+                className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                title={t('rec.val.ubicacion.edit')}
+              >
+                <Edit3 size={12} />
+              </button>
+            </div>
+            {history.filter(h => h.result === 'correcto').length > 0 && (
+              <div className="px-3 pb-2.5">
+                <button
+                  type="button"
+                  onClick={completarUbicacion}
+                  className="w-full py-1.5 rounded-xl bg-primary-600 text-white text-xs font-semibold hover:bg-primary-700 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-3 h-3" />
+                  {t('rec.val.btn.completar')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filter chips — grid segmented control (mirrors Surtido's pattern) */}
+        <div className="grid grid-cols-3 gap-1 rounded-2xl border border-primary-100/70 bg-gradient-to-br from-primary-50/85 via-white to-white p-1.5 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.45)]">
+          {ubFilterChips.map(chip => {
+            const isOn = ubicacionFilter === chip.key
+            return (
+              <button
+                key={String(chip.key)}
+                type="button"
+                onClick={() => setUbicacionFilter(isOn ? null : chip.key)}
+                className={`w-full min-w-0 px-1 py-1.5 h-8 rounded-xl text-[10px] font-semibold border transition-all flex items-center justify-center gap-0.5 overflow-hidden ${
+                  isOn
+                    ? 'bg-white text-primary-700 border-primary-200 shadow-sm ring-1 ring-primary-100'
+                    : 'bg-white/75 text-warm-500 border-transparent hover:border-warm-200 hover:bg-warm-50'
+                }`}
+              >
+                <span className="truncate">{chip.label}</span>
+                <span className={`text-[9px] font-bold tabular-nums shrink-0 ${isOn ? 'text-primary-400' : 'text-warm-400'}`}>{chip.count}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center gap-1.5 rounded-2xl border border-primary-100/80 bg-gradient-to-r from-white via-primary-50/55 to-white px-3 h-10 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.4)] transition-all focus-within:border-primary-300 focus-within:ring-2 focus-within:ring-primary-100">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100/80 shadow-inner shrink-0">
+            <Search className="w-3 h-3 text-primary-500" />
           </div>
           <input
             type="text"
@@ -446,30 +546,6 @@ export default function ValidacionRecepcion() {
               <X className="w-3 h-3" />
             </button>
           )}
-        </div>
-
-        {/* Filter chips */}
-        <div className="flex gap-1.5 flex-wrap">
-          {ubFilterChips.map(chip => {
-            const isOn = ubicacionFilter === chip.key
-            return (
-              <button
-                key={String(chip.key)}
-                type="button"
-                onClick={() => setUbicacionFilter(isOn ? null : chip.key)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${
-                  isOn
-                    ? 'bg-accent-600 text-white shadow-sm'
-                    : 'bg-warm-100 text-warm-500 hover:bg-accent-50 hover:text-accent-700'
-                }`}
-              >
-                {chip.label}
-                <span className={`text-[9px] font-bold ${isOn ? 'text-white/70' : 'text-warm-400'}`}>
-                  {chip.count}
-                </span>
-              </button>
-            )
-          })}
         </div>
 
         {(ubicacionSearch || ubicacionFilter) && (
@@ -501,8 +577,8 @@ export default function ValidacionRecepcion() {
               key={cardKey}
               className={`rounded-2xl border overflow-hidden transition-all duration-200 ${
                 isActive
-                  ? 'border-accent-400 bg-gradient-to-br from-accent-100 via-accent-50 to-white shadow-[0_18px_34px_-18px_rgba(124,58,237,0.55)] ring-2 ring-accent-300 ring-offset-1'
-                  : 'border-accent-100/60 bg-gradient-to-br from-white via-accent-50/20 to-accent-50/35 shadow-[0_14px_30px_-24px_rgba(124,58,237,0.16)] hover:border-accent-200 hover:to-accent-50/55 hover:shadow-[0_20px_38px_-26px_rgba(124,58,237,0.28)]'
+                  ? 'border-primary-200/80 bg-gradient-to-br from-primary-50 via-white to-accent-50/60 shadow-[0_18px_34px_-18px_rgba(37,99,235,0.45)] ring-1 ring-primary-100/80'
+                  : 'border-warm-200/90 bg-white hover:border-primary-100 hover:bg-gradient-to-br hover:from-white hover:to-primary-50/30 shadow-[0_14px_30px_-24px_rgba(15,23,42,0.12)]'
               }`}
             >
               {/* Card header — clickable to expand/collapse */}
@@ -511,29 +587,29 @@ export default function ValidacionRecepcion() {
                 onClick={() => toggleUbicacion(cardKey)}
                 className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
               >
-                <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-accent-100' : 'bg-accent-100/60'}`}>
-                  <MapPin className={`w-3 h-3 ${isActive ? 'text-accent-600' : 'text-accent-500'}`} />
+                <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-primary-100' : 'bg-warm-100'}`}>
+                  <MapPin className={`w-3 h-3 ${isActive ? 'text-primary-600' : 'text-warm-400'}`} />
                 </div>
-                <span className={`text-xs font-bold font-mono truncate flex-1 ${isActive ? 'text-accent-800' : 'text-warm-800'}`}>
+                <span className={`text-xs font-bold font-mono truncate flex-1 ${isActive ? 'text-primary-800' : 'text-warm-800'}`}>
                   {g.ubicacion || t('rec.val.ubicacion.panel.sin_ub')}
                 </span>
                 {isActive
-                  ? <span className="badge bg-accent-600 text-white text-[9px] border-0 shrink-0 shadow-sm">ACTIVA</span>
-                  : <span className="badge bg-accent-50 text-accent-600 border border-accent-100 text-[9px] shrink-0">{g.codes.length}</span>
+                  ? <span className="badge bg-primary-100 text-primary-700 text-[9px] border-0 shrink-0">{t('rec.val.ubicacion.badge')}</span>
+                  : <span className="badge bg-warm-50 text-warm-600 border border-warm-100 text-[9px] shrink-0">{g.codes.length}</span>
                 }
-                <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-accent-400' : 'text-warm-300'}`} />
+                <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-primary-400' : 'text-warm-300'}`} />
               </button>
 
               {/* Progress bar — always visible */}
               <div className="px-3 pb-2.5">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[10px] font-medium ${isActive ? 'text-accent-600' : 'text-accent-500/70'}`}>
+                  <span className={`text-[10px] font-medium ${isActive ? 'text-primary-600' : 'text-warm-400'}`}>
                     {g.codes.length} escaneos
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${isActive ? 'bg-gradient-to-r from-accent-400 to-accent-500' : 'bg-gradient-to-r from-accent-300 to-accent-400'}`}
+                    className={`h-full rounded-full transition-all duration-500 ${isActive ? 'bg-gradient-to-r from-primary-400 to-primary-500' : 'bg-gradient-to-r from-primary-200 to-primary-300'}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
@@ -541,9 +617,9 @@ export default function ValidacionRecepcion() {
 
               {/* Expandable code list */}
               {isExpanded && g.codes.length > 0 && (
-                <div className={`border-t ${isActive ? 'border-accent-100' : 'border-accent-100/40'} divide-y divide-warm-50 max-h-36 overflow-y-auto`}>
+                <div className={`border-t ${isActive ? 'border-primary-100' : 'border-warm-100'} divide-y divide-warm-50 max-h-36 overflow-y-auto`}>
                   {g.codes.map((c, ci) => (
-                    <div key={c.id || ci} className="flex items-center gap-2 px-3 py-1.5 hover:bg-accent-50/30 transition-colors">
+                    <div key={c.id || ci} className="flex items-center gap-2 px-3 py-1.5 hover:bg-primary-50/30 transition-colors">
                       <Check className="w-2.5 h-2.5 shrink-0 text-success-400" />
                       <span className="font-mono text-[10px] truncate flex-1 text-warm-600">{c.code}</span>
                       {c.scannedAt && (
@@ -574,6 +650,29 @@ export default function ValidacionRecepcion() {
             <span className={`badge text-[9px] font-bold ${lastTarimaColor.pill}`}>T{lastTarimaNum} {t('rec.tarimas.panel.activa')}</span>
           )}
         </div>
+
+        {/* Section mode status bar */}
+        {sectionMode && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] text-warm-500">{t('rec.tarimas.sections.current')} <span className="font-bold text-primary-700">{currentSectionIdx + 1}/{totalSections}</span></span>
+            <span className="text-[10px] text-warm-400">T{sectionStart}–T{sectionEnd}</span>
+            {heldCodes.length > 0 && (
+              <span className="badge bg-warning-100 text-warning-700 border-0 text-[9px]">{heldCodes.length} {t('rec.tarimas.sections.held')}</span>
+            )}
+            {currentSectionIdx < totalSections - 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentSectionIdx(p => p + 1)
+                  setHeldCodes(prev => prev.filter(h => !isInSection(h.tarimaNum)))
+                }}
+                className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary-600 text-white text-[10px] font-semibold hover:bg-primary-700 transition-colors"
+              >
+                {t('rec.tarimas.sections.advance')}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Search — mirrors Dropscan's gradient pill with circular icon */}
         <div className="flex items-center gap-1.5 rounded-2xl border border-sky-100/80 bg-gradient-to-r from-white via-sky-50/55 to-white px-3 h-10 shadow-[0_12px_26px_-24px_rgba(14,165,233,0.6)] transition-all focus-within:border-sky-300 focus-within:ring-2 focus-within:ring-sky-100">
@@ -756,10 +855,13 @@ export default function ValidacionRecepcion() {
                 }
               }}
               className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
-                withTarimas ? 'border-sky-300 bg-sky-50 text-sky-700' : 'border-warm-200 text-warm-500 hover:bg-warm-50'
+                withTarimas ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-warm-200 text-warm-500 hover:bg-warm-50'
               }`}
             >
-              <Layers className={`w-3.5 h-3.5 ${withTarimas ? 'text-sky-600' : 'text-warm-400'}`} />
+              {withTarimas
+                ? <ToggleRight className="w-4 h-4 text-primary-600 shrink-0" />
+                : <ToggleLeft className="w-4 h-4 text-warm-400 shrink-0" />
+              }
               <span className="hidden sm:inline">{withTarimas ? t('rec.tarimas.n_tarimas').replace('{n}', totalTarimas) : t('rec.tarimas.toggle')}</span>
               {withTarimas && <span className="sm:hidden">{totalTarimas}T</span>}
             </button>
@@ -768,7 +870,7 @@ export default function ValidacionRecepcion() {
               <button
                 type="button"
                 onClick={() => setMobileUbicacionPanelOpen(true)}
-                className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-accent-200 bg-accent-50 text-xs font-semibold text-accent-700 transition-colors"
+                className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-xs font-semibold text-primary-700 transition-colors"
               >
                 <MapPin className="w-3.5 h-3.5" />
                 <span>{allUbicacionGroups.length}</span>
@@ -779,13 +881,23 @@ export default function ValidacionRecepcion() {
               <button
                 type="button"
                 onClick={completarUbicacion}
-                className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-accent-300 bg-accent-600 text-xs font-semibold text-white hover:bg-accent-700 transition-colors"
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-primary-300 bg-primary-600 text-xs font-semibold text-white hover:bg-primary-700 transition-colors"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{t('rec.val.btn.completar')}</span>
                 <span className="sm:hidden">OK</span>
               </button>
             )}
+            {/* Force close */}
+            <button
+              type="button"
+              onClick={() => setForceCloseOpen(true)}
+              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors"
+              title={t('rec.val.forceClose.title')}
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
+            </button>
             {/* Terminar */}
             <button
               onClick={endSession}
@@ -861,6 +973,57 @@ export default function ValidacionRecepcion() {
               <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
             </div>
 
+            {/* ── Scan result feedback ── */}
+            <AnimatePresence mode="wait">
+              {lastResult && (() => {
+                const cfg = RESULT_CFG[lastResult.result] || RESULT_CFG.no_encontrado
+                const Icon = cfg.icon
+                return (
+                  <motion.div
+                    key={lastResult.code + lastResult.result}
+                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    {withTarimas && lastTarimaNum && lastTarimaColor && (
+                      <div className={`${sidebarVisible ? 'sm:hidden' : ''} rounded-2xl flex flex-col items-center justify-center py-6 mb-3 ${lastTarimaColor.bg} ring-4 ${lastTarimaColor.ring} ring-offset-2`}>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">{t('rec.tarimas.label')}</p>
+                        <p className="text-[80px] sm:text-[96px] font-black text-white leading-none tabular-nums">{lastTarimaNum}</p>
+                        <p className="text-xs font-mono text-white/60 mt-1">{lastTarimaBase}</p>
+                      </div>
+                    )}
+                    <div className={`p-4 rounded-2xl flex items-center gap-3 border backdrop-blur-sm ${cfg.bg}`}>
+                      <Icon className={`w-5 h-5 shrink-0 ${cfg.iconCls}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-warm-400">{t('rec.scan.ultimo')}</p>
+                        <p className="font-mono font-bold text-warm-800 truncate text-sm sm:text-base">{lastResult.code}</p>
+                        {lastResult.sku && <p className="text-xs text-warm-500 font-mono">SKU: {lastResult.sku}</p>}
+                      </div>
+                      <div className="shrink-0 flex flex-col items-end gap-1.5">
+                        <span className={`text-sm font-bold ${cfg.label}`}>{cfg.labelText}</span>
+                        {lastResult.result === 'fuera_seccion' && lastResult.tarimaNum && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-700 border border-sky-200">
+                            T{lastResult.tarimaNum} → S{Math.ceil(lastResult.tarimaNum / maxTarimasPerSection)}
+                          </span>
+                        )}
+                        {withTarimas && lastResult.result !== 'fuera_seccion' && lastTarimaNum && lastTarimaColor && sidebarVisible && (
+                          <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${lastTarimaColor.pill}`}>
+                            T{lastTarimaNum}
+                          </span>
+                        )}
+                        {!withTarimas && selectedUbicacion && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-primary-100 text-primary-700 border border-primary-200">
+                            <MapPin size={8} />{selectedUbicacion}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })()}
+            </AnimatePresence>
+
             {/* ── Ubicación — unified card: input → summary in one block ── */}
             {!withTarimas && (() => {
               const batchCount = history.filter(h => h.result === 'correcto').length
@@ -910,24 +1073,35 @@ export default function ValidacionRecepcion() {
                   ) : (
                     /* ─── SUMMARY MODE ─── */
                     <>
-                      {/* Compact header: location name + ACTIVA badge + edit */}
+                      {/* Compact header: edit btn on left + location name + ACTIVA badge + confirm */}
                       <div className="flex items-center gap-2 px-3 py-2 bg-accent-50/70 border-b border-accent-100">
-                        <div className="w-5 h-5 rounded-md bg-accent-100 flex items-center justify-center shrink-0">
-                          <MapPin className="w-3 h-3 text-accent-600" />
-                        </div>
-                        <span className="font-mono text-sm font-black text-accent-800 leading-none truncate">
-                          {selectedUbicacion || <span className="text-accent-400 font-semibold text-xs">{t('rec.val.ubicacion.panel.sin_ub')}</span>}
-                        </span>
-                        <span className="badge bg-accent-600 text-white text-[9px] font-bold border-0 shrink-0">{t('rec.val.ubicacion.badge')}</span>
                         <button
                           type="button"
                           onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
-                          className="ml-auto flex items-center gap-1 text-warm-400 hover:text-accent-600 transition-colors rounded-lg px-2 py-1 hover:bg-accent-50 text-[10px] font-medium"
+                          className="flex items-center gap-1 text-accent-600 hover:text-accent-800 hover:bg-accent-100 transition-colors rounded-lg px-1.5 py-1 text-[10px] font-semibold shrink-0"
                           title={t('rec.val.ubicacion.edit')}
                         >
                           <Edit3 size={11} />
                           <span>{t('rec.val.ubicacion.edit')}</span>
                         </button>
+                        <div className="w-px h-4 bg-accent-200 shrink-0" />
+                        <div className="w-4 h-4 rounded-md bg-accent-100 flex items-center justify-center shrink-0">
+                          <MapPin className="w-2.5 h-2.5 text-accent-600" />
+                        </div>
+                        <span className="font-mono text-sm font-black text-accent-800 leading-none truncate flex-1">
+                          {selectedUbicacion || <span className="text-accent-400 font-semibold text-xs">{t('rec.val.ubicacion.panel.sin_ub')}</span>}
+                        </span>
+                        <span className="badge bg-accent-600 text-white text-[9px] font-bold border-0 shrink-0">{t('rec.val.ubicacion.badge')}</span>
+                        {batchCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={completarUbicacion}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-accent-600 text-white text-[10px] font-semibold hover:bg-accent-700 transition-colors shrink-0"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span className="hidden md:inline">{t('rec.val.btn.completar')}</span>
+                          </button>
+                        )}
                       </div>
                       {/* Counters + history table */}
                       <div className="p-3 space-y-2">
@@ -996,69 +1170,12 @@ export default function ValidacionRecepcion() {
                             </div>
                           </div>
                         )}
-                        {batchCount > 0 && (
-                          <button
-                            type="button"
-                            onClick={completarUbicacion}
-                            className="w-full py-1.5 rounded-xl bg-accent-600 text-white text-xs font-semibold hover:bg-accent-700 transition-colors flex items-center justify-center gap-1.5"
-                          >
-                            <Check className="w-3 h-3" />
-                            {t('rec.val.btn.completar')}
-                          </button>
-                        )}
                       </div>
                     </>
                   )}
                 </div>
               )
             })()}
-
-            {/* ── Scan result feedback ── */}
-            <AnimatePresence mode="wait">
-              {lastResult && (() => {
-                const cfg = RESULT_CFG[lastResult.result] || RESULT_CFG.no_encontrado
-                const Icon = cfg.icon
-                return (
-                  <motion.div
-                    key={lastResult.code + lastResult.result}
-                    initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    transition={{ duration: 0.18 }}
-                  >
-                    {withTarimas && lastTarimaNum && lastTarimaColor && (
-                      <div className={`${sidebarVisible ? 'sm:hidden' : ''} rounded-2xl flex flex-col items-center justify-center py-6 mb-3 ${lastTarimaColor.bg} ring-4 ${lastTarimaColor.ring} ring-offset-2`}>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">{t('rec.tarimas.label')}</p>
-                        <p className="text-[80px] sm:text-[96px] font-black text-white leading-none tabular-nums">{lastTarimaNum}</p>
-                        <p className="text-xs font-mono text-white/60 mt-1">{lastTarimaBase}</p>
-                      </div>
-                    )}
-
-                    <div className={`p-4 rounded-2xl flex items-center gap-3 border backdrop-blur-sm ${cfg.bg}`}>
-                      <Icon className={`w-5 h-5 shrink-0 ${cfg.iconCls}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-warm-400">{t('rec.scan.ultimo')}</p>
-                        <p className="font-mono font-bold text-warm-800 truncate text-sm sm:text-base">{lastResult.code}</p>
-                        {lastResult.sku && <p className="text-xs text-warm-500 font-mono">SKU: {lastResult.sku}</p>}
-                      </div>
-                      <div className="shrink-0 flex flex-col items-end gap-1.5">
-                        <span className={`text-sm font-bold ${cfg.label}`}>{cfg.labelText}</span>
-                        {withTarimas && lastTarimaNum && lastTarimaColor && sidebarVisible && (
-                          <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${lastTarimaColor.pill}`}>
-                            T{lastTarimaNum}
-                          </span>
-                        )}
-                        {!withTarimas && selectedUbicacion && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-700 border border-sky-200">
-                            <MapPin size={8} />{selectedUbicacion}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </motion.div>
-                )
-              })()}
-            </AnimatePresence>
 
             {/* ── Scan history (mobile only — desktop shows in ubicación card) ── */}
             {history.length > 0 && (
@@ -1150,7 +1267,7 @@ export default function ValidacionRecepcion() {
             <button
               type="button"
               onClick={() => setSidebarVisible(p => !p)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-accent-600"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
               title={sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}
             >
               {sidebarVisible ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
@@ -1163,7 +1280,7 @@ export default function ValidacionRecepcion() {
           <div className={`hidden lg:flex w-[400px] flex-col border-l border-warm-100 backdrop-blur-2xl shrink-0 animate-fade-in ${
             withTarimas
               ? 'bg-gradient-to-b from-white via-white to-sky-50/20 shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.38)]'
-              : 'bg-gradient-to-b from-white via-white to-accent-50/20 shadow-[-16px_0_34px_-28px_rgba(124,58,237,0.38)]'
+              : 'bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]'
           }`}>
             {withTarimas ? renderPanelBody() : renderUbicacionPanelBody()}
           </div>
@@ -1177,7 +1294,7 @@ export default function ValidacionRecepcion() {
         {!withTarimas && !ubicacionConfirmed && (
           <div className="mb-2">
             <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-accent-400 pointer-events-none" />
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary-400 pointer-events-none" />
               <input
                 ref={locationRef}
                 type="text"
@@ -1185,13 +1302,13 @@ export default function ValidacionRecepcion() {
                 onChange={e => setLocationInputValue(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); tryConfirmUbicacion(locationInputValue) } }}
                 placeholder={t('rec.val.ubicacion.placeholder')}
-                className="w-full pl-9 pr-16 py-2.5 text-sm border border-accent-200 rounded-xl bg-accent-50 focus:outline-none focus:ring-2 focus:ring-accent-300 placeholder:text-accent-300"
+                className="w-full pl-9 pr-16 py-2.5 text-sm border border-primary-200 rounded-xl bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-300 placeholder:text-primary-300"
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
                 <button
                   type="button"
                   onClick={() => tryConfirmUbicacion(locationInputValue)}
-                  className="px-2 py-1 text-[11px] font-semibold bg-accent-600 text-white rounded-lg"
+                  className="px-2 py-1 text-[11px] font-semibold bg-primary-600 text-white rounded-lg"
                 >
                   {t('rec.val.ubicacion.confirm')}
                 </button>
@@ -1210,18 +1327,18 @@ export default function ValidacionRecepcion() {
         {/* Active ubicacion badge on mobile */}
         {!withTarimas && ubicacionConfirmed && (
           <div className="mb-2 flex items-center gap-2 px-1">
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-accent-700 bg-accent-50 border border-accent-200 px-2 py-1 rounded-full flex-1 min-w-0 truncate">
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-primary-700 bg-primary-50 border border-primary-200 px-2 py-1 rounded-full flex-1 min-w-0 truncate">
               <MapPin size={10} className="shrink-0" />{selectedUbicacion || t('rec.val.ubicacion.skip')}
             </span>
             <button
               type="button"
               onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
-              className="inline-flex items-center gap-1 text-[10px] font-medium text-warm-400 hover:text-accent-600 shrink-0"
+              className="inline-flex items-center gap-1 text-[10px] font-medium text-warm-400 hover:text-primary-600 shrink-0"
             >
               <Edit3 size={11} />
-              <span>Editar</span>
+              <span>{t('rec.val.ubicacion.edit')}</span>
             </button>
-            <button type="button" onClick={completarUbicacion} className="text-[10px] text-accent-600 hover:text-accent-800 font-semibold shrink-0">
+            <button type="button" onClick={completarUbicacion} className="text-[10px] text-primary-600 hover:text-primary-800 font-semibold shrink-0">
               {t('rec.val.btn.completar')}
             </button>
           </div>
@@ -1349,6 +1466,35 @@ export default function ValidacionRecepcion() {
             })}
           </div>
           {tarimaMap.size > 8 && <p className="text-xs text-warm-400 text-center">+{tarimaMap.size - 8} más...</p>}
+          {/* Section mode toggle */}
+          <div className="mt-1 rounded-xl border border-warm-100 bg-warm-50 p-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-warm-800">{t('rec.tarimas.sections.enable')}</p>
+                <p className="text-[11px] text-warm-500 leading-tight">{t('rec.tarimas.sections.desc')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSectionMode(p => !p)}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${sectionMode ? 'bg-primary-600' : 'bg-warm-200'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${sectionMode ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+            {sectionMode && (
+              <div className="flex items-center gap-3">
+                <label className="text-xs text-warm-600 flex-1">{t('rec.tarimas.sections.max_per_section')}</label>
+                <input
+                  type="number"
+                  min="1"
+                  max={totalTarimas || 99}
+                  value={maxTarimasPerSection}
+                  onChange={e => setMaxTarimasPerSection(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-20 text-center text-sm border border-warm-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
 
@@ -1404,6 +1550,30 @@ export default function ValidacionRecepcion() {
         }
       >
         <p className="text-sm text-warm-700">{t('rec.val.delete.desc')}</p>
+      </Modal>
+
+      {/* ── Force close modal ── */}
+      <Modal
+        isOpen={forceCloseOpen}
+        onClose={() => setForceCloseOpen(false)}
+        title={t('rec.val.forceClose.title')}
+        icon={AlertTriangle}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end w-full">
+            <button onClick={() => setForceCloseOpen(false)} className="btn-ghost">{t('common.cancel')}</button>
+            <button onClick={() => forceCloseMut.mutate()} disabled={forceCloseMut.isPending} className="btn-danger disabled:opacity-50">
+              {forceCloseMut.isPending ? t('common.loading') : t('rec.val.forceClose.confirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">{t('rec.val.forceClose.desc')}</p>
+          <div className="rounded-xl border border-warning-200 bg-warning-50 p-3">
+            <p className="text-xs font-semibold text-warning-800">{t('rec.val.forceClose.hint')}</p>
+          </div>
+        </div>
       </Modal>
 
       {/* ── Rejection blocking modal ── */}

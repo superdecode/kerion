@@ -218,6 +218,16 @@ export default function RecepcionDetalle() {
   const canEdit = hasPermission('recepcion.recibir', 'actualizar')
   const canCreate = hasPermission('recepcion.recibir', 'crear')
 
+  const lineUbicacionMap = useMemo(() => {
+    const map = new Map()
+    for (const ev of (eventsData?.events || [])) {
+      if (ev.resultado === 'correcto' && ev.line_id && ev.ubicacion) {
+        map.set(ev.line_id, ev.ubicacion)
+      }
+    }
+    return map
+  }, [eventsData?.events])
+
   if (isLoading) return <div className="flex items-center justify-center h-full"><LoadingSpinner /></div>
   if (isError || !data) return (
     <div className="flex flex-col h-full">
@@ -281,17 +291,6 @@ export default function RecepcionDetalle() {
       : String(av).localeCompare(String(bv), 'es')
     return eventSortDir === 'asc' ? cmp : -cmp
   })
-
-  // Build a line_id → ubicacion map from scan events (correcto result)
-  const lineUbicacionMap = useMemo(() => {
-    const map = new Map()
-    for (const ev of events) {
-      if (ev.resultado === 'correcto' && ev.line_id && ev.ubicacion) {
-        map.set(ev.line_id, ev.ubicacion)
-      }
-    }
-    return map
-  }, [events])
 
   const handleExportLines = () => {
     const wb = XLSX.utils.book_new()
