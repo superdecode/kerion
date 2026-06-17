@@ -360,19 +360,88 @@
 .driver-tour-skip-module-btn {
   display: inline-block;
   margin-top: 8px;
-  margin-right: 8px;
-  padding: 4px 10px;
+  padding: 0;
   font-size: 11px;
-  color: #6366f1;
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
-  border-radius: 6px;
+  color: #94a3b8;
+  background: none;
+  border: none;
   cursor: pointer;
-  font-weight: 600;
-  transition: background 0.15s;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .driver-tour-skip-module-btn:hover {
-  background: #e0e7ff;
+  color: #6366f1;
+}
+
+.driver-tour-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 14px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.driver-tour-block-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  cursor: pointer;
+  font-size: 13px;
+  color: #475569;
+  transition: background 0.12s, border-color 0.12s;
+  user-select: none;
+}
+.driver-tour-block-item:hover {
+  background: #f0f9ff;
+  border-color: #bae6fd;
+  color: #0369a1;
+}
+.driver-tour-block-item.checked {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+.driver-tour-block-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid #cbd5e1;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  color: #3b82f6;
+  flex-shrink: 0;
+  transition: background 0.1s, border-color 0.1s;
+}
+.driver-tour-block-item.checked .driver-tour-block-check {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.driver-tour-select-toggle {
+  display: block;
+  margin-top: 8px;
+  padding: 3px 0;
+  font-size: 11px;
+  color: #3b82f6;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.driver-tour-select-toggle:hover {
+  color: #1d4ed8;
 }
 
 @keyframes tour-arrow-bounce {

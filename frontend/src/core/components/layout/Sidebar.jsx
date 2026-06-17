@@ -140,9 +140,9 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (!requestExpandGroup) return
+    const { id, collapseOthers } = requestExpandGroup
     setExpandedGroups(prev => {
-      const next = new Set(prev)
-      next.add(requestExpandGroup)
+      const next = collapseOthers ? new Set([id]) : new Set([...prev, id])
       return next
     })
     clearExpandGroup()
