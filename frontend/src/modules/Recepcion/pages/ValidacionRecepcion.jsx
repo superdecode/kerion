@@ -12,6 +12,7 @@ import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useAuthStore } from '../../../core/stores/authStore'
 import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, getScanEvents } from '../services/recepcionService'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 
@@ -79,6 +80,8 @@ export default function ValidacionRecepcion() {
   const { t } = useI18nStore()
   const toast = useToastStore()
   const qc = useQueryClient()
+  const { hasPermission } = useAuthStore()
+  const canDeleteScan = hasPermission('recepcion.recibir', 'actualizar')
 
   const scanRefDesktop = useRef(null)
   const scanRefMobile  = useRef(null)
@@ -1239,15 +1242,17 @@ export default function ValidacionRecepcion() {
                                           </span>
                                         </td>
                                         <td className="px-2 py-1.5 text-right">
-                                          <button
-                                            type="button"
-                                            onClick={() => setConfirmDeleteOpen(true)}
-                                            disabled={i !== 0 || h.result !== 'correcto' || deleteLastMut.isPending}
-                                            className="p-1 rounded-md text-danger-500 hover:bg-danger-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-                                            title={t('rec.val.delete.tooltip')}
-                                          >
-                                            <Trash2 className="w-3 h-3" />
-                                          </button>
+                                          {canDeleteScan && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setConfirmDeleteOpen(true)}
+                                              disabled={i !== 0 || h.result !== 'correcto' || deleteLastMut.isPending}
+                                              className="p-1 rounded-md text-danger-500 hover:bg-danger-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                              title={t('rec.val.delete.tooltip')}
+                                            >
+                                              <Trash2 className="w-3 h-3" />
+                                            </button>
+                                          )}
                                         </td>
                                       </tr>
                                     )
@@ -1326,15 +1331,17 @@ export default function ValidacionRecepcion() {
                               </td>
                             )}
                             <td className="px-3 py-2 text-right">
-                              <button
-                                type="button"
-                                onClick={() => setConfirmDeleteOpen(true)}
-                                disabled={i !== 0 || deleteLastMut.isPending}
-                                className="p-1.5 rounded-lg text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed"
-                                title={t('rec.val.delete.tooltip')}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {canDeleteScan && (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteOpen(true)}
+                                  disabled={i !== 0 || deleteLastMut.isPending}
+                                  className="p-1.5 rounded-lg text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title={t('rec.val.delete.tooltip')}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </td>
                           </tr>
                         )

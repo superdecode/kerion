@@ -347,6 +347,64 @@ router.delete('/orders/:id/scan-events/last-validation',
   }
 )
 
+// DELETE /orders/:id/scan-events/:eventId — delete any scan event (eliminar perm only)
+router.delete('/orders/:id/scan-events/:eventId',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'eliminar'),
+  async (req, res) => {
+    try {
+      const eventRes = await req.tQuery(
+        `SELECT * FROM inbound_scan_events WHERE id=$1 AND order_id=$2 AND tenant_id=$3`,
+        [req.params.eventId, req.params.id, req.tenantId]
+      )
+      if (eventRes.rows.length === 0) return res.status(404).json({ error: 'Evento no encontrado' })
+
+      const event = eventRes.rows[0]
+
+      await req.tQuery(
+        `DELETE FROM inbound_scan_events WHERE id=$1 AND tenant_id=$2`,
+        [event.id, req.tenantId]
+      )
+
+      if (event.resultado === 'correcto' && event.line_id) {
+        await req.tQuery(
+          `UPDATE inbound_lines SET estado_validacion='pendiente', validated_by=NULL, validated_at=NULL
+           WHERE id=$1 AND tenant_id=$2`,
+          [event.line_id, req.tenantId]
+        )
+      }
+
+      const statsRes = await req.tQuery(
+        `SELECT
+           COUNT(*) FILTER (WHERE estado_validacion='validada') AS validadas,
+           COUNT(*) FILTER (WHERE estado_validacion='faltante') AS faltantes,
+           COUNT(*) AS total
+         FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2`,
+        [req.params.id, req.tenantId]
+      )
+
+      const validadas = parseInt(statsRes.rows[0].validadas || 0, 10)
+      const faltantes = parseInt(statsRes.rows[0].faltantes || 0, 10)
+      const total = parseInt(statsRes.rows[0].total || 0, 10)
+
+      let newEstado = 'pendiente_validacion'
+      if (validadas > 0 && validadas === total) newEstado = 'completo'
+      else if (validadas > 0 || faltantes > 0) newEstado = 'en_validacion'
+
+      await req.tQuery(
+        `UPDATE inbound_orders SET cajas_validadas=$3, estado=$4, updated_at=now()
+         WHERE id=$1 AND tenant_id=$2`,
+        [req.params.id, req.tenantId, validadas, newEstado]
+      )
+
+      res.json({ ok: true, removedEvent: event, lineId: event.line_id, cajas_validadas: validadas, estado: newEstado })
+    } catch (err) {
+      console.error('[recepcion] delete scan event:', err.message)
+      res.status(500).json({ error: 'Error al eliminar registro de escaneo' })
+    }
+  }
+)
+
 // GET /orders/:id/novedades
 router.get('/orders/:id/novedades',
   authenticateToken, loadFullUser,

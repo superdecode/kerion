@@ -13,7 +13,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, getNovedades, createNovedad, deleteNovedad } from '../services/recepcionService'
+import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad } from '../services/recepcionService'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
 import * as XLSX from 'xlsx'
@@ -193,6 +193,17 @@ export default function RecepcionDetalle() {
     onError: (err) => toast.error(err.response?.data?.error || t('rec.toast.deleteError')),
   })
 
+  const deleteScanEventMut = useMutation({
+    mutationFn: (eventId) => deleteScanEvent(id, eventId),
+    onSuccess: () => {
+      toast.success(t('rec.toast.lastDeleted'))
+      qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('rec.toast.deleteError')),
+  })
+
   const createNovedadMut = useMutation({
     mutationFn: (payload) => createNovedad(id, payload),
     onSuccess: () => {
@@ -217,6 +228,7 @@ export default function RecepcionDetalle() {
   const canValidate = hasPermission('recepcion.recibir', 'actualizar')
   const canEdit = hasPermission('recepcion.recibir', 'actualizar')
   const canCreate = hasPermission('recepcion.recibir', 'crear')
+  const canDeleteEvents = hasPermission('recepcion.recibir', 'eliminar')
 
   const lineUbicacionMap = useMemo(() => {
     const map = new Map()
@@ -688,15 +700,27 @@ export default function RecepcionDetalle() {
                             </span>
                           </td>
                           <td className="px-3 py-2.5 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteOpen(true)}
-                              disabled={!canValidate || i !== 0 || ev.resultado !== 'correcto' || deleteLastMut.isPending}
-                              className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-30"
-                              title={t('rec.val.delete.tooltip')}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canDeleteEvents ? (
+                              <button
+                                type="button"
+                                onClick={() => deleteScanEventMut.mutate(ev.id)}
+                                disabled={deleteScanEventMut.isPending}
+                                className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-30"
+                                title={t('rec.val.delete.tooltip')}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            ) : canValidate ? (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteOpen(true)}
+                                disabled={i !== 0 || ev.resultado !== 'correcto' || deleteLastMut.isPending}
+                                className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-30"
+                                title={t('rec.val.delete.tooltip')}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            ) : null}
                           </td>
                         </tr>
                       )
