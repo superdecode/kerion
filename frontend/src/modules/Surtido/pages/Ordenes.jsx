@@ -1742,7 +1742,7 @@ export default function Ordenes() {
               refreshing={refreshing}
             />
             {canUpdateOrders && (
-              <button className="btn-ghost text-xs flex items-center gap-1.5" onClick={() => setShowSurtidoresModal(true)}>
+              <button data-tour="sur-btn-surtidores" className="btn-ghost text-xs flex items-center gap-1.5" onClick={() => setShowSurtidoresModal(true)}>
                 <Users size={14} /> {t('surtido.ordenes.manage_surtidores')}
               </button>
             )}

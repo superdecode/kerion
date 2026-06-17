@@ -934,6 +934,7 @@ export default function ValidacionRecepcion() {
             </button>
             {/* Tarimas toggle — on mobile when active: opens panel; on desktop: toggles off */}
             <button
+              data-tour="rec-tarimas-toggle"
               type="button"
               onClick={() => {
                 if (withTarimas) {

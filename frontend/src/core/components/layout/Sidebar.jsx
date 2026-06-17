@@ -135,6 +135,18 @@ export default function Sidebar() {
   const { t } = useI18nStore()
   const tourActive = useTourStore((s) => s.active)
   const highlightedSidebarItem = useTourStore((s) => s.highlightedSidebarItem)
+  const requestExpandGroup = useTourStore((s) => s.requestExpandGroup)
+  const clearExpandGroup = useTourStore((s) => s.clearExpandGroup)
+
+  useEffect(() => {
+    if (!requestExpandGroup) return
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      next.add(requestExpandGroup)
+      return next
+    })
+    clearExpandGroup()
+  }, [requestExpandGroup, clearExpandGroup])
   const navigate = useNavigate()
   const { pathname } = useLocation()
 

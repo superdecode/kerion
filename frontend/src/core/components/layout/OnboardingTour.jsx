@@ -1,166 +1,415 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { driver } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
+import { CheckSquare, Square, X } from 'lucide-react'
 
-const LANG_LABELS = { es: 'Español', zh: '中文' }
-
-const TOUR_DONE_KEY = (id) => `kirion_tour_${id}`
-const TOUR_SEEN_KEY = (id) => `kirion_tour_first_seen_${id}`
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-
-// Path to navigate to before showing each step (null = no navigation, stay wherever we are)
-const STEP_PATHS = [
-  null,                        // 0: welcome
-  null,                        // 1: sidebar overview (sidebar always visible)
-  '/DropScan/configuracion',   // 2: config tab bar
-  '/DropScan/configuracion',   // 3: config empresas content
-  '/DropScan/configuracion',   // 4: config canales tab button
-  '/DropScan/configuracion',   // 5: config operadores tab button
-  '/DropScan/escaneo',         // 6: escaneo start screen
-  '/DropScan/tarimas',         // 7: tarimas filter bar
-  '/DropScan/tarimas',         // 8: tarimas table
-  '/DropScan/folios',          // 9: folios table
-  null,                        // 10: finish
-]
-
-// Sidebar nav item to highlight (data-tour id) for each step index
-const STEP_NAV_IDS = [
-  null, null,
-  'nav-configuracion', 'nav-configuracion', 'nav-configuracion', 'nav-configuracion',
-  'nav-escaneo',
-  'nav-tarimas', 'nav-tarimas',
-  'nav-folios',
-  null,
-]
-
+// Always show the help button for authenticated users
 export function tourHelpVisible(userId) {
-  if (!userId) return false
-  const seen = localStorage.getItem(TOUR_SEEN_KEY(userId))
-  if (!seen) return false
-  return Date.now() - new Date(seen).getTime() < WEEK_MS
+  return !!userId
+}
+
+// Block definitions — each block maps to a sidebar group and has steps
+// Steps may have: element (CSS selector), path (navigate before), groupToExpand (sidebar group id), navHighlight (sidebar nav id)
+const buildBlocks = (t, tenantName) => [
+  {
+    id: 'dropscan',
+    moduleId: 'dropscan',
+    permission: 'dropscan.escaneo',
+    labelKey: 'tour.block.dropscan.label',
+    steps: [
+      {
+        popover: {
+          title: t('tour.block.dropscan.intro.title'),
+          description: t('tour.block.dropscan.intro.desc'),
+          side: 'over',
+          align: 'center',
+        },
+        path: null,
+        groupToExpand: null,
+        navHighlight: null,
+      },
+      {
+        element: '[data-tour="nav-folios"]',
+        popover: {
+          title: t('tour.block.dropscan.folios.title'),
+          description: t('tour.block.dropscan.folios.desc'),
+          side: 'right',
+          align: 'center',
+        },
+        path: null,
+        groupToExpand: 'dropscan',
+        navHighlight: 'nav-folios',
+      },
+    ],
+  },
+  {
+    id: 'surtido',
+    moduleId: 'surtido',
+    permission: 'surtido.ordenes',
+    labelKey: 'tour.block.surtido.label',
+    steps: [
+      {
+        popover: {
+          title: t('tour.block.surtido.intro.title'),
+          description: t('tour.block.surtido.intro.desc'),
+          side: 'over',
+          align: 'center',
+        },
+        path: null,
+        groupToExpand: null,
+        navHighlight: null,
+      },
+      {
+        element: '[data-tour="sur-btn-surtidores"]',
+        popover: {
+          title: t('tour.block.surtido.surtidores.title'),
+          description: t('tour.block.surtido.surtidores.desc'),
+          side: 'bottom',
+          align: 'start',
+        },
+        path: '/surtido',
+        groupToExpand: 'surtido',
+        navHighlight: 'nav-sur-ordenes',
+      },
+      {
+        element: '[data-tour="nav-sur-validacion"]',
+        popover: {
+          title: t('tour.block.surtido.validacion.title'),
+          description: t('tour.block.surtido.validacion.desc'),
+          side: 'right',
+          align: 'center',
+        },
+        path: null,
+        groupToExpand: 'surtido',
+        navHighlight: 'nav-sur-validacion',
+      },
+    ],
+  },
+  {
+    id: 'despacho',
+    moduleId: 'despacho',
+    permission: 'despacho.ordenes',
+    labelKey: 'tour.block.despacho.label',
+    steps: [
+      {
+        popover: {
+          title: t('tour.block.despacho.intro.title'),
+          description: t('tour.block.despacho.intro.desc'),
+          side: 'over',
+          align: 'center',
+        },
+        path: null,
+        groupToExpand: null,
+        navHighlight: null,
+      },
+      {
+        element: '[data-tour="desp-catalog-actions"]',
+        popover: {
+          title: t('tour.block.despacho.catalogs.title'),
+          description: t('tour.block.despacho.catalogs.desc'),
+          side: 'bottom',
+          align: 'start',
+        },
+        path: '/despacho/ordenes',
+        groupToExpand: 'despacho',
+        navHighlight: 'nav-desp-ordenes',
+      },
+    ],
+  },
+  {
+    id: 'recepcion',
+    moduleId: 'recepcion',
+    permission: 'recepcion.recibir',
+    labelKey: 'tour.block.recepcion.label',
+    steps: [
+      {
+        popover: {
+          title: t('tour.block.recepcion.intro.title'),
+          description: t('tour.block.recepcion.intro.desc'),
+          side: 'over',
+          align: 'center',
+        },
+        path: '/recepcion/recibir',
+        groupToExpand: 'recepcion',
+        navHighlight: 'nav-rec-recibir',
+      },
+      {
+        element: '[data-tour="rec-btn-recibir"]',
+        popover: {
+          title: t('tour.block.recepcion.recibir.title'),
+          description: t('tour.block.recepcion.recibir.desc'),
+          side: 'bottom',
+          align: 'end',
+        },
+        path: '/recepcion/recibir',
+        groupToExpand: 'recepcion',
+        navHighlight: 'nav-rec-recibir',
+      },
+      {
+        popover: {
+          title: t('tour.block.recepcion.tarimas.title'),
+          description: t('tour.block.recepcion.tarimas.desc'),
+          side: 'over',
+          align: 'center',
+        },
+        path: null,
+        groupToExpand: null,
+        navHighlight: null,
+      },
+    ],
+  },
+  {
+    id: 'inventario',
+    moduleId: 'inventario',
+    permission: 'inventario.registros',
+    labelKey: 'tour.block.inventario.label',
+    steps: [
+      {
+        popover: {
+          title: t('tour.block.inventario.intro.title'),
+          description: t('tour.block.inventario.intro.desc'),
+          side: 'over',
+          align: 'center',
+        },
+        path: null,
+        groupToExpand: null,
+        navHighlight: null,
+      },
+      {
+        element: '[data-tour="nav-inv-rastreo"]',
+        popover: {
+          title: t('tour.block.inventario.rastreo.title'),
+          description: t('tour.block.inventario.rastreo.desc'),
+          side: 'right',
+          align: 'center',
+        },
+        path: null,
+        groupToExpand: 'inventario',
+        navHighlight: 'nav-inv-rastreo',
+      },
+      {
+        element: '[data-tour="inv-btn-quicksearch"]',
+        popover: {
+          title: t('tour.block.inventario.quicksearch.title'),
+          description: t('tour.block.inventario.quicksearch.desc'),
+          side: 'bottom',
+          align: 'end',
+        },
+        path: '/Inventario/registros',
+        groupToExpand: 'inventario',
+        navHighlight: 'nav-inv-registros',
+      },
+    ],
+  },
+  {
+    id: 'devoluciones',
+    moduleId: 'devoluciones',
+    permission: 'devoluciones.entradas',
+    labelKey: 'tour.block.devoluciones.label',
+    steps: [
+      {
+        element: '[data-tour="sidebar"]',
+        popover: {
+          title: t('tour.block.devoluciones.intro.title'),
+          description: t('tour.block.devoluciones.intro.desc'),
+          side: 'right',
+          align: 'start',
+        },
+        path: null,
+        groupToExpand: 'devoluciones',
+        navHighlight: null,
+      },
+    ],
+  },
+  {
+    id: 'anormalidades',
+    moduleId: 'anormalidades',
+    permission: 'anormalidades.registro',
+    labelKey: 'tour.block.anormalidades.label',
+    steps: [
+      {
+        element: '[data-tour="sidebar"]',
+        popover: {
+          title: t('tour.block.anormalidades.intro.title'),
+          description: t('tour.block.anormalidades.intro.desc'),
+          side: 'right',
+          align: 'start',
+        },
+        path: null,
+        groupToExpand: 'anormalidades',
+        navHighlight: null,
+      },
+    ],
+  },
+  {
+    id: 'admin',
+    moduleId: 'sistema',
+    permission: 'global.administracion',
+    labelKey: 'tour.block.admin.label',
+    steps: [
+      {
+        element: '[data-tour="nav-admin"]',
+        popover: {
+          title: t('tour.block.admin.intro.title'),
+          description: t('tour.block.admin.intro.desc'),
+          side: 'right',
+          align: 'center',
+        },
+        path: null,
+        groupToExpand: 'sistema',
+        navHighlight: 'nav-admin',
+      },
+    ],
+  },
+]
+
+// Block selection modal
+function TourBlockSelector({ blocks, selected, onToggle, onToggleAll, onStart, onSkip, t }) {
+  const allSelected = selected.length === blocks.length
+  return (
+    <div className="fixed inset-0 z-[200000] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onSkip} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md mx-auto overflow-hidden">
+        <div className="px-6 pt-6 pb-4 border-b border-warm-100">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-warm-900">{t('tour.selection.title')}</h2>
+            <button onClick={onSkip} className="w-8 h-8 flex items-center justify-center rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-sm text-warm-500 mt-1">{t('tour.selection.desc')}</p>
+        </div>
+
+        <div className="px-6 py-4 space-y-2 max-h-64 overflow-y-auto">
+          {blocks.map(block => {
+            const checked = selected.includes(block.id)
+            return (
+              <button
+                key={block.id}
+                onClick={() => onToggle(block.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors text-left ${
+                  checked
+                    ? 'bg-primary-50 border-primary-200 text-primary-800'
+                    : 'bg-warm-50 border-warm-200 text-warm-700 hover:bg-warm-100'
+                }`}
+              >
+                {checked
+                  ? <CheckSquare className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                  : <Square className="w-4 h-4 text-warm-400 flex-shrink-0" />
+                }
+                {t(block.labelKey)}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="px-6 pb-5 pt-3 border-t border-warm-100 space-y-2">
+          <button
+            onClick={onToggleAll}
+            className="w-full text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors py-1"
+          >
+            {allSelected ? t('tour.selection.deselectAll') : t('tour.selection.selectAll')}
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onSkip}
+              className="flex-1 btn-ghost text-sm"
+            >
+              {t('tour.selection.skip')}
+            </button>
+            <button
+              onClick={() => onStart(selected)}
+              disabled={selected.length === 0}
+              className="flex-1 btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {t('tour.selection.start')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function OnboardingTour() {
-  const { user, canView } = useAuthStore()
+  const { user, canView, isModuleEnabled, markTourComplete } = useAuthStore()
   const { t } = useI18nStore()
-  const { triggerCount, setActive, setHighlightedItem } = useTourStore()
-  const startTourRef = useRef(null)
+  const { triggerCount, setActive, setHighlightedItem, expandGroup } = useTourStore()
   const navigate = useNavigate()
   const navigateRef = useRef(navigate)
   const driverRef = useRef(null)
 
+  // 'idle' | 'selecting' | 'running'
+  const [phase, setPhase] = useState('idle')
+  const [availableBlocks, setAvailableBlocks] = useState([])
+  const [selectedBlockIds, setSelectedBlockIds] = useState([])
+
   useEffect(() => { navigateRef.current = navigate }, [navigate])
 
-  const buildSteps = () => {
-    const tenantName = user?.tenant_name || 'Kirion'
-    const steps = [
-      // 0: Welcome
-      {
-        popover: {
-          title: t('tour.welcome.title'),
-          description: t('tour.welcome.description').replace('{tenant}', tenantName),
-          side: 'over',
-          align: 'center',
-        },
-      },
-      // 1: Sidebar navigation overview
-      {
-        element: '[data-tour="sidebar"]',
-        popover: {
-          title: t('tour.sidebar.title'),
-          description: t('tour.sidebar.description'),
-          side: 'right',
-          align: 'start',
-        },
-      },
-      // 2: Config tab bar
-      {
-        element: '[data-tour="config-tabs"]',
-        popover: {
-          title: t('tour.config.title'),
-          description: t('tour.config.description'),
-          side: 'bottom',
-          align: 'start',
-        },
-      },
-      // 3: Config empresas content
-      {
-        element: '[data-tour="config-empresas"]',
-        popover: {
-          title: t('tour.config_empresas.title'),
-          description: t('tour.config_empresas.description'),
-          side: 'bottom',
-          align: 'start',
-        },
-      },
-      // 4: Config canales tab button
-      {
-        element: '[data-tour="config-tab-canales"]',
-        popover: {
-          title: t('tour.config_canales.title'),
-          description: t('tour.config_canales.description'),
-          side: 'bottom',
-          align: 'start',
-        },
-      },
-      // 5: Config operadores tab button
-      {
-        element: '[data-tour="config-tab-operadores"]',
-        popover: {
-          title: t('tour.config_operadores.title'),
-          description: t('tour.config_operadores.description'),
-          side: 'bottom',
-          align: 'start',
-        },
-      },
-      // 6: Escaneo start screen
-      {
-        element: '[data-tour="escaneo-inicio"]',
-        popover: {
-          title: t('tour.escaneo.title'),
-          description: t('tour.escaneo.description'),
-          side: 'bottom',
-          align: 'center',
-        },
-      },
-      // 7: Tarimas filter bar
-      {
-        element: '[data-tour="tarimas-filtros"]',
-        popover: {
-          title: t('tour.tarimas.title'),
-          description: t('tour.tarimas.description'),
-          side: 'bottom',
-          align: 'start',
-        },
-      },
-      // 8: Tarimas table
-      {
-        element: '[data-tour="tarimas-tabla"]',
-        popover: {
-          title: t('tour.historial_tabla.title'),
-          description: t('tour.historial_tabla.description'),
-          side: 'top',
-          align: 'start',
-        },
-      },
-      // 9: Folios table
-      {
-        element: '[data-tour="folios-tabla"]',
-        popover: {
-          title: t('tour.folios.title'),
-          description: t('tour.folios.description'),
-          side: 'top',
-          align: 'start',
-        },
-      },
-    ]
+  const buildAvailableBlocks = useCallback(() => {
+    const blocks = buildBlocks(t, user?.tenant_name || 'Kirion')
+    return blocks.filter(b => {
+      if (b.moduleId === 'sistema') return canView(b.permission)
+      return isModuleEnabled(b.moduleId) && canView(b.permission)
+    })
+  }, [t, user, canView, isModuleEnabled])
 
-    // Finish
-    steps.push({
+  const launchSelector = useCallback(() => {
+    const blocks = buildAvailableBlocks()
+    setAvailableBlocks(blocks)
+    setSelectedBlockIds(blocks.map(b => b.id))
+    setPhase('selecting')
+  }, [buildAvailableBlocks])
+
+  const handleSkipForever = useCallback(() => {
+    markTourComplete()
+    setPhase('idle')
+    driverRef.current?.destroy()
+  }, [markTourComplete])
+
+  const handleSkipNow = useCallback(() => {
+    setPhase('idle')
+    driverRef.current?.destroy()
+    setActive(false)
+    setHighlightedItem(null)
+  }, [setActive, setHighlightedItem])
+
+  const toggleBlock = useCallback((id) => {
+    setSelectedBlockIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }, [])
+
+  const toggleAll = useCallback(() => {
+    setSelectedBlockIds(prev =>
+      prev.length === availableBlocks.length ? [] : availableBlocks.map(b => b.id)
+    )
+  }, [availableBlocks])
+
+  const startTour = useCallback((blockIds) => {
+    setPhase('running')
+    driverRef.current?.destroy()
+    setActive(true)
+
+    const blocks = buildBlocks(t, user?.tenant_name || 'Kirion')
+      .filter(b => blockIds.includes(b.id))
+
+    // Flatten all steps, tracking which block each step belongs to
+    const flatSteps = []
+    const blockBoundaries = [] // index of first step of each block
+    blocks.forEach((block, blockIdx) => {
+      blockBoundaries.push(flatSteps.length)
+      block.steps.forEach(step => {
+        flatSteps.push({ ...step, blockIdx, blockId: block.id })
+      })
+    })
+
+    // Add finish step
+    flatSteps.push({
       popover: {
         title: t('tour.finish.title'),
         description: t('tour.finish.description'),
@@ -168,38 +417,49 @@ export default function OnboardingTour() {
         align: 'center',
         doneBtnText: t('tour.finish.button'),
       },
+      path: null,
+      groupToExpand: null,
+      navHighlight: null,
+      blockIdx: -1,
+      blockId: null,
     })
 
-    return steps
-  }
-
-  const markDone = () => {
-    if (!user?.id) return
-    localStorage.setItem(TOUR_DONE_KEY(user.id), 'done')
-  }
-
-  // Navigate to the required path for a given step index, then call callback
-  const goToStep = (index, callback) => {
-    const path = STEP_PATHS[index]
-    if (!path) {
-      callback()
-      return
+    const finishTour = () => {
+      markTourComplete()
+      driverRef.current?.destroy()
     }
-    const current = window.location.pathname
-    if (current === path || current.startsWith(path + '?')) {
-      callback()
-    } else {
-      navigateRef.current(path)
-      setTimeout(callback, 650)
+
+    const navigateAndExpand = (step, callback) => {
+      if (step.groupToExpand) {
+        expandGroup(step.groupToExpand)
+      }
+      const path = step.path
+      if (!path) {
+        if (step.groupToExpand) {
+          setTimeout(callback, 350)
+        } else {
+          callback()
+        }
+        return
+      }
+      const current = window.location.pathname
+      if (current.toLowerCase() === path.toLowerCase() || current.toLowerCase().startsWith(path.toLowerCase() + '/') || current.toLowerCase().startsWith(path.toLowerCase() + '?')) {
+        if (step.groupToExpand) {
+          setTimeout(callback, 350)
+        } else {
+          callback()
+        }
+      } else {
+        navigateRef.current(path)
+        setTimeout(callback, step.groupToExpand ? 700 : 650)
+      }
     }
-  }
 
-  const startTour = () => {
-    driverRef.current?.destroy()
-    setActive(true)
-
-    const steps = buildSteps()
-    const stepPaths = buildStepPaths()
+    const driverSteps = flatSteps.map(step => {
+      const s = { popover: step.popover }
+      if (step.element) s.element = step.element
+      return s
+    })
 
     const instance = driver({
       animate: true,
@@ -210,135 +470,102 @@ export default function OnboardingTour() {
       stageRadius: 8,
       showProgress: true,
       progressText: t('tour.step_of'),
-      steps,
+      steps: driverSteps,
       onPopoverRender: (popover, { state }) => {
+        const idx = state.activeIndex ?? 0
         if (popover.nextButton) popover.nextButton.textContent = t('tour.next')
         if (popover.previousButton) popover.previousButton.textContent = t('tour.prev')
-        if (state.activeIndex === steps.length - 1 && popover.nextButton) {
+        if (idx === flatSteps.length - 1 && popover.nextButton) {
           popover.nextButton.textContent = t('tour.finish.button')
         }
-        if (state.activeIndex === 0) {
-          const { locale, setLocale } = useI18nStore.getState()
-          const wrap = document.createElement('div')
-          wrap.className = 'driver-tour-lang-wrap'
-          wrap.innerHTML = `
-            <span>语言 / Idioma:</span>
-            <select class="driver-tour-lang-select" data-driver-lang>
-              ${Object.entries(LANG_LABELS).map(([code, label]) =>
-                `<option value="${code}"${locale === code ? ' selected' : ''}>${label}</option>`
-              ).join('')}
-            </select>
-          `
-          popover.description.appendChild(wrap)
-          wrap.querySelector('[data-driver-lang]').addEventListener('change', (e) => {
-            setLocale(e.target.value)
-            driverRef.current?.destroy()
-            setTimeout(() => startTourRef.current?.(), 50)
-          })
 
+        // Welcome step extras (first step)
+        if (idx === 0) {
           const dontShowBtn = document.createElement('button')
           dontShowBtn.textContent = t('tour.dontShowAgain')
           dontShowBtn.className = 'driver-tour-dont-show-btn'
           dontShowBtn.addEventListener('click', () => {
-            markDone()
-            instance.destroy()
+            finishTour()
           })
           popover.description.appendChild(dontShowBtn)
         }
+
+        // "Skip this module" button — shown on all non-finish steps that belong to a block
+        const step = flatSteps[idx]
+        if (step && step.blockIdx >= 0) {
+          // Find the first step of the next block
+          const nextBlockIdx = step.blockIdx + 1
+          const nextBlockStart = blockBoundaries[nextBlockIdx]
+          if (nextBlockStart !== undefined) {
+            const skipModuleBtn = document.createElement('button')
+            skipModuleBtn.textContent = t('tour.skipModule')
+            skipModuleBtn.className = 'driver-tour-skip-module-btn'
+            skipModuleBtn.addEventListener('click', () => {
+              const nextStep = flatSteps[nextBlockStart]
+              navigateAndExpand(nextStep, () => instance.moveTo(nextBlockStart))
+            })
+            popover.description.appendChild(skipModuleBtn)
+          }
+        }
       },
       onNextClick: () => {
-        const nextIndex = (instance.getActiveIndex() ?? 0) + 1
-        if (nextIndex >= stepPaths.length) {
-          instance.moveNext()
+        const currentIdx = instance.getActiveIndex() ?? 0
+        const nextIdx = currentIdx + 1
+        if (nextIdx >= flatSteps.length) {
+          finishTour()
           return
         }
-        const path = stepPaths[nextIndex]
-        if (!path) {
-          instance.moveNext()
-        } else {
-          const current = window.location.pathname
-          if (current === path || current.startsWith(path + '?')) {
-            instance.moveNext()
-          } else {
-            navigateRef.current(path)
-            setTimeout(() => instance.moveNext(), 650)
-          }
-        }
+        const nextStep = flatSteps[nextIdx]
+        setHighlightedItem(nextStep.navHighlight ?? null)
+        navigateAndExpand(nextStep, () => instance.moveNext())
       },
       onPrevClick: () => {
-        const prevIndex = (instance.getActiveIndex() ?? 1) - 1
-        if (prevIndex < 0) return
-        const path = stepPaths[prevIndex]
-        if (!path) {
-          instance.movePrevious()
-        } else {
-          const current = window.location.pathname
-          if (current === path || current.startsWith(path + '?')) {
-            instance.movePrevious()
-          } else {
-            navigateRef.current(path)
-            setTimeout(() => instance.movePrevious(), 650)
-          }
-        }
+        const currentIdx = instance.getActiveIndex() ?? 1
+        const prevIdx = currentIdx - 1
+        if (prevIdx < 0) return
+        const prevStep = flatSteps[prevIdx]
+        setHighlightedItem(prevStep.navHighlight ?? null)
+        navigateAndExpand(prevStep, () => instance.movePrevious())
       },
       onHighlightStarted: () => {
         const idx = instance.getActiveIndex() ?? 0
-        setHighlightedItem(STEP_NAV_IDS[idx] ?? null)
+        const step = flatSteps[idx]
+        setHighlightedItem(step?.navHighlight ?? null)
       },
       onCloseClick: () => {
-        markDone()
+        markTourComplete()
         instance.destroy()
       },
       onDestroyed: () => {
-        markDone()
+        markTourComplete()
         setActive(false)
         setHighlightedItem(null)
+        setPhase('idle')
       },
     })
 
     driverRef.current = instance
-    startTourRef.current = startTour
-    instance.drive()
-  }
 
-  // Build a path array for the dynamically built steps
-  const buildStepPaths = () => {
-    return [
-      null,                        // 0: welcome
-      null,                        // 1: sidebar
-      '/DropScan/configuracion',   // 2: config tabs
-      '/DropScan/configuracion',   // 3: config empresas
-      '/DropScan/configuracion',   // 4: config canales
-      '/DropScan/configuracion',   // 5: config operadores
-      '/DropScan/escaneo',         // 6: escaneo
-      '/DropScan/tarimas',         // 7: tarimas filtros
-      '/DropScan/tarimas',         // 8: tarimas tabla
-      '/DropScan/folios',          // 9: folios
-      null,                        // 10: finish
-    ]
-  }
+    // Navigate and expand for the first step before driving
+    const firstStep = flatSteps[0]
+    navigateAndExpand(firstStep, () => instance.drive())
+  }, [t, user, markTourComplete, setActive, setHighlightedItem, expandGroup])
 
-  // Auto-start for Administrador users on first login
+  // Auto-start for first login (tour not completed)
   useEffect(() => {
     if (!user?.id) return
-    const isAdmin = user.rol_nombre === 'Administrador' || user.es_admin_tenant
-    if (!isAdmin) return
-    const done = localStorage.getItem(TOUR_DONE_KEY(user.id))
-    if (done) return
-    if (!localStorage.getItem(TOUR_SEEN_KEY(user.id))) {
-      localStorage.setItem(TOUR_SEEN_KEY(user.id), new Date().toISOString())
-    }
-    const timer = setTimeout(startTour, 700)
+    if (user.tour_completado) return
+    const timer = setTimeout(launchSelector, 900)
     return () => clearTimeout(timer)
   }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-start when triggered from help button
+  // Manual trigger from help button
   const prevTrigger = useRef(0)
   useEffect(() => {
     if (triggerCount === 0) return
     if (triggerCount === prevTrigger.current) return
     prevTrigger.current = triggerCount
-    startTour()
+    launchSelector()
   }, [triggerCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -347,6 +574,23 @@ export default function OnboardingTour() {
       setActive(false)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (phase === 'selecting') {
+    return (
+      <TourBlockSelector
+        blocks={availableBlocks}
+        selected={selectedBlockIds}
+        onToggle={toggleBlock}
+        onToggleAll={toggleAll}
+        onStart={(ids) => {
+          if (ids.length === 0) return
+          startTour(ids)
+        }}
+        onSkip={handleSkipNow}
+        t={t}
+      />
+    )
+  }
 
   return null
 }

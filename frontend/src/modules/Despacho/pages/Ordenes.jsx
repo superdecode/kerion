@@ -423,7 +423,7 @@ export default function Ordenes() {
               {t('desp.btn.agenda')}
             </button>
             {canManageCatalogs && (
-              <>
+              <div data-tour="desp-catalog-actions" className="flex items-center gap-1.5">
                 <button onClick={() => setShowConductores(true)} className="btn-ghost text-xs flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5" />
                   {t('desp.btn.conductores')}
@@ -432,7 +432,7 @@ export default function Ordenes() {
                   <Truck className="w-3.5 h-3.5" />
                   {t('desp.btn.unidades')}
                 </button>
-              </>
+              </div>
             )}
           </div>
         }

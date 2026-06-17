@@ -230,6 +230,13 @@ export const useAuthStore = create(
         return data
       },
 
+      markTourComplete: async () => {
+        try {
+          await api.put('/auth/tour-complete')
+          set((state) => ({ user: state.user ? { ...state.user, tour_completado: true } : state.user }))
+        } catch (_e) { /* non-critical — ignore */ }
+      },
+
       updateProfile: async ({ nombre, apellido }) => {
         const { data } = await api.put('/auth/profile', { nombre, apellido })
         if (data.success && data.user) {

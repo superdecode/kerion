@@ -170,6 +170,7 @@ router.post('/login', async (req, res) => {
         avatar_url: user.avatar_url,
         zona_horaria: user.zona_horaria || tenantInfo.zona_horaria || 'America/Mexico_City',
         must_change_password: user.must_change_password || false,
+        tour_completado: user.tour_completado || false,
         modules,
         slug: tenant.slug,
         tenant_status: tenantInfo.status || tenant.status,
@@ -195,7 +196,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       query(
         `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id, u.estado,
                 u.avatar_url, u.permisos_override, u.ultimo_acceso, u.zona_horaria,
-                u.es_admin_tenant,
+                u.es_admin_tenant, u.tour_completado,
                 r.nombre as rol_nombre, r.permisos as rol_permisos
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id
@@ -232,6 +233,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       estado: user.estado,
       ultimo_acceso: user.ultimo_acceso,
       zona_horaria: user.zona_horaria || tenantInfo.zona_horaria || 'America/Mexico_City',
+      tour_completado: user.tour_completado || false,
       tenant_status: tenantInfo.status || req.user.tenant_status,
       tenant_name: tenantInfo.legal_name || '',
       tenant_contact_email: tenantInfo.contact_email || user.email,
@@ -382,6 +384,21 @@ router.get('/plan-info', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Plan info error:', error)
     res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// PUT /api/auth/tour-complete
+router.put('/tour-complete', authenticateToken, async (req, res) => {
+  try {
+    if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
+    await query(
+      'UPDATE usuarios SET tour_completado = true, tour_completado_at = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2',
+      [req.user.id, req.user.tenant_id]
+    )
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Tour complete error:', error)
+    res.status(500).json({ error: 'Error interno del servidor' })
   }
 })
 

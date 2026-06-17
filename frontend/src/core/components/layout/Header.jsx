@@ -488,10 +488,8 @@ export default function Header({ title, subtitle, actions, showSearch = false })
           {showTourHelp && (
             <button
               onClick={() => {
-                if (window.confirm(t('tour.help_confirm'))) {
-                  setProfileOpen(false)
-                  triggerTour()
-                }
+                setProfileOpen(false)
+                triggerTour()
               }}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-primary-700
                          bg-primary-50 hover:bg-primary-100 border border-primary-100 transition-all"

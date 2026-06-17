@@ -263,6 +263,7 @@ export default function Recibir() {
             <div className="ml-auto flex items-center gap-2 shrink-0">
               {canCreate && (
                 <button
+                  data-tour="rec-btn-recibir"
                   onClick={() => setShowImport(true)}
                   className="btn-primary inline-flex items-center gap-2 text-sm h-10 px-4"
                 >

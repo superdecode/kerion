@@ -856,6 +856,7 @@ export default function InventarioRegistros() {
         <LayoutGrid className="w-3.5 h-3.5" /> Gestionar ubicaciones
       </button>
       <button
+        data-tour="inv-btn-quicksearch"
         type="button"
         onClick={() => setShowQuickSearch(true)}
         className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-warm-100 text-warm-400 transition-all duration-200 hover:bg-primary-50 hover:text-primary-600"
