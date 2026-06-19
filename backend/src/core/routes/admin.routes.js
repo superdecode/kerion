@@ -589,7 +589,7 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
         to: contact_email.toLowerCase().trim(),
         tenant_name: legal_name,
         admin_name: contact_name,
-        login_url: `https://${finalSlug}.kirion.co/login`,
+        login_url: `https://${finalSlug}.${env.TENANT_BASE_DOMAIN}/login`,
       })]
     ).catch(e => console.error('[admin/tenants POST] step 7 non-fatal:', e.message))
 

@@ -96,6 +96,19 @@ function clearPersistedAuth() {
     .forEach(k => localStorage.removeItem(k))
 }
 
+function resolveTenantBaseDomain() {
+  const configured = (import.meta.env.VITE_TENANT_BASE_DOMAIN || '').trim()
+  if (configured) return configured
+
+  const hostname = window.location.hostname
+  if (['localhost', '127.0.0.1', '0.0.0.0'].includes(hostname)) return hostname
+
+  const parts = hostname.split('.').filter(Boolean)
+  if (parts.length >= 2) return parts.slice(-2).join('.')
+
+  return hostname
+}
+
 function getReadableAuthError(error) {
   if (error.response?.data?.error) {
     const err = error.response.data.error
@@ -153,7 +166,7 @@ export const useAuthStore = create(
           // Subdomain redirect: if on main domain and slug available, redirect to tenant subdomain
           const slug = data.user?.slug
           const hostname = window.location.hostname
-          const tenantBase = import.meta.env.VITE_TENANT_BASE_DOMAIN || 'kirion.co'
+          const tenantBase = resolveTenantBaseDomain()
           const mainDomains = [tenantBase, `www.${tenantBase}`, 'kirion.vercel.app', 'localhost', '127.0.0.1']
           const isMainDomain = mainDomains.some(h => hostname === h)
 
