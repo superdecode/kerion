@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Search, Loader2, Package, CheckCircle2, XCircle,
-  ChevronDown, ChevronRight, BarChart2, ShoppingCart, AlertCircle, ClipboardList, Crosshair,
+  ChevronDown, ChevronRight, BarChart2, ShoppingCart, AlertCircle, ClipboardList, Crosshair, Truck,
 } from 'lucide-react'
 import CopyableCell from '../../../core/components/common/CopyableCell'
 import { buscarCaja } from '../../../core/services/rastreoService'
@@ -441,6 +441,80 @@ function RastreoSection({ records, open, onToggle }) {
   )
 }
 
+const INBOUND_ESTADO_LABELS = {
+  pendiente: 'rastreo.searchModal.recepcion.pendiente',
+  validada: 'rastreo.searchModal.recepcion.validada',
+  faltante: 'rastreo.searchModal.recepcion.faltante',
+}
+
+function RecepcionSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
+  return (
+    <div>
+      <SectionHeader
+        icon={Truck}
+        title={t('rastreo.searchModal.section.recepcion')}
+        count={records?.length}
+        color={{ border: 'border-violet-200', bg: 'bg-violet-50/50', icon: 'bg-violet-100 text-violet-600', badge: 'bg-violet-100 text-violet-700' }}
+        open={open}
+        onToggle={onToggle}
+      />
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 rounded-xl border border-violet-100 overflow-hidden">
+              {!records?.length ? (
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.recepcion')}</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-violet-50/70 border-b border-violet-100">
+                    <tr>
+                      {['Cód. caja', 'Tipo caja', 'SKU', 'Folio entrada', 'Cliente', t('common.status')].map(h => (
+                        <th key={h} className="text-left px-3 py-2 font-semibold text-violet-700 uppercase tracking-wide text-[10px]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-violet-50">
+                    {records.map((r, i) => (
+                      <tr key={r.id || i} className="hover:bg-primary-100 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.custom_box_barcode || '—'} className="font-mono text-warm-700" />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.box_type || '—'} className="font-mono text-warm-500" />
+                        </td>
+                        <td className="px-3 py-2.5 text-warm-600">{r.sku || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.folio || r.inbound_order_no || '—'} className="font-mono font-semibold text-primary-700" />
+                        </td>
+                        <td className="px-3 py-2.5 text-warm-600 max-w-[120px] truncate">{r.cliente || '—'}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
+                            r.estado_validacion === 'validada' ? 'bg-success-100 text-success-700'
+                              : r.estado_validacion === 'faltante' ? 'bg-danger-100 text-danger-600'
+                                : 'bg-warm-100 text-warm-600'
+                          }`}>
+                            {t(INBOUND_ESTADO_LABELS[r.estado_validacion] || 'common.status')}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 export default function RastreoSearchModal({ isOpen, onClose }) {
   const { t } = useI18nStore()
   const [query, setQuery] = useState('')
@@ -449,7 +523,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
   const [results, setResults] = useState(null)
   const [gsInv, setGsInv] = useState(null)
   const [gsSurtido, setGsSurtido] = useState(null)
-  const [openSections, setOpenSections] = useState({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true })
+  const [openSections, setOpenSections] = useState({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true })
   const inputRef = useRef(null)
 
   function toggleSection(key) {
@@ -502,7 +576,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
       })
       setGsSurtido(surtRecords)
 
-      const dbData = dbRes?.data || { inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], rastreo: [], meta: null }
+      const dbData = dbRes?.data || { inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], rastreo: [], recepcion: [], meta: null }
       setResults(dbData)
 
       // Auto-expand first section that has data
@@ -510,16 +584,18 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
       const registrosLen = dbData.inventario_registros?.length || 0
       const validLen = dbData.surtido_validacion?.length || 0
       const rastreoLen = dbData.rastreo?.length || 0
+      const recepcionLen = dbData.recepcion?.length || 0
       const firstKey =
         invRecords.length ? 'inv' :
         surtRecords.length ? 'surtido' :
+        recepcionLen ? 'recepcion' :
         escaneoLen ? 'escaneo' :
         registrosLen ? 'registros' :
         validLen ? 'validacion' :
         rastreoLen ? 'rastreo' : null
-      setOpenSections({ inv: false, surtido: false, escaneo: false, registros: false, validacion: false, rastreo: false, ...(firstKey ? { [firstKey]: true } : {}) })
+      setOpenSections({ inv: false, surtido: false, escaneo: false, registros: false, validacion: false, rastreo: false, recepcion: false, ...(firstKey ? { [firstKey]: true } : {}) })
     } catch (err) {
-      setResults({ inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], rastreo: [], meta: null })
+      setResults({ inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], rastreo: [], recepcion: [], meta: null })
     } finally {
       setLoading(false)
     }
@@ -536,7 +612,8 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
 
   const totalResults = (gsInv?.length || 0) + (gsSurtido?.length || 0) +
     (results?.inventario_escaneo?.length || 0) + (results?.inventario_registros?.length || 0) +
-    (results?.surtido_validacion?.length || 0) + (results?.rastreo?.length || 0)
+    (results?.surtido_validacion?.length || 0) + (results?.rastreo?.length || 0) +
+    (results?.recepcion?.length || 0)
 
   if (!isOpen) return null
 
@@ -621,7 +698,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                 {t('common.search')}
               </button>
               {results && (
-                <button onClick={() => { setQuery(''); setResults(null); setGsInv(null); setGsSurtido(null) }} className="btn btn-secondary h-11 px-4">
+                <button onClick={() => { setQuery(''); setResults(null); setGsInv(null); setGsSurtido(null); setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true }) }} className="btn btn-secondary h-11 px-4">
                   {t('common.clear')}
                 </button>
               )}
@@ -691,6 +768,13 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                     records={results.surtido_validacion}
                     open={openSections.validacion}
                     onToggle={() => toggleSection('validacion')}
+                  />
+                )}
+                {results.recepcion?.length > 0 && (
+                  <RecepcionSection
+                    records={results.recepcion}
+                    open={openSections.recepcion}
+                    onToggle={() => toggleSection('recepcion')}
                   />
                 )}
                 {results.rastreo?.length > 0 && (

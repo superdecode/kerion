@@ -275,10 +275,13 @@ router.get('/buscar',
       const rastreoWhere = mode === 'exact'
         ? buildExactOnlyWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)
         : buildFlexibleMatchWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)
+      const inboundWhere = mode === 'exact'
+        ? buildExactOnlyWhere(['il.custom_box_barcode', 'il.box_type'], matchParams)
+        : buildFlexibleMatchWhere(['il.custom_box_barcode', 'il.box_type'], matchParams)
 
       const searchParams = [req.tenantId, tokens.normalized, tokens.compact, tokens.baseCompact, tokens.partialLike]
       const client = await req.tGetClient()
-      let invRes, invRegRes, pickRes, rastreoRes
+      let invRes, invRegRes, pickRes, rastreoRes, inboundRes
       try {
         invRes = await client.query(
           `SELECT s.barcode, s.sku, s.product_name, s.cell_no, s.available_stock,
@@ -366,6 +369,26 @@ router.get('/buscar',
            LIMIT 30`,
           searchParams
         )
+        inboundRes = await client.query(
+          `SELECT il.id, il.custom_box_barcode, il.box_type, il.sku, il.qty_per_box,
+                  il.estado_validacion, il.validated_at, il.created_at,
+                  io.folio, io.cliente, io.inbound_order_no, io.tracking_no, io.estado AS orden_estado,
+                  ${buildMatchCase(['il.custom_box_barcode', 'il.box_type'], matchParams)} AS match_type
+           FROM inbound_lines il
+           JOIN inbound_orders io ON io.id = il.order_id
+           WHERE io.tenant_id = $1
+             AND ${inboundWhere}
+           ORDER BY
+             CASE ${buildMatchCase(['il.custom_box_barcode', 'il.box_type'], matchParams)}
+               WHEN 'exact' THEN 1
+               WHEN 'normalized' THEN 2
+               WHEN 'base' THEN 3
+               ELSE 4
+             END,
+             il.created_at DESC
+           LIMIT 50`,
+          searchParams
+        )
         await client.query('COMMIT')
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {})
@@ -379,6 +402,7 @@ router.get('/buscar',
         ...invRegRes.rows,
         ...pickRes.rows,
         ...rastreoRes.rows,
+        ...inboundRes.rows,
       ]
       const usedBaseCode = datasets.some(row => row.match_type === 'base')
 
@@ -389,6 +413,7 @@ router.get('/buscar',
           inventario_registros: invRegRes.rows,
           surtido_validacion: pickRes.rows,
           rastreo: rastreoRes.rows,
+          recepcion: inboundRes.rows,
           meta: {
             query: q,
             mode,
