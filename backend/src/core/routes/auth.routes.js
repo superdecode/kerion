@@ -18,6 +18,32 @@ function normalizePermisos(obj) {
   return result
 }
 
+function getSafePermisos(user) {
+  const rawPermisos = user?.permisos_override || user?.rol_permisos || {}
+  if (!rawPermisos) return {}
+  if (typeof rawPermisos === 'string') {
+    try {
+      return normalizePermisos(JSON.parse(rawPermisos))
+    } catch (error) {
+      console.error('[auth] permisos parse failed:', error.message)
+      return {}
+    }
+  }
+  return normalizePermisos(rawPermisos)
+}
+
+async function comparePasswordSafe(password, passwordHash) {
+  if (typeof password !== 'string' || typeof passwordHash !== 'string' || !passwordHash.trim()) {
+    return false
+  }
+  try {
+    return await bcrypt.compare(password, passwordHash)
+  } catch (error) {
+    console.error('[auth] password compare failed:', error.message)
+    return false
+  }
+}
+
 const router = Router()
 const DEFAULT_MODULES = ['dropscan']
 
@@ -150,17 +176,21 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Usuario inactivo o suspendido' })
     }
 
-    const validPassword = await bcrypt.compare(password, user.password_hash)
+    const validPassword = await comparePasswordSafe(password, user.password_hash)
     if (!validPassword) {
       return res.status(401).json({ error: 'Credenciales inválidas' })
     }
 
-    await query(
-      'UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2',
-      [user.id, tenant.id]
-    )
+    try {
+      await query(
+        'UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2',
+        [user.id, tenant.id]
+      )
+    } catch (error) {
+      console.error('[auth] ultimo_acceso update failed:', error.message)
+    }
 
-    const permisos = normalizePermisos(user.permisos_override || user.rol_permisos || {})
+    const permisos = getSafePermisos(user)
 
     const [tenantInfo, modules] = await Promise.all([
       getTenantInfoSafe(tenant.id),
@@ -227,10 +257,7 @@ router.get('/me', authenticateToken, async (req, res) => {
 
     const [result, tenantInfo] = await Promise.all([
       query(
-        `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id, u.estado,
-                u.avatar_url, u.permisos_override, u.ultimo_acceso, u.zona_horaria,
-                u.es_admin_tenant, u.tour_completado,
-                r.nombre as rol_nombre, r.permisos as rol_permisos
+        `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id
          WHERE u.id = $1 AND u.tenant_id = $2`,
@@ -244,7 +271,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     }
 
     const user = result.rows[0]
-    const permisos = normalizePermisos(user.permisos_override || user.rol_permisos || {})
+    const permisos = getSafePermisos(user)
     const modules = await getPlanModulesSafe(req.user.tenant_id)
     const enabledModules = await getEnabledModulesSafe(req.user.tenant_id, modules)
 
@@ -296,7 +323,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' })
     }
 
-    const valid = await bcrypt.compare(current_password, userRes.rows[0].password_hash)
+    const valid = await comparePasswordSafe(current_password, userRes.rows[0].password_hash)
     if (!valid) {
       return res.status(401).json({ error: 'Contraseña actual incorrecta' })
     }

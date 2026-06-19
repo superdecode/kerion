@@ -1,6 +1,30 @@
 import jwt from 'jsonwebtoken'
 import env from '../../config/env.js'
 import { query, tenantQuery } from '../../config/database.js'
+import { normalizeLevel } from './permissions.js'
+
+function normalizePermisos(obj) {
+  if (!obj || typeof obj !== 'object') return obj
+  const result = {}
+  for (const [key, val] of Object.entries(obj)) {
+    result[key] = typeof val === 'string' ? normalizeLevel(val) : normalizePermisos(val)
+  }
+  return result
+}
+
+function getSafePermisos(user) {
+  const rawPermisos = user?.permisos_override || user?.rol_permisos || {}
+  if (!rawPermisos) return {}
+  if (typeof rawPermisos === 'string') {
+    try {
+      return normalizePermisos(JSON.parse(rawPermisos))
+    } catch (error) {
+      console.error('[auth] middleware permisos parse failed:', error.message)
+      return {}
+    }
+  }
+  return normalizePermisos(rawPermisos)
+}
 
 export async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization']
@@ -104,7 +128,7 @@ export async function loadFullUser(req, res, next) {
       rol_id: user.rol_id,
       rol_nombre: user.rol_nombre,
       es_admin_tenant: user.es_admin_tenant === true,
-      permisos: user.permisos_override || user.rol_permisos || {},
+      permisos: getSafePermisos(user),
       estado: user.estado,
       tenant_id: user.tenant_id,
       zona_horaria: user.zona_horaria || user.tenant_zona_horaria || 'America/Mexico_City',
