@@ -15,7 +15,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
 import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import {
-  getFolio, updateFolio, addOrder, updateOrder, removeOrder,
+  getFolio, addOrder, updateOrder, removeOrder,
   cerrarFolio, cancelarFolio, findOrderByBarcode,
   addOrderScan, deleteLastOrderScan,
 } from '../services/despachoService'
@@ -334,12 +334,6 @@ export default function ValidarPorOrden({ folioId }) {
     }
   }, [qc, folioId])
 
-  const { mutate: doToggleTarimas, isPending: togglingTarimas } = useMutation({
-    mutationFn: (val) => updateFolio(folioId, { validar_por_tarimas: val }),
-    onSuccess: () => invalidate(),
-    onError: (err) => addToast(err?.response?.data?.error || 'Error actualizando folio', 'error'),
-  })
-
   const { mutate: doCerrar, isPending: cerrando } = useMutation({
     mutationFn: () => cerrarFolio(folioId),
     onSuccess: () => { invalidate(); addToast('Folio cerrado', 'success') },
@@ -499,85 +493,49 @@ export default function ValidarPorOrden({ folioId }) {
 
   return (
     <div className="space-y-4">
-      {/* Folio action bar */}
-      <div className="bg-white rounded-2xl border border-warm-100 shadow-sm px-5 py-3 flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
-          {orders.length > 0 && (
-            <>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-2.5 py-0.5 text-xs font-bold text-primary-700">
-                {orders.length} {t('desp.validar.orden.ordenes')}
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-warm-200 bg-white px-2.5 py-0.5 text-xs font-bold text-warm-800">
-                {totalBultos} {t('desp.validar.orden.cajas')}
-              </span>
-            </>
-          )}
-          {primaryDestinatario && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700 max-w-[200px] truncate">
-              <MapPin className="w-3 h-3 shrink-0" />{primaryDestinatario}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Tarimas toggle — only for active folios */}
-          {isActive && canWrite('despacho.folios') && (
-            <button
-              type="button"
-              onClick={() => doToggleTarimas(!folio.validar_por_tarimas)}
-              disabled={togglingTarimas}
-              className={`h-8 flex items-center gap-2 px-3 rounded-xl border transition-all text-xs font-semibold ${
-                folio.validar_por_tarimas
-                  ? 'bg-accent-50 border-accent-300 text-accent-700'
-                  : 'bg-warm-50 border-warm-200 text-warm-500 hover:border-warm-300 hover:text-warm-700'
-              }`}
-            >
-              {togglingTarimas ? <Loader2 className="w-3 h-3 animate-spin" /> : <Layers className="w-3 h-3 shrink-0" />}
-              <span>{t('desp.validar.orden.tarimas')}</span>
-              <div className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0 ${
-                folio.validar_por_tarimas ? 'bg-accent-500' : 'bg-warm-300'
-              }`}>
-                <span className={`inline-block w-3 h-3 transform rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                  folio.validar_por_tarimas ? 'translate-x-[18px]' : 'translate-x-[2px]'
-                }`} />
-              </div>
-            </button>
-          )}
-
-          {folio?.estado === 'en_proceso' && canWrite('despacho.folios') && (
-            <button onClick={() => doCerrar()} disabled={cerrando}
-              className="btn-success text-xs flex items-center gap-1.5 h-8">
-              {cerrando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-              {t('desp.validar.orden.cerrarFolio')}
-            </button>
-          )}
-          {canCancelFolio && (
-            <button onClick={() => setShowConfirmCancel(true)} disabled={cancelando}
-              className="btn-danger text-xs flex items-center gap-1.5 h-8">
-              <XCircle className="w-3.5 h-3.5" />
-              {t('desp.validar.orden.cancelar')}
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Orders block */}
       <div className="bg-white rounded-2xl border border-warm-100 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-warm-100">
-          <div className="flex items-center gap-3">
-            <h3 className="text-sm font-semibold text-warm-800">{t('desp.validar.orden.ordenesAsignadas')}</h3>
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-50 text-primary-700 text-xs font-bold">
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-warm-100 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0 flex-wrap">
+            <h3 className="text-sm font-semibold text-warm-800 shrink-0">{t('desp.validar.orden.ordenesAsignadas')}</h3>
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-50 text-primary-700 text-xs font-bold shrink-0">
               {orders.length}
             </span>
+            {orders.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-warm-200 bg-warm-50 px-2.5 py-0.5 text-xs font-bold text-warm-800">
+                {totalBultos} {t('desp.validar.orden.cajas')}
+              </span>
+            )}
+            {primaryDestinatario && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700 max-w-[180px] truncate">
+                <MapPin className="w-3 h-3 shrink-0" />{primaryDestinatario}
+              </span>
+            )}
           </div>
-          {editable && (
-            <button
-              onClick={showAddOrder ? () => { setShowAddOrder(false); setLookupResult(null); setLookupInput('') } : openAddOrder}
-              className="btn-primary text-xs flex items-center gap-1.5">
-              {showAddOrder ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-              {showAddOrder ? t('desp.validar.orden.cerrar') : t('desp.validar.orden.agregarOrden')}
-            </button>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {editable && (
+              <button
+                onClick={showAddOrder ? () => { setShowAddOrder(false); setLookupResult(null); setLookupInput('') } : openAddOrder}
+                className="btn-primary text-xs flex items-center gap-1.5 h-8">
+                {showAddOrder ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                {showAddOrder ? t('desp.validar.orden.cerrar') : t('desp.validar.orden.agregarOrden')}
+              </button>
+            )}
+            {folio?.estado === 'en_proceso' && canWrite('despacho.folios') && (
+              <button onClick={() => doCerrar()} disabled={cerrando}
+                className="btn-success text-xs flex items-center gap-1.5 h-8">
+                {cerrando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                {t('desp.validar.orden.cerrarFolio')}
+              </button>
+            )}
+            {canCancelFolio && (
+              <button onClick={() => setShowConfirmCancel(true)} disabled={cancelando}
+                className="btn-danger text-xs flex items-center gap-1.5 h-8">
+                <XCircle className="w-3.5 h-3.5" />
+                {t('desp.validar.orden.cancelar')}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Add order panel */}
@@ -990,7 +948,7 @@ export default function ValidarPorOrden({ folioId }) {
                             canEdit={editable}
                             onAutoConfirm={(body) => doUpdateOrder({ orderId: order.id, body })}
                             onClose={() => setValidatingOrderId(null)}
-                            validarPorTarimas={!!folio?.validar_por_tarimas}
+                            validarPorTarimas={true}
                           />
                         </motion.div>
                       </AnimatePresence>
