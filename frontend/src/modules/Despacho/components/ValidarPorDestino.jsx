@@ -260,7 +260,10 @@ export default function ValidarPorDestino({ folioId }) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full overflow-hidden">
+
+      {/* ── LEFT COLUMN (header + scan stream) ───────────────────────── */}
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div className="shrink-0 bg-white border-b border-warm-100 px-5 pt-4 pb-3 space-y-3">
@@ -385,11 +388,8 @@ export default function ValidarPorDestino({ folioId }) {
         </p>
       </div>
 
-      {/* ── BODY ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 bg-warm-50/40 overflow-hidden">
-
-        {/* Scan stream — responsive, fills remaining space */}
-        <div className="flex-1 min-w-0 flex flex-col bg-white border-r border-warm-100 overflow-hidden">
+      {/* ── SCAN STREAM ───────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col bg-white overflow-hidden">
           <div className="px-4 py-2.5 border-b border-warm-100 bg-warm-50/70 shrink-0 flex items-center justify-between">
             <span className="text-xs font-semibold text-warm-700">{t('desp.validar.destino.flujo')}</span>
             <div className="flex items-center gap-2">
@@ -458,11 +458,13 @@ export default function ValidarPorDestino({ folioId }) {
               </div>
             )}
           </div>
-        </div>
+      </div>{/* ── SCAN STREAM end ── */}
 
-        {/* Right: orders side panel (collapsible) */}
-        {showPanel && (
-          <div className="w-80 shrink-0 flex flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]">
+      </div>{/* ── LEFT COLUMN end ── */}
+
+      {/* Right: orders side panel (collapsible) */}
+      {showPanel && (
+        <div className="w-80 shrink-0 flex flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]">
             {/* Panel header */}
             <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50 shrink-0">
               <div className="flex items-center justify-between mb-2.5">
@@ -604,9 +606,8 @@ export default function ValidarPorDestino({ folioId }) {
               </div>
               )}
             </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Blocking error modal ── */}
       <Modal
