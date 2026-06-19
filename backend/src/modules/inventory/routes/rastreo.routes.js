@@ -1244,19 +1244,34 @@ router.delete('/:id',
   async (req, res) => {
     try {
       const existing = await req.tQuery(
-        'SELECT id FROM rastreo_ordenes WHERE id = $1 AND tenant_id = $2',
+        'SELECT id, folio FROM rastreo_ordenes WHERE id = $1 AND tenant_id = $2',
         [req.params.id, req.tenantId]
       )
       if (!existing.rows.length) return res.status(404).json({ error: 'Orden no encontrada' })
 
-      await req.tQuery(
-        'DELETE FROM rastreo_ordenes WHERE id = $1 AND tenant_id = $2',
-        [req.params.id, req.tenantId]
-      )
+      await req.tTransaction(async (client) => {
+        await client.query(
+          `DELETE FROM rastreo_historial
+           WHERE rastreo_orden_id = $1 AND tenant_id = $2`,
+          [req.params.id, req.tenantId]
+        )
+
+        await client.query(
+          `DELETE FROM rastreo_cajas
+           WHERE rastreo_orden_id = $1 AND tenant_id = $2`,
+          [req.params.id, req.tenantId]
+        )
+
+        await client.query(
+          `DELETE FROM rastreo_ordenes
+           WHERE id = $1 AND tenant_id = $2`,
+          [req.params.id, req.tenantId]
+        )
+      })
 
       res.json({ success: true })
     } catch (err) {
-      console.error('[rastreo.delete]', err.message)
+      console.error('[rastreo.delete]', req.params.id, err.message)
       res.status(500).json({ error: 'Error al eliminar orden' })
     }
   }
