@@ -1,5 +1,4 @@
 import { Router } from 'express'
-import { query, getClient } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { getTodayMX } from '../../../shared/utils/dateUtils.js'
@@ -13,14 +12,14 @@ router.get('/guide-usage',
   async (req, res) => {
     try {
       const [planRes, usageRes] = await Promise.all([
-        query(
+        req.tQuery(
           `SELECT p.guide_limit, p.name AS plan_name
            FROM tenants t
            LEFT JOIN plans p ON t.current_plan_id = p.id
            WHERE t.id = $1`,
           [req.tenantId]
         ),
-        query(
+        req.tQuery(
           `SELECT COUNT(*) AS count FROM guias
            WHERE tenant_id = $1
              AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)`,
@@ -85,7 +84,7 @@ router.post('/sessions/start',
       }
 
       // Check monthly guide limit against active plan
-      const planLimitRes = await query(
+      const planLimitRes = await client.query(
         `SELECT p.guide_limit FROM tenants t
          LEFT JOIN plans p ON t.current_plan_id = p.id
          WHERE t.id = $1`,
@@ -93,7 +92,7 @@ router.post('/sessions/start',
       )
       const guideLimit = planLimitRes.rows[0]?.guide_limit ?? null
       if (guideLimit !== null) {
-        const monthUsageRes = await query(
+        const monthUsageRes = await client.query(
           `SELECT COUNT(*) AS count FROM guias
            WHERE tenant_id = $1
              AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)`,

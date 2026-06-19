@@ -251,7 +251,11 @@ export default function Escaneo() {
   const empresas = (Array.isArray(empresasData) ? empresasData : empresasData?.items || empresasData?.empresas || []).filter(e => e.activo !== false)
   const allCanales = Array.isArray(canalesData) ? canalesData : canalesData?.items || canalesData?.canales || []
   const pickerCanales = pickerEmpresa
-    ? allCanales.filter(c => c.activo !== false && c.empresas?.some(e => e.id === parseInt(pickerEmpresa)))
+    ? allCanales.filter(c => {
+        if (c.activo === false) return false
+        if (!Array.isArray(c.empresas) || c.empresas.length === 0) return true
+        return c.empresas.some(e => e.id === parseInt(pickerEmpresa))
+      })
     : allCanales.filter(c => c.activo !== false)
   const configLoaded = empresasLoaded && canalesLoaded
   const hasNoConfig = configLoaded && (empresas.length === 0 || allCanales.filter(c => c.activo !== false).length === 0)
