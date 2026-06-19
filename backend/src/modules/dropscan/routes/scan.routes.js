@@ -11,24 +11,21 @@ router.get('/guide-usage',
   requirePermission('dropscan.escaneo', 'ver'),
   async (req, res) => {
     try {
-      const [planRes, usageRes] = await Promise.all([
-        req.tQuery(
-          `SELECT p.guide_limit, p.name AS plan_name
-           FROM tenants t
-           LEFT JOIN plans p ON t.current_plan_id = p.id
-           WHERE t.id = $1`,
-          [req.tenantId]
-        ),
-        req.tQuery(
-          `SELECT COUNT(*) AS count FROM guias
-           WHERE tenant_id = $1
-             AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)`,
-          [req.tenantId]
-        ),
-      ])
-      const guide_limit = planRes.rows[0]?.guide_limit ?? null
-      const plan_name = planRes.rows[0]?.plan_name ?? null
-      const used = parseInt(usageRes.rows[0]?.count ?? 0)
+      const result = await req.tQuery(
+        `SELECT p.guide_limit, p.name AS plan_name,
+           (SELECT COUNT(*) FROM guias
+            WHERE tenant_id = $1
+              AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+           ) AS used_count
+         FROM tenants t
+         LEFT JOIN plans p ON t.current_plan_id = p.id
+         WHERE t.id = $1`,
+        [req.tenantId]
+      )
+      const row = result.rows[0]
+      const guide_limit = row?.guide_limit ?? null
+      const plan_name = row?.plan_name ?? null
+      const used = parseInt(row?.used_count ?? 0)
       res.json({
         used,
         limit: guide_limit,
@@ -117,8 +114,25 @@ router.post('/sessions/start',
         [userId, req.tenantId]
       )
 
-      // Auto-close zombie sessions whose active tarima is no longer EN_PROCESO.
+      // Auto-close sessions whose linked tarima is missing or no longer active.
       // This prevents orphan sessions from blocking new tabs after unexpected crashes.
+      await client.query(
+        `UPDATE sesiones_escaneo s
+         SET activa = false, fecha_fin = CURRENT_TIMESTAMP
+         WHERE s.operador_id = $1
+           AND s.tenant_id = $2
+           AND s.activa = true
+           AND NOT EXISTS (
+             SELECT 1
+             FROM tarimas t
+             WHERE t.id = s.tarima_actual_id
+               AND t.tenant_id = s.tenant_id
+               AND t.estado = 'EN_PROCESO'
+           )`,
+        [userId, req.tenantId]
+      )
+
+      // Empty sessions abandoned by reloads should not consume the 3-tab limit forever.
       await client.query(
         `UPDATE sesiones_escaneo s
          SET activa = false, fecha_fin = CURRENT_TIMESTAMP
@@ -127,7 +141,10 @@ router.post('/sessions/start',
            AND s.tenant_id = $2
            AND s.activa = true
            AND s.tarima_actual_id = t.id
-           AND t.estado <> 'EN_PROCESO'`,
+           AND t.tenant_id = s.tenant_id
+           AND t.estado = 'EN_PROCESO'
+           AND t.cantidad_guias = 0
+           AND s.fecha_inicio < NOW() - INTERVAL '30 minutes'`,
         [userId, req.tenantId]
       )
 
@@ -138,7 +155,11 @@ router.post('/sessions/start',
       )
       if (existing.rows.length >= 3) {
         await client.query('ROLLBACK')
-        return res.status(409).json({ error: 'Máximo 3 sesiones activas permitidas', sesion_id: existing.rows[0].id })
+        return res.status(409).json({
+          error: 'Máximo 3 sesiones activas permitidas',
+          code: 'MAX_ACTIVE_SESSIONS',
+          sesion_id: existing.rows[0].id,
+        })
       }
 
       // Generate tarima code and create tarima (retry on unique collision within tenant)
@@ -155,7 +176,7 @@ router.post('/sessions/start',
           tarima = tarimaRes.rows[0]
           break
         } catch (e) {
-          if (e.code === '23505' && e.constraint === 'tarimas_tenant_codigo_unique' && attempt < 4) continue
+          if (e.code === '23505' && attempt < 4) continue
           throw e
         }
       }
@@ -271,35 +292,46 @@ router.get('/sessions/all-active',
         return res.json({ sesiones: [] })
       }
 
-      const sesiones = await Promise.all(sesionRes.rows.map(async (sesion) => {
-        let tarima = null
-        if (sesion.tarima_actual_id) {
-          const tarimaRes = await req.tQuery(
-            `SELECT * FROM tarimas WHERE id = $1 AND estado = 'EN_PROCESO' AND tenant_id = $2`,
-            [sesion.tarima_actual_id, req.tenantId]
+      // Batch: fetch all tarimas and guides in 2 queries instead of N×2 parallel tQuery calls.
+      const tarimaIds = sesionRes.rows.map(s => s.tarima_actual_id).filter(Boolean)
+
+      const tarimasRes = tarimaIds.length > 0
+        ? await req.tQuery(
+            `SELECT * FROM tarimas WHERE id = ANY($1::int[]) AND estado = 'EN_PROCESO' AND tenant_id = $2`,
+            [tarimaIds, req.tenantId]
           )
-          tarima = tarimaRes.rows[0] || null
-        }
+        : { rows: [] }
 
-        // Skip sessions that point to invalid/non-active tarimas.
+      const validTarimaIds = tarimasRes.rows.map(t => t.id)
+      const tarimaMap = Object.fromEntries(tarimasRes.rows.map(t => [t.id, t]))
+
+      const guiasRes = validTarimaIds.length > 0
+        ? await req.tQuery(
+            `SELECT id, codigo_guia, posicion, timestamp_escaneo, tarima_id
+             FROM guias WHERE tarima_id = ANY($1::int[]) AND tenant_id = $2
+             ORDER BY posicion DESC`,
+            [validTarimaIds, req.tenantId]
+          )
+        : { rows: [] }
+
+      const guiasByTarima = {}
+      for (const g of guiasRes.rows) {
+        if (!guiasByTarima[g.tarima_id]) guiasByTarima[g.tarima_id] = []
+        guiasByTarima[g.tarima_id].push(g)
+      }
+
+      const sesiones = sesionRes.rows.map(sesion => {
+        const tarima = tarimaMap[sesion.tarima_actual_id] || null
         if (!tarima) return null
-
-        const guiasRes = await req.tQuery(
-          `SELECT id, codigo_guia, posicion, timestamp_escaneo
-           FROM guias WHERE tarima_id = $1 AND tenant_id = $2
-           ORDER BY posicion DESC`,
-          [tarima.id, req.tenantId]
-        )
-
         return {
           sesion,
           tarima_actual: tarima,
           tarimas_activas: [tarima],
-          ultimas_guias: guiasRes.rows
+          ultimas_guias: guiasByTarima[tarima.id] || [],
         }
-      }))
+      }).filter(Boolean)
 
-      res.json({ sesiones: sesiones.filter(Boolean) })
+      res.json({ sesiones })
     } catch (error) {
       console.error('Get all active sessions error:', error)
       res.status(500).json({ error: 'Error obteniendo sesiones activas' })
@@ -494,7 +526,7 @@ router.post('/sessions/:id/scan',
             nueva_tarima = newTarimaRes.rows[0]
             break
           } catch (e) {
-            if (e.code === '23505' && e.constraint === 'tarimas_tenant_codigo_unique' && attempt < 4) continue
+            if (e.code === '23505' && attempt < 4) continue
             throw e
           }
         }
@@ -587,7 +619,7 @@ router.post('/sessions/:id/add-tarima',
           )
           break
         } catch (e) {
-          if (e.code === '23505' && e.constraint === 'tarimas_tenant_codigo_unique' && attempt < 4) continue
+          if (e.code === '23505' && attempt < 4) continue
           throw e
         }
       }

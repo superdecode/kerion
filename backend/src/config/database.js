@@ -135,8 +135,13 @@ export function tenantDB(req, res, next) {
   // Caller does COMMIT/ROLLBACK themselves.
   req.tGetClient = async () => {
     const client = await pool.connect()
-    await client.query('BEGIN')
-    await client.query(`SET LOCAL app.tenant_id = '${tid}'`)
+    try {
+      await client.query('BEGIN')
+      await client.query(`SET LOCAL app.tenant_id = '${tid}'`)
+    } catch (err) {
+      client.release()
+      throw err
+    }
     return client
   }
 
