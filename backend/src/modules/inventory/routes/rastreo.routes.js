@@ -276,8 +276,11 @@ router.get('/buscar',
         ? buildExactOnlyWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)
         : buildFlexibleMatchWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)
 
-      const [invRes, invRegRes, pickRes, rastreoRes] = await Promise.all([
-        req.tQuery(
+      const searchParams = [req.tenantId, tokens.normalized, tokens.compact, tokens.baseCompact, tokens.partialLike]
+      const client = await req.tGetClient()
+      let invRes, invRegRes, pickRes, rastreoRes
+      try {
+        invRes = await client.query(
           `SELECT s.barcode, s.sku, s.product_name, s.cell_no, s.available_stock,
                   s.status, s.created_at,
                   u.nombre_completo AS operador,
@@ -297,9 +300,9 @@ router.get('/buscar',
              END,
              s.created_at DESC
            LIMIT 30`,
-          [req.tenantId, tokens.normalized, tokens.compact, tokens.baseCompact, tokens.partialLike]
-        ),
-        req.tQuery(
+          searchParams
+        )
+        invRegRes = await client.query(
           `SELECT sc.id, sc.scanned_code, sc.normalized_code, sc.code2, sc.scan_status, sc.cell_no,
                   sc.group_assignment, sc.scanned_at,
                   sess.id AS session_id, sess.scan_type,
@@ -319,9 +322,9 @@ router.get('/buscar',
              END,
              sc.scanned_at DESC
            LIMIT 30`,
-          [req.tenantId, tokens.normalized, tokens.compact, tokens.baseCompact, tokens.partialLike]
-        ),
-        req.tQuery(
+          searchParams
+        )
+        pickRes = await client.query(
           `SELECT pe.scanned_code, pe.scan_result, pe.scanned_at AS created_at,
                   pe.normalized_code, pe.matched_box_type,
                   ps.outbound_order_no, ps.status AS session_status,
@@ -341,9 +344,9 @@ router.get('/buscar',
              END,
              pe.scanned_at DESC
            LIMIT 30`,
-          [req.tenantId, tokens.normalized, tokens.compact, tokens.baseCompact, tokens.partialLike]
-        ),
-        req.tQuery(
+          searchParams
+        )
+        rastreoRes = await client.query(
           `SELECT rc.id, rc.box_code, rc.box_code_normalized, rc.box_type, rc.estado_caja, rc.ubicacion,
                   rc.producto, rc.validada_en_surtido, rc.created_at, rc.updated_at,
                   ro.folio, ro.outbound_order_no, ro.estado AS orden_estado,
@@ -361,9 +364,15 @@ router.get('/buscar',
              END,
              rc.updated_at DESC
            LIMIT 30`,
-          [req.tenantId, tokens.normalized, tokens.compact, tokens.baseCompact, tokens.partialLike]
-        ),
-      ])
+          searchParams
+        )
+        await client.query('COMMIT')
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {})
+        throw err
+      } finally {
+        client.release()
+      }
 
       const datasets = [
         ...invRes.rows,
