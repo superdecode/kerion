@@ -192,23 +192,21 @@ router.post('/sessions/start',
 
       await client.query('COMMIT')
 
-      // Try to set operator context columns OUTSIDE transaction (non-fatal if columns don't exist)
-      const operadorNombre = usuario_operador || req.fullUser?.nombre_completo || null
-      try {
-        await req.tQuery(
-          `UPDATE sesiones_escaneo SET usuario_operador = $1, nivel_usuario = $2, usuario_interno_id = $3
-           WHERE id = $4 AND tenant_id = $5`,
-          [operadorNombre, nivel_usuario || null, usuario_interno_id || null, sesion.id, req.tenantId]
-        )
-      } catch {
-        // Operator columns don't exist yet — non-fatal
-      }
-
+      // Respond immediately — operator context update is non-critical and must not
+      // block the response (awaiting it holds the pool slot and can race the axios timeout).
       res.status(201).json({
         sesion,
         tarima_actual: tarima,
         tarimas_activas: [tarima]
       })
+
+      // Fire-and-forget operator context columns after response is sent.
+      const operadorNombre = usuario_operador || req.fullUser?.nombre_completo || null
+      req.tQuery(
+        `UPDATE sesiones_escaneo SET usuario_operador = $1, nivel_usuario = $2, usuario_interno_id = $3
+         WHERE id = $4 AND tenant_id = $5`,
+        [operadorNombre, nivel_usuario || null, usuario_interno_id || null, sesion.id, req.tenantId]
+      ).catch(() => {})
     } catch (error) {
       if (client) try { await client.query('ROLLBACK') } catch {}
       console.error('Start session error:', error.message, error.detail || '')
