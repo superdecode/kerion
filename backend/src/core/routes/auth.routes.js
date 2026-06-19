@@ -19,6 +19,7 @@ function normalizePermisos(obj) {
 }
 
 const router = Router()
+const DEFAULT_MODULES = ['dropscan']
 
 function isLocalDevHost(host) {
   const withoutPort = String(host || '').split(':')[0].trim().toLowerCase()
@@ -66,6 +67,51 @@ async function resolveTenantIdFromRequest(req) {
   }
 
   return null
+}
+
+async function getTenantInfoSafe(tenantId) {
+  try {
+    const res = await query(
+      `SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email, contact_phone, current_plan_id, zona_horaria
+       FROM tenants WHERE id = $1`,
+      [tenantId]
+    )
+    return res.rows[0] || {}
+  } catch (error) {
+    console.error('[auth] tenant info lookup failed:', error.message)
+    return {}
+  }
+}
+
+async function getPlanModulesSafe(tenantId) {
+  try {
+    const res = await query(
+      `SELECT p.modules FROM subscriptions s
+       JOIN plans p ON s.plan_id = p.id
+       WHERE s.tenant_id = $1 AND s.status = 'active'
+       ORDER BY s.started_at DESC LIMIT 1`,
+      [tenantId]
+    )
+    const modules = res.rows[0]?.modules
+    return Array.isArray(modules) && modules.length > 0 ? modules : DEFAULT_MODULES
+  } catch (error) {
+    console.error('[auth] plan modules lookup failed:', error.message)
+    return DEFAULT_MODULES
+  }
+}
+
+async function getEnabledModulesSafe(tenantId, fallbackModules = DEFAULT_MODULES) {
+  try {
+    const res = await query(
+      'SELECT module_code FROM tenant_modules WHERE tenant_id = $1 AND enabled = true',
+      [tenantId]
+    )
+    const enabled = res.rows.map(r => r.module_code).filter(Boolean)
+    return enabled.length > 0 ? enabled : fallbackModules
+  } catch (error) {
+    console.error('[auth] tenant_modules lookup failed:', error.message)
+    return fallbackModules
+  }
 }
 
 // POST /api/auth/login
@@ -116,27 +162,11 @@ router.post('/login', async (req, res) => {
 
     const permisos = normalizePermisos(user.permisos_override || user.rol_permisos || {})
 
-    const [subRes, tenantRes, modulesRes] = await Promise.all([
-      query(
-        `SELECT p.modules FROM subscriptions s
-         JOIN plans p ON s.plan_id = p.id
-         WHERE s.tenant_id = $1 AND s.status = 'active'
-         ORDER BY s.started_at DESC LIMIT 1`,
-        [tenant.id]
-      ),
-      query(
-        `SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email, contact_phone, current_plan_id, zona_horaria
-         FROM tenants WHERE id = $1`,
-        [tenant.id]
-      ),
-      query(
-        'SELECT module_code FROM tenant_modules WHERE tenant_id = $1 AND enabled = true',
-        [tenant.id]
-      ),
+    const [tenantInfo, modules] = await Promise.all([
+      getTenantInfoSafe(tenant.id),
+      getPlanModulesSafe(tenant.id),
     ])
-    const modules = subRes.rows.length > 0 ? subRes.rows[0].modules : ['dropscan']
-    const tenantInfo = tenantRes.rows[0] || {}
-    const enabledModules = modulesRes.rows.map(r => r.module_code)
+    const enabledModules = await getEnabledModulesSafe(tenant.id, modules)
 
     const jti = crypto.randomBytes(16).toString('hex')
     const payload = {
@@ -195,7 +225,7 @@ router.get('/me', authenticateToken, async (req, res) => {
   try {
     if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
 
-    const [result, tenantRes, modulesRes] = await Promise.all([
+    const [result, tenantInfo] = await Promise.all([
       query(
         `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id, u.estado,
                 u.avatar_url, u.permisos_override, u.ultimo_acceso, u.zona_horaria,
@@ -206,12 +236,7 @@ router.get('/me', authenticateToken, async (req, res) => {
          WHERE u.id = $1 AND u.tenant_id = $2`,
         [req.user.id, req.user.tenant_id]
       ),
-      req.user.tenant_id
-        ? query(`SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email, zona_horaria FROM tenants WHERE id = $1`, [req.user.tenant_id])
-        : Promise.resolve({ rows: [] }),
-      req.user.tenant_id
-        ? query('SELECT module_code FROM tenant_modules WHERE tenant_id = $1 AND enabled = true', [req.user.tenant_id])
-        : Promise.resolve({ rows: [] }),
+      req.user.tenant_id ? getTenantInfoSafe(req.user.tenant_id) : Promise.resolve({}),
     ])
 
     if (result.rows.length === 0) {
@@ -219,9 +244,9 @@ router.get('/me', authenticateToken, async (req, res) => {
     }
 
     const user = result.rows[0]
-    const tenantInfo = tenantRes.rows[0] || {}
     const permisos = normalizePermisos(user.permisos_override || user.rol_permisos || {})
-    const enabledModules = modulesRes.rows.map(r => r.module_code)
+    const modules = await getPlanModulesSafe(req.user.tenant_id)
+    const enabledModules = await getEnabledModulesSafe(req.user.tenant_id, modules)
 
     res.json({
       id: user.id,
