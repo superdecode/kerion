@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import env from '../../config/env.js'
-import { isDatabaseUnavailableError, query } from '../../config/database.js'
+import { isDatabaseUnavailableError, query, tenantQuery } from '../../config/database.js'
 import { authenticateToken, auditLog } from '../../shared/middleware/auth.js'
 import { normalizeLevel } from '../../shared/middleware/permissions.js'
 
@@ -69,6 +69,29 @@ async function queryAuthWithRetry(text, params) {
   } catch (error) {
     if (!isDatabaseUnavailableError(error) || NON_RETRYABLE_AUTH_DB_CODES.has(error.code)) throw error
     console.warn('[auth] transient DB error, retrying query once:', error.code || error.message)
+    await sleep(350)
+    return execute()
+  }
+}
+
+async function tenantQueryAuthWithRetry(tenantId, text, params) {
+  const execute = () => {
+    let timeoutId
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const error = new Error(`Tenant database query exceeded ${AUTH_DB_DEADLINE_MS}ms`)
+        error.code = 'DB_QUERY_DEADLINE'
+        reject(error)
+      }, AUTH_DB_DEADLINE_MS)
+    })
+    return Promise.race([tenantQuery(tenantId, text, params), timeoutPromise]).finally(() => clearTimeout(timeoutId))
+  }
+
+  try {
+    return await execute()
+  } catch (error) {
+    if (!isDatabaseUnavailableError(error) || NON_RETRYABLE_AUTH_DB_CODES.has(error.code)) throw error
+    console.warn('[auth] transient tenant DB error, retrying query once:', error.code || error.message)
     await sleep(350)
     return execute()
   }
@@ -295,7 +318,8 @@ router.get('/me', authenticateToken, async (req, res) => {
     if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
 
     const [result, tenantInfo] = await Promise.all([
-      queryAuthWithRetry(
+      tenantQueryAuthWithRetry(
+        req.user.tenant_id,
         `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id

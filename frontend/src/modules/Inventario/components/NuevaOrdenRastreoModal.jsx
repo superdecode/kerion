@@ -34,8 +34,10 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
       .then(res => {
         const map = {}
         ;(res?.data?.records || []).forEach(item => {
-          const k = normalizeCodeFast(item.customizeBarcode || '')
-          if (k) map[k] = item
+          const barcode = normalizeCodeFast(item.customizeBarcode || '')
+          const boxType = normalizeCodeFast(item.boxType || '')
+          if (barcode) map[barcode] = item
+          if (boxType) map[boxType] = item
         })
         setInvMap(map)
       })
@@ -49,7 +51,9 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     if (!q) return list
     return list.filter(b =>
       b.customizeCode?.toLowerCase().includes(q) ||
-      invMap?.[normalizeCodeFast(b.customizeCode || '')]?.cellNo?.toLowerCase().includes(q)
+      b.boxType?.toLowerCase().includes(q) ||
+      invMap?.[normalizeCodeFast(b.customizeCode || '')]?.cellNo?.toLowerCase().includes(q) ||
+      invMap?.[normalizeCodeFast(b.boxType || '')]?.cellNo?.toLowerCase().includes(q)
     )
   }, [outboundDetail, boxSearch, invMap])
 
@@ -78,7 +82,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
       const res = await getOutboundDetail(obc.trim().toUpperCase())
       if (!res?.data) { setError('Orden no encontrada en el sistema'); return }
       setOutboundDetail(res.data)
-      const allCodes = new Set((res.data.packageList || []).map(b => b.customizeCode).filter(Boolean))
+      const allCodes = new Set((res.data.packageList || []).map(b => b.customizeCode || b.boxType).filter(Boolean))
       setSelectedBoxes(allCodes)
     } catch {
       setError('Error al cargar la orden')
@@ -96,7 +100,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
   }
 
   function selectAllBoxes() {
-    const allCodes = new Set((outboundDetail?.packageList || []).map(b => b.customizeCode).filter(Boolean))
+    const allCodes = new Set((outboundDetail?.packageList || []).map(b => b.customizeCode || b.boxType).filter(Boolean))
     setSelectedBoxes(allCodes)
   }
 
@@ -113,6 +117,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     const gsItem = invMap?.[normalized]
     setManualCajas(prev => [...prev, {
       box_code: code,
+      box_type: gsItem?.boxType || null,
       ubicacion: gsItem?.cellNo || null,
       producto: gsItem?.productName || null,
       cantidad_disponible: gsItem?.availableAmount != null ? parseFloat(gsItem.availableAmount) : null,
@@ -127,12 +132,14 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
   function buildCajasPayload() {
     if (tab === 'con_orden') {
       return (outboundDetail?.packageList || [])
-        .filter(b => selectedBoxes.has(b.customizeCode))
+        .filter(b => selectedBoxes.has(b.customizeCode || b.boxType))
         .map(b => {
           const normalized = normalizeCodeFast(b.customizeCode || '')
-          const gsItem = invMap?.[normalized]
+          const normalizedBoxType = normalizeCodeFast(b.boxType || '')
+          const gsItem = invMap?.[normalized] || invMap?.[normalizedBoxType]
           return {
-            box_code: b.customizeCode,
+            box_code: b.customizeCode || b.boxType,
+            box_type: b.boxType || null,
             ubicacion: gsItem?.cellNo || null,
             producto: gsItem?.productName || null,
             cantidad_disponible: gsItem?.availableAmount != null ? parseFloat(gsItem.availableAmount) : null,
@@ -259,7 +266,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                       <button
                         type="button"
                         onClick={() => {
-                          const visibleCodes = new Set(visibleBoxes.map(b => b.customizeCode).filter(Boolean))
+                          const visibleCodes = new Set(visibleBoxes.map(b => b.customizeCode || b.boxType).filter(Boolean))
                           setSelectedBoxes(prev => {
                             const next = new Set(prev)
                             visibleCodes.forEach(c => next.add(c))
@@ -274,7 +281,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                       <button
                         type="button"
                         onClick={() => {
-                          const visibleCodes = new Set(visibleBoxes.map(b => b.customizeCode).filter(Boolean))
+                          const visibleCodes = new Set(visibleBoxes.map(b => b.customizeCode || b.boxType).filter(Boolean))
                           setSelectedBoxes(prev => {
                             const next = new Set(prev)
                             visibleCodes.forEach(c => next.delete(c))
@@ -309,17 +316,21 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                   {visibleBoxes.length === 0 ? (
                     <div className="py-4 text-center text-xs text-warm-400">{t('rastreo.nuevaOrden.noBoxResults')}</div>
                   ) : visibleBoxes.map((b, i) => {
-                    const gsItem = invMap?.[normalizeCodeFast(b.customizeCode || '')]
+                    const boxKey = b.customizeCode || b.boxType
+                    const gsItem = invMap?.[normalizeCodeFast(b.customizeCode || '')] || invMap?.[normalizeCodeFast(b.boxType || '')]
                     return (
                       <button
                         key={i}
-                        onClick={() => toggleBox(b.customizeCode)}
+                        onClick={() => toggleBox(boxKey)}
                         className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-warm-50 transition-colors"
                       >
-                        {selectedBoxes.has(b.customizeCode)
+                        {selectedBoxes.has(boxKey)
                           ? <CheckSquare size={15} className="text-primary-600 flex-shrink-0" />
                           : <Square size={15} className="text-warm-300 flex-shrink-0" />}
-                        <span className="font-mono text-xs text-warm-700 flex-1">{b.customizeCode}</span>
+                        <span className="font-mono text-xs text-warm-700 flex-1">{boxKey}</span>
+                        {b.boxType && b.boxType !== boxKey && (
+                          <span className="text-[10px] text-warm-400">{b.boxType}</span>
+                        )}
                         {gsItem?.cellNo && (
                           <span className="text-xs text-warm-400">{gsItem.cellNo}</span>
                         )}

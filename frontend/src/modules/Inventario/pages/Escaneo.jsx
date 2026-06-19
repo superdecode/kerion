@@ -2140,21 +2140,17 @@ export default function Escaneo() {
           </div>
 
           {/* Right side panel — wrapper always rendered so toggle stays at panel edge */}
-          <div className={`hidden lg:flex shrink-0 relative ${showPanel ? '' : 'w-0'}`}>
-            {!showPanel && (
-              <button
-                type="button"
-                onClick={() => setShowPanel(true)}
-                title="Mostrar panel"
-                className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-              >
-                <PanelRightOpen size={16} />
-              </button>
-            )}
+          <div className={`hidden lg:flex shrink-0 relative ${showPanel ? 'w-80' : 'w-0'}`}>
+            <button
+              type="button"
+              onClick={() => setShowPanel(v => !v)}
+              title={showPanel ? 'Ocultar panel' : 'Mostrar panel'}
+              className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+            >
+              {showPanel ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+            </button>
             {showPanel && (
-              <div className="relative">
-                <SidePanel tab={activeTab} items={activeTab.items} />
-              </div>
+              <SidePanel tab={activeTab} items={activeTab.items} />
             )}
           </div>
         </div>

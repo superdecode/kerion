@@ -16,7 +16,11 @@ function resolveApiBaseUrl() {
       const url = new URL(configured)
       const isLocalApi = ['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)
       const isLocalPage = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname)
-      baseUrl = isLocalApi && !isLocalPage ? buildSameOriginApiUrl('/api') : configured
+      // In local development, route API traffic through the app origin so Vite's
+      // proxy handles the backend hop and the browser avoids direct localhost calls.
+      baseUrl = isLocalApi && isLocalPage ? buildSameOriginApiUrl('/api') : (
+        isLocalApi && !isLocalPage ? buildSameOriginApiUrl('/api') : configured
+      )
     } catch {
       baseUrl = buildSameOriginApiUrl('/api')
     }

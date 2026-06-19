@@ -305,8 +305,31 @@ export async function getSheetUrls() {
 async function fetchSheetAsCSV(url, limit = 0) {
   const params = { url }
   if (limit > 0) params.limit = limit
-  const res = await api.get('/wmshub/proxy/sheet', { params, timeout: 25000 })
-  return typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
+  try {
+    const res = await api.get('/wmshub/proxy/sheet', { params, timeout: 25000 })
+    return typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
+  } catch (err) {
+    const status = err?.response?.status
+    if (err?.code === 'ERR_BACKEND_UNAVAILABLE') {
+      const next = new Error('El backend de Kirion no esta disponible temporalmente')
+      next.code = 'BACKEND_UNAVAILABLE'
+      next.cause = err
+      throw next
+    }
+    if (status === 503) {
+      const next = new Error('El proxy de Google Sheets no esta disponible temporalmente')
+      next.code = 'SHEET_PROXY_UNAVAILABLE'
+      next.cause = err
+      throw next
+    }
+    if (err?.code === 'ECONNABORTED') {
+      const next = new Error('La consulta a Google Sheets excedio el tiempo limite')
+      next.code = 'SHEET_TIMEOUT'
+      next.cause = err
+      throw next
+    }
+    throw err
+  }
 }
 
 // ── Background full-sheet warmer ───────────────────────────────────────────

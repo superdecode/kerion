@@ -24,7 +24,7 @@ import {
   Truck,
   ClipboardList,
   RotateCcw,
-  BarChart2,
+  LayoutGrid,
   Download,
   ScanLine,
 } from 'lucide-react'
@@ -349,7 +349,7 @@ export default function Sidebar() {
                 }`}
               >
                 <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-white/20' : styles.iconBg}`}>
-                  <BarChart2 className={`w-3.5 h-3.5 ${isActive ? 'text-white' : styles.iconColor}`} />
+                  <LayoutGrid className={`w-3.5 h-3.5 ${isActive ? 'text-white' : styles.iconColor}`} />
                 </div>
                 {!collapsed && <span className="truncate flex-1">{t('nav.mainDashboard') || 'Dashboard'}</span>}
               </NavLink>

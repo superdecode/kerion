@@ -111,6 +111,7 @@ export default function ValidacionRecepcion() {
   const scanRefDesktop = useRef(null)
   const scanRefMobile  = useRef(null)
   const locationRef    = useRef(null)
+  const sessionBootOrderRef = useRef(null)
 
   const [sessionId, setSessionId] = useState(null)
   const [withTarimas, setWithTarimas] = useState(false)
@@ -173,7 +174,7 @@ export default function ValidacionRecepcion() {
 
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
-    queryFn: () => getScanEvents(id),
+    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1 }),
     enabled: canQueryRecepcion,
     retry: false,
     refetchInterval: canQueryRecepcion && scanning ? 6000 : false,
@@ -182,6 +183,8 @@ export default function ValidacionRecepcion() {
 
   const order    = orderData?.order ?? null
   const lines    = orderData?.lines ?? []
+  const savedValidationConfig = order?.validation_config ?? null
+  const tarimaConfigLocked = savedValidationConfig?.mode === 'tarimas' && savedValidationConfig?.locked === true
   const total    = Math.max(Number(order?.total_cajas || 0), lines.length)
   const validadas  = Math.max(lines.filter(l => l.estado_validacion === 'validada').length, Number(order?.cajas_validadas || 0))
   const faltantes  = lines.filter(l => l.estado_validacion === 'faltante').length
@@ -278,6 +281,17 @@ export default function ValidacionRecepcion() {
     return s
   }, [sectionMode, tarimaStats, maxTarimasPerSection, prioritizedTarimas])
 
+  const buildValidationConfig = useCallback(() => ({
+    mode: withTarimas ? 'tarimas' : 'ubicacion',
+    locked: withTarimas,
+    sectionMode,
+    maxTarimasPerSection,
+    groupSmallCodes,
+    minCajasParaAgrupar,
+    maxCajasEnGrupo,
+    sortTarimasByCountDesc,
+  }), [withTarimas, sectionMode, maxTarimasPerSection, groupSmallCodes, minCajasParaAgrupar, maxCajasEnGrupo, sortTarimasByCountDesc])
+
   const filteredTarimaStats = useMemo(() => {
     let result = tarimaStats
     const q = tarimaSearch.trim().toLowerCase()
@@ -373,10 +387,33 @@ export default function ValidacionRecepcion() {
   useEffect(() => { if (scanning) refocus() }, [scanning, refocus])
 
   useEffect(() => {
+    const cfg = order?.validation_config
+    if (!cfg || typeof cfg !== 'object') {
+      setWithTarimas(false)
+      setSectionMode(false)
+      setMaxTarimasPerSection(20)
+      setGroupSmallCodes(false)
+      setMinCajasParaAgrupar(3)
+      setMaxCajasEnGrupo(10)
+      setSortTarimasByCountDesc(false)
+      return
+    }
+    setWithTarimas(cfg.mode === 'tarimas')
+    setSectionMode(Boolean(cfg.sectionMode))
+    setMaxTarimasPerSection(Math.max(1, parseInt(cfg.maxTarimasPerSection, 10) || 20))
+    setGroupSmallCodes(Boolean(cfg.groupSmallCodes))
+    setMinCajasParaAgrupar(Math.max(1, parseInt(cfg.minCajasParaAgrupar, 10) || 3))
+    setMaxCajasEnGrupo(Math.max(1, parseInt(cfg.maxCajasEnGrupo, 10) || 10))
+    setSortTarimasByCountDesc(Boolean(cfg.sortTarimasByCountDesc))
+  }, [order?.id, order?.validation_config])
+
+  useEffect(() => {
     let cancelled = false
     async function boot() {
+      if (!order || sessionBootOrderRef.current === id) return
+      sessionBootOrderRef.current = id
       try {
-        const res = await createSession(id)
+        const res = await createSession(id, { tarimas_enabled: order.validation_config?.mode === 'tarimas' })
         if (cancelled) return
         setSessionId(res.session?.id ?? 'local')
         setScanning(true)
@@ -389,7 +426,7 @@ export default function ValidacionRecepcion() {
     }
     boot()
     return () => { cancelled = true }
-  }, [id, refocus, toast])
+  }, [id, order, refocus, toast])
 
   const endSession = async () => {
     if (sessionId && sessionId !== 'local') {
@@ -452,7 +489,6 @@ export default function ValidacionRecepcion() {
           })
         }
       }
-      qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)()
         const osc = ctx.createOscillator(); const gain = ctx.createGain()
@@ -480,7 +516,6 @@ export default function ValidacionRecepcion() {
             : l),
         }
       })
-      qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
       toast.success('Último registro eliminado')
       setConfirmDeleteOpen(false)
       refocus()
@@ -498,6 +533,26 @@ export default function ValidacionRecepcion() {
     },
     onError: () => toast.error(t('toast.error')),
   })
+
+  const saveValidationConfigMut = useMutation({
+    mutationFn: (validationConfig) => updateOrder(id, { validation_config: validationConfig }),
+    onSuccess: (data) => {
+      qc.setQueryData(['recepcion-order', id], (cur) => cur ? { ...cur, order: data.order } : cur)
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  async function activateTarimaMode() {
+    const nextConfig = {
+      ...buildValidationConfig(),
+      mode: 'tarimas',
+      locked: true,
+    }
+    await saveValidationConfigMut.mutateAsync(nextConfig)
+    setWithTarimas(true)
+    setShowTarimaConfirm(false)
+    refocus()
+  }
 
   const playDupAudio = useCallback(() => {
     try {
@@ -1037,7 +1092,10 @@ export default function ValidacionRecepcion() {
                   else if (!sidebarVisible) setSidebarVisible(true)
                   else toast.error(t('rec.tarimas.locked'))
                 } else {
-                  if (totalTarimas > 0) setShowTarimaConfirm(true)
+                  if (tarimaConfigLocked) {
+                    setWithTarimas(true)
+                    refocus()
+                  } else if (totalTarimas > 0) setShowTarimaConfirm(true)
                   else setWithTarimas(true)
                 }
               }}
@@ -1454,30 +1512,20 @@ export default function ValidacionRecepcion() {
 
         {/* ── Side panel — wrapper always rendered so toggle stays at panel edge ── */}
         <div className={`hidden lg:flex shrink-0 relative ${sidebarVisible ? 'w-[400px]' : 'w-0'}`}>
-          {!sidebarVisible && (
-            <button
-              type="button"
-              onClick={() => setSidebarVisible(true)}
-              title="Mostrar panel"
-              className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-            >
-              <PanelRightOpen size={16} />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setSidebarVisible(v => !v)}
+            title={sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}
+            className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+          >
+            {sidebarVisible ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+          </button>
           {sidebarVisible && (
-          <div className={`w-full h-full flex flex-col border-l border-warm-100 backdrop-blur-2xl animate-fade-in relative ${
+          <div className={`w-full h-full flex flex-col border-l border-warm-100 backdrop-blur-2xl animate-fade-in overflow-hidden ${
             withTarimas
               ? 'bg-gradient-to-b from-white via-white to-sky-50/20 shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.38)]'
               : 'bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]'
           }`}>
-            <button
-              type="button"
-              onClick={() => setSidebarVisible(false)}
-              title="Ocultar panel"
-              className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-            >
-              <PanelRightClose size={16} />
-            </button>
             {withTarimas ? renderPanelBody() : renderUbicacionPanelBody()}
           </div>
           )}
@@ -1642,7 +1690,7 @@ export default function ValidacionRecepcion() {
         footer={
           <div className="flex gap-2 justify-end w-full">
             <button onClick={() => setShowTarimaConfirm(false)} className="btn-ghost">{t('common.cancel')}</button>
-            <button onClick={() => { setWithTarimas(true); setShowTarimaConfirm(false); refocus() }} className="btn-primary">
+            <button onClick={() => activateTarimaMode()} disabled={saveValidationConfigMut.isPending} className="btn-primary disabled:opacity-50">
               {t('rec.tarimas.activar')} ({totalTarimas})
             </button>
           </div>
@@ -1667,6 +1715,11 @@ export default function ValidacionRecepcion() {
           {/* ── TARIMAS: section grouping ── */}
           <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3 space-y-2.5">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-400">{t('rec.tarimas.label')}</p>
+            {tarimaConfigLocked && (
+              <div className="rounded-lg border border-primary-200 bg-white px-3 py-2 text-[11px] font-semibold text-primary-700">
+                {t('rec.tarimas.locked')}
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-warm-800">{t('rec.tarimas.sections.enable')}</p>
@@ -1675,7 +1728,7 @@ export default function ValidacionRecepcion() {
               <button
                 type="button"
                 onClick={() => setSectionMode(p => !p)}
-                disabled={withTarimas}
+                disabled={withTarimas || tarimaConfigLocked}
                 className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${sectionMode ? 'bg-primary-600' : 'bg-warm-200'}`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${sectionMode ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -1690,7 +1743,7 @@ export default function ValidacionRecepcion() {
                   max={totalTarimas || 99}
                   value={maxTarimasPerSection}
                   onChange={e => setMaxTarimasPerSection(Math.max(1, parseInt(e.target.value) || 1))}
-                  disabled={withTarimas}
+                  disabled={withTarimas || tarimaConfigLocked}
                   className="w-20 text-center text-sm border border-primary-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100 disabled:opacity-50"
                 />
               </div>
@@ -1708,7 +1761,7 @@ export default function ValidacionRecepcion() {
               <button
                 type="button"
                 onClick={() => setGroupSmallCodes(p => !p)}
-                disabled={withTarimas}
+                disabled={withTarimas || tarimaConfigLocked}
                 className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${groupSmallCodes ? 'bg-primary-600' : 'bg-warm-200'}`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${groupSmallCodes ? 'translate-x-6' : 'translate-x-1'}`} />
@@ -1723,7 +1776,7 @@ export default function ValidacionRecepcion() {
                     min="1"
                     value={minCajasParaAgrupar}
                     onChange={e => setMinCajasParaAgrupar(Math.max(1, parseInt(e.target.value) || 1))}
-                    disabled={withTarimas}
+                    disabled={withTarimas || tarimaConfigLocked}
                     className="w-20 text-center text-sm border border-warm-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100 disabled:opacity-50"
                   />
                 </div>
@@ -1734,7 +1787,7 @@ export default function ValidacionRecepcion() {
                     min="1"
                     value={maxCajasEnGrupo}
                     onChange={e => setMaxCajasEnGrupo(Math.max(1, parseInt(e.target.value) || 1))}
-                    disabled={withTarimas}
+                    disabled={withTarimas || tarimaConfigLocked}
                     className="w-20 text-center text-sm border border-warm-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100 disabled:opacity-50"
                   />
                 </div>
@@ -1755,7 +1808,7 @@ export default function ValidacionRecepcion() {
               <button
                 type="button"
                 onClick={() => setSortTarimasByCountDesc(p => !p)}
-                disabled={withTarimas}
+                disabled={withTarimas || tarimaConfigLocked}
                 className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${sortTarimasByCountDesc ? 'bg-primary-600' : 'bg-warm-200'}`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${sortTarimasByCountDesc ? 'translate-x-6' : 'translate-x-1'}`} />

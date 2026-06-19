@@ -4,6 +4,26 @@ import { requirePermission } from '../../../shared/middleware/permissions.js'
 
 const router = Router()
 
+function sanitizeValidationConfig(input = {}) {
+  const toPositiveInt = (value, fallback) => {
+    const parsed = parseInt(value, 10)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+  }
+
+  const mode = input?.mode === 'tarimas' ? 'tarimas' : 'ubicacion'
+
+  return {
+    mode,
+    locked: mode === 'tarimas' ? Boolean(input?.locked) : false,
+    sectionMode: Boolean(input?.sectionMode),
+    maxTarimasPerSection: toPositiveInt(input?.maxTarimasPerSection, 20),
+    groupSmallCodes: Boolean(input?.groupSmallCodes),
+    minCajasParaAgrupar: toPositiveInt(input?.minCajasParaAgrupar, 3),
+    maxCajasEnGrupo: toPositiveInt(input?.maxCajasEnGrupo, 10),
+    sortTarimasByCountDesc: Boolean(input?.sortTarimasByCountDesc),
+  }
+}
+
 async function generateFolioNumero(req) {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   const countRes = await req.tQuery(
@@ -282,14 +302,27 @@ router.patch('/orders/:id',
   requirePermission('recepcion.recibir', 'actualizar'),
   async (req, res) => {
     try {
-      const { estado } = req.body
+      const { estado, validation_config } = req.body
       const allowed = ['pendiente_validacion', 'en_validacion', 'completo', 'parcial', 'cancelado']
       if (estado && !allowed.includes(estado)) return res.status(400).json({ error: 'Estado inválido' })
 
+      const updates = ['updated_at=now()']
+      const params = [req.params.id, req.tenantId]
+
+      if (estado !== undefined) {
+        params.push(estado || null)
+        updates.push(`estado=COALESCE($${params.length}, estado)`)
+      }
+
+      if (validation_config !== undefined) {
+        params.push(JSON.stringify(sanitizeValidationConfig(validation_config)))
+        updates.push(`validation_config=$${params.length}::jsonb`)
+      }
+
       const result = await req.tQuery(
-        `UPDATE inbound_orders SET estado=COALESCE($3, estado), updated_at=now()
+        `UPDATE inbound_orders SET ${updates.join(', ')}
          WHERE id=$1 AND tenant_id=$2 RETURNING *`,
-        [req.params.id, req.tenantId, estado || null]
+        params
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
       res.json({ order: result.rows[0] })

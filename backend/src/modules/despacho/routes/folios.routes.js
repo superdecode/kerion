@@ -43,7 +43,11 @@ async function getFolioDetail(req, folioId) {
     req.tQuery(
       `SELECT o.*, COALESCE(ps.total_scanned, 0) AS surtido_validadas
        FROM dispatch_folio_orders o
-       LEFT JOIN pick_sessions ps ON ps.outbound_order_no = o.outbound_order_no AND ps.tenant_id = o.tenant_id
+       LEFT JOIN (
+         SELECT tenant_id, outbound_order_no, COALESCE(SUM(total_scanned), 0) AS total_scanned
+         FROM pick_sessions
+         GROUP BY tenant_id, outbound_order_no
+       ) ps ON ps.outbound_order_no = o.outbound_order_no AND ps.tenant_id = o.tenant_id
        WHERE o.folio_id = $1 AND o.tenant_id = $2
        ORDER BY o.created_at ASC`,
       [folioId, req.tenantId]

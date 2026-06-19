@@ -227,6 +227,7 @@ export default function ValidarPorDestino({ folioId }) {
     if (!raw) return
     const code = normalizeScanCode(raw)
     if (!code) return
+    if (code !== raw) setScanInput(code)
 
     // Duplicate check
     const scannedCodes = new Set()
@@ -363,16 +364,16 @@ export default function ValidarPorDestino({ folioId }) {
   }
 
   return (
-    <div className="flex h-full overflow-hidden relative">
+    <div className="flex h-full flex-col xl:flex-row overflow-hidden relative">
 
       {/* ── LEFT COLUMN (header + scan stream) ───────────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
-      <div className="shrink-0 bg-white border-b border-warm-100 px-5 pt-4 pb-3 space-y-3">
+      <div className="shrink-0 bg-white border-b border-warm-100 px-4 sm:px-5 pt-4 pb-3 space-y-3">
 
         {/* Row 1: folio identity + action buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary-100 text-primary-600 shrink-0">
               <MapPin className="w-3.5 h-3.5" />
@@ -403,12 +404,22 @@ export default function ValidarPorDestino({ folioId }) {
           </div>
 
           {/* Action buttons — right side of row 1 */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center shrink-0 w-full lg:w-auto lg:justify-end">
+            <button
+              type="button"
+              onClick={() => setShowPanel(v => !v)}
+              title={showPanel ? t('desp.validar.destino.ocultarPanel') : t('desp.validar.destino.mostrarPanel')}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-600 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600 shrink-0 ${
+                showPanel ? 'xl:hidden' : 'sm:order-last'
+              }`}
+            >
+              {showPanel ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+            </button>
             {editable && (
               <button
                 type="button"
                 onClick={handleNextTarima}
-                className="h-8 inline-flex items-center gap-1.5 px-2.5 rounded-xl border border-accent-300 bg-accent-50 text-accent-700 text-xs font-semibold hover:bg-accent-100 transition-colors"
+                className="h-9 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl border border-accent-300 bg-accent-50 text-accent-700 text-xs font-semibold hover:bg-accent-100 transition-colors w-full sm:w-auto"
               >
                 <Layers className="w-3 h-3" />
                 {t('desp.validar.destino.sigTarima')} ({genTarimaRef(currentTarimaNum + 1)})
@@ -416,14 +427,14 @@ export default function ValidarPorDestino({ folioId }) {
             )}
             {folio?.estado === 'en_proceso' && canWrite('despacho.folios') && (
               <button onClick={() => setShowConfirmCerrar(true)} disabled={cerrando}
-                className="btn-success text-xs flex items-center gap-1 h-8 px-3">
+                className="btn-success text-xs flex items-center justify-center gap-1 h-9 px-3 w-full sm:w-auto">
                 {cerrando ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
                 {t('desp.validar.destino.cerrarFolio')}
               </button>
             )}
             {canUpdate && isActive && (
               <button onClick={() => setShowConfirmCancel(true)}
-                className="btn-danger text-xs flex items-center gap-1 h-8 px-3">
+                className="btn-danger text-xs flex items-center justify-center gap-1 h-9 px-3 w-full sm:w-auto">
                 <XCircle className="w-3 h-3" />{t('desp.validar.orden.cancelar')}
               </button>
             )}
@@ -431,7 +442,7 @@ export default function ValidarPorDestino({ folioId }) {
         </div>
 
         {/* Row 2: KPI metrics strip */}
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
           {[
             { label: t('desp.validar.destino.ordenes'), value: orders.length, accent: 'bg-primary-500', tone: 'text-warm-900' },
             { label: t('desp.validar.destino.esperadas'), value: totalEsperadas || '—', accent: 'bg-warm-400', tone: 'text-warm-900' },
@@ -450,7 +461,7 @@ export default function ValidarPorDestino({ folioId }) {
         </div>
 
         {/* Row 3: scan input */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <div className={`flex items-center gap-2 bg-white border-2 rounded-2xl px-4 h-11 flex-1 transition-colors ${
             scanning ? 'border-primary-300' : 'border-primary-200 focus-within:border-primary-400'
           }`}>
@@ -460,7 +471,12 @@ export default function ValidarPorDestino({ folioId }) {
               type="text"
               value={scanInput}
               onChange={e => setScanInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleScan() }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleScan()
+                }
+              }}
               placeholder={t('desp.validar.orden.scanPlaceholder')}
               className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400"
               autoComplete="off"
@@ -475,7 +491,7 @@ export default function ValidarPorDestino({ folioId }) {
           <button
             onClick={handleScan}
             disabled={!scanInput.trim() || scanning || !editable}
-            className="btn-primary text-sm flex items-center gap-1.5 h-11 px-4 rounded-2xl disabled:opacity-50"
+            className="btn-primary text-sm flex items-center justify-center gap-1.5 h-11 px-4 rounded-2xl disabled:opacity-50 w-full sm:w-auto"
           >
             {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
             {t('desp.validar.orden.validarBtn')}
@@ -516,7 +532,7 @@ export default function ValidarPorDestino({ folioId }) {
                       </span>
                     </div>
                     {[...scansByTarima[tarima]].reverse().map((s, i) => (
-                      <div key={s.id} className={`flex items-center gap-2.5 px-4 py-2.5 group hover:bg-warm-50 transition-colors ${
+                      <div key={`${tarima}-${s.id || s.codigo_caja || 'scan'}-${i}`} className={`flex items-center gap-2.5 px-4 py-2.5 group hover:bg-warm-50 transition-colors ${
                         i === 0 ? 'bg-primary-50/30' : ''
                       }`}>
                         <span className="w-5 text-right text-[10px] text-warm-400 tabular-nums shrink-0">
@@ -555,19 +571,18 @@ export default function ValidarPorDestino({ folioId }) {
 
       </div>{/* ── LEFT COLUMN end ── */}
 
-      {/* Right: orders side panel — wrapper always rendered so toggle button stays at the panel edge */}
-      <div className={`shrink-0 relative ${showPanel ? 'w-[26rem] xl:w-[28rem] 2xl:w-[30rem]' : 'w-0'}`}>
-        {/* Toggle button — always at panel left border, overlapping into content */}
-        <button
-          type="button"
-          onClick={() => setShowPanel(v => !v)}
-          title={showPanel ? t('desp.validar.destino.ocultarPanel') : t('desp.validar.destino.mostrarPanel')}
-          className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-        >
-          {showPanel ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
-        </button>
+      {/* Right: orders side panel */}
+      <div className={`shrink-0 relative transition-all ${showPanel ? 'w-full xl:w-[26rem] 2xl:w-[30rem]' : 'w-0 xl:w-0'}`}>
         {showPanel && (
-        <div className="w-full h-full flex flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] overflow-hidden">
+        <div className="w-full h-full flex flex-col border-t xl:border-t-0 xl:border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowPanel(false)}
+              title={t('desp.validar.destino.ocultarPanel')}
+              className="hidden xl:flex absolute -left-4 top-4 z-20 h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-600 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+            >
+              <PanelRightClose size={14} />
+            </button>
             {/* Panel header */}
             <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50 shrink-0">
               <div className="flex items-center gap-2 mb-2.5 min-w-0">
@@ -594,7 +609,7 @@ export default function ValidarPorDestino({ folioId }) {
               </div>
 
               {/* Status filters */}
-              <div className="flex gap-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
                 {[
                   { k: 'all', l: t('desp.validar.destino.filtroTodas') },
                   { k: 'pending', l: t('desp.validar.destino.filtroPend') },
@@ -634,7 +649,7 @@ export default function ValidarPorDestino({ folioId }) {
                     : t('desp.validar.destino.sinOrdenes')}
                 </div>
               ) : (
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {filteredOrders.map(order => {
                 const validadas = validatedCountByOrderNo[order.outbound_order_no] || 0
                 const esperadas = order.bultos_esperados ?? 0

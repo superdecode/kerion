@@ -71,6 +71,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     setCompleted(false)
     getOutboundDetail(order.outbound_order_no)
       .then(r => setOrderDetail(r?.data ?? null))
+      .catch(() => setOrderDetail(null))
       .finally(() => setDetailLoading(false))
   }, [order.outbound_order_no])
 
@@ -133,6 +134,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
   const handleScan = useCallback(() => {
     const code = normalizeScanCode(input.trim())
     if (!code) return
+    if (code !== input.trim()) setInput(code)
     if (alreadyScanned.has(code)) {
       addToast('Código ya escaneado en esta orden', 'warning')
       setInput('')
@@ -227,7 +229,12 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
               type="text"
               value={input}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleScan() }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleScan()
+                }
+              }}
               placeholder={t('desp.validar.orden.scanPlaceholderPanel')}
               className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400"
               autoComplete="off"
@@ -480,6 +487,7 @@ export default function ValidarPorOrden({ folioId }) {
   const handleInlineScan = useCallback(() => {
     const code = normalizeScanCode(scanInput.trim())
     if (!code) return
+    if (code !== scanInput.trim()) setScanInput(code)
     const alreadyScanned = new Set()
     localScans.forEach((localCode) => {
       generateCodeVariations(localCode, false).forEach((variant) => alreadyScanned.add(variant))
@@ -789,7 +797,12 @@ export default function ValidarPorOrden({ folioId }) {
                                   type="text"
                                   value={scanInput}
                                   onChange={e => setScanInput(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter') handleInlineScan() }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault()
+                                      handleInlineScan()
+                                    }
+                                  }}
                                   placeholder={t('desp.validar.orden.scanPlaceholder')}
                                   className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-300"
                                   autoComplete="off"

@@ -270,11 +270,11 @@ router.get('/buscar',
         ? buildExactOnlyWhere(['sc.scanned_code', 'sc.normalized_code', 'sc.code2'], matchParams)
         : buildFlexibleMatchWhere(['sc.scanned_code', 'sc.normalized_code', 'sc.code2'], matchParams)
       const surtidoWhere = mode === 'exact'
-        ? buildExactOnlyWhere(['pe.scanned_code', 'pe.normalized_code'], matchParams)
-        : buildFlexibleMatchWhere(['pe.scanned_code', 'pe.normalized_code'], matchParams)
+        ? buildExactOnlyWhere(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type'], matchParams)
+        : buildFlexibleMatchWhere(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type'], matchParams)
       const rastreoWhere = mode === 'exact'
-        ? buildExactOnlyWhere(['rc.box_code', 'rc.box_code_normalized'], matchParams)
-        : buildFlexibleMatchWhere(['rc.box_code', 'rc.box_code_normalized'], matchParams)
+        ? buildExactOnlyWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)
+        : buildFlexibleMatchWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)
 
       const [invRes, invRegRes, pickRes, rastreoRes] = await Promise.all([
         req.tQuery(
@@ -323,17 +323,17 @@ router.get('/buscar',
         ),
         req.tQuery(
           `SELECT pe.scanned_code, pe.scan_result, pe.scanned_at AS created_at,
-                  pe.normalized_code,
+                  pe.normalized_code, pe.matched_box_type,
                   ps.outbound_order_no, ps.status AS session_status,
                   u.nombre_completo AS operador,
-                  ${buildMatchCase(['pe.scanned_code', 'pe.normalized_code'], matchParams)} AS match_type
+                  ${buildMatchCase(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type'], matchParams)} AS match_type
            FROM pick_events pe
            JOIN pick_sessions ps ON ps.id = pe.session_id
            LEFT JOIN usuarios u ON u.id = ps.operator_id
            WHERE ps.tenant_id = $1
              AND ${surtidoWhere}
            ORDER BY
-             CASE ${buildMatchCase(['pe.scanned_code', 'pe.normalized_code'], matchParams)}
+             CASE ${buildMatchCase(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type'], matchParams)}
                WHEN 'exact' THEN 1
                WHEN 'normalized' THEN 2
                WHEN 'base' THEN 3
@@ -344,16 +344,16 @@ router.get('/buscar',
           [req.tenantId, tokens.normalized, tokens.compact, tokens.baseCompact, tokens.partialLike]
         ),
         req.tQuery(
-          `SELECT rc.id, rc.box_code, rc.box_code_normalized, rc.estado_caja, rc.ubicacion,
+          `SELECT rc.id, rc.box_code, rc.box_code_normalized, rc.box_type, rc.estado_caja, rc.ubicacion,
                   rc.producto, rc.validada_en_surtido, rc.created_at, rc.updated_at,
                   ro.folio, ro.outbound_order_no, ro.estado AS orden_estado,
-                  ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized'], matchParams)} AS match_type
+                  ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)} AS match_type
            FROM rastreo_cajas rc
            JOIN rastreo_ordenes ro ON ro.id = rc.rastreo_orden_id
            WHERE rc.tenant_id = $1
              AND ${rastreoWhere}
            ORDER BY
-             CASE ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized'], matchParams)}
+             CASE ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)}
                WHEN 'exact' THEN 1
                WHEN 'normalized' THEN 2
                WHEN 'base' THEN 3
@@ -851,6 +851,7 @@ router.post('/',
         return {
           box_code: c.box_code,
           box_code_normalized: normalized,
+          box_type: c.box_type || null,
           ubicacion: c.ubicacion || null,
           producto: c.producto || null,
           cantidad_disponible: c.cantidad_disponible != null ? c.cantidad_disponible : null,
@@ -875,11 +876,11 @@ router.post('/',
         for (const c of cajasData) {
           await client.query(
             `INSERT INTO rastreo_cajas
-               (tenant_id, rastreo_orden_id, box_code, box_code_normalized,
+               (tenant_id, rastreo_orden_id, box_code, box_code_normalized, box_type,
                 ubicacion, producto, cantidad_disponible, validada_en_surtido)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
             [req.tenantId, ordenId, c.box_code, c.box_code_normalized,
-             c.ubicacion, c.producto, c.cantidad_disponible, c.validada_en_surtido]
+             c.box_type, c.ubicacion, c.producto, c.cantidad_disponible, c.validada_en_surtido]
           )
         }
 
@@ -1011,7 +1012,7 @@ router.post('/cajas/add',
   requirePermission('inventario.rastreo', 'crear'),
   async (req, res) => {
     try {
-      const { orden_id, box_code, ubicacion, producto, cantidad_disponible } = req.body
+      const { orden_id, box_code, box_type, ubicacion, producto, cantidad_disponible } = req.body
       if (!orden_id || !box_code) return res.status(400).json({ error: 'orden_id y box_code requeridos' })
 
       const ordenRes = await req.tQuery(
@@ -1023,8 +1024,16 @@ router.post('/cajas/add',
 
       // Check duplicate
       const dupRes = await req.tQuery(
-        `SELECT id FROM rastreo_cajas WHERE rastreo_orden_id = $1 AND UPPER(box_code) = UPPER($2) AND tenant_id = $3`,
-        [orden_id, box_code, req.tenantId]
+        `SELECT id
+           FROM rastreo_cajas
+          WHERE rastreo_orden_id = $1
+            AND tenant_id = $3
+            AND (
+              UPPER(box_code) = UPPER($2)
+              OR UPPER(COALESCE(box_type, '')) = UPPER($2)
+              OR ($4 IS NOT NULL AND UPPER(COALESCE(box_type, '')) = UPPER($4))
+            )`,
+        [orden_id, box_code, req.tenantId, box_type || null]
       )
       if (dupRes.rows.length) return res.status(409).json({ error: 'La caja ya existe en esta orden' })
 
@@ -1051,10 +1060,10 @@ router.post('/cajas/add',
 
       const cajaRes = await req.tQuery(
         `INSERT INTO rastreo_cajas
-           (tenant_id, rastreo_orden_id, box_code, box_code_normalized, ubicacion, producto, cantidad_disponible, validada_en_surtido)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+           (tenant_id, rastreo_orden_id, box_code, box_code_normalized, box_type, ubicacion, producto, cantidad_disponible, validada_en_surtido)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          RETURNING id`,
-        [req.tenantId, orden_id, box_code, normalized, ubicacion || null, producto || null,
+        [req.tenantId, orden_id, box_code, normalized, box_type || null, ubicacion || null, producto || null,
          cantidad_disponible != null ? cantidad_disponible : null, validada]
       )
 

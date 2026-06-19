@@ -76,6 +76,15 @@ function generateCodeVariations(rawCode, normalize = true) {
   return [...new Set(variations)]
 }
 
+function normalizedCodeSql(column) {
+  return `UPPER(REGEXP_REPLACE(
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(${column}, ''), '／', '/'), '－', '-'), '‒', '-'), '–', '-'), '—', '-'), '―', '-'),
+    '[^A-Z0-9\\-/]',
+    '',
+    'g'
+  ))`
+}
+
 // POST /orders/:id/sessions — start validation session
 router.post('/orders/:id/sessions',
   authenticateToken, loadFullUser,
@@ -137,39 +146,40 @@ router.post('/orders/:id/scan',
 
       const rawCode = String(codigo_escaneado).trim()
       const normalizedCode = normalizeScanCode(rawCode)
-      const scanVariations = new Set(generateCodeVariations(rawCode, true))
-
-      const [orderRes, linesRes, successEventsRes] = await Promise.all([
+      const scanVariations = generateCodeVariations(rawCode, true)
+      const [orderRes, lineRes, previousSuccessRes] = await Promise.all([
         req.tQuery(
           `SELECT id, estado FROM inbound_orders WHERE id=$1 AND tenant_id=$2`,
           [req.params.id, req.tenantId]
         ),
         req.tQuery(
-          `SELECT * FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2 ORDER BY created_at ASC`,
-          [req.params.id, req.tenantId]
+          `SELECT l.*, u.nombre_completo AS validated_by_nombre
+           FROM inbound_lines l
+           LEFT JOIN usuarios u ON u.id = l.validated_by
+           WHERE l.order_id=$1
+             AND l.tenant_id=$2
+             AND ${normalizedCodeSql('l.custom_box_barcode')} = ANY($3::text[])
+           ORDER BY CASE WHEN l.estado_validacion = 'pendiente' THEN 0 ELSE 1 END, l.created_at ASC
+           LIMIT 1`,
+          [req.params.id, req.tenantId, scanVariations]
         ),
         req.tQuery(
           `SELECT e.*, u.nombre_completo AS scanned_by_nombre
            FROM inbound_scan_events e
            LEFT JOIN usuarios u ON u.id = e.scanned_by
-           WHERE e.order_id=$1 AND e.tenant_id=$2 AND e.resultado='correcto'
+           WHERE e.order_id=$1
+             AND e.tenant_id=$2
+             AND e.resultado='correcto'
+             AND ${normalizedCodeSql('e.codigo_escaneado')} = ANY($3::text[])
            ORDER BY e.scanned_at DESC, e.id DESC`,
-          [req.params.id, req.tenantId]
+          [req.params.id, req.tenantId, scanVariations]
         ),
       ])
       if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
-
-      const lines = linesRes.rows
-      const successEvents = successEventsRes.rows
-
-      const previousSuccess = successEvents.find((event) => {
-        const code = normalizeCodeFast(event.codigo_escaneado || '')
-        if (!code) return false
-        return generateCodeVariations(code, false).some((variant) => scanVariations.has(variant))
-      })
+      const previousSuccess = previousSuccessRes.rows[0] || null
 
       if (previousSuccess) {
-        const line = lines.find((entry) => entry.id === previousSuccess.line_id) || null
+        const line = lineRes.rows.find((entry) => entry.id === previousSuccess.line_id) || null
         const eventRes = await req.tQuery(
           `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
            VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
@@ -199,13 +209,7 @@ router.post('/orders/:id/scan',
         })
       }
 
-      const customMatches = lines.filter((line) => {
-        const code = normalizeCodeFast(line.custom_box_barcode || '')
-        if (!code) return false
-        return generateCodeVariations(code, false).some((variant) => scanVariations.has(variant))
-      })
-
-      let line = customMatches.find((entry) => entry.estado_validacion === 'pendiente') || customMatches[0] || null
+      let line = lineRes.rows[0] || null
       let matchField = line ? 'custom_box_barcode' : null
 
       if (!line) {
@@ -286,13 +290,31 @@ router.get('/orders/:id/scan-events',
   requirePermission('recepcion.validacion', 'ver'),
   async (req, res) => {
     try {
+      const resultados = String(req.query.resultados || '').trim()
+      const compact = req.query.compact === '1'
+      const resultList = resultados
+        ? resultados.split(',').map(v => v.trim()).filter(v => ['correcto', 'duplicado', 'no_encontrado'].includes(v))
+        : []
+      const where = ['e.order_id=$1', 'e.tenant_id=$2']
+      const params = [req.params.id, req.tenantId]
+      if (resultList.length === 1) {
+        params.push(resultList[0])
+        where.push(`e.resultado = $${params.length}`)
+      } else if (resultList.length > 1) {
+        params.push(resultList)
+        where.push(`e.resultado = ANY($${params.length}::text[])`)
+      }
       const result = await req.tQuery(
-        `SELECT e.*, u.nombre_completo AS scanned_by_nombre
+        `SELECT ${
+          compact
+            ? 'e.id, e.line_id, e.codigo_escaneado, e.resultado, e.scanned_at, e.ubicacion, u.nombre_completo AS scanned_by_nombre'
+            : 'e.*, u.nombre_completo AS scanned_by_nombre'
+        }
          FROM inbound_scan_events e
          LEFT JOIN usuarios u ON u.id = e.scanned_by
-         WHERE e.order_id=$1 AND e.tenant_id=$2
+         WHERE ${where.join(' AND ')}
          ORDER BY e.scanned_at DESC`,
-        [req.params.id, req.tenantId]
+        params
       )
       res.json({ events: result.rows })
     } catch (err) {

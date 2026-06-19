@@ -487,7 +487,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
 
       // Filter GS inventory
       const invRecords = (invRes?.data?.records || []).filter(r =>
-        codeMatches(r.customizeBarcode) || codeMatches(r.customizeCode)
+        codeMatches(r.customizeBarcode) || codeMatches(r.customizeCode) || codeMatches(r.boxType)
       )
       setGsInv(invRecords)
 
@@ -495,8 +495,8 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
       const surtRecords = []
       ;(outRes?.data?.records || []).forEach(order => {
         ;(order.packageList || []).forEach(box => {
-          if (codeMatches(box.customizeCode)) {
-            surtRecords.push({ ...box, ...order, customizeCode: box.customizeCode })
+          if (codeMatches(box.customizeCode) || codeMatches(box.boxType)) {
+            surtRecords.push({ ...box, ...order, customizeCode: box.customizeCode, boxType: box.boxType })
           }
         })
       })
@@ -546,7 +546,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-8 pb-4 px-4"
+        className="fixed inset-0 z-[120] flex items-start justify-center bg-black/50 backdrop-blur-sm pt-8 pb-4 px-4"
         onClick={handleClose}
       >
         <motion.div

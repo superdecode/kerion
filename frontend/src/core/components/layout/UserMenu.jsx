@@ -123,7 +123,7 @@ export default function UserMenu({ compact = false }) {
 
   return (
     <>
-      <div ref={menuRef} className="relative shrink-0">
+      <div ref={menuRef} className={`relative shrink-0 ${userMenuOpen ? 'z-[10020]' : 'z-[120]'}`}>
         <button
           onClick={() => setUserMenuOpen(!userMenuOpen)}
           className={`flex items-center rounded-xl transition-all duration-200 group hover:bg-warm-100 ${
@@ -145,7 +145,7 @@ export default function UserMenu({ compact = false }) {
         <AnimatePresence>
           {userMenuOpen && (
             <motion.div
-              className="absolute right-0 top-full mt-2 w-72 bg-white/95 backdrop-blur-xl rounded-2xl shadow-depth border border-white/60 overflow-hidden z-[140]"
+              className="absolute right-0 top-full mt-2 w-72 bg-white/95 backdrop-blur-xl rounded-2xl shadow-depth border border-white/60 overflow-hidden z-[10021]"
               initial={{ opacity: 0, scale: 0.95, y: -5 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -5 }}

@@ -11,7 +11,7 @@ export const deleteLine = (lineId) => api.delete(`/recepcion/lines/${lineId}`).t
 export const createSession = (orderId, payload) => api.post(`/recepcion/orders/${orderId}/sessions`, payload).then(r => r.data)
 export const updateSession = (orderId, sessionId, payload) => api.patch(`/recepcion/orders/${orderId}/sessions/${sessionId}`, payload).then(r => r.data)
 export const scanCode = (orderId, payload) => api.post(`/recepcion/orders/${orderId}/scan`, payload).then(r => r.data)
-export const getScanEvents = (orderId) => api.get(`/recepcion/orders/${orderId}/scan-events`).then(r => r.data)
+export const getScanEvents = (orderId, params = {}) => api.get(`/recepcion/orders/${orderId}/scan-events`, { params }).then(r => r.data)
 export const deleteLastValidationRecord = (orderId) => api.delete(`/recepcion/orders/${orderId}/scan-events/last-validation`).then(r => r.data)
 export const deleteScanEvent = (orderId, eventId) => api.delete(`/recepcion/orders/${orderId}/scan-events/${eventId}`).then(r => r.data)
 export const getListaRecepcion = (orderId) => api.get(`/recepcion/orders/${orderId}/lista-recepcion`).then(r => r.data)

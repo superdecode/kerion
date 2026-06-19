@@ -20,7 +20,7 @@ function genId() { return Math.random().toString(36).slice(2, 9) }
 
 function TabBar({ tabs, activeTabId, onSelect, onClose, onAdd, canAdd, t }) {
   return (
-    <div className="flex h-full min-w-max items-end gap-1.5 overflow-x-auto overflow-y-hidden scrollbar-hide pr-1 whitespace-nowrap">
+    <div className="flex h-full min-w-max items-end gap-1.5 overflow-x-auto overflow-y-hidden scrollbar-hide pr-1 pb-1 whitespace-nowrap">
       {tabs.map(tab => {
         const isActive = tab.id === activeTabId
         const dotColor = tab.tipo === 'por_destino' ? 'bg-accent-400' : 'bg-primary-400'
@@ -28,7 +28,7 @@ function TabBar({ tabs, activeTabId, onSelect, onClose, onAdd, canAdd, t }) {
           <div key={tab.id} className="relative shrink-0">
             <button
               onClick={() => onSelect(tab.id)}
-              className={`relative flex items-center gap-2 pl-3 pr-7 py-2 rounded-t-xl text-sm font-semibold transition-all border-2 border-b-0 ${
+              className={`relative flex min-h-10 items-center gap-2 pl-3 pr-7 py-2 rounded-t-xl text-sm font-semibold transition-all border-2 border-b-0 ${
                 isActive
                   ? 'bg-white border-warm-200 text-warm-800 shadow-sm -mb-px z-10'
                   : 'bg-warm-50 border-transparent text-warm-500 hover:text-warm-700 hover:bg-warm-100'
@@ -199,10 +199,10 @@ export default function Validar() {
   return (
     <div className="flex flex-col h-full bg-warm-50">
       {/* Page header */}
-      <header className="bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-5 py-3 flex items-center gap-4 shrink-0 sticky top-0 z-10 overflow-hidden">
-        <div className="flex items-center gap-3 shrink-0 min-w-fit">
+      <header className="bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-4 sm:px-5 py-3 flex items-center gap-2 sm:gap-3 flex-nowrap shrink-0 sticky top-0 z-10 overflow-visible">
+        <div className="flex items-center gap-2.5 shrink-0 min-w-0 max-w-[11rem] sm:max-w-[14rem] lg:max-w-none">
           <ScanBarcode className="w-5 h-5 text-primary-600 shrink-0" />
-          <h1 className="text-base font-bold text-warm-800 whitespace-nowrap">{t('desp.validar.title')}</h1>
+          <h1 className="text-base font-bold text-warm-800 truncate whitespace-nowrap">{t('desp.validar.title')}</h1>
         </div>
 
         <div className="flex-1 min-w-0 h-11 overflow-hidden">
@@ -219,12 +219,16 @@ export default function Validar() {
           )}
         </div>
 
-        <div className="inline-flex shrink-0 items-center gap-2 rounded-full border border-warm-200 bg-white/80 px-3 py-1 text-[11px] font-semibold text-warm-500">
-          <span className="inline-flex h-2 w-2 rounded-full bg-primary-500" />
-          {tabs.length > 0 ? `${tabs.length}/${MAX_TABS} sesiones` : t('desp.validar.empty.modos')}
-        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden xl:inline-flex shrink-0 items-center gap-2 rounded-full border border-warm-200 bg-white/80 px-3 py-1 text-[11px] font-semibold text-warm-500">
+            <span className="inline-flex h-2 w-2 rounded-full bg-primary-500" />
+            {tabs.length > 0 ? `${tabs.length}/${MAX_TABS} sesiones` : t('desp.validar.empty.modos')}
+          </div>
 
-        <UserMenu compact />
+          <div className="shrink-0">
+            <UserMenu compact />
+          </div>
+        </div>
       </header>
 
       {tabs.length === 0 ? (

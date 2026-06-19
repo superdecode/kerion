@@ -33,6 +33,40 @@ const ACTIVE_TAB_KEY = 'kirion_surtido_active_tab'
 const SESSION_KEY = (tabId) => `kirion_surtido_session_${tabId}`
 
 function genId() { return Math.random().toString(36).slice(2, 9) }
+function safeParseJson(raw) {
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function buildDefaultTab(label) {
+  return { id: genId(), label }
+}
+
+function normalizeStoredTabs(value, fallbackLabel) {
+  if (!Array.isArray(value)) return []
+
+  const tabs = value
+    .map((tab) => {
+      if (!tab || typeof tab !== 'object') return null
+      const id = typeof tab.id === 'string' && tab.id.trim() ? tab.id : genId()
+      const label = typeof tab.label === 'string' && tab.label.trim() ? tab.label : fallbackLabel
+      return { id, label }
+    })
+    .filter(Boolean)
+
+  const deduped = []
+  const seen = new Set()
+  tabs.forEach((tab) => {
+    if (seen.has(tab.id)) return
+    seen.add(tab.id)
+    deduped.push(tab)
+  })
+  return deduped
+}
 
 function buildItemMaps(detailData) {
   const detail = detailData?.data ?? detailData
@@ -652,6 +686,12 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
         setSearchError('La hoja de salidas no esta configurada. Ve a WmsHub -> Configuracion y guarda la URL de salidas.')
       } else if (code === 'SHEET_EMPTY') {
         setSearchError('La hoja de Google Sheets esta vacia o tiene menos de 2 filas. Verifica el contenido.')
+      } else if (code === 'SHEET_PROXY_UNAVAILABLE') {
+        setSearchError('El proxy de Google Sheets esta temporalmente no disponible. Intenta de nuevo en unos segundos.')
+      } else if (code === 'BACKEND_UNAVAILABLE') {
+        setSearchError('El backend de Kirion no esta disponible temporalmente. Espera un momento e intenta de nuevo.')
+      } else if (code === 'SHEET_TIMEOUT') {
+        setSearchError('La consulta a Google Sheets tardo demasiado. Intenta nuevamente.')
       } else if (err?.message?.includes('HTTP')) {
         setSearchError(`Error al obtener la hoja: ${err.message}. Verifica la URL y los permisos de acceso.`)
       } else {
@@ -1684,32 +1724,22 @@ const { data: reasonsData } = useQuery({
 
       {/* Right sidebar — wrapper always rendered so toggle stays at panel edge */}
       <div className={`hidden lg:flex shrink-0 relative ${sidebarVisible ? 'w-80' : 'w-0'}`}>
-        {!sidebarVisible && (
-          <button
-            type="button"
-            onClick={() => {
-              setSidebarVisible(true)
-              localStorage.setItem(sidebarStorageKey, 'visible')
-            }}
-            title="Mostrar panel"
-            className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-          >
-            <PanelRightOpen size={16} />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            setSidebarVisible(v => {
+              const next = !v
+              localStorage.setItem(sidebarStorageKey, next ? 'visible' : 'hidden')
+              return next
+            })
+          }}
+          title={sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}
+          className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+        >
+          {sidebarVisible ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+        </button>
         {sidebarVisible && (
-        <div className="w-full h-full hidden lg:flex border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] relative">
-          <button
-            type="button"
-            onClick={() => {
-              setSidebarVisible(false)
-              localStorage.setItem(sidebarStorageKey, 'hidden')
-            }}
-            title="Ocultar panel"
-            className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-          >
-            <PanelRightClose size={16} />
-          </button>
+        <div className="w-full h-full hidden lg:flex border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] overflow-hidden">
         <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50">
           <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
             <Zap className="w-3.5 h-3.5 text-primary-500" /> {t('surtido.validacion.sidebar_title')}
@@ -2164,6 +2194,7 @@ export default function SurtidoValidacion() {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const { hasPermission } = useAuthStore()
+  const newTabLabel = t('surtido.validacion.new_tab')
   const canCreateValidation = hasPermission('surtido.validacion', 'crear')
   const canUpdateValidation = hasPermission('surtido.validacion', 'actualizar')
   const canDeleteValidation = hasPermission('surtido.validacion', 'eliminar')
@@ -2173,17 +2204,14 @@ export default function SurtidoValidacion() {
   const [refreshingSheet, setRefreshingSheet] = useState(false)
 
   const [tabs, setTabs] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(TABS_KEY) || 'null')
-      if (Array.isArray(saved) && saved.length > 0) return saved
-    } catch {}
-    return [{ id: genId(), label: t('surtido.validacion.new_tab') }]
+    const saved = safeParseJson(localStorage.getItem(TABS_KEY))
+    const normalized = normalizeStoredTabs(saved, newTabLabel)
+    if (normalized.length > 0) return normalized
+    return [buildDefaultTab(newTabLabel)]
   })
   const [activeTabId, setActiveTabId] = useState(() => {
-    try {
-      const saved = localStorage.getItem(ACTIVE_TAB_KEY)
-      if (saved) return saved
-    } catch {}
+    const saved = localStorage.getItem(ACTIVE_TAB_KEY)
+    if (saved) return saved
     return tabs[0]?.id
   })
 
@@ -2195,10 +2223,23 @@ export default function SurtidoValidacion() {
     if (!obcParam || initialObcConsumed) return
     setInitialObcConsumed(true)
     const activeTab = tabs.find(t => t.id === activeTabId)
-    if (activeTab?.label === t('surtido.validacion.new_tab') || !activeTab?.label) {
+    if (activeTab?.label === newTabLabel || !activeTab?.label) {
       setTabs(prev => prev.map(tab => tab.id === activeTabId ? { ...tab, label: obcParam } : tab))
     }
   }, [obcParam]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (tabs.length === 0) {
+      const fallback = buildDefaultTab(newTabLabel)
+      setTabs([fallback])
+      setActiveTabId(fallback.id)
+      return
+    }
+
+    if (!tabs.some((tab) => tab.id === activeTabId)) {
+      setActiveTabId(tabs[0].id)
+    }
+  }, [activeTabId, newTabLabel, tabs])
 
   useEffect(() => {
     try { localStorage.setItem(TABS_KEY, JSON.stringify(tabs)) } catch {}
@@ -2210,7 +2251,7 @@ export default function SurtidoValidacion() {
 
   function addTab() {
     const newId = genId()
-    const newTab = { id: newId, label: t('surtido.validacion.new_tab') }
+    const newTab = { id: newId, label: newTabLabel }
     setTabs(prev => [...prev, newTab])
     setActiveTabId(newId)
   }
@@ -2219,7 +2260,7 @@ export default function SurtidoValidacion() {
     setTabs(prev => {
       const next = prev.filter(t => t.id !== tabId)
       if (next.length === 0) {
-        const fresh = { id: genId(), label: t('surtido.validacion.new_tab') }
+        const fresh = buildDefaultTab(newTabLabel)
         setActiveTabId(fresh.id)
         return [fresh]
       }
@@ -2234,7 +2275,7 @@ export default function SurtidoValidacion() {
   function handleUpdateTab(tabId, { obc, step }) {
     setTabs(prev => prev.map(tab => {
       if (tab.id !== tabId) return tab
-      const label = obc || t('surtido.validacion.new_tab')
+      const label = obc || newTabLabel
       return { ...tab, label }
     }))
     if (obc && pendingTabObcs[tabId]) {
