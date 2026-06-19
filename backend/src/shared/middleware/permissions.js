@@ -31,6 +31,7 @@ const MODULE_ALIASES = {
 const MODULE_FALLBACKS = {
   'fep.folios': 'dropscan.folios',
   'dropscan.folios': 'fep.folios',
+  'despacho.validar': 'despacho.folios',
 }
 
 function normalizeLevel(level) {

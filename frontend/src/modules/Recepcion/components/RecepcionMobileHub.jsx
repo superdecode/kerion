@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { searchByCode } from '../services/recepcionService'
 import { fmtDate } from '../../../core/utils/dateFormat'
+import StatusPill from '../../../core/components/common/StatusPill'
 
 const ESTADO_META = {
   pendiente_validacion: { cls: 'bg-warm-100 text-warm-600' },
@@ -18,9 +19,9 @@ const ESTADO_META = {
 function EstadoBadge({ estado, t }) {
   const meta = ESTADO_META[estado] ?? ESTADO_META.pendiente_validacion
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${meta.cls}`}>
+    <StatusPill size="xs" className={meta.cls}>
       {t(`rec.status.${estado}`) || estado}
-    </span>
+    </StatusPill>
   )
 }
 

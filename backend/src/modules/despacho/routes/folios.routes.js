@@ -1,9 +1,13 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
-import { requirePermission } from '../../../shared/middleware/permissions.js'
+import { requireAnyPermission, requirePermission } from '../../../shared/middleware/permissions.js'
 import { instantDateInTZ } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
+const requireDespachoValidar = (action) => requireAnyPermission([
+  { modulePath: 'despacho.validar', action },
+  { modulePath: 'despacho.folios', action },
+])
 
 async function generateFolioNumero(req) {
   const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
@@ -20,7 +24,6 @@ async function generateFolioNumero(req) {
 }
 
 async function getFolioDetail(req, folioId) {
-  // Fetch folio header and orders list in parallel
   const [folioRes, ordersRes] = await Promise.all([
     req.tQuery(
       `SELECT f.*,
@@ -33,7 +36,7 @@ async function getFolioDetail(req, folioId) {
        LEFT JOIN dispatch_unidades u ON u.id = f.unidad_id
        LEFT JOIN usuarios us ON us.id = f.operador_id
        LEFT JOIN dispatch_folio_orders fo ON fo.folio_id = f.id
-       WHERE f.id = $1 AND f.tenant_id = $2
+       WHERE f.id = $1 AND f.tenant_id = $2 AND f.deleted_at IS NULL
        GROUP BY f.id, c.nombre, c.licencia, c.telefono, u.placa, u.tipo, us.nombre_completo`,
       [folioId, req.tenantId]
     ),
@@ -69,7 +72,7 @@ async function getFolioDetail(req, folioId) {
   return { folio: folioRes.rows[0], orders }
 }
 
-// List folios
+// List folios (exclude soft-deleted)
 router.get('/',
   authenticateToken, loadFullUser,
   requirePermission('despacho.folios', 'ver'),
@@ -78,7 +81,7 @@ router.get('/',
       const { q = '', estado = '', fecha_inicio = '', fecha_fin = '' } = req.query
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       const params = [req.tenantId]
-      const where = ['f.tenant_id = $1']
+      const where = ['f.tenant_id = $1', 'f.deleted_at IS NULL']
 
       if (estado) {
         params.push(estado)
@@ -122,7 +125,7 @@ router.get('/',
   }
 )
 
-// Dispatch status for outbound orders (which folio each order is in)
+// Dispatch status for outbound orders
 router.get('/ordenes-dispatch',
   authenticateToken, loadFullUser,
   requirePermission('despacho.ordenes', 'ver'),
@@ -133,7 +136,7 @@ router.get('/ordenes-dispatch',
                 f.folio_numero, f.estado AS folio_estado
          FROM dispatch_folio_orders fo
          JOIN dispatch_folios f ON f.id = fo.folio_id
-         WHERE fo.tenant_id = $1 AND f.estado IN ('borrador','en_proceso','cerrado')`,
+         WHERE fo.tenant_id = $1 AND f.estado IN ('borrador','en_proceso','cerrado') AND f.deleted_at IS NULL`,
         [req.tenantId]
       )
       res.json({ dispatch: result.rows })
@@ -147,19 +150,22 @@ router.get('/ordenes-dispatch',
 // Create folio
 router.post('/',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'crear'),
+  requireDespachoValidar('crear'),
   async (req, res) => {
     try {
-      const { conductor_id = null, unidad_id = null, notas = '' } = req.body
+      const { conductor_id = null, unidad_id = null, notas = '', tipo = 'por_orden', destino = null } = req.body
       const fecha_salida = req.body.fecha_salida === '' ? null : (req.body.fecha_salida ?? null)
+      if (!conductor_id || !unidad_id || !fecha_salida) {
+        return res.status(400).json({ error: 'Conductor, unidad y fecha de salida son obligatorios para crear el folio' })
+      }
       const folio_numero = await generateFolioNumero(req)
       const result = await req.tQuery(
-        `INSERT INTO dispatch_folios (tenant_id, folio_numero, conductor_id, unidad_id, operador_id, fecha_salida, notas)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO dispatch_folios (tenant_id, folio_numero, conductor_id, unidad_id, operador_id, fecha_salida, notas, tipo, destino)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          RETURNING *`,
-        [req.tenantId, folio_numero, conductor_id, unidad_id, req.user.id, fecha_salida, notas || null]
+        [req.tenantId, folio_numero, conductor_id, unidad_id, req.user.id, fecha_salida, notas || null, tipo, destino || null]
       )
-      auditLog(req, 'DESPACHO_FOLIO_CREATE', 'dispatch_folio', result.rows[0].id, { folio_numero })
+      auditLog(req, 'DESPACHO_FOLIO_CREATE', 'dispatch_folio', result.rows[0].id, { folio_numero, tipo })
       res.status(201).json({ folio: result.rows[0] })
     } catch (error) {
       console.error('Create folio error:', error)
@@ -171,7 +177,7 @@ router.post('/',
 // Get folio detail
 router.get('/:id',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'ver'),
+  requireDespachoValidar('ver'),
   async (req, res) => {
     try {
       const detail = await getFolioDetail(req, req.params.id)
@@ -184,22 +190,54 @@ router.get('/:id',
   }
 )
 
-// Update folio metadata
+// Update folio metadata (allowed for borrador, en_proceso, cerrado — not cancelado)
+// Also handles validar_por_tarimas toggle (only for active folios)
 router.put('/:id',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'actualizar'),
+  requireDespachoValidar('actualizar'),
   async (req, res) => {
     try {
-      const { conductor_id = null, unidad_id = null, notas = '' } = req.body
-      const fecha_salida = req.body.fecha_salida === '' ? null : (req.body.fecha_salida ?? null)
-      const result = await req.tQuery(
-        `UPDATE dispatch_folios
-         SET conductor_id = $1, unidad_id = $2, fecha_salida = $3, notas = $4, updated_at = now()
-         WHERE id = $5 AND tenant_id = $6 AND estado IN ('borrador','en_proceso')
-         RETURNING *`,
-        [conductor_id, unidad_id, fecha_salida, notas || null, req.params.id, req.tenantId]
+      const folioRes = await req.tQuery(
+        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [req.params.id, req.tenantId]
       )
-      if (result.rows.length === 0) return res.status(409).json({ error: 'El folio ya no se puede editar' })
+      if (folioRes.rows.length === 0) return res.status(404).json({ error: 'Folio no encontrado' })
+      const { estado } = folioRes.rows[0]
+      if (estado === 'cancelado') return res.status(409).json({ error: 'No se puede editar un folio cancelado' })
+
+      const setClauses = ['updated_at = now()']
+      const params = []
+
+      if ('conductor_id' in req.body) {
+        params.push(req.body.conductor_id || null)
+        setClauses.push(`conductor_id = $${params.length}`)
+      }
+      if ('unidad_id' in req.body) {
+        params.push(req.body.unidad_id || null)
+        setClauses.push(`unidad_id = $${params.length}`)
+      }
+      if ('notas' in req.body) {
+        params.push(req.body.notas || null)
+        setClauses.push(`notas = $${params.length}`)
+      }
+      if ('fecha_salida' in req.body) {
+        params.push(req.body.fecha_salida === '' ? null : (req.body.fecha_salida ?? null))
+        setClauses.push(`fecha_salida = $${params.length}`)
+      }
+      // validar_por_tarimas only for active folios
+      if ('validar_por_tarimas' in req.body && ['borrador', 'en_proceso'].includes(estado)) {
+        params.push(req.body.validar_por_tarimas ?? false)
+        setClauses.push(`validar_por_tarimas = $${params.length}`)
+      }
+
+      params.push(req.params.id, req.tenantId)
+      const result = await req.tQuery(
+        `UPDATE dispatch_folios SET ${setClauses.join(', ')}
+         WHERE id = $${params.length - 1} AND tenant_id = $${params.length} AND deleted_at IS NULL
+         RETURNING *`,
+        params
+      )
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Folio no encontrado' })
       res.json({ folio: result.rows[0] })
     } catch (error) {
       console.error('Update folio error:', error)
@@ -208,17 +246,226 @@ router.put('/:id',
   }
 )
 
+// Bulk-add orders to folio (for por_destino: insert all destino orders at once)
+router.post('/:id/orders/bulk',
+  authenticateToken, loadFullUser,
+  requireDespachoValidar('crear'),
+  async (req, res) => {
+    try {
+      const { orders } = req.body
+      if (!Array.isArray(orders) || orders.length === 0) {
+        return res.status(400).json({ error: 'orders array requerido' })
+      }
+      const folioRes = await req.tQuery(
+        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [req.params.id, req.tenantId]
+      )
+      if (folioRes.rows.length === 0) return res.status(404).json({ error: 'Folio no encontrado' })
+      if (!['borrador','en_proceso'].includes(folioRes.rows[0].estado)) {
+        return res.status(409).json({ error: 'El folio no acepta más órdenes' })
+      }
+      // Insert all orders — skip duplicates silently
+      for (const o of orders) {
+        if (!o.outbound_order_no) continue
+        await req.tQuery(
+          `INSERT INTO dispatch_folio_orders
+             (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (tenant_id, folio_id, outbound_order_no) DO NOTHING`,
+          [req.tenantId, req.params.id, o.outbound_order_no,
+           o.destinatario || null, o.bultos || 0, o.bultos_esperados || null, o.notas || null]
+        )
+      }
+      await req.tQuery(
+        `UPDATE dispatch_folios SET estado = 'en_proceso', updated_at = now()
+         WHERE id = $1 AND tenant_id = $2 AND estado = 'borrador'`,
+        [req.params.id, req.tenantId]
+      )
+      const detail = await getFolioDetail(req, req.params.id)
+      res.status(201).json(detail)
+    } catch (error) {
+      console.error('Bulk add orders error:', error)
+      res.status(500).json({ error: 'Error agregando órdenes al folio' })
+    }
+  }
+)
+
+// Get all scans for a folio (for por_destino detail view)
+router.get('/:id/scans',
+  authenticateToken, loadFullUser,
+  requireDespachoValidar('ver'),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `SELECT s.*, u.nombre_completo AS validated_by_nombre
+         FROM dispatch_order_scans s
+         LEFT JOIN usuarios u ON u.id = s.validated_by
+         WHERE s.tenant_id = $1 AND s.folio_id = $2
+         ORDER BY s.validated_at ASC`,
+        [req.tenantId, req.params.id]
+      )
+      res.json({ scans: result.rows })
+    } catch (error) {
+      console.error('Get folio scans error:', error)
+      res.status(500).json({ error: 'Error obteniendo escaneos' })
+    }
+  }
+)
+
+// Add folio-level scan (for por_destino — box matched to order client-side)
+router.post('/:id/scans',
+  authenticateToken, loadFullUser,
+  requireDespachoValidar('actualizar'),
+  async (req, res) => {
+    try {
+      const { codigo_caja, tarima_ref = null, matched_order_no = null } = req.body
+      if (!codigo_caja?.trim()) return res.status(400).json({ error: 'codigo_caja requerido' })
+
+      const folioRes = await req.tQuery(
+        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [req.params.id, req.tenantId]
+      )
+      if (!folioRes.rows.length || !['borrador','en_proceso'].includes(folioRes.rows[0].estado)) {
+        return res.status(409).json({ error: 'Folio no editable' })
+      }
+
+      // Duplicate within this folio
+      const folioDedupeRes = await req.tQuery(
+        `SELECT id FROM dispatch_order_scans
+         WHERE tenant_id = $1 AND folio_id = $2 AND codigo_caja = $3`,
+        [req.tenantId, req.params.id, codigo_caja.trim()]
+      )
+      if (folioDedupeRes.rows.length > 0) {
+        return res.status(409).json({ error: 'Código ya escaneado en este folio', code: 'DUPLICATE_IN_FOLIO' })
+      }
+
+      // Cross-folio same-day dedup (excluding cancelled folios)
+      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
+      const crossFolioRes = await req.tQuery(
+        `SELECT f.folio_numero FROM dispatch_order_scans s
+         JOIN dispatch_folios f ON f.id = s.folio_id
+         WHERE s.tenant_id = $1 AND s.codigo_caja = $2
+           AND s.folio_id != $3
+           AND f.estado != 'cancelado'
+           AND f.deleted_at IS NULL
+           AND date_trunc('day', s.validated_at AT TIME ZONE $4) =
+               date_trunc('day', now() AT TIME ZONE $4)
+         LIMIT 1`,
+        [req.tenantId, codigo_caja.trim(), req.params.id, tz]
+      )
+      if (crossFolioRes.rows.length > 0) {
+        return res.status(409).json({
+          error: `Caja ya escaneada hoy en folio ${crossFolioRes.rows[0].folio_numero}`,
+          code: 'DUPLICATE_CROSS_FOLIO',
+          folio_numero: crossFolioRes.rows[0].folio_numero,
+        })
+      }
+
+      await req.tQuery(
+        `INSERT INTO dispatch_order_scans
+           (tenant_id, folio_id, codigo_caja, tarima_ref, matched_order_no, validated_by)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [req.tenantId, req.params.id, codigo_caja.trim(), tarima_ref || null, matched_order_no || null, req.user.id]
+      )
+
+      // If matched to an order in this folio, update that order's bultos
+      if (matched_order_no) {
+        await req.tQuery(
+          `UPDATE dispatch_folio_orders
+           SET bultos = (
+             SELECT COUNT(*) FROM dispatch_order_scans s2
+             WHERE s2.folio_id = $1 AND s2.matched_order_no = $2 AND s2.tenant_id = $3
+           )
+           WHERE folio_id = $1 AND outbound_order_no = $2 AND tenant_id = $3`,
+          [req.params.id, matched_order_no, req.tenantId]
+        )
+      }
+
+      await req.tQuery(
+        `UPDATE dispatch_folios SET estado = 'en_proceso', updated_at = now()
+         WHERE id = $1 AND tenant_id = $2 AND estado = 'borrador'`,
+        [req.params.id, req.tenantId]
+      )
+
+      const scansRes = await req.tQuery(
+        `SELECT s.*, u.nombre_completo AS validated_by_nombre
+         FROM dispatch_order_scans s
+         LEFT JOIN usuarios u ON u.id = s.validated_by
+         WHERE s.tenant_id = $1 AND s.folio_id = $2
+         ORDER BY s.validated_at ASC`,
+        [req.tenantId, req.params.id]
+      )
+      res.json({ scans: scansRes.rows })
+    } catch (error) {
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'Código ya escaneado en este folio', code: 'DUPLICATE_IN_FOLIO' })
+      }
+      console.error('Add folio scan error:', error)
+      res.status(500).json({ error: 'Error registrando escaneo' })
+    }
+  }
+)
+
+// Delete a specific scan (por_destino — by scan id)
+router.delete('/:id/scans/:scanId',
+  authenticateToken, loadFullUser,
+  requireDespachoValidar('actualizar'),
+  async (req, res) => {
+    try {
+      const folioRes = await req.tQuery(
+        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [req.params.id, req.tenantId]
+      )
+      if (!folioRes.rows.length || !['borrador','en_proceso'].includes(folioRes.rows[0].estado)) {
+        return res.status(409).json({ error: 'Folio no editable' })
+      }
+      const delRes = await req.tQuery(
+        `DELETE FROM dispatch_order_scans
+         WHERE id = $1 AND folio_id = $2 AND tenant_id = $3
+         RETURNING matched_order_no`,
+        [req.params.scanId, req.params.id, req.tenantId]
+      )
+      if (delRes.rows.length === 0) return res.status(404).json({ error: 'Escaneo no encontrado' })
+
+      const matchedOrderNo = delRes.rows[0].matched_order_no
+      if (matchedOrderNo) {
+        await req.tQuery(
+          `UPDATE dispatch_folio_orders
+           SET bultos = (
+             SELECT COUNT(*) FROM dispatch_order_scans s2
+             WHERE s2.folio_id = $1 AND s2.matched_order_no = $2 AND s2.tenant_id = $3
+           )
+           WHERE folio_id = $1 AND outbound_order_no = $2 AND tenant_id = $3`,
+          [req.params.id, matchedOrderNo, req.tenantId]
+        )
+      }
+      const scansRes = await req.tQuery(
+        `SELECT s.*, u.nombre_completo AS validated_by_nombre
+         FROM dispatch_order_scans s
+         LEFT JOIN usuarios u ON u.id = s.validated_by
+         WHERE s.tenant_id = $1 AND s.folio_id = $2
+         ORDER BY s.validated_at ASC`,
+        [req.tenantId, req.params.id]
+      )
+      res.json({ scans: scansRes.rows })
+    } catch (error) {
+      console.error('Delete folio scan error:', error)
+      res.status(500).json({ error: 'Error eliminando escaneo' })
+    }
+  }
+)
+
 // Add order to folio
 router.post('/:id/orders',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'crear'),
+  requireDespachoValidar('crear'),
   async (req, res) => {
     try {
       const { outbound_order_no, destinatario = null, bultos = 1, bultos_esperados = null, notas = '' } = req.body
       if (!outbound_order_no) return res.status(400).json({ error: 'outbound_order_no es requerido' })
 
       const folioRes = await req.tQuery(
-        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2`,
+        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
         [req.params.id, req.tenantId]
       )
       if (folioRes.rows.length === 0) return res.status(404).json({ error: 'Folio no encontrado' })
@@ -226,15 +473,33 @@ router.post('/:id/orders',
         return res.status(409).json({ error: 'El folio no acepta más órdenes' })
       }
 
+      // Reject duplicate within same folio
+      const dupeRes = await req.tQuery(
+        `SELECT id FROM dispatch_folio_orders
+         WHERE tenant_id = $1 AND folio_id = $2 AND outbound_order_no = $3`,
+        [req.tenantId, req.params.id, outbound_order_no]
+      )
+      if (dupeRes.rows.length > 0) {
+        return res.status(409).json({ error: 'Esta orden ya está registrada en este folio' })
+      }
+
+      // Reject if order belongs to another non-cancelled folio
+      const otherFolioRes = await req.tQuery(
+        `SELECT f.folio_numero FROM dispatch_folio_orders fo
+         JOIN dispatch_folios f ON f.id = fo.folio_id
+         WHERE fo.tenant_id = $1 AND fo.outbound_order_no = $2
+           AND f.estado NOT IN ('cancelado') AND f.deleted_at IS NULL
+           AND f.id != $3`,
+        [req.tenantId, outbound_order_no, req.params.id]
+      )
+      if (otherFolioRes.rows.length > 0) {
+        return res.status(409).json({ error: `La orden ya está asignada al folio ${otherFolioRes.rows[0].folio_numero}` })
+      }
+
       const result = await req.tQuery(
         `INSERT INTO dispatch_folio_orders
            (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas)
          VALUES ($1,$2,$3,$4,$5,$6,$7)
-         ON CONFLICT (tenant_id, folio_id, outbound_order_no) DO UPDATE
-           SET destinatario = EXCLUDED.destinatario,
-               bultos = EXCLUDED.bultos,
-               bultos_esperados = EXCLUDED.bultos_esperados,
-               notas = EXCLUDED.notas
          RETURNING *`,
         [req.tenantId, req.params.id, outbound_order_no, destinatario, bultos, bultos_esperados, notas || null]
       )
@@ -258,7 +523,7 @@ router.post('/:id/orders',
 // Update order status in folio
 router.put('/:id/orders/:orderId',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'actualizar'),
+  requireDespachoValidar('actualizar'),
   async (req, res) => {
     try {
       const { estado, notas, bultos, destinatario } = req.body
@@ -282,17 +547,17 @@ router.put('/:id/orders/:orderId',
   }
 )
 
-// Add scan to order (box validation)
+// Add scan to order (accepts optional tarima_ref)
 router.post('/:id/orders/:orderId/scans',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'actualizar'),
+  requireDespachoValidar('actualizar'),
   async (req, res) => {
     try {
-      const { codigo_caja } = req.body
+      const { codigo_caja, tarima_ref = null } = req.body
       if (!codigo_caja?.trim()) return res.status(400).json({ error: 'codigo_caja requerido' })
 
       const folioRes = await req.tQuery(
-        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2`,
+        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
         [req.params.id, req.tenantId]
       )
       if (!folioRes.rows.length || !['borrador','en_proceso'].includes(folioRes.rows[0].estado)) {
@@ -300,9 +565,9 @@ router.post('/:id/orders/:orderId/scans',
       }
 
       await req.tQuery(
-        `INSERT INTO dispatch_order_scans (tenant_id, folio_order_id, codigo_caja, validated_by)
-         VALUES ($1, $2, $3, $4)`,
-        [req.tenantId, req.params.orderId, codigo_caja.trim(), req.user.id]
+        `INSERT INTO dispatch_order_scans (tenant_id, folio_id, folio_order_id, codigo_caja, tarima_ref, validated_by)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [req.tenantId, req.params.id, req.params.orderId, codigo_caja.trim(), tarima_ref || null, req.user.id]
       )
       await req.tQuery(
         `UPDATE dispatch_folio_orders
@@ -324,7 +589,7 @@ router.post('/:id/orders/:orderId/scans',
 // Delete last scan of an order
 router.delete('/:id/orders/:orderId/scans/last',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'actualizar'),
+  requireDespachoValidar('actualizar'),
   async (req, res) => {
     try {
       const lastRes = await req.tQuery(
@@ -358,11 +623,11 @@ router.delete('/:id/orders/:orderId/scans/last',
 // Remove order from folio
 router.delete('/:id/orders/:orderId',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'eliminar'),
+  requireDespachoValidar('eliminar'),
   async (req, res) => {
     try {
       const folioRes = await req.tQuery(
-        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2`,
+        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
         [req.params.id, req.tenantId]
       )
       if (folioRes.rows.length === 0) return res.status(404).json({ error: 'Folio no encontrado' })
@@ -385,13 +650,13 @@ router.delete('/:id/orders/:orderId',
 // Close folio
 router.post('/:id/cerrar',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'actualizar'),
+  requireDespachoValidar('actualizar'),
   async (req, res) => {
     try {
       const result = await req.tQuery(
         `UPDATE dispatch_folios
          SET estado = 'cerrado', fecha_salida = COALESCE(fecha_salida, now()), updated_at = now()
-         WHERE id = $1 AND tenant_id = $2 AND estado = 'en_proceso'
+         WHERE id = $1 AND tenant_id = $2 AND estado = 'en_proceso' AND deleted_at IS NULL
          RETURNING *`,
         [req.params.id, req.tenantId]
       )
@@ -405,16 +670,39 @@ router.post('/:id/cerrar',
   }
 )
 
-// Cancel folio
+// Reopen folio — set closed folio back to en_proceso
+router.post('/:id/reabrir',
+  authenticateToken, loadFullUser,
+  requireDespachoValidar('actualizar'),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `UPDATE dispatch_folios
+         SET estado = 'en_proceso', updated_at = now()
+         WHERE id = $1 AND tenant_id = $2 AND estado = 'cerrado' AND deleted_at IS NULL
+         RETURNING *`,
+        [req.params.id, req.tenantId]
+      )
+      if (result.rows.length === 0) return res.status(409).json({ error: 'Solo se puede reabrir un folio cerrado' })
+      auditLog(req, 'DESPACHO_FOLIO_REABRIR', 'dispatch_folio', req.params.id, {})
+      res.json({ folio: result.rows[0] })
+    } catch (error) {
+      console.error('Reabrir folio error:', error)
+      res.status(500).json({ error: 'Error reabriendo folio' })
+    }
+  }
+)
+
+// Cancel folio — requires actualizar or higher (not eliminar)
 router.post('/:id/cancelar',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'eliminar'),
+  requireDespachoValidar('actualizar'),
   async (req, res) => {
     try {
       const result = await req.tQuery(
         `UPDATE dispatch_folios
          SET estado = 'cancelado', updated_at = now()
-         WHERE id = $1 AND tenant_id = $2 AND estado IN ('borrador','en_proceso')
+         WHERE id = $1 AND tenant_id = $2 AND estado IN ('borrador','en_proceso') AND deleted_at IS NULL
          RETURNING *`,
         [req.params.id, req.tenantId]
       )
@@ -423,6 +711,31 @@ router.post('/:id/cancelar',
     } catch (error) {
       console.error('Cancelar folio error:', error)
       res.status(500).json({ error: 'Error cancelando folio' })
+    }
+  }
+)
+
+// Delete folio — only cancelled folios, requires eliminar
+router.delete('/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('despacho.folios', 'eliminar'),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `UPDATE dispatch_folios
+         SET deleted_at = now(), updated_at = now()
+         WHERE id = $1 AND tenant_id = $2 AND estado = 'cancelado' AND deleted_at IS NULL
+         RETURNING id`,
+        [req.params.id, req.tenantId]
+      )
+      if (result.rows.length === 0) {
+        return res.status(409).json({ error: 'Solo se pueden eliminar folios cancelados' })
+      }
+      auditLog(req, 'DESPACHO_FOLIO_DELETE', 'dispatch_folio', req.params.id, {})
+      res.json({ ok: true })
+    } catch (error) {
+      console.error('Delete folio error:', error)
+      res.status(500).json({ error: 'Error eliminando folio' })
     }
   }
 )

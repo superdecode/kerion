@@ -17,7 +17,18 @@ import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLa
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 
-function buildTarimaMap(lines, groupOptions = null) {
+function parseTarimaNumber(value) {
+  const normalized = String(value ?? '').trim().toUpperCase().replace(/^T\s*/, '')
+  const num = Number.parseInt(normalized, 10)
+  return Number.isInteger(num) && num > 0 ? num : null
+}
+
+function formatTarimaLocation(value) {
+  const num = parseTarimaNumber(value)
+  return num ? `T${num}` : null
+}
+
+function buildTarimaMap(lines, pinnedTarimas = new Map(), groupOptions = null) {
   const basesInOrder = []
   const baseCounts = new Map()
   for (const line of lines) {
@@ -27,14 +38,22 @@ function buildTarimaMap(lines, groupOptions = null) {
     baseCounts.set(base, baseCounts.get(base) + 1)
   }
   const map = new Map()
-  let tarimaNum = 1
+  for (const base of basesInOrder) {
+    const pinnedNum = pinnedTarimas.get(base)
+    if (pinnedNum) map.set(base, pinnedNum)
+  }
+  const usedNums = new Set(map.values())
+  let tarimaNum = usedNums.size > 0 ? Math.max(...usedNums) + 1 : 1
   if (!groupOptions?.enabled) {
-    for (const base of basesInOrder) map.set(base, tarimaNum++)
+    for (const base of basesInOrder) {
+      if (!map.has(base)) map.set(base, tarimaNum++)
+    }
     return map
   }
   const { minCajas, maxCajas } = groupOptions
   // Large codes (>= minCajas) each get their own tarima first
   for (const base of basesInOrder) {
+    if (map.has(base)) continue
     if (baseCounts.get(base) >= minCajas) map.set(base, tarimaNum++)
   }
   // Small codes (< minCajas) get packed into group tarimas
@@ -42,7 +61,7 @@ function buildTarimaMap(lines, groupOptions = null) {
   let groupNum = tarimaNum
   for (const base of basesInOrder) {
     const count = baseCounts.get(base)
-    if (count >= minCajas) continue
+    if (count >= minCajas || map.has(base)) continue
     // If adding this code would exceed maxCajas, start a new group tarima
     if (groupCajas > 0 && groupCajas + count > maxCajas) {
       tarimaNum++; groupNum = tarimaNum; groupCajas = 0
@@ -132,6 +151,7 @@ export default function ValidacionRecepcion() {
   const [groupSmallCodes, setGroupSmallCodes] = useState(false)
   const [minCajasParaAgrupar, setMinCajasParaAgrupar] = useState(3)
   const [maxCajasEnGrupo, setMaxCajasEnGrupo] = useState(10)
+  const [sortTarimasByCountDesc, setSortTarimasByCountDesc] = useState(false)
 
   // Tarima transfer
   const [tarimaTransferModal, setTarimaTransferModal] = useState({ open: false, fromNum: null, fromBases: [] })
@@ -168,16 +188,39 @@ export default function ValidacionRecepcion() {
   const pendientes = Math.max(total - validadas - faltantes, 0)
   const progressPct = total > 0 ? Math.min(100, Math.round((validadas / total) * 100)) : 0
 
-  const baseTarimaMap = useMemo(
-    () => buildTarimaMap(lines, groupSmallCodes ? { enabled: true, minCajas: minCajasParaAgrupar, maxCajas: maxCajasEnGrupo } : null),
-    [lines, groupSmallCodes, minCajasParaAgrupar, maxCajasEnGrupo]
-  )
-  const effectiveTarimaMap = useMemo(() => {
-    if (tarimaOverrides.size === 0) return baseTarimaMap
-    const map = new Map(baseTarimaMap)
-    for (const [base, num] of tarimaOverrides) map.set(base, num)
+  const persistedTarimaMap = useMemo(() => {
+    if (!withTarimas && tarimaOverrides.size === 0) return new Map()
+    const map = new Map()
+    for (const ev of serverEvents) {
+      if (ev.resultado !== 'correcto') continue
+      const base = extractBaseCode(ev.codigo_escaneado)
+      const tarimaNum = parseTarimaNumber(ev.ubicacion)
+      if (base && tarimaNum) map.set(base, tarimaNum)
+    }
+    for (const h of history) {
+      if (h.result !== 'correcto') continue
+      const base = extractBaseCode(h.code)
+      const tarimaNum = parseTarimaNumber(h.ubicacion)
+      if (base && tarimaNum) map.set(base, tarimaNum)
+    }
     return map
-  }, [baseTarimaMap, tarimaOverrides])
+  }, [serverEvents, history, withTarimas, tarimaOverrides])
+  const lockedTarimaMap = useMemo(() => {
+    const map = new Map(tarimaOverrides)
+    for (const [base, num] of persistedTarimaMap) map.set(base, num)
+    return map
+  }, [tarimaOverrides, persistedTarimaMap])
+  const hasLockedTarimaAssignments = lockedTarimaMap.size > 0
+
+  const baseTarimaMap = useMemo(
+    () => buildTarimaMap(
+      lines,
+      lockedTarimaMap,
+      groupSmallCodes ? { enabled: true, minCajas: minCajasParaAgrupar, maxCajas: maxCajasEnGrupo } : null
+    ),
+    [lines, lockedTarimaMap, groupSmallCodes, minCajasParaAgrupar, maxCajasEnGrupo]
+  )
+  const effectiveTarimaMap = baseTarimaMap
   const totalTarimas = useMemo(() => new Set(effectiveTarimaMap.values()).size, [effectiveTarimaMap])
 
   const lastTarimaNum = useMemo(() => {
@@ -211,8 +254,14 @@ export default function ValidacionRecepcion() {
       ...ts,
       total: ts.tarLines.length,
       validated: ts.tarLines.filter(l => l.estado_validacion === 'validada').length,
-    })).sort((a, b) => a.num - b.num)
-  }, [withTarimas, effectiveTarimaMap, lines])
+    })).sort((a, b) => {
+      if (sortTarimasByCountDesc) {
+        const totalCmp = b.total - a.total
+        if (totalCmp !== 0) return totalCmp
+      }
+      return a.num - b.num
+    })
+  }, [withTarimas, effectiveTarimaMap, lines, sortTarimasByCountDesc])
 
   const tarimaCounts = useMemo(() => ({
     completo:   tarimaStats.filter(ts => ts.validated === ts.total && ts.total > 0).length,
@@ -223,7 +272,7 @@ export default function ValidacionRecepcion() {
   // Dynamic active set: first N incomplete tarimas + any prioritized ones
   const activeTarimaSet = useMemo(() => {
     if (!sectionMode) return null
-    const incomplete = tarimaStats.filter(ts => ts.validated < ts.total).map(ts => ts.num).sort((a, b) => a - b)
+    const incomplete = tarimaStats.filter(ts => ts.validated < ts.total).map(ts => ts.num)
     const s = new Set(incomplete.slice(0, maxTarimasPerSection))
     for (const num of prioritizedTarimas) s.add(num)
     return s
@@ -376,6 +425,15 @@ export default function ValidacionRecepcion() {
         })
       }
       if (ev.resultado === 'correcto') {
+        const tarimaNum = parseTarimaNumber(variables.ubicacion)
+        const base = extractBaseCode(ev.codigo_escaneado)
+        if (base && tarimaNum) {
+          setTarimaOverrides(prev => {
+            const next = new Map(prev)
+            next.set(base, tarimaNum)
+            return next
+          })
+        }
         setHistory(prev => [{
           id: ev.id, result: ev.resultado, code: ev.codigo_escaneado,
           sku: ev.sku_asociado, scannedAt: ev.scanned_at, scannedBy: ev.scanned_by_nombre || '—',
@@ -481,7 +539,9 @@ export default function ValidacionRecepcion() {
           return
         }
       }
-      scanMut.mutate({ codigo: code, ubicacion: selectedUbicacion })
+      const tarimaNum = withTarimas ? effectiveTarimaMap.get(extractBaseCode(code)) : null
+      const ubicacion = withTarimas ? formatTarimaLocation(tarimaNum) : selectedUbicacion
+      scanMut.mutate({ codigo: code, ubicacion })
     }
   }
 
@@ -739,6 +799,20 @@ export default function ValidacionRecepcion() {
           )}
         </div>
 
+        {lastTarimaNum && lastTarimaColor && (
+          <div className={`rounded-2xl border px-3 py-2.5 shadow-[0_14px_30px_-22px_rgba(15,23,42,0.28)] ${lastTarimaColor.pill}`}>
+            <div className="flex items-center gap-2.5">
+              <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black shrink-0 ${lastTarimaColor.bg} text-white`}>
+                {lastTarimaNum}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{t('rec.tarimas.panel.activa')}</p>
+                <p className="font-mono text-xs font-black truncate">{lastTarimaBase || '—'}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Section mode status bar */}
         {sectionMode && activeTarimaSet && (
           <div className="rounded-xl border border-sky-100 bg-sky-50/70 px-3 py-2 space-y-1.5">
@@ -857,14 +931,16 @@ export default function ValidacionRecepcion() {
                   </div>
                   <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-white/60' : 'text-warm-300'}`} />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { setTarimaTransferModal({ open: true, fromNum: ts.num, fromBases: ts.bases }); setTransferToTarima('') }}
-                  className={`p-2 mr-2 rounded-lg transition-colors shrink-0 ${isActive ? 'text-white/60 hover:bg-white/20 hover:text-white' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
-                  title={t('rec.tarimas.transfer.btn')}
-                >
-                  <ArrowRightLeft size={11} />
-                </button>
+                {!hasLockedTarimaAssignments && (
+                  <button
+                    type="button"
+                    onClick={() => { setTarimaTransferModal({ open: true, fromNum: ts.num, fromBases: ts.bases }); setTransferToTarima('') }}
+                    className={`p-2 mr-2 rounded-lg transition-colors shrink-0 ${isActive ? 'text-white/60 hover:bg-white/20 hover:text-white' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
+                    title={t('rec.tarimas.transfer.btn')}
+                  >
+                    <ArrowRightLeft size={11} />
+                  </button>
+                )}
               </div>
 
               {!isActive && (
@@ -958,7 +1034,8 @@ export default function ValidacionRecepcion() {
               onClick={() => {
                 if (withTarimas) {
                   if (window.innerWidth < 1024) setMobilePanelOpen(true)
-                  else setWithTarimas(false)
+                  else if (!sidebarVisible) setSidebarVisible(true)
+                  else toast.error(t('rec.tarimas.locked'))
                 } else {
                   if (totalTarimas > 0) setShowTarimaConfirm(true)
                   else setWithTarimas(true)
@@ -1555,7 +1632,7 @@ export default function ValidacionRecepcion() {
         onClose={() => setShowTarimaConfirm(false)}
         title={t('rec.tarimas.toggle')}
         icon={Layers}
-        size="sm"
+        size="lg"
         footer={
           <div className="flex gap-2 justify-end w-full">
             <button onClick={() => setShowTarimaConfirm(false)} className="btn-ghost">{t('common.cancel')}</button>
@@ -1565,23 +1642,25 @@ export default function ValidacionRecepcion() {
           </div>
         }
       >
-        <div className="space-y-3 text-sm text-warm-700">
+        <div className="space-y-4 text-sm text-warm-700">
           <p>{t('rec.tarimas.confirm.desc1').replace('{n}', totalTarimas)}</p>
           <p>{t('rec.tarimas.confirm.desc2').replace('{n}', totalTarimas)}</p>
-          <div className="grid grid-cols-2 gap-1.5 mt-3">
-            {Array.from(baseTarimaMap.entries()).slice(0, 8).map(([base, num]) => {
+          <div className="grid grid-cols-3 gap-1.5">
+            {Array.from(baseTarimaMap.entries()).slice(0, 9).map(([base, num]) => {
               const tc = getTarimaColor(num)
               return (
                 <div key={base} className={`flex items-center gap-2 rounded-xl px-3 py-2 ${tc.pill}`}>
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${tc.bg} text-white`}>{num}</span>
+                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${tc.bg} text-white shrink-0`}>{num}</span>
                   <span className="font-mono text-xs truncate">{base}</span>
                 </div>
               )
             })}
           </div>
-          {baseTarimaMap.size > 8 && <p className="text-xs text-warm-400 text-center">+{baseTarimaMap.size - 8} más...</p>}
-          {/* Section mode toggle */}
-          <div className="mt-1 rounded-xl border border-warm-100 bg-warm-50 p-3 space-y-2.5">
+          {baseTarimaMap.size > 9 && <p className="text-xs text-warm-400 text-center">+{baseTarimaMap.size - 9} más...</p>}
+
+          {/* ── TARIMAS: section grouping ── */}
+          <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3 space-y-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary-400">{t('rec.tarimas.label')}</p>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-warm-800">{t('rec.tarimas.sections.enable')}</p>
@@ -1590,13 +1669,14 @@ export default function ValidacionRecepcion() {
               <button
                 type="button"
                 onClick={() => setSectionMode(p => !p)}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${sectionMode ? 'bg-primary-600' : 'bg-warm-200'}`}
+                disabled={withTarimas}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${sectionMode ? 'bg-primary-600' : 'bg-warm-200'}`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${sectionMode ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
             {sectionMode && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 pt-1 border-t border-primary-100">
                 <label className="text-xs text-warm-600 flex-1">{t('rec.tarimas.sections.max_per_section')}</label>
                 <input
                   type="number"
@@ -1604,14 +1684,16 @@ export default function ValidacionRecepcion() {
                   max={totalTarimas || 99}
                   value={maxTarimasPerSection}
                   onChange={e => setMaxTarimasPerSection(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-20 text-center text-sm border border-warm-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100"
+                  disabled={withTarimas}
+                  className="w-20 text-center text-sm border border-primary-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100 disabled:opacity-50"
                 />
               </div>
             )}
           </div>
 
-          {/* Group small codes toggle */}
+          {/* ── CÓDIGOS: how codes/boxes are packed into tarimas ── */}
           <div className="rounded-xl border border-warm-100 bg-warm-50 p-3 space-y-2.5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-warm-400">{t('rec.tarimas.group.codes_label') || 'Códigos'}</p>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-warm-800">{t('rec.tarimas.group.enable')}</p>
@@ -1620,13 +1702,14 @@ export default function ValidacionRecepcion() {
               <button
                 type="button"
                 onClick={() => setGroupSmallCodes(p => !p)}
-                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${groupSmallCodes ? 'bg-primary-600' : 'bg-warm-200'}`}
+                disabled={withTarimas}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${groupSmallCodes ? 'bg-primary-600' : 'bg-warm-200'}`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${groupSmallCodes ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
             {groupSmallCodes && (
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1 border-t border-warm-100">
                 <div className="flex items-center gap-3">
                   <label className="text-xs text-warm-600 flex-1">{t('rec.tarimas.group.min_cajas')}</label>
                   <input
@@ -1634,7 +1717,8 @@ export default function ValidacionRecepcion() {
                     min="1"
                     value={minCajasParaAgrupar}
                     onChange={e => setMinCajasParaAgrupar(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-20 text-center text-sm border border-warm-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100"
+                    disabled={withTarimas}
+                    className="w-20 text-center text-sm border border-warm-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100 disabled:opacity-50"
                   />
                 </div>
                 <div className="flex items-center gap-3">
@@ -1644,7 +1728,8 @@ export default function ValidacionRecepcion() {
                     min="1"
                     value={maxCajasEnGrupo}
                     onChange={e => setMaxCajasEnGrupo(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-20 text-center text-sm border border-warm-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100"
+                    disabled={withTarimas}
+                    className="w-20 text-center text-sm border border-warm-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100 disabled:opacity-50"
                   />
                 </div>
                 <p className="text-[10px] text-warm-400">
@@ -1652,6 +1737,24 @@ export default function ValidacionRecepcion() {
                 </p>
               </div>
             )}
+          </div>
+
+          {/* ── Sort ── */}
+          <div className="rounded-xl border border-warm-100 bg-warm-50 p-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-warm-800">{t('rec.tarimas.sort.enable')}</p>
+                <p className="text-[11px] text-warm-500 leading-tight">{t('rec.tarimas.sort.desc')}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSortTarimasByCountDesc(p => !p)}
+                disabled={withTarimas}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${sortTarimasByCountDesc ? 'bg-primary-600' : 'bg-warm-200'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${sortTarimasByCountDesc ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
           </div>
         </div>
       </Modal>
@@ -1758,7 +1861,7 @@ export default function ValidacionRecepcion() {
                 const { code, tarimaNum } = fueraSectionModal
                 setPrioritizedTarimas(prev => { const next = new Set(prev); next.add(tarimaNum); return next })
                 setFueraSectionModal({ open: false, code: null, base: null, tarimaNum: null })
-                scanMut.mutate({ codigo: code, ubicacion: selectedUbicacion })
+                scanMut.mutate({ codigo: code, ubicacion: formatTarimaLocation(tarimaNum) })
               }}
               className="btn-primary"
             >

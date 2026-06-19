@@ -12,6 +12,7 @@ import {
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -132,8 +133,16 @@ function SearchStep({ onFound }) {
     try {
       const data = await getOutboundList()
       const all = getRecords(data)
-      const norm = q.trim().toLowerCase()
-      const filtered = all.filter(r => (r.outboundOrderNo || '').toLowerCase().includes(norm))
+      const normQ = normalizeCodeFast(q.trim())
+      const lowerQ = q.trim().toLowerCase()
+      const filtered = all.filter(r => {
+        if ((r.outboundOrderNo || '').toLowerCase().includes(lowerQ)) return true
+        if ((r.thirdOrderNo || '').toLowerCase().includes(lowerQ)) return true
+        if ((r.logisticsTrackNo || '').toLowerCase().includes(lowerQ)) return true
+        if (normQ && normalizeCodeFast(r.customizeCode || '').includes(normQ)) return true
+        if (normQ && (r.allCustomizeCodes || []).some(c => normalizeCodeFast(c).includes(normQ))) return true
+        return false
+      })
       if (filtered.length === 0) { toast.error(t('surtido.escaneo.order_not_found') + ': ' + q); setResults([]); return }
       if (filtered.length === 1) { onFound(filtered[0].outboundOrderNo); return }
       setResults(filtered)
@@ -711,12 +720,12 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
               let statusBadge = null
               if (tracking) {
                 statusBadge = isComplete
-                  ? <span className="badge text-[10px] bg-success-100 text-success-700 shrink-0">Completa</span>
+                  ? <StatusPill size="xs" className="shrink-0 bg-success-100 text-success-700">Completa</StatusPill>
                   : isValidating
-                  ? <span className="badge text-[10px] bg-primary-100 text-primary-700 shrink-0">Validando</span>
-                  : <span className="badge text-[10px] bg-warm-100 text-warm-600 shrink-0">{tracking.status}</span>
+                  ? <StatusPill size="xs" className="shrink-0 bg-primary-100 text-primary-700">Validando</StatusPill>
+                  : <StatusPill size="xs" className="shrink-0 bg-warm-100 text-warm-600">{tracking.status}</StatusPill>
               } else {
-                statusBadge = <span className="badge text-[10px] bg-warm-100 text-warm-500 shrink-0">{t('surtido.validacion.card_not_validated')}</span>
+                statusBadge = <StatusPill size="xs" className="shrink-0 bg-warm-100 text-warm-500">{t('surtido.validacion.card_not_validated')}</StatusPill>
               }
 
               return (

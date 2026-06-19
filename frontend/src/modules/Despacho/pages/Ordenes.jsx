@@ -1,4 +1,3 @@
-// frontend/src/modules/Despacho/pages/Ordenes.jsx
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -13,16 +12,19 @@ import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import TablePagination from '../../../core/components/common/TablePagination'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { usePreloaderStore } from '../../../core/stores/preloaderStore'
 import { fmtDate, fmtTimeShort, toDateKey, fmtDateString } from '../../../core/utils/dateFormat'
 import { getOutboundList, getOrdenesDispatch, getConductores, getUnidades, findAllOrdersByBarcode } from '../services/despachoService'
+import { normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { ConductoresModal, UnidadesModal } from '../components/CatalogsModals'
 import IniciarDespachoModal  from '../components/IniciarDespachoModal'
 import DispatchQuantityModal from '../components/DispatchQuantityModal'
 import AgendaView            from '../components/AgendaView'
 import ScanResolutionModal  from '../components/ScanResolutionModal'
-import { getDespachoDates, setDespachoDates, clearDespachoDates } from '../utils/despachoSession'
+import { getSmartDespachoDates, setDespachoDates, clearDespachoDates } from '../utils/despachoSession'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 
 function getCodigosCaja(order) {
@@ -78,6 +80,9 @@ function SortHeader({ label, field, sortField, sortDir, onSort, className = '' }
 export default function Ordenes() {
   const qc = useQueryClient()
   const { t } = useI18nStore()
+  const beginPreloader = usePreloaderStore(s => s.begin)
+  const endPreloader = usePreloaderStore(s => s.end)
+  const initialPreloaderRef = useRef(null)
 
   const SCAN_STATUS_META = {
     [SCAN_IDLE]:      { cls: '',                   text: '' },
@@ -102,7 +107,7 @@ export default function Ordenes() {
 
   function statusBadge(status) {
     const meta = STATUS_META[status] ?? STATUS_META.pending_assignment
-    return <span className={`badge text-[11px] font-semibold ${meta.cls}`}>{t(meta.labelKey)}</span>
+    return <StatusPill className={meta.cls}>{t(meta.labelKey)}</StatusPill>
   }
 
   const canManageCatalogs = useAuthStore(s => {
@@ -116,8 +121,8 @@ export default function Ordenes() {
 
   const [searchInput, setSearchInput]   = useState('')
   const [search, setSearch]             = useState('')
-  const [dateFrom, setDateFrom]         = useState(() => getDespachoDates()?.dateFrom ?? '')
-  const [dateTo, setDateTo]             = useState(() => getDespachoDates()?.dateTo   ?? '')
+  const [dateFrom, setDateFrom]         = useState(() => getSmartDespachoDates().dateFrom)
+  const [dateTo, setDateTo]             = useState(() => getSmartDespachoDates().dateTo)
   const [statusFilter, setStatusFilter] = useState([])
   const [dispatchFilter, setDispatchFilter] = useState([])
   const [tab, setTab]       = useState('all')
@@ -132,6 +137,7 @@ export default function Ordenes() {
   const [copiedOrderNo, setCopiedOrderNo] = useState(null)
   const [scanInput, setScanInput]         = useState('')
   const [scanStatus, setScanStatus]       = useState(SCAN_IDLE)
+  const [showHistoricalSearch, setShowHistoricalSearch] = useState(false)
   const scanInputRef  = useRef(null)
   const scanDebounce  = useRef(null)
   const [showIniciarDespacho, setShowIniciarDespacho] = useState(false)
@@ -142,7 +148,7 @@ export default function Ordenes() {
   const [showScanResolution, setShowScanResolution] = useState(false)
   const [conflictModal, setConflictModal] = useState({ open: false, orderNo: null, dispatch: null })
 
-  const { data: sheetsData, isLoading: loadingSheets, isError } = useQuery({
+  const { data: sheetsData, isLoading: loadingSheets, isFetching: fetchingSheets, isError } = useQuery({
     queryKey: ['despacho-outbound-list'],
     queryFn: getOutboundList,
     staleTime: 60000,
@@ -150,7 +156,7 @@ export default function Ordenes() {
     refetchInterval: (query) => query.state.data?.data?.partial ? 5000 : false,
   })
 
-  const { data: dispatchData } = useQuery({
+  const { data: dispatchData, isLoading: loadingDispatch, isFetching: fetchingDispatch } = useQuery({
     queryKey: ['despacho-ordenes-dispatch'],
     queryFn: getOrdenesDispatch,
     refetchInterval: 30000,
@@ -266,12 +272,6 @@ export default function Ordenes() {
 
   useEffect(() => { setPage(1) }, [search, dateFrom, dateTo, statusFilter, dispatchFilter, tab])
 
-  useEffect(() => {
-    const saved = getDespachoDates()
-    if (!saved?.dateFrom || !saved?.dateTo) {
-      setShowIniciarDespacho(true)
-    }
-  }, [])
 
   function handleSort(field) {
     if (field === sortField) {
@@ -286,63 +286,84 @@ export default function Ordenes() {
 
   function clearFilters() {
     clearDespachoDates()
+    const smart = getSmartDespachoDates()
     setSearchInput('')
     setSearch('')
-    setDateFrom('')
-    setDateTo('')
+    setDateFrom(smart.dateFrom)
+    setDateTo(smart.dateTo)
     setStatusFilter([])
     setDispatchFilter([])
     setTab('all')
-    setShowIniciarDespacho(true)
   }
 
   const runScan = useCallback(async (q) => {
-    const raw = q.trim().toUpperCase()
-    if (!raw) { setScanStatus(SCAN_IDLE); return }
+    const normQ = normalizeScanCode(q.trim())
+    if (!normQ) { setScanStatus(SCAN_IDLE); return }
     setScanStatus(SCAN_LOADING)
 
-    // Fast path: exact order number already in filtered view
-    const inFilter = filtered.find(o => (o.outboundOrderNo || o.order_no || '').toUpperCase() === raw)
-    if (inFilter) {
-      setScanStatus(SCAN_FOUND)
-      setTimeout(() => { setScanInput(''); setScanStatus(SCAN_IDLE); handleOrderFound(inFilter) }, 300)
+    function getDateKey(order) {
+      const orderDate = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
+      if (!orderDate) return ''
+      try { return /^\d{4}-\d{2}-\d{2}/.test(orderDate) ? orderDate.slice(0, 10) : toDateKey(orderDate) }
+      catch { return '' }
+    }
+
+    function isInRange(order) {
+      const dk = getDateKey(order)
+      return !!(dk && dateFrom && dateTo && dk >= dateFrom && dk <= dateTo)
+    }
+
+    function matchesInMemory(o) {
+      if (normalizeCodeFast(o.outboundOrderNo || o.order_no || '') === normQ) return true
+      if (normalizeCodeFast(o.thirdOrderNo || '') === normQ) return true
+      if (normalizeCodeFast(o.logisticsTrackNo || '') === normQ) return true
+      if (normalizeCodeFast(o.customizeCode || '') === normQ) return true
+      return (o.allCustomizeCodes || []).some(c => normalizeCodeFast(c) === normQ)
+    }
+
+    // Fast path: search already-loaded orders (full date range, not just filtered view)
+    const memoryMatches = allOrders.filter(matchesInMemory)
+    if (memoryMatches.length > 0) {
+      const ordersWithRange = memoryMatches.map(order => ({ order, inRange: isInRange(order) }))
+      const inRangeList = ordersWithRange.filter(e => e.inRange)
+
+      if (ordersWithRange.length === 1 && inRangeList.length === 1) {
+        setScanStatus(SCAN_FOUND)
+        setTimeout(() => { setScanInput(''); setScanStatus(SCAN_IDLE); handleOrderFound(memoryMatches[0]) }, 300)
+        return
+      }
+      setScanResolutionData({ orders: ordersWithRange, query: normQ })
+      setShowScanResolution(true)
+      setScanInput('')
+      setScanStatus(SCAN_IDLE)
       return
     }
 
+    // Historical fallback — show loading modal
+    setShowHistoricalSearch(true)
     try {
-      const matches = await findAllOrdersByBarcode(raw)
+      const matches = await findAllOrdersByBarcode(normQ)
       if (!matches || matches.length === 0) { setScanStatus(SCAN_NOT_FOUND); return }
 
-      const ordersWithRange = matches.map(order => {
-        const orderDate = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
-        let dk = ''
-        if (orderDate) {
-          try { dk = /^\d{4}-\d{2}-\d{2}/.test(orderDate) ? orderDate.slice(0, 10) : toDateKey(orderDate) }
-          catch { dk = '' }
-        }
-        const inRange = !!(dk && dateFrom && dateTo && dk >= dateFrom && dk <= dateTo)
-        return { order, inRange }
-      })
-
+      const ordersWithRange = matches.map(order => ({ order, inRange: isInRange(order) }))
       const inRangeList = ordersWithRange.filter(e => e.inRange)
 
-      // Single result that is in range — dispatch directly without modal
       if (ordersWithRange.length === 1 && inRangeList.length === 1) {
         setScanStatus(SCAN_FOUND)
-        setTimeout(() => { setScanInput(''); setScanStatus(SCAN_IDLE); handleOrderFound(ordersWithRange[0].order) }, 300)
+        setTimeout(() => { setScanInput(''); setScanStatus(SCAN_IDLE); handleOrderFound(matches[0]) }, 300)
         return
       }
-
-      // All other cases: out-of-range, multiple matches, mixed — open resolution modal
-      setScanResolutionData({ orders: ordersWithRange, query: raw })
+      setScanResolutionData({ orders: ordersWithRange, query: normQ })
       setShowScanResolution(true)
       setScanInput('')
       setScanStatus(SCAN_IDLE)
     } catch {
       setScanStatus(SCAN_NOT_FOUND)
+    } finally {
+      setShowHistoricalSearch(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, dateFrom, dateTo])
+  }, [allOrders, filtered, dateFrom, dateTo])
 
   function handleScanChange(e) {
     const val = e.target.value
@@ -381,7 +402,27 @@ export default function Ordenes() {
   const hasFilters = search || statusFilter.length > 0 || dispatchFilter.length > 0 || dateFrom || dateTo
 
   const isPartial = sheetsData?.data?.partial ?? false
+  const hasNoOrdersLoaded = allOrders.length === 0
+  const waitingForSheets = loadingSheets || fetchingSheets || !sheetsData || isPartial
+  const waitingForDispatch = (loadingDispatch || fetchingDispatch) && !dispatchData
+  const showInitialLoader = !isError && hasNoOrdersLoaded && (waitingForSheets || waitingForDispatch)
   const sp = { sortField, sortDir, onSort: handleSort }
+
+  useEffect(() => {
+    if (showInitialLoader && !initialPreloaderRef.current) {
+      initialPreloaderRef.current = beginPreloader('Cargando órdenes de despacho...', 0)
+    }
+    if (!showInitialLoader && initialPreloaderRef.current) {
+      endPreloader(initialPreloaderRef.current)
+      initialPreloaderRef.current = null
+    }
+    return () => {
+      if (initialPreloaderRef.current) {
+        endPreloader(initialPreloaderRef.current)
+        initialPreloaderRef.current = null
+      }
+    }
+  }, [showInitialLoader, beginPreloader, endPreloader])
 
   const tabCounts = useMemo(() => {
     const counts = { all: filteredBase.length, pendiente: 0, cargado: 0, entregado: 0, cancelado: 0 }
@@ -580,8 +621,10 @@ export default function Ordenes() {
         </div>
 
         {/* Table */}
-        {loadingSheets ? (
-          <div className="flex justify-center py-16"><LoadingSpinner /></div>
+        {showInitialLoader ? (
+          <div className="flex min-h-[360px] items-center justify-center px-5 py-16">
+            <LoadingSpinner size="lg" text="Cargando órdenes de despacho..." />
+          </div>
         ) : isError ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <AlertCircle className="w-10 h-10 text-danger-300" />
@@ -688,7 +731,7 @@ export default function Ordenes() {
                         {/* Estado Folio */}
                         <td className="px-4 py-3">
                           {dm
-                            ? <span className={`badge text-[11px] font-semibold ${dm.cls}`}>{dm.label}</span>
+                            ? <StatusPill className={dm.cls}>{dm.label}</StatusPill>
                             : <span className="text-warm-200 text-xs">—</span>
                           }
                         </td>
@@ -826,6 +869,19 @@ export default function Ordenes() {
           </div>
         </div>
       </Modal>
+
+      {/* Historical search modal */}
+      {showHistoricalSearch && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl px-8 py-7 flex flex-col items-center gap-4 max-w-sm w-full mx-4">
+            <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+            <div className="text-center">
+              <p className="text-sm font-bold text-warm-800 mb-1">{t('desp.scan.busquedaHistorica')}</p>
+              <p className="text-xs text-warm-500">{t('desp.scan.busquedaHistoricaHint')}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Full-screen agenda overlay */}
       {showAgenda && (

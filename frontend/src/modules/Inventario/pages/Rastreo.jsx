@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   Plus, LayoutList, LayoutGrid, Users, Search,
-  Eye, Trash2, X, Package, User, Crosshair,
+  Eye, Trash2, X, Package, User, Crosshair, BookOpen,
   Calendar, ChevronDown, RefreshCw, FileDown, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
@@ -24,6 +24,7 @@ import NuevaOrdenRastreoModal from '../components/NuevaOrdenRastreoModal'
 import RastreoKanban from '../components/RastreoKanban'
 import RastreoCards from '../components/RastreoCards'
 import RastreoSearchModal from '../components/RastreoSearchModal'
+import GestionCausasRastreoModal from '../components/GestionCausasRastreoModal'
 
 const TH = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
@@ -129,6 +130,7 @@ export default function Rastreo() {
   // Modals
   const [showModal, setShowModal] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [showCausas, setShowCausas] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
   // Bulk selection
@@ -348,13 +350,22 @@ export default function Rastreo() {
         title={t('rastreo.titulo')}
         subtitle={!isLoading ? `${total} ${t('rastreo.subtitulo')}` : undefined}
         actions={
-          <button
-            onClick={() => setShowSearch(true)}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 transition-all text-xs font-semibold"
-          >
-            <Crosshair size={13} />
-            {t('rastreo.rastrearCaja')}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowCausas(true)}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100 transition-all text-xs font-semibold"
+            >
+              <BookOpen size={13} />
+              {t('rastreo.causas.btnGestion')}
+            </button>
+            <button
+              onClick={() => setShowSearch(true)}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 transition-all text-xs font-semibold"
+            >
+              <Crosshair size={13} />
+              {t('rastreo.rastrearCaja')}
+            </button>
+          </div>
         }
       />
 
@@ -432,7 +443,7 @@ export default function Rastreo() {
             options={Object.entries(ESTADO_META).map(([k, m]) => ({ value: k, label: t(m.labelKey) }))}
             selected={estadosFilter}
             onChange={setFilter(setEstadosFilter)}
-            className="min-w-[160px]"
+            className="min-w-[138px] sm:min-w-[160px]"
           />
 
           <MultiSelect
@@ -441,7 +452,7 @@ export default function Rastreo() {
             options={usuarios.map(u => ({ value: String(u.id), label: u.nombre_completo }))}
             selected={responsableFilter}
             onChange={setFilter(setResponsableFilter)}
-            className="min-w-[160px]"
+            className="min-w-[138px] sm:min-w-[160px]"
           />
 
           <MultiSelect
@@ -450,20 +461,20 @@ export default function Rastreo() {
             options={Object.entries(ESTADO_CAJA_META).map(([k, m]) => ({ value: k, label: t(m.labelKey) }))}
             selected={estadoCajaFilter}
             onChange={setFilter(setEstadoCajaFilter)}
-            className="min-w-[160px]"
+            className="min-w-[138px] sm:min-w-[160px]"
           />
 
-          <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 w-full max-w-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
-            <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+          <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-[11px] sm:px-3 h-9 sm:h-10 flex-1 min-w-[220px] sm:min-w-[260px] max-w-[300px] sm:max-w-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+            <Search className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-warm-400 shrink-0" />
             <input
-              className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="flex-1 min-w-0 text-[13px] sm:text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               placeholder={t('rastreo.searchPlaceholder')}
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1) }}
             />
             {search && (
               <button onClick={() => { setSearch(''); setPage(1) }}>
-                <X size={12} className="text-warm-400 hover:text-warm-600" />
+                <X size={11} className="text-warm-400 hover:text-warm-600 sm:w-3 sm:h-3" />
               </button>
             )}
           </div>
@@ -481,17 +492,17 @@ export default function Rastreo() {
             </span>
           )}
 
-          <div className="flex items-center rounded-xl border border-warm-200 overflow-hidden ml-auto">
+          <div className="flex items-center rounded-lg sm:rounded-xl border border-warm-200 overflow-hidden ml-auto shrink-0">
             {VIEWS.map(v => (
               <button
                 key={v.key}
                 onClick={() => setView(v.key)}
                 title={t(v.labelKey)}
-                className={`flex items-center gap-1.5 px-3 h-10 text-xs font-medium transition-colors
+                className={`flex items-center gap-1 px-2.5 sm:px-3 h-9 sm:h-10 text-[11px] sm:text-xs font-medium transition-colors
                   ${view === v.key ? 'bg-primary-500 text-white' : 'text-warm-500 hover:bg-warm-50'}`}
               >
-                <v.icon size={13} />
-                <span className="hidden sm:inline">{t(v.labelKey)}</span>
+                <v.icon size={12} className="sm:w-[13px] sm:h-[13px]" />
+                <span className="hidden md:inline">{t(v.labelKey)}</span>
               </button>
             ))}
           </div>
@@ -801,6 +812,11 @@ export default function Rastreo() {
         onClose={() => setShowSearch(false)}
       />
 
+      <GestionCausasRastreoModal
+        isOpen={showCausas}
+        onClose={() => setShowCausas(false)}
+      />
+
       <Modal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
@@ -808,19 +824,19 @@ export default function Rastreo() {
         icon={Trash2}
         size="sm"
         footer={
-          <div className="flex gap-2 justify-end w-full">
-            <button onClick={() => setDeleteTarget(null)} className="btn btn-secondary text-sm">
+          <>
+            <button onClick={() => setDeleteTarget(null)} className="btn-secondary text-sm">
               {t('common.cancel')}
             </button>
             <button
               onClick={() => deleteMutation.mutate(deleteTarget.id)}
               disabled={deleteMutation.isPending}
-              className="btn text-sm bg-danger-600 text-white hover:bg-danger-700 flex items-center gap-1.5"
+              className="btn-danger text-sm !bg-danger-600 !text-white hover:!bg-danger-700 inline-flex items-center gap-1.5"
             >
               {deleteMutation.isPending && <RefreshCw size={12} className="animate-spin" />}
               {t('common.delete')}
             </button>
-          </div>
+          </>
         }
       >
         <p className="text-sm text-warm-600">

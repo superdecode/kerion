@@ -10,7 +10,7 @@ const mockUsers = [
       global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
       dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
       inventory: { escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar' },
-      despacho: { ordenes: 'eliminar', validacion: 'eliminar' },
+      despacho: { validar: 'eliminar', ordenes: 'eliminar', folios: 'eliminar' },
       rastreo: { consulta: 'eliminar' },
       integraciones: { config: 'eliminar' },
       reportes: { global: 'eliminar' }
@@ -26,7 +26,7 @@ const mockUsers = [
       global: { inicio: 'ver', administracion: 'sin_acceso', wms: 'sin_acceso' },
       dropscan: { dashboard: 'ver', escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso', configuracion: 'sin_acceso', folios: 'ver' },
       inventory: { escaneo: 'crear', tarimas: 'ver', reportes: 'sin_acceso' },
-      despacho: { ordenes: 'ver', validacion: 'sin_acceso' },
+      despacho: { validar: 'sin_acceso', ordenes: 'ver', folios: 'ver' },
       rastreo: { consulta: 'ver' },
       integraciones: { config: 'sin_acceso' },
       reportes: { global: 'sin_acceso' }

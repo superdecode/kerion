@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import Modal from '../../../core/components/common/Modal'
 import {
   Crosshair, Search, X, ScanBarcode, Loader2, CheckSquare, Square,
@@ -7,10 +7,13 @@ import {
 import { getOutboundDetail, getInventoryList } from '../../WmsHub/services/googleSheetsService'
 import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import { createRastreoOrden } from '../../../core/services/rastreoService'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [], onCreated }) {
+  const { t } = useI18nStore()
   const [tab, setTab] = useState('con_orden')
   const [obc, setObc] = useState('')
+  const [boxSearch, setBoxSearch] = useState('')
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [outboundDetail, setOutboundDetail] = useState(null)
   const [selectedBoxes, setSelectedBoxes] = useState(new Set())
@@ -40,6 +43,18 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
       .finally(() => setLoadingInv(false))
   }, [isOpen])
 
+  const visibleBoxes = useMemo(() => {
+    const list = outboundDetail?.packageList || []
+    const q = boxSearch.trim().toLowerCase()
+    if (!q) return list
+    return list.filter(b =>
+      b.customizeCode?.toLowerCase().includes(q) ||
+      invMap?.[normalizeCodeFast(b.customizeCode || '')]?.cellNo?.toLowerCase().includes(q)
+    )
+  }, [outboundDetail, boxSearch, invMap])
+
+  const outboundBoxTotal = outboundDetail?.outboundBoxCount ?? outboundDetail?.packageList?.length ?? outboundDetail?.outboundBoxList?.length ?? 0
+
   function reset() {
     setTab('con_orden')
     setObc('')
@@ -50,6 +65,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     setAsignadoA('')
     setNotas('')
     setError('')
+    setBoxSearch('')
   }
 
   async function handleLoadObc() {
@@ -155,29 +171,29 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     : manualCajas.length > 0
 
   const TABS = [
-    { key: 'con_orden', label: 'Con orden de salida', icon: FileSearch },
-    { key: 'sin_orden', label: 'Sin orden (flexible)', icon: ScanBarcode },
+    { key: 'con_orden', label: t('rastreo.nuevaOrden.tabConOrden'), icon: FileSearch },
+    { key: 'sin_orden', label: t('rastreo.nuevaOrden.tabSinOrden'), icon: ScanBarcode },
   ]
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={() => { reset(); onClose() }}
-      title="Nueva orden de rastreo"
+      title={t('rastreo.nuevaOrden.title')}
       icon={Crosshair}
       size="lg"
       footer={
         <div className="flex items-center justify-between w-full gap-3">
           {error && <p className="text-xs text-red-600 flex-1">{error}</p>}
           <div className="flex gap-2 ml-auto">
-            <button onClick={() => { reset(); onClose() }} className="btn btn-secondary">Cancelar</button>
+            <button onClick={() => { reset(); onClose() }} className="btn btn-secondary">{t('common.cancel')}</button>
             <button
               onClick={handleSubmit}
               disabled={!canSubmit || submitting}
               className="btn btn-primary flex items-center gap-2"
             >
               {submitting && <Loader2 size={14} className="animate-spin" />}
-              Crear rastreo
+              {t('rastreo.nuevaOrden.create')}
             </button>
           </div>
         </div>
@@ -204,14 +220,14 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
         {tab === 'con_orden' && (
           <>
             <div>
-              <label className="block text-xs font-semibold text-warm-600 mb-1.5 flex items-center gap-1.5">
-                <Truck size={12} className="text-warm-400" />
-                Número de orden de salida (OBC)
+                <label className="block text-xs font-semibold text-warm-600 mb-1.5 flex items-center gap-1.5">
+                  <Truck size={12} className="text-warm-400" />
+                {t('rastreo.nuevaOrden.obcLabel')}
               </label>
               <div className="flex gap-2">
                 <input
                   className="input flex-1"
-                  placeholder="Ej: OBC-20240611-001"
+                  placeholder={t('rastreo.nuevaOrden.obcPlaceholder')}
                   value={obc}
                   onChange={e => setObc(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleLoadObc()}
@@ -222,44 +238,77 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                   className="btn btn-secondary flex items-center gap-1.5"
                 >
                   {loadingDetail ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                  Cargar
+                  {t('rastreo.nuevaOrden.load')}
                 </button>
               </div>
             </div>
 
             {outboundDetail && (
               <div className="rounded-xl border border-warm-200 overflow-hidden">
-                <div className="bg-warm-50 px-3 py-2.5 border-b border-warm-100 flex items-center justify-between">
+                <div className="bg-warm-50 px-3 py-2.5 border-b border-warm-100 flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Package size={13} className="text-warm-400" />
                     <span className="text-xs font-semibold text-warm-700">
-                      {outboundDetail.packageList?.length || 0} cajas
+                      {outboundBoxTotal} {t('rastreo.nuevaOrden.cajas')}
                       {outboundDetail.customerCode && ` — ${outboundDetail.customerCode}`}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-primary-600 font-semibold">{selectedBoxes.size} seleccionadas</span>
+                    <span className="text-xs text-primary-600 font-semibold">{selectedBoxes.size} {t('rastreo.nuevaOrden.seleccionadas')}</span>
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={selectAllBoxes}
+                        onClick={() => {
+                          const visibleCodes = new Set(visibleBoxes.map(b => b.customizeCode).filter(Boolean))
+                          setSelectedBoxes(prev => {
+                            const next = new Set(prev)
+                            visibleCodes.forEach(c => next.add(c))
+                            return next
+                          })
+                        }}
                         className="text-[11px] font-semibold text-primary-600 hover:text-primary-700"
                       >
-                        Marcar todo
+                        {t('rastreo.nuevaOrden.marcarVisibles')}
                       </button>
                       <span className="text-warm-300">·</span>
                       <button
                         type="button"
-                        onClick={clearSelectedBoxes}
+                        onClick={() => {
+                          const visibleCodes = new Set(visibleBoxes.map(b => b.customizeCode).filter(Boolean))
+                          setSelectedBoxes(prev => {
+                            const next = new Set(prev)
+                            visibleCodes.forEach(c => next.delete(c))
+                            return next
+                          })
+                        }}
                         className="text-[11px] font-semibold text-warm-500 hover:text-warm-700"
                       >
-                        Desmarcar
+                        {t('rastreo.nuevaOrden.desmarcarVisibles')}
                       </button>
                     </div>
                   </div>
                 </div>
-                <div className="max-h-[220px] overflow-y-auto divide-y divide-warm-100">
-                  {(outboundDetail.packageList || []).map((b, i) => {
+
+                {/* Search within boxes */}
+                <div className="flex items-center gap-1.5 bg-white border-b border-warm-100 px-3 h-8 focus-within:border-primary-300">
+                  <Search size={11} className="text-warm-400 shrink-0" />
+                  <input
+                    className="flex-1 text-xs outline-none bg-transparent text-warm-700 placeholder-warm-300"
+                    placeholder={t('rastreo.nuevaOrden.searchBoxes')}
+                    value={boxSearch}
+                    onChange={e => setBoxSearch(e.target.value)}
+                  />
+                  {boxSearch && (
+                    <button onClick={() => setBoxSearch('')}>
+                      <X size={10} className="text-warm-400 hover:text-warm-600" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-[200px] overflow-y-auto divide-y divide-warm-100">
+                  {visibleBoxes.length === 0 ? (
+                    <div className="py-4 text-center text-xs text-warm-400">{t('rastreo.nuevaOrden.noBoxResults')}</div>
+                  ) : visibleBoxes.map((b, i) => {
                     const gsItem = invMap?.[normalizeCodeFast(b.customizeCode || '')]
                     return (
                       <button
@@ -288,14 +337,14 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
             <div>
               <label className="block text-xs font-semibold text-warm-600 mb-1.5 flex items-center gap-1.5">
                 <ScanBarcode size={12} className="text-warm-400" />
-                Escanear código de caja
+                {t('rastreo.nuevaOrden.scanBoxLabel')}
               </label>
               <div className="relative">
                 <ScanBarcode size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-warm-400" />
                 <input
                   ref={scanRef}
                   className="input pl-9"
-                  placeholder="Escanear o ingresar + Enter"
+                  placeholder={t('rastreo.nuevaOrden.scanBoxPlaceholder')}
                   value={scanInput}
                   onChange={e => setScanInput(e.target.value)}
                   onKeyDown={handleScanKeyDown}
@@ -305,7 +354,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
               {loadingInv && (
                 <p className="mt-1.5 text-xs text-warm-400 flex items-center gap-1.5">
                   <Loader2 size={11} className="animate-spin" />
-                  Cargando inventario...
+                  {t('rastreo.nuevaOrden.loadingInventory')}
                 </p>
               )}
             </div>
@@ -314,7 +363,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
               <div className="rounded-xl border border-warm-200 overflow-hidden">
                 <div className="bg-warm-50 px-3 py-2.5 border-b border-warm-100 flex items-center gap-2">
                   <Package size={13} className="text-warm-400" />
-                  <span className="text-xs font-semibold text-warm-700">{manualCajas.length} caja{manualCajas.length !== 1 ? 's' : ''} agregadas</span>
+                  <span className="text-xs font-semibold text-warm-700">{manualCajas.length} {t('rastreo.nuevaOrden.manualAdded')}</span>
                 </div>
                 <div className="max-h-[200px] overflow-y-auto divide-y divide-warm-100">
                   {manualCajas.map(c => (
@@ -341,10 +390,10 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
           <div>
             <label className="block text-xs font-semibold text-warm-600 mb-1.5 flex items-center gap-1.5">
               <User size={12} className="text-warm-400" />
-              Asignar a
+              {t('rastreo.nuevaOrden.assignTo')}
             </label>
             <select className="input" value={asignadoA} onChange={e => setAsignadoA(e.target.value)}>
-              <option value="">Sin asignar</option>
+              <option value="">{t('rastreo.nuevaOrden.unassigned')}</option>
               {usuarios.map(u => (
                 <option key={u.id} value={u.id}>{u.nombre_completo}</option>
               ))}
@@ -353,11 +402,11 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
           <div>
             <label className="block text-xs font-semibold text-warm-600 mb-1.5 flex items-center gap-1.5">
               <FileText size={12} className="text-warm-400" />
-              Notas iniciales
+              {t('rastreo.nuevaOrden.initialNotes')}
             </label>
             <input
               className="input"
-              placeholder="Opcional"
+              placeholder={t('common.optional')}
               value={notas}
               onChange={e => setNotas(e.target.value)}
             />

@@ -26,6 +26,7 @@ import {
   RotateCcw,
   BarChart2,
   Download,
+  ScanLine,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
@@ -98,8 +99,9 @@ const getNavItems = (t) => [
     label: t('nav.despacho'),
     icon: Truck,
     items: [
-      { path: '/despacho/ordenes', tourId: 'nav-desp-ordenes', label: t('nav.desp.ordenes'), icon: ClipboardList, permission: 'despacho.ordenes' },
-      { path: '/despacho/folios',  tourId: 'nav-desp-folios',  label: t('nav.desp.folios'),  icon: Truck,         permission: 'despacho.folios' },
+      { path: '/despacho/validar',  tourId: 'nav-desp-validar',  label: t('nav.desp.validar'),  icon: ScanLine,      permission: 'despacho.validar' },
+      { path: '/despacho/ordenes',  tourId: 'nav-desp-ordenes',  label: t('nav.desp.ordenes'),  icon: ClipboardList, permission: 'despacho.ordenes' },
+      { path: '/despacho/folios',   tourId: 'nav-desp-folios',   label: t('nav.desp.folios'),   icon: Truck,         permission: 'despacho.folios' },
     ],
   },
   {

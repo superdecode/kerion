@@ -42,8 +42,14 @@ export const deleteLastOrderScan = (id, orderId) =>
 export const cerrarFolio = (id) =>
   api.post(`/despacho/folios/${id}/cerrar`).then(r => r.data)
 
+export const reabrirFolio = (id) =>
+  api.post(`/despacho/folios/${id}/reabrir`).then(r => r.data)
+
 export const cancelarFolio = (id) =>
   api.post(`/despacho/folios/${id}/cancelar`).then(r => r.data)
+
+export const deleteFolio = (id) =>
+  api.delete(`/despacho/folios/${id}`).then(r => r.data)
 
 export const getConductores = () =>
   api.get('/despacho/catalogs/conductores').then(r => r.data)
@@ -68,3 +74,16 @@ export const updateUnidad = (id, body) =>
 
 export const deleteUnidad = (id) =>
   api.delete(`/despacho/catalogs/unidades/${id}`).then(r => r.data)
+
+// Folio-level scans (por_destino)
+export const getFolioScans = (id) =>
+  api.get(`/despacho/folios/${id}/scans`).then(r => r.data)
+
+export const addFolioScan = (id, body) =>
+  api.post(`/despacho/folios/${id}/scans`, body).then(r => r.data)
+
+export const deleteFolioScan = (id, scanId) =>
+  api.delete(`/despacho/folios/${id}/scans/${scanId}`).then(r => r.data)
+
+export const bulkAddOrders = (id, orders) =>
+  api.post(`/despacho/folios/${id}/orders/bulk`, { orders }).then(r => r.data)

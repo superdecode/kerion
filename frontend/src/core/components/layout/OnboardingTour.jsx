@@ -166,6 +166,28 @@ export default function OnboardingTour() {
 
   useEffect(() => { navigateRef.current = navigate }, [navigate])
 
+  const cleanupDriverArtifacts = () => {
+    document.body.classList.remove('driver-active', 'driver-fade')
+    document.body.style.overflow = ''
+    document.body.style.pointerEvents = ''
+    document.querySelectorAll('.driver-overlay, .driver-popover, .driver-active-element').forEach((node) => {
+      node.remove()
+    })
+  }
+
+  const safeDestroyDriver = () => {
+    try {
+      driverRef.current?.destroy()
+    } catch {
+      // Ignore cleanup errors and force-remove stale overlay artifacts below.
+    } finally {
+      driverRef.current = null
+      cleanupDriverArtifacts()
+      setActive(false)
+      setHighlightedItem(null)
+    }
+  }
+
   const getAvailableBlocks = () => {
     const { t: tFn } = useI18nStore.getState()
     const { canView: cv, isModuleEnabled: ime } = useAuthStore.getState()
@@ -177,7 +199,7 @@ export default function OnboardingTour() {
 
   useEffect(() => {
     const startSelector = (availableBlocks, initialIds) => {
-      driverRef.current?.destroy()
+      safeDestroyDriver()
       const { t: tFn } = useI18nStore.getState()
 
       const selectedIds = new Set(initialIds ?? availableBlocks.map(b => b.id))
@@ -205,83 +227,93 @@ export default function OnboardingTour() {
 
       let toggleBtn = null
 
-      const inst = driver({
-        animate: true,
-        smoothScroll: true,
-        allowClose: true,
-        overlayOpacity: 0.72,
-        stagePadding: 8,
-        stageRadius: 8,
-        steps: [{
-          popover: {
-            title: tFn('tour.selection.title'),
-            description: tFn('tour.selection.desc'),
-            side: 'over',
-            align: 'center',
-          },
-        }],
-        onPopoverRender: (popover) => {
-          if (popover.nextButton) popover.nextButton.textContent = tFn('tour.selection.start')
-          if (popover.previousButton) popover.previousButton.style.display = 'none'
+      try {
+        const inst = driver({
+          animate: true,
+          smoothScroll: true,
+          allowClose: true,
+          overlayOpacity: 0.72,
+          stagePadding: 8,
+          stageRadius: 8,
+          steps: [{
+            popover: {
+              title: tFn('tour.selection.title'),
+              description: tFn('tour.selection.desc'),
+              side: 'over',
+              align: 'center',
+            },
+          }],
+          onPopoverRender: (popover) => {
+            if (popover.nextButton) popover.nextButton.textContent = tFn('tour.selection.start')
+            if (popover.previousButton) popover.previousButton.style.display = 'none'
 
-          // Language switcher
-          const { locale, setLocale } = useI18nStore.getState()
-          const langWrap = document.createElement('div')
-          langWrap.className = 'driver-tour-lang-wrap'
-          langWrap.innerHTML = `
-            <span>语言 / Idioma:</span>
-            <select class="driver-tour-lang-select">
-              ${Object.entries(LANG_LABELS).map(([code, label]) =>
-                `<option value="${code}"${locale === code ? ' selected' : ''}>${label}</option>`
-              ).join('')}
-            </select>
-          `
-          langWrap.querySelector('select').addEventListener('change', (e) => {
-            setLocale(e.target.value)
-            inst.destroy()
-            const ids = Array.from(selectedIds)
-            setTimeout(() => startSelectorRef.current?.(availableBlocks, ids), 50)
-          })
-          popover.description.appendChild(langWrap)
+            const description = popover.description
+            if (!(description instanceof HTMLElement)) return
 
-          // Block list
-          const blocksContainer = document.createElement('div')
-          blocksContainer.className = 'driver-tour-blocks'
-          popover.description.appendChild(blocksContainer)
-          renderBlockList(blocksContainer)
+            // Language switcher
+            const { locale, setLocale } = useI18nStore.getState()
+            const langWrap = document.createElement('div')
+            langWrap.className = 'driver-tour-lang-wrap'
+            langWrap.innerHTML = `
+              <span>语言 / Idioma:</span>
+              <select class="driver-tour-lang-select">
+                ${Object.entries(LANG_LABELS).map(([code, label]) =>
+                  `<option value="${code}"${locale === code ? ' selected' : ''}>${label}</option>`
+                ).join('')}
+              </select>
+            `
+            langWrap.querySelector('select').addEventListener('change', (e) => {
+              setLocale(e.target.value)
+              safeDestroyDriver()
+              const ids = Array.from(selectedIds)
+              setTimeout(() => startSelectorRef.current?.(availableBlocks, ids), 50)
+            })
+            description.appendChild(langWrap)
 
-          // Select-all toggle
-          toggleBtn = document.createElement('button')
-          toggleBtn.className = 'driver-tour-select-toggle'
-          toggleBtn.textContent = tFn('tour.selection.deselectAll')
-          toggleBtn.addEventListener('click', () => {
-            if (selectedIds.size === availableBlocks.length) selectedIds.clear()
-            else availableBlocks.forEach(b => selectedIds.add(b.id))
+            // Block list
+            const blocksContainer = document.createElement('div')
+            blocksContainer.className = 'driver-tour-blocks'
+            description.appendChild(blocksContainer)
             renderBlockList(blocksContainer)
-            toggleBtn.textContent = selectedIds.size === availableBlocks.length
-              ? tFn('tour.selection.deselectAll')
-              : tFn('tour.selection.selectAll')
-          })
-          popover.description.appendChild(toggleBtn)
 
-          // Skip button
-          const skipBtn = document.createElement('button')
-          skipBtn.textContent = tFn('tour.selection.skip')
-          skipBtn.className = 'driver-tour-dont-show-btn'
-          skipBtn.addEventListener('click', () => inst.destroy())
-          popover.description.appendChild(skipBtn)
-        },
-        onNextClick: () => {
-          const ids = Array.from(selectedIds)
-          inst.destroy()
-          if (ids.length > 0) startTourRef.current?.(ids)
-        },
-        onCloseClick: () => inst.destroy(),
-        onDestroyed: () => setActive(false),
-      })
+            // Select-all toggle
+            toggleBtn = document.createElement('button')
+            toggleBtn.className = 'driver-tour-select-toggle'
+            toggleBtn.textContent = tFn('tour.selection.deselectAll')
+            toggleBtn.addEventListener('click', () => {
+              if (selectedIds.size === availableBlocks.length) selectedIds.clear()
+              else availableBlocks.forEach(b => selectedIds.add(b.id))
+              renderBlockList(blocksContainer)
+              toggleBtn.textContent = selectedIds.size === availableBlocks.length
+                ? tFn('tour.selection.deselectAll')
+                : tFn('tour.selection.selectAll')
+            })
+            description.appendChild(toggleBtn)
 
-      driverRef.current = inst
-      inst.drive()
+            // Skip button
+            const skipBtn = document.createElement('button')
+            skipBtn.textContent = tFn('tour.selection.skip')
+            skipBtn.className = 'driver-tour-dont-show-btn'
+            skipBtn.addEventListener('click', () => safeDestroyDriver())
+            description.appendChild(skipBtn)
+          },
+          onNextClick: () => {
+            const ids = Array.from(selectedIds)
+            safeDestroyDriver()
+            if (ids.length > 0) startTourRef.current?.(ids)
+          },
+          onCloseClick: () => safeDestroyDriver(),
+          onDestroyed: () => {
+            cleanupDriverArtifacts()
+            setActive(false)
+          },
+        })
+
+        driverRef.current = inst
+        inst.drive()
+      } catch {
+        safeDestroyDriver()
+      }
     }
 
     const startTour = (blockIds) => {
@@ -308,7 +340,7 @@ export default function OnboardingTour() {
 
       const finishTour = () => {
         mtc()
-        driverRef.current?.destroy()
+        safeDestroyDriver()
       }
 
       const navigateAndExpand = (step, callback) => {
@@ -333,98 +365,95 @@ export default function OnboardingTour() {
         return s
       })
 
-      const inst = driver({
-        animate: true,
-        smoothScroll: true,
-        allowClose: true,
-        overlayOpacity: 0.72,
-        stagePadding: 8,
-        stageRadius: 8,
-        showProgress: true,
-        progressText: tFn('tour.step_of'),
-        steps: driverSteps,
-        onPopoverRender: (popover, { state }) => {
-          const idx = state.activeIndex ?? 0
-          if (popover.nextButton) popover.nextButton.textContent = tFn('tour.next')
-          if (popover.previousButton) popover.previousButton.textContent = tFn('tour.prev')
-          if (idx === flatSteps.length - 1 && popover.nextButton) {
-            popover.nextButton.textContent = tFn('tour.finish.button')
-          }
-
-          // Don't-show-again on finish step
-          if (idx === flatSteps.length - 1) {
-            const dontShow = document.createElement('button')
-            dontShow.textContent = tFn('tour.dontShowAgain')
-            dontShow.className = 'driver-tour-dont-show-btn'
-            dontShow.addEventListener('click', () => finishTour())
-            popover.description.appendChild(dontShow)
-          }
-
-          // Skip-this-module on non-finish steps that have a next block
-          const step = flatSteps[idx]
-          if (step && step.blockIdx >= 0) {
-            const nextBlockStart = blockBoundaries[step.blockIdx + 1]
-            if (nextBlockStart !== undefined) {
-              const skipBtn = document.createElement('button')
-              skipBtn.textContent = tFn('tour.skipModule')
-              skipBtn.className = 'driver-tour-skip-module-btn'
-              skipBtn.addEventListener('click', () => {
-                const nextStep = flatSteps[nextBlockStart]
-                setHighlightedItem(nextStep.navHighlight ?? null)
-                navigateAndExpand(nextStep, () => inst.moveTo(nextBlockStart))
-              })
-              popover.description.appendChild(skipBtn)
+      try {
+        const inst = driver({
+          animate: true,
+          smoothScroll: true,
+          allowClose: true,
+          overlayOpacity: 0.72,
+          stagePadding: 8,
+          stageRadius: 8,
+          showProgress: true,
+          progressText: tFn('tour.step_of'),
+          steps: driverSteps,
+          onPopoverRender: (popover, { state }) => {
+            const idx = state.activeIndex ?? 0
+            if (popover.nextButton) popover.nextButton.textContent = tFn('tour.next')
+            if (popover.previousButton) popover.previousButton.textContent = tFn('tour.prev')
+            if (idx === flatSteps.length - 1 && popover.nextButton) {
+              popover.nextButton.textContent = tFn('tour.finish.button')
             }
-          }
-        },
-        onNextClick: () => {
-          const cur = inst.getActiveIndex() ?? 0
-          const nextIdx = cur + 1
-          if (nextIdx >= flatSteps.length) { finishTour(); return }
-          const nextStep = flatSteps[nextIdx]
-          setHighlightedItem(nextStep.navHighlight ?? null)
-          navigateAndExpand(nextStep, () => inst.moveNext())
-        },
-        onPrevClick: () => {
-          const cur = inst.getActiveIndex() ?? 1
-          const prevIdx = cur - 1
-          if (prevIdx < 0) return
-          const prevStep = flatSteps[prevIdx]
-          setHighlightedItem(prevStep.navHighlight ?? null)
-          navigateAndExpand(prevStep, () => inst.movePrevious())
-        },
-        onHighlightStarted: () => {
-          const idx = inst.getActiveIndex() ?? 0
-          setHighlightedItem(flatSteps[idx]?.navHighlight ?? null)
-        },
-        onCloseClick: () => finishTour(),
-        onDestroyed: () => {
-          mtc()
-          setActive(false)
-          setHighlightedItem(null)
-        },
-      })
 
-      driverRef.current = inst
-      const firstStep = flatSteps[0]
-      navigateAndExpand(firstStep, () => inst.drive())
+            const description = popover.description
+            if (!(description instanceof HTMLElement)) return
+
+            // Don't-show-again on finish step
+            if (idx === flatSteps.length - 1) {
+              const dontShow = document.createElement('button')
+              dontShow.textContent = tFn('tour.dontShowAgain')
+              dontShow.className = 'driver-tour-dont-show-btn'
+              dontShow.addEventListener('click', () => finishTour())
+              description.appendChild(dontShow)
+            }
+
+            // Skip-this-module on non-finish steps that have a next block
+            const step = flatSteps[idx]
+            if (step && step.blockIdx >= 0) {
+              const nextBlockStart = blockBoundaries[step.blockIdx + 1]
+              if (nextBlockStart !== undefined) {
+                const skipBtn = document.createElement('button')
+                skipBtn.textContent = tFn('tour.skipModule')
+                skipBtn.className = 'driver-tour-skip-module-btn'
+                skipBtn.addEventListener('click', () => {
+                  const nextStep = flatSteps[nextBlockStart]
+                  setHighlightedItem(nextStep.navHighlight ?? null)
+                  navigateAndExpand(nextStep, () => inst.moveTo(nextBlockStart))
+                })
+                description.appendChild(skipBtn)
+              }
+            }
+          },
+          onNextClick: () => {
+            const cur = inst.getActiveIndex() ?? 0
+            const nextIdx = cur + 1
+            if (nextIdx >= flatSteps.length) { finishTour(); return }
+            const nextStep = flatSteps[nextIdx]
+            setHighlightedItem(nextStep.navHighlight ?? null)
+            navigateAndExpand(nextStep, () => inst.moveNext())
+          },
+          onPrevClick: () => {
+            const cur = inst.getActiveIndex() ?? 1
+            const prevIdx = cur - 1
+            if (prevIdx < 0) return
+            const prevStep = flatSteps[prevIdx]
+            setHighlightedItem(prevStep.navHighlight ?? null)
+            navigateAndExpand(prevStep, () => inst.movePrevious())
+          },
+          onHighlightStarted: () => {
+            const idx = inst.getActiveIndex() ?? 0
+            setHighlightedItem(flatSteps[idx]?.navHighlight ?? null)
+          },
+          onCloseClick: () => finishTour(),
+          onDestroyed: () => {
+            mtc()
+            cleanupDriverArtifacts()
+            setActive(false)
+            setHighlightedItem(null)
+          },
+        })
+
+        driverRef.current = inst
+        const firstStep = flatSteps[0]
+        navigateAndExpand(firstStep, () => inst.drive())
+      } catch {
+        safeDestroyDriver()
+      }
     }
 
     startSelectorRef.current = startSelector
     startTourRef.current = startTour
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setActive, setHighlightedItem, expandGroup])
-
-  // Auto-start on first login
-  useEffect(() => {
-    if (!user?.id) return
-    if (user.tour_completado) return
-    const blocks = getAvailableBlocks()
-    if (blocks.length === 0) return
-    const timer = setTimeout(() => startSelectorRef.current?.(blocks, null), 900)
-    return () => clearTimeout(timer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id])
 
   // Manual trigger from help button
   const prevTrigger = useRef(0)
@@ -440,8 +469,7 @@ export default function OnboardingTour() {
 
   useEffect(() => {
     return () => {
-      driverRef.current?.destroy()
-      setActive(false)
+      safeDestroyDriver()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

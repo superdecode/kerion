@@ -9,6 +9,7 @@ import {
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -527,9 +528,9 @@ export default function RecepcionDetalle() {
             <div className="flex items-center gap-2 flex-wrap min-w-0 group">
               <span className="font-mono font-black text-base text-warm-900 leading-none truncate">{order.folio}</span>
               <CopyButton text={order.folio} />
-              <span className={`badge text-[11px] font-semibold shrink-0 ${estadoMeta.cls}`}>
+              <StatusPill className={`shrink-0 ${estadoMeta.cls}`}>
                 {t(`rec.status.${order.estado}`)}
-              </span>
+              </StatusPill>
             </div>
           </div>
         }

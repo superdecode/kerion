@@ -10,6 +10,7 @@ import {
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
+import StatusPill from '../../../core/components/common/StatusPill'
 import SalidaImportModal from '../components/SalidaImportModal'
 import SurtidoConfirmModal from '../components/SurtidoConfirmModal'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -683,9 +684,9 @@ export default function SalidaDetalle() {
                         )}
                         {hasExtraCols && (
                           <td className="table-cell">
-                            <span className={`badge text-[10px] ${row.surtido ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-600'}`}>
+                            <StatusPill size="xs" className={row.surtido ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-600'}>
                               {row.surtido ? t('dev.salida_detalle.surtido_si') : t('dev.salida_detalle.surtido_no')}
-                            </span>
+                            </StatusPill>
                           </td>
                         )}
                         {isEditable && (canEdit || canDelete) && (

@@ -72,6 +72,7 @@ const MODULE_GROUPS = [
     groupKey: 'perm.group.despacho',
     modules: [
       { key: 'despacho.dashboard', label: 'Dashboard', labelKey: 'perm.sub.dashboard' },
+      { key: 'despacho.validar',   label: 'Validar',   labelKey: 'perm.sub.despacho.validar' },
       { key: 'despacho.ordenes',   label: 'Órdenes',   labelKey: 'perm.sub.despacho.ordenes' },
       { key: 'despacho.folios',    label: 'Folios',    labelKey: 'perm.sub.despacho.folios' },
     ]

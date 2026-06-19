@@ -159,7 +159,7 @@ export async function provisionTenant(requestId, approvedByAdminId) {
           devoluciones: { dashboard: 'eliminar', entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
           surtido: { dashboard: 'eliminar', ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
           anormalidades: { dashboard: 'eliminar', registro: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
-          despacho: { dashboard: 'eliminar', ordenes: 'eliminar', folios: 'eliminar' },
+          despacho: { dashboard: 'eliminar', validar: 'eliminar', ordenes: 'eliminar', folios: 'eliminar' },
           recepcion: { dashboard: 'eliminar', recibir: 'eliminar', validacion: 'eliminar' },
           sistema: { wms: 'eliminar' },
         })]

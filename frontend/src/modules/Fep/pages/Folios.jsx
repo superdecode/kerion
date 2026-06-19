@@ -13,6 +13,7 @@ import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import MultiSelect from '../../../core/components/common/MultiSelect'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -543,9 +544,9 @@ export default function Folios() {
                         <td className="table-cell text-center font-bold text-warm-700">{row.total_tarimas}</td>
                         <td className="table-cell text-center font-bold text-warm-700">{row.total_guias}</td>
                         <td className="table-cell text-center">
-                          <span className={`badge text-[10px] ${ESTADO_COLORS[row.estado] || 'bg-warm-100 text-warm-600'}`}>
+                          <StatusPill size="xs" className={ESTADO_COLORS[row.estado] || 'bg-warm-100 text-warm-600'}>
                             {t(`fep.${row.estado.toLowerCase()}`)}
-                          </span>
+                          </StatusPill>
                         </td>
                         <td className="table-cell text-warm-500 text-xs">
                           {fmtDate(row.created_at)}
@@ -690,9 +691,9 @@ export default function Folios() {
               </button>
             )}
             {detailFolio && (
-              <span className={`badge text-xs px-2.5 py-1 ${ESTADO_COLORS[detailFolio.estado] || 'bg-warm-100 text-warm-600'}`}>
+              <StatusPill className={ESTADO_COLORS[detailFolio.estado] || 'bg-warm-100 text-warm-600'}>
                 {t(`fep.${detailFolio.estado.toLowerCase()}`)}
-              </span>
+              </StatusPill>
             )}
           </div>
         }

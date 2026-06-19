@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -163,9 +164,9 @@ export default function FolioDetalle() {
         title={
           <div className="flex items-center gap-2.5">
             <span className="code-main">{folio.folio_numero}</span>
-            <span className={`badge text-xs px-2.5 py-0.5 ${ESTADO_COLORS[folio.estado] || 'bg-warm-100 text-warm-600'}`}>
+            <StatusPill className={ESTADO_COLORS[folio.estado] || 'bg-warm-100 text-warm-600'}>
               {folio.estado}
-            </span>
+            </StatusPill>
           </div>
         }
         subtitle={`${folio.empresa_nombre} · ${folio.creado_por_nombre || ''}`}

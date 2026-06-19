@@ -12,6 +12,7 @@ import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import Header from '../../../core/components/layout/Header'
 import MultiSelect from '../../../core/components/common/MultiSelect'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -398,9 +399,9 @@ export default function Entradas() {
                             <td className="table-cell text-warm-600 text-xs">{row.responsable_nombre || '—'}</td>
                             <td className="table-cell text-center font-bold text-warm-700">{row.items_count ?? row.total_items ?? '—'}</td>
                             <td className="table-cell text-center">
-                              <span className={`badge text-[10px] ${ESTADO_COLORS[row.estado] || 'bg-warm-100 text-warm-600'}`}>
+                              <StatusPill size="xs" className={ESTADO_COLORS[row.estado] || 'bg-warm-100 text-warm-600'}>
                                 {t(`dev.estado.${row.estado}`) || row.estado}
-                              </span>
+                              </StatusPill>
                             </td>
                             <td className="table-cell text-right" onClick={e => e.stopPropagation()}>
                               <div className="flex items-center justify-end gap-1">

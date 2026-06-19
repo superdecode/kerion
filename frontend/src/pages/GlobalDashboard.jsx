@@ -5,7 +5,7 @@ import Header from '../core/components/layout/Header'
 import { fmtTimeShort, fmtDateShort } from '../core/utils/dateFormat'
 import {
   ScanBarcode, Package, RotateCcw, ArrowUpRight,
-  AlertTriangle, Settings2, Layers,
+  AlertTriangle, Settings2,
   Truck, Clock, LayoutGrid, PackageCheck,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -77,7 +77,7 @@ const ALL_MODULES = () => [
     name: 'Despacho',
     description: 'Embarques, folios de salida y gestión de conductores',
     icon: Truck,
-    path: '/despacho/folios',
+    path: '/despacho/validar',
     from: '#22c55e',
     to: '#16a34a',
     light: 'rgba(34,197,94,0.08)',
@@ -94,18 +94,6 @@ const ALL_MODULES = () => [
     to: '#d97706',
     light: 'rgba(245,158,11,0.08)',
     ring: 'rgba(245,158,11,0.2)',
-  },
-  {
-    id: 'wmshub',
-    permission: 'sistema.wms',
-    name: 'WMS Hub',
-    description: 'Configuración de conexión con WMS externo',
-    icon: Layers,
-    path: '/wmshub',
-    from: '#10b981',
-    to: '#0f766e',
-    light: 'rgba(16,185,129,0.08)',
-    ring: 'rgba(16,185,129,0.2)',
   },
   {
     id: 'admin',

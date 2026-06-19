@@ -3,7 +3,7 @@ import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { getPermissionLevel } from '../../../shared/middleware/permissions.js'
 import { generateRastreoFolio } from '../services/folioService.js'
-import { crearAnormalidadRastreo } from '../services/anormalidadHelper.js'
+import { crearAnormalidadRastreo, crearAnormalidadRastreoConsolidada } from '../services/anormalidadHelper.js'
 
 const router = Router()
 
@@ -121,6 +121,130 @@ function buildExactOnlyWhere(columns, { exactParam, compactParam }) {
   const compactCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') = $${compactParam}`).join(' OR ')
   return `(${upperCols} OR ${compactCols})`
 }
+
+// ── GET /api/rastreo/causas — catálogo causa tipos ───────────────────────────
+router.get('/causas',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.rastreo', 'ver'),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `SELECT id, descripcion, area, activo, created_at, updated_at
+         FROM rastreo_causa_tipos
+         WHERE tenant_id = $1
+         ORDER BY area, descripcion`,
+        [req.tenantId]
+      )
+      res.json({ success: true, data: result.rows })
+    } catch (err) {
+      console.error('[rastreo.causas.list]', err.message)
+      res.status(500).json({ error: 'Error al obtener causas de rastreo' })
+    }
+  }
+)
+
+// ── POST /api/rastreo/causas — crear causa tipo ───────────────────────────────
+router.post('/causas',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.rastreo', 'crear'),
+  async (req, res) => {
+    try {
+      const { descripcion, area } = req.body
+      if (!descripcion?.trim() || !area?.trim()) {
+        return res.status(400).json({ error: 'descripcion y area son requeridos' })
+      }
+      const result = await req.tQuery(
+        `INSERT INTO rastreo_causa_tipos (tenant_id, descripcion, area)
+         VALUES ($1, $2, $3)
+         RETURNING id, descripcion, area, activo, created_at`,
+        [req.tenantId, descripcion.trim(), area.trim()]
+      )
+      res.status(201).json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      console.error('[rastreo.causas.create]', err.message)
+      res.status(500).json({ error: 'Error al crear causa de rastreo' })
+    }
+  }
+)
+
+// ── PATCH /api/rastreo/causas/:id — editar causa tipo ────────────────────────
+router.patch('/causas/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.rastreo', 'editar'),
+  async (req, res) => {
+    try {
+      const { descripcion, area, activo } = req.body
+      const updates = []
+      const values = [req.params.id, req.tenantId]
+      let p = 3
+      if (descripcion !== undefined) { updates.push(`descripcion = $${p++}`); values.push(descripcion.trim()) }
+      if (area !== undefined) { updates.push(`area = $${p++}`); values.push(area.trim()) }
+      if (activo !== undefined) { updates.push(`activo = $${p++}`); values.push(activo) }
+      if (!updates.length) return res.status(400).json({ error: 'Sin cambios' })
+      updates.push(`updated_at = now()`)
+      const result = await req.tQuery(
+        `UPDATE rastreo_causa_tipos SET ${updates.join(', ')}
+         WHERE id = $1 AND tenant_id = $2
+         RETURNING id, descripcion, area, activo`,
+        values
+      )
+      if (!result.rows.length) return res.status(404).json({ error: 'Causa no encontrada' })
+      res.json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      console.error('[rastreo.causas.update]', err.message)
+      res.status(500).json({ error: 'Error al actualizar causa' })
+    }
+  }
+)
+
+// ── DELETE /api/rastreo/causas/:id — eliminar causa tipo ─────────────────────
+router.delete('/causas/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.rastreo', 'eliminar'),
+  async (req, res) => {
+    try {
+      const inUse = await req.tQuery(
+        `SELECT 1 FROM rastreo_cajas WHERE causa_rastreo_id = $1 AND tenant_id = $2 LIMIT 1`,
+        [req.params.id, req.tenantId]
+      )
+      if (inUse.rows.length) {
+        return res.status(409).json({ error: 'La causa está en uso y no puede eliminarse' })
+      }
+      const result = await req.tQuery(
+        `DELETE FROM rastreo_causa_tipos WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+        [req.params.id, req.tenantId]
+      )
+      if (!result.rows.length) return res.status(404).json({ error: 'Causa no encontrada' })
+      res.json({ success: true })
+    } catch (err) {
+      console.error('[rastreo.causas.delete]', err.message)
+      res.status(500).json({ error: 'Error al eliminar causa' })
+    }
+  }
+)
+
+// ── POST /api/rastreo/cajas/bulk/causa — asignación masiva de causa ───────────
+router.post('/cajas/bulk/causa',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.rastreo', 'editar'),
+  async (req, res) => {
+    try {
+      const { caja_ids, causa_rastreo_id } = req.body
+      if (!caja_ids?.length) return res.status(400).json({ error: 'caja_ids requeridos' })
+      const causaId = causa_rastreo_id || null
+      const placeholders = caja_ids.map((_, i) => `$${i + 3}`).join(',')
+      await req.tQuery(
+        `UPDATE rastreo_cajas SET causa_rastreo_id = $1, updated_at = now()
+         WHERE tenant_id = $2 AND id IN (${placeholders})`,
+        [causaId, req.tenantId, ...caja_ids]
+      )
+      res.json({ success: true, updated: caja_ids.length })
+    } catch (err) {
+      console.error('[rastreo.cajas.bulk.causa]', err.message)
+      res.status(500).json({ error: 'Error al asignar causa masiva' })
+    }
+  }
+)
 
 // ── GET /api/rastreo/buscar?q=<boxCode> ──────────────────────────────────────
 router.get('/buscar',
@@ -534,9 +658,11 @@ router.get('/:folio',
           [req.tenantId, req.params.folio]
         ),
         req.tQuery(
-          `SELECT rc.*, a.folio AS anormalidad_folio
+          `SELECT rc.*, a.folio AS anormalidad_folio,
+                  ct.descripcion AS causa_descripcion, ct.area AS causa_area
            FROM rastreo_cajas rc
            LEFT JOIN anormalidades a ON a.id = rc.anormalidad_id
+           LEFT JOIN rastreo_causa_tipos ct ON ct.id = rc.causa_rastreo_id
            WHERE rc.tenant_id = $1 AND rc.rastreo_orden_id = (
              SELECT id FROM rastreo_ordenes WHERE tenant_id = $1 AND folio = $2 LIMIT 1
            )
@@ -571,6 +697,100 @@ router.get('/:folio',
     } catch (err) {
       console.error('[rastreo.detail]', err.message)
       res.status(500).json({ error: 'Error al obtener detalle' })
+    }
+  }
+)
+
+// ── POST /api/rastreo/resolver — completar orden en una transacción ──────────
+router.post('/resolver',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.rastreo', 'editar'),
+  async (req, res) => {
+    try {
+      const { orden_id, target_estado, updates } = req.body
+      // updates: [{ caja_id, found, causa_rastreo_id? }]
+      if (!orden_id || !target_estado || !Array.isArray(updates)) {
+        return res.status(400).json({ error: 'orden_id, target_estado y updates son requeridos' })
+      }
+      const normalizedEstado = normalizeEstado(target_estado)
+      if (!normalizedEstado) return res.status(400).json({ error: 'Estado inválido' })
+
+      const userId = req.user.id
+      const userName = req.fullUser.nombre_completo
+
+      await req.tTransaction(async (client) => {
+        const ordenRes = await client.query(
+          `SELECT id, folio, outbound_order_no FROM rastreo_ordenes WHERE id = $1 AND tenant_id = $2`,
+          [orden_id, req.tenantId]
+        )
+        if (!ordenRes.rows.length) throw Object.assign(new Error('Orden no encontrada'), { status: 404 })
+        const orden = ordenRes.rows[0]
+
+        const cajaIds = updates.map(u => u.caja_id)
+        const cajasRes = await client.query(
+          `SELECT id, box_code, anormalidad_id FROM rastreo_cajas WHERE id = ANY($1::uuid[]) AND tenant_id = $2`,
+          [cajaIds, req.tenantId]
+        )
+        const cajaMap = new Map(cajasRes.rows.map(c => [c.id, c]))
+
+        // Identify not-found boxes that still need an anormalidad
+        const notFoundNewIds = updates
+          .filter(u => !u.found)
+          .map(u => cajaMap.get(u.caja_id))
+          .filter(c => c && !c.anormalidad_id)
+
+        let sharedAnormId = null
+        if (notFoundNewIds.length > 0) {
+          sharedAnormId = await crearAnormalidadRastreoConsolidada(
+            (sql, params) => client.query(sql, params),
+            req.tenantId,
+            {
+              boxCodes: notFoundNewIds.map(c => c.box_code),
+              ordenFolio: orden.folio,
+              outboundOrderNo: orden.outbound_order_no,
+              userId,
+              userName,
+            }
+          )
+        }
+
+        for (const u of updates) {
+          const caja = cajaMap.get(u.caja_id)
+          if (!caja) continue
+          const nextEstado = u.found ? 'localizada' : 'no_encontrada'
+          const setAnorm = !u.found && sharedAnormId && !caja.anormalidad_id
+          const setCausa = u.causa_rastreo_id !== undefined ? u.causa_rastreo_id || null : undefined
+
+          const fields = [`estado_caja = '${nextEstado}'`, `updated_at = now()`]
+          const params = [u.caja_id, req.tenantId]
+          let p = 3
+          if (setAnorm) { fields.push(`anormalidad_id = $${p++}`); params.splice(p - 2, 0, sharedAnormId) }
+          if (setCausa !== undefined) { fields.push(`causa_rastreo_id = $${p++}`); params.splice(p - 2, 0, setCausa) }
+
+          await client.query(
+            `UPDATE rastreo_cajas SET ${fields.join(', ')} WHERE id = $1 AND tenant_id = $2`,
+            params
+          )
+        }
+
+        await client.query(
+          `UPDATE rastreo_ordenes SET estado = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
+          [normalizedEstado, orden_id, req.tenantId]
+        )
+
+        const notFoundCount = updates.filter(u => !u.found).length
+        const desc = `Orden marcada como ${normalizedEstado}. Localizadas: ${updates.length - notFoundCount}, No encontradas: ${notFoundCount}`
+        await client.query(
+          `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, accion, descripcion, actor_id)
+           VALUES ($1,$2,'resuelta',$3,$4)`,
+          [req.tenantId, orden_id, desc, userId]
+        )
+      })
+
+      res.json({ success: true })
+    } catch (err) {
+      console.error('[rastreo.resolver]', err.message)
+      res.status(err.status || 500).json({ error: err.message || 'Error al resolver orden' })
     }
   }
 )
@@ -858,7 +1078,7 @@ router.patch('/cajas/:id',
   requirePermission('inventario.rastreo', 'editar'),
   async (req, res) => {
     try {
-      const { estado_caja, notas } = req.body
+      const { estado_caja, notas, causa_rastreo_id } = req.body
       const userId = req.fullUser.id
 
       const cajaRes = await req.tQuery(
@@ -873,6 +1093,16 @@ router.patch('/cajas/:id',
       const caja = cajaRes.rows[0]
       const currentOrdenEstado = normalizeEstado(caja.orden_estado)
 
+      // causa-only update (no estado_caja change)
+      if (causa_rastreo_id !== undefined && estado_caja === undefined) {
+        await req.tQuery(
+          `UPDATE rastreo_cajas SET causa_rastreo_id = $3, updated_at = now()
+           WHERE id = $1 AND tenant_id = $2`,
+          [req.params.id, req.tenantId, causa_rastreo_id || null]
+        )
+        return res.json({ success: true })
+      }
+
       const updates = [`estado_caja = $3`, `updated_at = now()`]
       const params = [req.params.id, req.tenantId, estado_caja]
       let p = 4
@@ -880,6 +1110,11 @@ router.patch('/cajas/:id',
       if (notas !== undefined) {
         updates.push(`notas = $${p++}`)
         params.push(notas)
+      }
+
+      if (causa_rastreo_id !== undefined) {
+        updates.push(`causa_rastreo_id = $${p++}`)
+        params.push(causa_rastreo_id || null)
       }
 
       let anormalidadId = null

@@ -12,6 +12,7 @@ import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import MultiSelect from '../../../core/components/common/MultiSelect'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -33,9 +34,9 @@ const TH = 'table-header whitespace-nowrap'
 function EstadoBadge({ estado, t }) {
   const meta = ESTADO_META[estado] ?? ESTADO_META.pendiente_validacion
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${meta.cls}`}>
+    <StatusPill className={meta.cls}>
       {t(`rec.status.${estado}`) || estado}
-    </span>
+    </StatusPill>
   )
 }
 

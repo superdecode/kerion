@@ -27,6 +27,7 @@ const MODULE_FALLBACKS = {
   'inventario.registros': 'inventory.tarimas',
   'fep.folios': 'dropscan.folios',
   'dropscan.folios': 'fep.folios',
+  'despacho.validar': 'despacho.folios',
 }
 
 function normalizeLevel(level) {

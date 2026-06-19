@@ -500,7 +500,7 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
       devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
       surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
       anormalidades: { registro: 'eliminar', dashboard: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
-      despacho: { ordenes: 'eliminar', folios: 'eliminar' },
+      despacho: { validar: 'eliminar', ordenes: 'eliminar', folios: 'eliminar' },
       recepcion: { recibir: 'eliminar' },
       sistema: { wms: 'eliminar' },
     }

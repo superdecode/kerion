@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Search, Loader2, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useBoxStock } from '../hooks/useBoxStock'
@@ -151,13 +152,13 @@ export default function Stock() {
                         <td className="table-cell text-right font-semibold">{r.availableAmount ?? 0}</td>
                         <td className="table-cell text-right font-semibold text-warning-700">{r.lockAmount ?? 0}</td>
                         <td className="table-cell">
-                          <span className={`badge ${
+                          <StatusPill className={
                             r.isAvailable ? 'bg-success-100 text-success-700' :
                             r.isBlocked ? 'bg-warning-100 text-warning-700' :
                             'bg-danger-100 text-danger-700'
-                          }`}>
+                          }>
                             {r.isAvailable ? t('inventario.stock.available') : r.isBlocked ? t('inventario.stock.blocked') : 'No disponible'}
-                          </span>
+                          </StatusPill>
                         </td>
                       </tr>
                     ))

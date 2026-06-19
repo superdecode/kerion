@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, CalendarDays, MapPin, Hash, Tag, Package, Truck, X, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { fmtDateString, toDateKey } from '../../../core/utils/dateFormat'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 
@@ -67,7 +68,7 @@ function OrderCard({ entry, selected, onSelect, dateFrom, dateTo }) {
           </div>
           <span className="font-mono font-bold text-primary-700 text-sm">{orderNo}</span>
         </div>
-        <span className={`badge text-[10px] font-bold ${ds.cls}`}>{ds.label}</span>
+        <StatusPill size="xs" className={ds.cls}>{ds.label}</StatusPill>
       </div>
 
       {/* Data rows */}

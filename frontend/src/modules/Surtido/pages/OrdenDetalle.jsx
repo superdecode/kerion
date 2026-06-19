@@ -10,6 +10,7 @@ import {
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -615,9 +616,9 @@ export default function OrdenDetalle() {
                 className="p-1 rounded-md text-warm-300 hover:text-primary-600 transition-colors shrink-0">
                 {copied ? <Check size={14} className="text-success-600" /> : <Copy size={14} />}
               </button>
-              <span className={`badge text-[11px] font-semibold shrink-0 ${statusMeta.cls}`}>
+              <StatusPill className={`shrink-0 ${statusMeta.cls}`}>
                 {t(statusMeta.labelKey)}
-              </span>
+              </StatusPill>
             </div>
           </div>
         }

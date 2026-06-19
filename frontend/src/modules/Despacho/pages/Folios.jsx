@@ -1,20 +1,23 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   Plus, Search, X, PackageCheck, CheckCircle2, XCircle, Clock,
   Users, Truck, User, Eye, Filter, ChevronUp, ChevronDown, ChevronsUpDown,
-  AlertCircle, RefreshCw,
+  AlertCircle, RefreshCw, Trash2, Loader2,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import Modal from '../../../core/components/common/Modal'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import TablePagination from '../../../core/components/common/TablePagination'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { useToastStore } from '../../../core/stores/toastStore'
 import { fmtDate, fmtTimeShort, getToday, subtractDays } from '../../../core/utils/dateFormat'
-import { getFolios, getConductores, getUnidades } from '../services/despachoService'
+import { getFolios, getConductores, getUnidades, deleteFolio } from '../services/despachoService'
 import { ConductoresModal, UnidadesModal, FolioFormModal } from '../components/CatalogsModals'
 
 const ESTADO_META = {
@@ -46,12 +49,15 @@ function SortHeader({ label, field, sortField, sortDir, onSort, className = '' }
 
 export default function Folios() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const { canWrite } = useAuthStore()
+  const { addToast } = useToastStore()
   const { t } = useI18nStore()
   const canManageCatalogs = useAuthStore(s => {
     const lvl = s.getPermissionLevel('despacho.folios')
     return lvl === 'actualizar' || lvl === 'eliminar'
   })
+  const canDeleteFolios = useAuthStore(s => s.canDelete('despacho.folios'))
 
   const [searchInput, setSearchInput] = useState('')
   const [q, setQ] = useState('')
@@ -67,6 +73,7 @@ export default function Folios() {
   const [showCreate, setShowCreate] = useState(false)
   const [showConductores, setShowConductores] = useState(false)
   const [showUnidades, setShowUnidades] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   const { data: foliosData, isLoading, isError, refetch } = useQuery({
     queryKey: ['despacho-folios'],
@@ -80,6 +87,18 @@ export default function Folios() {
   const folios = foliosData?.folios ?? []
   const conductores = conductoresData?.conductores ?? []
   const unidades = unidadesData?.unidades ?? []
+
+  const { mutate: doDeleteFolio, isPending: deletingFolio } = useMutation({
+    mutationFn: (folioId) => deleteFolio(folioId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['despacho-folios'] })
+      addToast(t('desp.toast.folioEliminado'), 'success')
+      setDeleteTarget(null)
+    },
+    onError: (err) => {
+      addToast(err?.response?.data?.error || t('desp.toast.errorEliminarFolio'), 'error')
+    },
+  })
 
   const conductorOptions = useMemo(
     () => conductores.map(c => ({ value: String(c.id), label: c.nombre })),
@@ -158,6 +177,19 @@ export default function Folios() {
     setConductorFilter([])
   }
 
+  function openDeleteModal(folio) {
+    setDeleteTarget(folio)
+  }
+
+  function closeDeleteModal() {
+    if (!deletingFolio) setDeleteTarget(null)
+  }
+
+  function confirmDelete() {
+    if (!deleteTarget?.id) return
+    doDeleteFolio(deleteTarget.id)
+  }
+
   const hasFilters = q || dateFrom || dateTo ||
     estadoFilter.length > 0 || unidadFilter.length > 0 || conductorFilter.length > 0
 
@@ -174,13 +206,7 @@ export default function Folios() {
 
   function estadoBadge(estado) {
     const meta = ESTADO_META[estado] ?? ESTADO_META.borrador
-    const Icon = meta.icon
-    return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${meta.cls}`}>
-        <Icon className="w-3 h-3" />
-        {t(meta.labelKey)}
-      </span>
-    )
+    return <StatusPill className={meta.cls}>{t(meta.labelKey)}</StatusPill>
   }
 
   const sp = { sortField, sortDir, onSort: handleSort }
@@ -322,7 +348,7 @@ export default function Folios() {
                     <SortHeader label={t('desp.folio.col.unidad')} field="unidad_placa" {...sp} />
                     <SortHeader label={t('desp.folio.col.ordenes')} field="total_ordenes" {...sp} className="text-center" />
                     <SortHeader label={t('desp.folio.col.cajas')} field="total_cajas" {...sp} className="text-center" />
-                    <th className="table-header w-10" />
+                    <th className="table-header w-24 text-right">{t('desp.folio.col.acciones')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
@@ -378,6 +404,16 @@ export default function Folios() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
+                        {canDeleteFolios && (
+                          <button
+                            onClick={() => openDeleteModal(folio)}
+                            title={t('common.delete')}
+                            disabled={folio.estado !== 'cancelado'}
+                            className="p-1.5 rounded-xl text-warm-300 hover:text-danger-600 hover:bg-danger-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-warm-300"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </td>
                     </motion.tr>
                   ))}
@@ -405,6 +441,32 @@ export default function Folios() {
       />
       <ConductoresModal isOpen={showConductores} onClose={() => setShowConductores(false)} canManage={canManageCatalogs} />
       <UnidadesModal isOpen={showUnidades} onClose={() => setShowUnidades(false)} canManage={canManageCatalogs} />
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={closeDeleteModal}
+        title={t('desp.folios.deleteTitle')}
+        icon={Trash2}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button onClick={closeDeleteModal} className="btn-secondary text-sm" disabled={deletingFolio}>
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={deletingFolio}
+              className="btn-danger text-sm flex items-center gap-1.5"
+            >
+              {deletingFolio && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {t('desp.folios.deleteConfirm')}
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm text-warm-700">
+          {t('desp.folios.deleteBody')}
+        </p>
+      </Modal>
     </div>
   )
 }

@@ -15,6 +15,7 @@ import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import { ErrorAlertModal } from '../../../core/components/common/ErrorAlertModal'
 import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useInventarioStore } from '../stores/inventarioStore'
@@ -984,7 +985,6 @@ function UnificadoPanel({ items, onRemove, onMove }) {
             {[...items].reverse().map((item, revIdx) => {
               const idx = items.length - 1 - revIdx
               const meta = STATUS_META[item.status] ?? STATUS_META.nowms
-              const StatusIcon = meta.icon
               return (
                 <tr key={idx} className={`border-l-4 ${meta.border} table-row`}>
                   <td className="table-cell text-warm-400 text-xs">{idx + 1}</td>
@@ -995,9 +995,7 @@ function UnificadoPanel({ items, onRemove, onMove }) {
                   <td className="table-cell font-mono text-xs text-warm-500">{item.code2 || '—'}</td>
                   <td className="table-cell text-warm-500 text-xs">{item.location || '—'}</td>
                   <td className="table-cell">
-                    <span className={`badge ${meta.bg} inline-flex items-center gap-1`}>
-                      <StatusIcon size={10} /> {t(meta.labelKey)}
-                    </span>
+                    <StatusPill className={meta.bg}>{t(meta.labelKey)}</StatusPill>
                   </td>
                   <td className="table-cell text-right">
                     <div className="flex items-center justify-end gap-1">

@@ -1,4 +1,5 @@
 import api from '../../../core/services/api'
+import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 
 // ── Cache ──────────────────────────────────────────────────────────────────
 const CACHE_TTL = 5 * 60 * 1000
@@ -487,18 +488,20 @@ export async function getOutboundList() {
 }
 
 export async function findOrderByBarcode(barcode) {
-  const q = (barcode || '').trim().toUpperCase()
-  if (!q) return null
+  const normQ = normalizeCodeFast((barcode || '').trim())
+  if (!normQ) return null
+
+  const matchRecord = r =>
+    normalizeCodeFast(r.outboundOrderNo || '') === normQ ||
+    normalizeCodeFast(r.logisticsTrackNo || '') === normQ ||
+    normalizeCodeFast(r.thirdOrderNo || '') === normQ ||
+    normalizeCodeFast(r.customizeCode || '') === normQ ||
+    (r.allCustomizeCodes || []).some(c => normalizeCodeFast(c) === normQ)
 
   // Fast path: search aggregated cache records first
   const cached = readOutboundRecordCache()
   if (cached?.records?.length) {
-    const found = cached.records.find(r =>
-      (r.outboundOrderNo || '').toUpperCase() === q ||
-      (r.logisticsTrackNo || '').toUpperCase() === q ||
-      (r.thirdOrderNo || '').toUpperCase() === q ||
-      (r.customizeCode || '').toUpperCase() === q
-    )
+    const found = cached.records.find(matchRecord)
     if (found) return found
   }
 
@@ -507,14 +510,12 @@ export async function findOrderByBarcode(barcode) {
     const rows = await loadSheet('outbound')
     const [headerRow, ...dataRows] = rows
     const map = buildHeaderMap(headerRow, OUTBOUND_ALIASES)
-    const match = dataRows
-      .map(row => mapRowToOutbound(row, map))
-      .find(r =>
-        (r.outboundOrderNo || '').toUpperCase() === q ||
-        (r.logisticsTrackNo || '').toUpperCase() === q ||
-        (r.thirdOrderNo || '').toUpperCase() === q ||
-        (r.customizeCode || '').toUpperCase() === q
-      )
+    const matchRow = r =>
+      normalizeCodeFast(r.outboundOrderNo || '') === normQ ||
+      normalizeCodeFast(r.logisticsTrackNo || '') === normQ ||
+      normalizeCodeFast(r.thirdOrderNo || '') === normQ ||
+      normalizeCodeFast(r.customizeCode || '') === normQ
+    const match = dataRows.map(row => mapRowToOutbound(row, map)).find(matchRow)
     return match ?? null
   } catch {
     return null
@@ -522,32 +523,41 @@ export async function findOrderByBarcode(barcode) {
 }
 
 export async function findAllOrdersByBarcode(barcode) {
-  const q = (barcode || '').trim().toUpperCase()
-  if (!q) return []
+  const normQ = normalizeCodeFast((barcode || '').trim())
+  if (!normQ) return []
 
-  const matchRow = r =>
-    (r.outboundOrderNo || '').toUpperCase() === q ||
-    (r.logisticsTrackNo || '').toUpperCase() === q ||
-    (r.thirdOrderNo || '').toUpperCase() === q ||
-    (r.customizeCode || '').toUpperCase() === q
+  const matchRecord = r =>
+    normalizeCodeFast(r.outboundOrderNo || '') === normQ ||
+    normalizeCodeFast(r.logisticsTrackNo || '') === normQ ||
+    normalizeCodeFast(r.thirdOrderNo || '') === normQ ||
+    normalizeCodeFast(r.customizeCode || '') === normQ ||
+    (r.allCustomizeCodes || []).some(c => normalizeCodeFast(c) === normQ)
 
-  // Fast path: aggregated cache (one entry per order)
+  // Fast path: aggregated cache — records already have outboundBoxCount
   const cached = readOutboundRecordCache()
   if (cached?.records?.length) {
-    const hits = cached.records.filter(matchRow)
+    const hits = cached.records.filter(matchRecord)
     if (hits.length > 0) return hits
   }
 
-  // Full sheet scan — deduplicate by outboundOrderNo
+  // Full sheet scan — deduplicate by outboundOrderNo, compute box count
   try {
     const rows = await loadSheet('outbound')
     const [headerRow, ...dataRows] = rows
     const map = buildHeaderMap(headerRow, OUTBOUND_ALIASES)
+    const matchRow = r =>
+      normalizeCodeFast(r.outboundOrderNo || '') === normQ ||
+      normalizeCodeFast(r.logisticsTrackNo || '') === normQ ||
+      normalizeCodeFast(r.thirdOrderNo || '') === normQ ||
+      normalizeCodeFast(r.customizeCode || '') === normQ
     const orderMap = new Map()
+    const boxCountMap = new Map()
     const SPARSE = ['thirdOrderNo', 'logisticsTrackNo', 'logisticsChannel', 'receiverName', 'outboundTime', 'whCode']
     for (const row of dataRows) {
       const r = mapRowToOutbound(row, map)
-      if (!r.outboundOrderNo || !matchRow(r)) continue
+      if (!r.outboundOrderNo) continue
+      boxCountMap.set(r.outboundOrderNo, (boxCountMap.get(r.outboundOrderNo) || 0) + 1)
+      if (!matchRow(r)) continue
       if (!orderMap.has(r.outboundOrderNo)) {
         orderMap.set(r.outboundOrderNo, { ...r })
       } else {
@@ -555,7 +565,10 @@ export async function findAllOrdersByBarcode(barcode) {
         SPARSE.forEach(f => { if (!existing[f] && r[f]) existing[f] = r[f] })
       }
     }
-    return Array.from(orderMap.values())
+    return Array.from(orderMap.values()).map(r => ({
+      ...r,
+      outboundBoxCount: r.outboundBoxCount || boxCountMap.get(r.outboundOrderNo) || 0,
+    }))
   } catch {
     return []
   }

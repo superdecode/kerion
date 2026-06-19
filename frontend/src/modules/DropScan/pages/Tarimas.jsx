@@ -10,6 +10,7 @@ import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import MultiSelect from '../../../core/components/common/MultiSelect'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -742,9 +743,9 @@ export default function Tarimas() {
                           </td>
                           <td className="table-cell text-center">
                             <div className="flex items-center justify-center gap-1 flex-wrap">
-                              <span className={`badge text-[10px] ${estadoColors[getDisplayEstado(row)] || 'bg-warm-100 text-warm-600'}`}>
+                              <StatusPill size="xs" className={estadoColors[getDisplayEstado(row)] || 'bg-warm-100 text-warm-600'}>
                                 {estadoLabels[getDisplayEstado(row)] || getDisplayEstado(row)}
-                              </span>
+                              </StatusPill>
                               {row.forzado_cierre && !row.folio_asignado && (
                                 <span className="badge text-[9px] bg-warning-100 text-warning-600 flex items-center gap-0.5">
                                   <Lock className="w-2.5 h-2.5" /> Forzado
@@ -822,9 +823,9 @@ export default function Tarimas() {
                     ? <CheckCircle className="w-3.5 h-3.5 text-success-500" />
                     : <Copy className="w-3.5 h-3.5" />}
                 </button>
-                <span className={`badge text-xs px-2.5 py-1 ${estadoColors[getDisplayEstado(detail)] || 'bg-warm-100 text-warm-600'}`}>
+                <StatusPill className={estadoColors[getDisplayEstado(detail)] || 'bg-warm-100 text-warm-600'}>
                   {estadoLabels[getDisplayEstado(detail)] || getDisplayEstado(detail)}
-                </span>
+                </StatusPill>
               </div>
               {detail.folio_asignado && (
                 <button

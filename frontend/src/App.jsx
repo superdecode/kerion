@@ -76,6 +76,7 @@ import AnormConfiguracion from './modules/Anormalidades/pages/Configuracion'
 import DespachoOrdenes from './modules/Despacho/pages/Ordenes'
 import DespachoFolios from './modules/Despacho/pages/Folios'
 import DespachoFolioDetalle from './modules/Despacho/pages/FolioDetalle'
+import DespachoValidar from './modules/Despacho/pages/Validar'
 
 // Recepcion Module
 import RecepcionRecibir from './modules/Recepcion/pages/Recibir'
@@ -115,6 +116,7 @@ const MODULE_ROUTES = [
   { module: 'anormalidades.registro', path: '/Anormalidades/registro' },
   { module: 'anormalidades.dashboard', path: '/dashboard?module=anormalidades' },
   { module: 'anormalidades.mejoras', path: '/Anormalidades/mejoras' },
+  { module: 'despacho.validar', path: '/despacho/validar' },
   { module: 'despacho.ordenes', path: '/despacho/ordenes' },
   { module: 'despacho.folios', path: '/despacho/folios' },
   { module: 'recepcion.recibir', path: '/recepcion/recibir' },
@@ -294,6 +296,9 @@ function AppRoutes() {
         } />
 
         {/* Despacho Module */}
+        <Route path="despacho/validar" element={
+          <PermissionRoute module="despacho.validar"><ErrorBoundary><DespachoValidar /></ErrorBoundary></PermissionRoute>
+        } />
         <Route path="despacho/ordenes" element={
           <PermissionRoute module="despacho.ordenes"><ErrorBoundary><DespachoOrdenes /></ErrorBoundary></PermissionRoute>
         } />
@@ -303,7 +308,7 @@ function AppRoutes() {
         <Route path="despacho/folios/:id" element={
           <PermissionRoute module="despacho.folios"><ErrorBoundary><DespachoFolioDetalle /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="despacho" element={<Navigate to="/despacho/folios" replace />} />
+        <Route path="despacho" element={<Navigate to="/despacho/validar" replace />} />
 
         {/* Recepcion Module */}
         <Route path="recepcion/recibir" element={

@@ -35,3 +35,21 @@ export const addCajaToOrden = (orden_id, cajaData) =>
 
 export const deleteCaja = (id) =>
   api.delete(`/rastreo/cajas/${id}`).then(r => r.data)
+
+export const getCausasRastreo = () =>
+  api.get('/rastreo/causas').then(r => r.data)
+
+export const createCausaRastreo = (body) =>
+  api.post('/rastreo/causas', body).then(r => r.data)
+
+export const updateCausaRastreo = (id, body) =>
+  api.patch(`/rastreo/causas/${id}`, body).then(r => r.data)
+
+export const deleteCausaRastreo = (id) =>
+  api.delete(`/rastreo/causas/${id}`).then(r => r.data)
+
+export const bulkAssignCausa = (caja_ids, causa_rastreo_id) =>
+  api.post('/rastreo/cajas/bulk/causa', { caja_ids, causa_rastreo_id }).then(r => r.data)
+
+export const resolverRastreoOrden = (body) =>
+  api.post('/rastreo/resolver', body).then(r => r.data)

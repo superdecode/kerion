@@ -17,6 +17,27 @@ export function getOrderCodes(order) {
   return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
 }
 
+export function getOrderTarimas(order) {
+  const scans = order.scans ?? []
+  const refs = new Set()
+  for (const s of scans) {
+    if (s.tarima_ref) refs.add(s.tarima_ref)
+  }
+  return Array.from(refs).sort()
+}
+
+function getTarimaScans(order) {
+  const scans = order.scans ?? []
+  const map = new Map()
+  for (const s of scans) {
+    const ref = s.tarima_ref || 'Sin tarima'
+    if (!map.has(ref)) map.set(ref, [])
+    const base = extractBaseCode(s.codigo_caja) || s.codigo_caja
+    if (base) map.get(ref).push(base)
+  }
+  return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+}
+
 const TH = {
   background: '#fff7ed',
   color: '#78716c',
@@ -44,6 +65,7 @@ export default function PrintFolioContent({ folio, orders }) {
 
   const totalBultos = orders.reduce((s, o) => s + (Number(o.bultos) || 0), 0)
   const totalPeso   = orders.reduce((s, o) => s + (Number(o.peso_kg) || 0), 0)
+  const showTarimas = !!folio.validar_por_tarimas
 
   return (
     <div id="print-folio-content" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '10px', color: '#1a1a1a' }}>
@@ -88,6 +110,7 @@ export default function PrintFolioContent({ folio, orders }) {
             <th style={{ ...TH, width: '30px', textAlign: 'center' }}>#</th>
             <th style={TH}>Orden</th>
             <th style={TH}>Código</th>
+            {showTarimas && <th style={{ ...TH, textAlign: 'center', width: '70px' }}># Tarima</th>}
             <th style={{ ...TH, textAlign: 'center' }}>Bultos</th>
             <th style={{ ...TH, textAlign: 'center' }}>Peso kg</th>
             <th style={TH}>Estado</th>
@@ -96,6 +119,7 @@ export default function PrintFolioContent({ folio, orders }) {
         <tbody>
           {orders.map((o, i) => {
             const codes = getOrderCodes(o)
+            const tarimas = showTarimas ? getOrderTarimas(o) : []
             return (
               <tr key={o.id || i} style={{ background: i % 2 === 0 ? '#ffffff' : '#fffbeb' }}>
                 <td style={{ ...TD, textAlign: 'center', color: '#94a3b8', fontWeight: '600' }}>{i + 1}</td>
@@ -113,6 +137,16 @@ export default function PrintFolioContent({ folio, orders }) {
                     : <span style={{ color: '#94a3b8' }}>—</span>
                   }
                 </td>
+                {showTarimas && (
+                  <td style={{ ...TD, textAlign: 'center' }}>
+                    {tarimas.length > 0
+                      ? tarimas.map(ref => (
+                          <div key={ref} style={{ fontFamily: 'monospace', fontSize: '9px', fontWeight: '700', color: '#9a3412', lineHeight: '1.6' }}>{ref}</div>
+                        ))
+                      : <span style={{ color: '#94a3b8' }}>—</span>
+                    }
+                  </td>
+                )}
                 <td style={{ ...TD, textAlign: 'center', fontWeight: '600' }}>{o.bultos ?? '—'}</td>
                 <td style={{ ...TD, textAlign: 'center', color: '#475569' }}>
                   {o.peso_kg != null ? Number(o.peso_kg).toFixed(2) : '—'}
@@ -124,7 +158,7 @@ export default function PrintFolioContent({ folio, orders }) {
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={3} style={{ ...TD, background: '#ffedd5', fontWeight: '800', color: '#9a3412', borderBottom: 'none' }}>
+            <td colSpan={showTarimas ? 4 : 3} style={{ ...TD, background: '#ffedd5', fontWeight: '800', color: '#9a3412', borderBottom: 'none' }}>
               TOTALES
             </td>
             <td style={{ ...TD, background: '#ffedd5', fontWeight: '800', color: '#9a3412', textAlign: 'center', borderBottom: 'none' }}>
@@ -139,6 +173,49 @@ export default function PrintFolioContent({ folio, orders }) {
           </tr>
         </tfoot>
       </table>
+
+      {/* ── Detallado por Tarima ─────────────────────────────────────────── */}
+      {showTarimas && orders.some(o => getOrderTarimas(o).length > 0) && (
+        <>
+          <div style={{ background: '#ffedd5', color: '#9a3412', padding: '5px 8px', fontWeight: '700', fontSize: '10px', border: '1px solid #fed7aa', marginBottom: '8px' }}>
+            DETALLADO POR TARIMA
+          </div>
+          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #fed7aa', marginBottom: '16px' }}>
+            <thead>
+              <tr>
+                <th style={{ ...TH, width: '80px' }}>Orden</th>
+                <th style={{ ...TH, width: '70px', textAlign: 'center' }}># Tarima</th>
+                <th style={TH}>Códigos escaneados</th>
+                <th style={{ ...TH, textAlign: 'center', width: '50px' }}>Cant</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.flatMap((o, oi) =>
+                getTarimaScans(o).map(([ref, codes], ti) => (
+                  <tr key={`${oi}-${ref}`} style={{ background: oi % 2 === 0 ? '#ffffff' : '#fffbeb' }}>
+                    {ti === 0
+                      ? <td style={{ ...TD, fontFamily: 'monospace', fontWeight: '700', color: '#1e3a5f', whiteSpace: 'nowrap', verticalAlign: 'top' }}
+                            rowSpan={getTarimaScans(o).length}>
+                          {o.outbound_order_no || '—'}
+                        </td>
+                      : null
+                    }
+                    <td style={{ ...TD, textAlign: 'center', fontFamily: 'monospace', fontWeight: '700', color: '#9a3412' }}>
+                      {ref}
+                    </td>
+                    <td style={{ ...TD, fontSize: '9px' }}>
+                      {codes.map((c, ci) => (
+                        <span key={ci} style={{ fontFamily: 'monospace', marginRight: '6px', color: '#1e3a5f' }}>{c}</span>
+                      ))}
+                    </td>
+                    <td style={{ ...TD, textAlign: 'center', fontWeight: '600' }}>{codes.length}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {/* ── Detallado de rechazos ─────────────────────────────────────────── */}
       <div style={{ background: '#ffedd5', color: '#9a3412', padding: '5px 8px', fontWeight: '700', fontSize: '10px', border: '1px solid #fed7aa', marginBottom: '8px' }}>

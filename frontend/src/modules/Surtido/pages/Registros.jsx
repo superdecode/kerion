@@ -10,6 +10,7 @@ import {
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -67,7 +68,7 @@ function ObcHeader({ obc, status, t }) {
           {copied ? <Check size={13} className="text-success-600" /> : <Copy size={13} />}
         </button>
       )}
-      <span className={`badge text-[11px] font-semibold shrink-0 ${meta.cls}`}>{resolveStatusLabel(t, meta.labelKey)}</span>
+      <StatusPill className={`shrink-0 ${meta.cls}`}>{resolveStatusLabel(t, meta.labelKey)}</StatusPill>
     </div>
   )
 }
@@ -742,12 +743,12 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
               let statusBadge = null
               if (tracking) {
                 statusBadge = isComplete
-                  ? <span className="badge text-[10px] bg-success-100 text-success-700 shrink-0">Completa</span>
+                  ? <StatusPill size="xs" className="shrink-0 bg-success-100 text-success-700">Completa</StatusPill>
                   : isValidating
-                  ? <span className="badge text-[10px] bg-primary-100 text-primary-700 shrink-0">Validando</span>
-                  : <span className="badge text-[10px] bg-warm-100 text-warm-600 shrink-0">{tracking.status}</span>
+                  ? <StatusPill size="xs" className="shrink-0 bg-primary-100 text-primary-700">Validando</StatusPill>
+                  : <StatusPill size="xs" className="shrink-0 bg-warm-100 text-warm-600">{tracking.status}</StatusPill>
               } else {
-                statusBadge = <span className="badge text-[10px] bg-warm-100 text-warm-500 shrink-0">{t('surtido.validacion.card_not_validated')}</span>
+                statusBadge = <StatusPill size="xs" className="shrink-0 bg-warm-100 text-warm-500">{t('surtido.validacion.card_not_validated')}</StatusPill>
               }
 
               return (
@@ -1298,7 +1299,7 @@ export default function SurtidoRegistros() {
                           </div>
                         </td>
                         <td className="table-cell">
-                          <span className={`badge text-[11px] font-medium ${meta.cls}`}>{resolveStatusLabel(t, meta.labelKey)}</span>
+                          <StatusPill className={meta.cls}>{resolveStatusLabel(t, meta.labelKey)}</StatusPill>
                         </td>
                         <td className="table-cell text-right">
                           <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">

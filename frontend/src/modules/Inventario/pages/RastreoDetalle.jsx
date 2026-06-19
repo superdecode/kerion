@@ -5,6 +5,7 @@ import {
   Crosshair, ArrowLeft, User, Package, CheckCircle2, XCircle,
   Clock, Loader2, AlertTriangle, History, MessageSquare,
   Trash2, Search, X, ScanBarcode, ChevronUp, ChevronDown as ChevronDownIcon, Plus, Edit3, FileText,
+  FileDown,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -16,6 +17,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import {
   getRastreoDetalle, updateRastreoOrden, updateRastreaoCaja,
   deleteRastreoOrden, getRastreoUsuarios, addCajaToOrden, deleteCaja,
+  getCausasRastreo, bulkAssignCausa, resolverRastreoOrden,
 } from '../../../core/services/rastreoService'
 import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
 import RastreoSearchModal from '../components/RastreoSearchModal'
@@ -140,11 +142,16 @@ export default function RastreoDetalle() {
   const [newCajaCode, setNewCajaCode] = useState('')
   const [cajaDeleteConfirm, setCajaDeleteConfirm] = useState(null)
   const [cajaNota, setCajaNota] = useState('')
-  const [cajaNotaModal, setCajaNotaModal] = useState(null)
-  const [cajaNotaText, setCajaNotaText] = useState('')
+  const [cajaConfirmCausa, setCajaConfirmCausa] = useState('')
+  const [cajaEditModal, setCajaEditModal] = useState(null)  // { caja }
+  const [cajaEditNotas, setCajaEditNotas] = useState('')
+  const [cajaEditCausa, setCajaEditCausa] = useState('')
   const [resolveModalOpen, setResolveModalOpen] = useState(false)
   const [resolveMode, setResolveMode] = useState('all')
   const [resolveSelection, setResolveSelection] = useState({})
+  const [resolveCausas, setResolveCausas] = useState({})   // caja_id -> causa_rastreo_id
+  const [resolveSearch, setResolveSearch] = useState('')
+  const [resolveBulkCausa, setResolveBulkCausa] = useState('')
 
   const canEdit   = hasPermission('inventario.rastreo', 'editar')
   const canDelete = hasPermission('inventario.rastreo', 'eliminar')
@@ -167,6 +174,13 @@ export default function RastreoDetalle() {
     enabled: !!data?.data?.orden?.outbound_order_no,
     staleTime: 10 * 60 * 1000,
   })
+
+  const { data: causasData } = useQuery({
+    queryKey: ['rastreo-causas'],
+    queryFn: getCausasRastreo,
+    staleTime: 5 * 60 * 1000,
+  })
+  const causas = causasData?.data || []
 
   const updateOrden = useMutation({
     mutationFn: ({ id, body }) => updateRastreoOrden(id, body),
@@ -197,6 +211,12 @@ export default function RastreoDetalle() {
       toast.success(t('rastreo.toast.cajaAgregada'))
     },
     onError: (err) => toast.error(err?.response?.data?.error || t('rastreo.toast.errorAgregarCaja')),
+  })
+
+  const updateCajaCausaMutation = useMutation({
+    mutationFn: ({ id, causa_rastreo_id }) => updateRastreaoCaja(id, { causa_rastreo_id }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rastreo-detalle', folio] }),
+    onError: () => toast.error(t('toast.error')),
   })
 
   const deleteCajaMutation = useMutation({
@@ -230,6 +250,7 @@ export default function RastreoDetalle() {
   const cajas = data?.data?.cajas || []
   const historial = data?.data?.historial || []
   const od = outboundData?.data
+  const outboundBoxTotal = od?.outboundBoxCount ?? od?.packageList?.length ?? od?.outboundBoxList?.length ?? cajas.length ?? null
   const notas = historial.filter(h => h.accion === 'nota')
   const resolveCandidates = cajas.filter(c => c.estado_caja !== 'cancelada')
 
@@ -245,24 +266,28 @@ export default function RastreoDetalle() {
   )
 
   const resolveOrdenMutation = useMutation({
-    mutationFn: async ({ selection }) => {
-      const targetRows = resolveCandidates.map((caja) => {
-        const found = resolveMode === 'all' ? true : !!selection[caja.id]
-        return { caja, nextEstado: found ? 'localizada' : 'no_encontrada' }
-      })
-
-      for (const row of targetRows) {
-        const shouldEnsureAnormalidad = row.nextEstado === 'no_encontrada' && !row.caja.anormalidad_id
-        if (row.caja.estado_caja === row.nextEstado && !shouldEnsureAnormalidad) continue
-        await updateRastreaoCaja(row.caja.id, { estado_caja: row.nextEstado })
+    mutationFn: async ({ selection, targetEstado, causas }) => {
+      const isCancelling = targetEstado === 'cancelada'
+      if (isCancelling) {
+        await updateRastreoOrden(orden.id, { estado: targetEstado })
+        return
       }
-
-      return updateRastreoOrden(orden.id, { estado: 'completada' })
+      const updates = resolveCandidates.map(caja => ({
+        caja_id: caja.id,
+        found: resolveMode === 'all' ? true : !!selection[caja.id],
+        causa_rastreo_id: causas[caja.id] || null,
+      }))
+      await resolverRastreoOrden({ orden_id: orden.id, target_estado: targetEstado, updates })
     },
-    onSuccess: () => {
+    onSuccess: (_, { targetEstado }) => {
       qc.invalidateQueries({ queryKey: ['rastreo-detalle', folio] })
       setResolveModalOpen(false)
-      toast.success(t('rastreo.toast.ordenCompletada'))
+      setResolveSearch('')
+      setResolveCausas({})
+      setResolveBulkCausa('')
+      toast.success(targetEstado === 'cancelada'
+        ? t('rastreo.toast.ordenCancelada')
+        : t('rastreo.toast.ordenCompletada'))
     },
     onError: (err) => toast.error(err?.response?.data?.error || t('rastreo.toast.errorCompletarOrden')),
   })
@@ -277,19 +302,27 @@ export default function RastreoDetalle() {
     }, options.mutationOptions)
   }
 
-  function openResolveModal() {
+  const [resolveTargetEstado, setResolveTargetEstado] = useState('completada')
+
+  function openResolveModal(targetEstado = 'completada') {
     const nextSelection = Object.fromEntries(
       resolveCandidates.map((caja) => [caja.id, caja.estado_caja !== 'no_encontrada'])
     )
     setResolveSelection(nextSelection)
+    setResolveCausas(Object.fromEntries(
+      resolveCandidates.map(c => [c.id, c.causa_rastreo_id || ''])
+    ))
     setResolveMode(resolveCandidates.every(caja => caja.estado_caja === 'localizada') ? 'all' : 'manual')
+    setResolveTargetEstado(targetEstado)
+    setResolveSearch('')
+    setResolveBulkCausa('')
     setResolveModalOpen(true)
   }
 
   function handleEstadoChange(e) {
     const nextEstado = e.target.value
-    if (nextEstado === 'completada') {
-      openResolveModal()
+    if (nextEstado === 'completada' || nextEstado === 'cancelada') {
+      openResolveModal(nextEstado)
       return
     }
     mutateOrden(
@@ -327,7 +360,11 @@ export default function RastreoDetalle() {
   function confirmCajaNoEncontrada() {
     updateCajaMutation.mutate({
       id: cajaConfirm.caja.id,
-      body: { estado_caja: 'no_encontrada', ...(cajaNota.trim() ? { notas: cajaNota.trim() } : {}) },
+      body: {
+        estado_caja: 'no_encontrada',
+        ...(cajaNota.trim() ? { notas: cajaNota.trim() } : {}),
+        ...(cajaConfirmCausa ? { causa_rastreo_id: cajaConfirmCausa } : {}),
+      },
     })
   }
 
@@ -366,6 +403,19 @@ export default function RastreoDetalle() {
     }
     return list
   }, [cajas, cajaSearch, cajaSort])
+
+  const resolveVisibleCandidates = useMemo(() => {
+    const q = resolveSearch.trim().toLowerCase()
+    if (!q) return resolveCandidates
+    return resolveCandidates.filter(c =>
+      c.box_code?.toLowerCase().includes(q) ||
+      c.ubicacion?.toLowerCase().includes(q) ||
+      c.producto?.toLowerCase().includes(q)
+    )
+  }, [resolveCandidates, resolveSearch])
+
+  const isCancelFlow = resolveTargetEstado === 'cancelada'
+  const isCompletadaOrCancelada = orden && (orden.estado === 'completada' || orden.estado === 'cancelada')
 
   const tabs = [
     { key: 'cajas',    label: `${t('rastreo.detalle.cajas')} (${cajas.length})`,   icon: Package },
@@ -473,7 +523,7 @@ export default function RastreoDetalle() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600/70">{t('rastreo.detalle.cajasOrden')}</p>
-                          <p className="mt-1 text-sm font-bold text-warm-800">{od?.packageList?.length ?? '—'}</p>
+                          <p className="mt-1 text-sm font-bold text-warm-800">{outboundBoxTotal ?? '—'}</p>
                           <p className="text-[10px] text-warm-400">{t('rastreo.detalle.cajasOrdenHint')}</p>
                         </div>
                       </div>
@@ -647,15 +697,54 @@ export default function RastreoDetalle() {
                     </button>
                   )}
                 </div>
-                {canEdit && (
+                <div className="flex items-center gap-2 ml-auto">
                   <button
-                    onClick={() => setShowAddCaja(v => !v)}
-                    className="flex items-center gap-1.5 ml-auto px-3 py-2 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 text-xs font-medium transition-colors"
+                    onClick={() => {
+                      const headers = [
+                        t('rastreo.detalle.col.codigo'),
+                        t('rastreo.detalle.col.estadoCaja'),
+                        t('rastreo.detalle.col.ubicacion'),
+                        t('rastreo.detalle.col.producto'),
+                        t('rastreo.causas.col.causa'),
+                        t('rastreo.causas.col.area'),
+                        t('rastreo.detalle.col.surtido'),
+                        t('rastreo.detalle.col.anormalidad'),
+                      ]
+                      const rows = filteredCajas.map(c => [
+                        c.box_code,
+                        t(CAJA_META[c.estado_caja]?.labelKey || 'rastreo.caja.pendiente'),
+                        c.ubicacion || '',
+                        c.producto || '',
+                        c.causa_descripcion || '',
+                        c.causa_area || '',
+                        c.validada_en_surtido ? 'SI' : 'NO',
+                        c.anormalidad_folio || '',
+                      ])
+                      const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+                      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `rastreo_cajas_${orden.folio}_${new Date().toISOString().slice(0, 10)}.csv`
+                      a.click()
+                      URL.revokeObjectURL(url)
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-success-200 bg-success-50 text-success-700 hover:bg-success-100 text-xs font-medium transition-colors"
+                    title={t('rastreo.exportar')}
                   >
-                    <Plus size={12} />
-                    {t('rastreo.detalle.agregarCaja')}
+                    <FileDown size={12} />
+                    {t('rastreo.exportar')}
                   </button>
-                )}
+                  {canEdit && (
+                    <button
+                      onClick={() => setShowAddCaja(v => !v)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 text-xs font-medium transition-colors"
+                    >
+                      <Plus size={12} />
+                      {t('rastreo.detalle.agregarCaja')}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Add caja input row */}
@@ -698,6 +787,9 @@ export default function RastreoDetalle() {
                       <th className="table-header whitespace-nowrap">{t('rastreo.detalle.col.producto')}</th>
                       <th className="table-header whitespace-nowrap text-center">{t('rastreo.detalle.col.surtido')}</th>
                       <th className="table-header whitespace-nowrap">{t('rastreo.detalle.col.anormalidad')}</th>
+                      {isCompletadaOrCancelada && (
+                        <th className="table-header whitespace-nowrap">{t('rastreo.causas.col.causa')}</th>
+                      )}
                       <th className="table-header whitespace-nowrap">{t('rastreo.detalle.col.acciones')}</th>
                     </tr>
                   </thead>
@@ -741,11 +833,34 @@ export default function RastreoDetalle() {
                             ? <CopyableCell text={c.anormalidad_folio} className="font-mono text-xs text-danger-600" />
                             : <span className="text-xs text-warm-300">{t('rastreo.detalle.emptyDash')}</span>}
                         </td>
+                        {isCompletadaOrCancelada && (
+                          <td className="px-3 py-2.5 min-w-[160px]">
+                            {canEdit ? (
+                              <select
+                                className="text-xs rounded-lg border border-warm-200 bg-white px-2 py-1 cursor-pointer focus:outline-none focus:border-primary-400 w-full"
+                                value={c.causa_rastreo_id || ''}
+                                onChange={e => updateCajaCausaMutation.mutate({ id: c.id, causa_rastreo_id: e.target.value || null })}
+                                disabled={updateCajaCausaMutation.isPending}
+                              >
+                                <option value="">{t('rastreo.causas.sinCausa')}</option>
+                                {causas.map(ca => (
+                                  <option key={ca.id} value={ca.id}>
+                                    {ca.descripcion} ({ca.area})
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              c.causa_descripcion
+                                ? <span className="text-xs text-warm-700">{c.causa_descripcion} <span className="text-warm-400">({c.causa_area})</span></span>
+                                : <span className="text-xs text-warm-300">{t('rastreo.detalle.emptyDash')}</span>
+                            )}
+                          </td>
+                        )}
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-1">
                             {canEdit && (
                               <button
-                                onClick={() => { setCajaNotaModal(c); setCajaNotaText('') }}
+                                onClick={() => { setCajaEditModal(c); setCajaEditNotas(c.notas || ''); setCajaEditCausa(c.causa_rastreo_id || '') }}
                                 className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-300 hover:text-primary-500 transition-colors"
                                 title={t('rastreo.detalle.addBoxNote')}
                               >
@@ -767,7 +882,7 @@ export default function RastreoDetalle() {
                     ))}
                     {filteredCajas.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-xs text-warm-400">
+                        <td colSpan={isCompletadaOrCancelada ? 9 : 8} className="py-8 text-center text-xs text-warm-400">
                           {cajaSearch ? t('rastreo.detalle.noSearchResults') : t('rastreo.detalle.noBoxes')}
                         </td>
                       </tr>
@@ -892,127 +1007,211 @@ export default function RastreoDetalle() {
 
       <Modal
         isOpen={resolveModalOpen}
-        onClose={() => { if (!resolveOrdenMutation.isPending) setResolveModalOpen(false) }}
-        title={t('rastreo.detalle.resolveTitle')}
-        icon={CheckCircle2}
+        onClose={() => { if (!resolveOrdenMutation.isPending) { setResolveModalOpen(false); setResolveSearch(''); setResolveCausaId(''); setBulkCausaId('') } }}
+        title={isCancelFlow ? t('rastreo.detalle.cancelTitle') : t('rastreo.detalle.resolveTitle')}
+        icon={isCancelFlow ? XCircle : CheckCircle2}
         size="lg"
         footer={
           <div className="flex w-full items-center justify-between gap-3">
             <div className="text-[11px] text-warm-400">
-              {resolveMode === 'all'
+              {!isCancelFlow && (resolveMode === 'all'
                 ? t('rastreo.detalle.resolveAllSummary')
                   .replace('{total}', String(resolveCandidates.length))
                 : t('rastreo.detalle.resolveManualSummary')
                   .replace('{found}', String(resolveSelectedCount))
-                  .replace('{missing}', String(Math.max(resolveCandidates.length - resolveSelectedCount, 0)))}
+                  .replace('{missing}', String(Math.max(resolveCandidates.length - resolveSelectedCount, 0))))}
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setResolveModalOpen(false)}
+                onClick={() => { setResolveModalOpen(false); setResolveSearch(''); setResolveCausaId(''); setBulkCausaId('') }}
                 disabled={resolveOrdenMutation.isPending}
                 className="btn-ghost text-xs"
               >
                 {t('common.cancel')}
               </button>
               <button
-                onClick={() => resolveOrdenMutation.mutate({ selection: resolveSelection })}
+                onClick={() => resolveOrdenMutation.mutate({ selection: resolveSelection, targetEstado: resolveTargetEstado, causas: resolveCausas })}
                 disabled={resolveOrdenMutation.isPending}
-                className="btn-primary text-xs inline-flex items-center gap-1.5"
+                className={`text-xs inline-flex items-center gap-1.5 ${isCancelFlow ? 'btn-danger !bg-danger-600 !text-white hover:!bg-danger-700' : 'btn-primary'}`}
               >
                 {resolveOrdenMutation.isPending && <Loader2 size={12} className="animate-spin" />}
-                {t('rastreo.detalle.confirmResolution')}
+                {isCancelFlow ? t('rastreo.detalle.confirmCancel') : t('rastreo.detalle.confirmResolution')}
               </button>
             </div>
           </div>
         }
       >
         <div className="space-y-4">
-          <div className="rounded-2xl border border-primary-100 bg-gradient-to-r from-primary-50 via-white to-success-50 px-4 py-3">
-            <p className="text-sm font-semibold text-warm-800">{t('rastreo.detalle.resolveQuestion')}</p>
-            <p className="mt-1 text-xs text-warm-500">{t('rastreo.detalle.resolveHint')}</p>
+          <div>
+            <p className="text-sm font-semibold text-warm-800">{isCancelFlow ? t('rastreo.detalle.cancelQuestion') : t('rastreo.detalle.resolveQuestion')}</p>
+            <p className="mt-1 text-xs text-warm-500">{isCancelFlow ? t('rastreo.detalle.cancelHint') : t('rastreo.detalle.resolveHint')}</p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <button
-              onClick={() => setResolveMode('all')}
-              className={`rounded-2xl border px-4 py-4 text-left transition-all ${
-                resolveMode === 'all'
-                  ? 'border-success-200 bg-success-50 shadow-[0_18px_32px_-28px_rgba(34,197,94,0.55)]'
-                  : 'border-warm-200 bg-white hover:border-success-100 hover:bg-success-50/50'
-              }`}
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-success-700">{t('rastreo.detalle.resolveAllTitle')}</p>
-              <p className="mt-2 text-sm font-semibold text-warm-800">{t('rastreo.detalle.resolveAllAction')}</p>
-              <p className="mt-1 text-xs text-warm-500">{t('rastreo.detalle.resolveAllHint')}</p>
-            </button>
-            <button
-              onClick={() => setResolveMode('manual')}
-              className={`rounded-2xl border px-4 py-4 text-left transition-all ${
-                resolveMode === 'manual'
-                  ? 'border-primary-200 bg-primary-50 shadow-[0_18px_32px_-28px_rgba(59,130,246,0.55)]'
-                  : 'border-warm-200 bg-white hover:border-primary-100 hover:bg-primary-50/50'
-              }`}
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary-700">{t('rastreo.detalle.resolveManualTitle')}</p>
-              <p className="mt-2 text-sm font-semibold text-warm-800">{t('rastreo.detalle.resolveManualAction')}</p>
-              <p className="mt-1 text-xs text-warm-500">{t('rastreo.detalle.resolveManualHint')}</p>
-            </button>
-          </div>
+
+          {!isCancelFlow && (
+            <div className="rounded-2xl border border-warm-200 bg-warm-50/70 p-1">
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  onClick={() => setResolveMode('all')}
+                  className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
+                    resolveMode === 'all'
+                      ? 'bg-success-50 text-success-700 border border-success-200 shadow-[0_12px_24px_-24px_rgba(34,197,94,0.6)]'
+                      : 'bg-transparent text-warm-500 border border-transparent hover:bg-white hover:text-warm-700'
+                  }`}
+                >
+                  {t('rastreo.detalle.resolveAllTitle')}
+                </button>
+                <button
+                  onClick={() => setResolveMode('manual')}
+                  className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
+                    resolveMode === 'manual'
+                      ? 'bg-primary-50 text-primary-700 border border-primary-200 shadow-[0_12px_24px_-24px_rgba(59,130,246,0.6)]'
+                      : 'bg-transparent text-warm-500 border border-transparent hover:bg-white hover:text-warm-700'
+                  }`}
+                >
+                  {t('rastreo.detalle.resolveManualTitle')}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-warm-200 bg-white p-4 shadow-[0_16px_30px_-34px_rgba(15,23,42,0.2)]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-warm-400">{t('rastreo.detalle.quickSummary')}</p>
                 <p className="text-[11px] text-warm-500">{t('rastreo.detalle.quickSummaryHint')}</p>
               </div>
-              {resolveMode === 'manual' && (
-                <div className="flex items-center gap-2">
-                  <button onClick={() => markAllResolve(true)} className="rounded-lg border border-success-200 bg-success-50 px-2.5 py-1 text-[11px] font-semibold text-success-700">
-                    {t('rastreo.detalle.markAll')}
-                  </button>
-                  <button onClick={() => markAllResolve(false)} className="rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-1 text-[11px] font-semibold text-warm-600">
-                    {t('rastreo.detalle.unmarkAll')}
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {!isCancelFlow && resolveMode === 'manual' && (
+                  <>
+                    <button onClick={() => {
+                      const ids = resolveVisibleCandidates.map(c => c.id)
+                      setResolveSelection(prev => { const n = { ...prev }; ids.forEach(id => { n[id] = true }); return n })
+                    }} className="rounded-lg border border-success-200 bg-success-50 px-2.5 py-1 text-[11px] font-semibold text-success-700">
+                      {t('rastreo.detalle.markVisible')}
+                    </button>
+                    <button onClick={() => {
+                      const ids = resolveVisibleCandidates.map(c => c.id)
+                      setResolveSelection(prev => { const n = { ...prev }; ids.forEach(id => { n[id] = false }); return n })
+                    }} className="rounded-lg border border-warm-200 bg-warm-50 px-2.5 py-1 text-[11px] font-semibold text-warm-600">
+                      {t('rastreo.detalle.unmarkVisible')}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
+            {/* Search */}
+            <div className="flex gap-2 mb-2">
+              <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-8 flex-1 focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
+                <Search size={11} className="text-warm-400 shrink-0" />
+                <input
+                  className="flex-1 text-xs outline-none bg-transparent text-warm-700 placeholder-warm-300"
+                  placeholder={t('rastreo.detalle.searchPlaceholder')}
+                  value={resolveSearch}
+                  onChange={e => setResolveSearch(e.target.value)}
+                />
+                {resolveSearch && (
+                  <button onClick={() => setResolveSearch('')}>
+                    <X size={10} className="text-warm-400 hover:text-warm-600" />
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Bulk causa */}
+            {!isCancelFlow && causas.length > 0 && (
+              <div className="flex items-center gap-2 mb-3">
+                <select
+                  className="flex-1 h-7 rounded-xl border border-warm-200 bg-white px-2 text-[11px] text-warm-600 focus:outline-none focus:border-primary-400"
+                  value={resolveBulkCausa}
+                  onChange={e => setResolveBulkCausa(e.target.value)}
+                >
+                  <option value="">{t('rastreo.causas.sinCausa')}</option>
+                  {causas.map(ca => <option key={ca.id} value={ca.id}>{ca.descripcion} ({ca.area})</option>)}
+                </select>
+                <button
+                  onClick={() => {
+                    const ids = resolveVisibleCandidates.map(c => c.id)
+                    setResolveCausas(prev => {
+                      const n = { ...prev }
+                      ids.forEach(id => { n[id] = resolveBulkCausa })
+                      return n
+                    })
+                  }}
+                  disabled={!resolveBulkCausa}
+                  className="h-7 px-2.5 rounded-xl bg-primary-50 border border-primary-200 text-primary-700 text-[11px] font-semibold hover:bg-primary-100 disabled:opacity-40 whitespace-nowrap"
+                >
+                  {t('rastreo.causas.aplicarVisibles')}
+                </button>
+                <button
+                  onClick={() => setResolveCausas(prev => {
+                    const n = { ...prev }
+                    resolveCandidates.forEach(c => { n[c.id] = '' })
+                    return n
+                  })}
+                  className="h-7 px-2.5 rounded-xl border border-warm-200 bg-warm-50 text-warm-600 text-[11px] font-semibold hover:bg-warm-100 whitespace-nowrap"
+                >
+                  {t('rastreo.causas.limpiarTodas')}
+                </button>
+              </div>
+            )}
+
             {resolveCandidates.length === 0 ? (
-              <div className="mt-4 rounded-xl border border-dashed border-warm-200 bg-warm-50/60 px-4 py-6 text-center text-xs text-warm-400">
+              <div className="rounded-xl border border-dashed border-warm-200 bg-warm-50/60 px-4 py-6 text-center text-xs text-warm-400">
                 {t('rastreo.detalle.noActiveBoxes')}
               </div>
             ) : (
-              <div className="mt-4 grid gap-2">
-                {resolveCandidates.map((caja) => {
-                  const checked = resolveMode === 'all' ? true : !!resolveSelection[caja.id]
+              <div className="max-h-[260px] overflow-y-auto grid gap-2 pr-0.5">
+                {resolveVisibleCandidates.map((caja) => {
+                  const checked = isCancelFlow ? false : (resolveMode === 'all' ? true : !!resolveSelection[caja.id])
                   return (
                     <label
                       key={caja.id}
                       className={`flex items-center gap-3 rounded-xl border px-3 py-3 transition-all ${
-                        checked
-                          ? 'border-success-200 bg-success-50/70'
-                          : 'border-warm-200 bg-white'
-                      } ${resolveMode === 'manual' ? 'cursor-pointer hover:border-primary-200' : ''}`}
+                        isCancelFlow
+                          ? 'border-warm-200 bg-white'
+                          : checked
+                            ? 'border-success-200 bg-success-50/70'
+                            : 'border-warm-200 bg-white'
+                      } ${!isCancelFlow && resolveMode === 'manual' ? 'cursor-pointer hover:border-primary-200' : ''}`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={resolveMode === 'all'}
-                        onChange={() => toggleResolveCaja(caja.id)}
-                        className="cb"
-                      />
+                      {!isCancelFlow && (
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={resolveMode === 'all'}
+                          onChange={() => toggleResolveCaja(caja.id)}
+                          className="cb"
+                        />
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="font-mono text-xs font-semibold text-warm-800">{caja.box_code}</p>
                         <p className="text-[11px] text-warm-400">{caja.ubicacion || t('rastreo.detalle.noLocation')} • {caja.producto || t('rastreo.detalle.noProduct')}</p>
+                        {!isCancelFlow && causas.length > 0 && (
+                          <select
+                            className="mt-1.5 w-full h-6 rounded-lg border border-warm-200 bg-white/80 px-1.5 text-[11px] text-warm-600 focus:outline-none focus:border-primary-400"
+                            value={resolveCausas[caja.id] || ''}
+                            onChange={e => { e.stopPropagation(); setResolveCausas(prev => ({ ...prev, [caja.id]: e.target.value })) }}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <option value="">{t('rastreo.causas.sinCausa')}</option>
+                            {causas.map(ca => <option key={ca.id} value={ca.id}>{ca.descripcion} ({ca.area})</option>)}
+                          </select>
+                        )}
                       </div>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                        checked ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-700'
-                      }`}>
-                        {checked ? t('rastreo.detalle.found') : t('rastreo.detalle.notFound')}
-                      </span>
+                      {!isCancelFlow && (
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 self-start ${
+                          checked ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-700'
+                        }`}>
+                          {checked ? t('rastreo.detalle.found') : t('rastreo.detalle.notFound')}
+                        </span>
+                      )}
                     </label>
                   )
                 })}
+                {resolveVisibleCandidates.length === 0 && resolveSearch && (
+                  <div className="py-4 text-center text-xs text-warm-400">{t('rastreo.detalle.noSearchResults')}</div>
+                )}
               </div>
             )}
           </div>
@@ -1049,13 +1248,13 @@ export default function RastreoDetalle() {
       {/* No encontrada confirm modal */}
       <Modal
         isOpen={!!cajaConfirm}
-        onClose={() => { setCajaConfirm(null); setCajaNota('') }}
+        onClose={() => { setCajaConfirm(null); setCajaNota(''); setCajaConfirmCausa('') }}
         title={t('rastreo.detalle.confirmMissingBoxTitle')}
         icon={AlertTriangle}
         size="sm"
         footer={
           <div className="flex gap-2 justify-end">
-            <button onClick={() => { setCajaConfirm(null); setCajaNota('') }} className="btn-ghost text-xs">{t('common.cancel')}</button>
+            <button onClick={() => { setCajaConfirm(null); setCajaNota(''); setCajaConfirmCausa('') }} className="btn-ghost text-xs">{t('common.cancel')}</button>
             <button
               onClick={confirmCajaNoEncontrada}
               disabled={updateCajaMutation.isPending}
@@ -1070,9 +1269,16 @@ export default function RastreoDetalle() {
         <p className="text-xs text-warm-500 mb-3">
           {t('rastreo.detalle.boxLabel')} <span className="font-mono font-semibold text-warm-900">{cajaConfirm?.caja.box_code}</span>
         </p>
-        <p className="text-xs text-warm-500 mb-3">
-          {t('rastreo.detalle.missingBoxHint')} <span className="font-semibold">INV-07</span> {t('rastreo.detalle.missingBoxHintSuffix')}
-        </p>
+        {causas.length > 0 && (
+          <select
+            className="w-full h-8 rounded-xl border border-warm-200 bg-white px-3 text-xs text-warm-700 mb-3 focus:outline-none focus:border-primary-400"
+            value={cajaConfirmCausa}
+            onChange={e => setCajaConfirmCausa(e.target.value)}
+          >
+            <option value="">{t('rastreo.causas.sinCausa')}</option>
+            {causas.map(ca => <option key={ca.id} value={ca.id}>{ca.descripcion} ({ca.area})</option>)}
+          </select>
+        )}
         <textarea
           className="w-full min-h-[70px] resize-y rounded-xl border border-warm-200 bg-warm-50 px-3 py-2 text-xs text-warm-800 placeholder-warm-300 focus:outline-none focus:border-primary-400 transition-colors"
           placeholder={t('rastreo.detalle.missingBoxNotePlaceholder')}
@@ -1108,52 +1314,59 @@ export default function RastreoDetalle() {
         </p>
       </Modal>
 
-      {/* Caja nota modal */}
+      {/* Caja edit modal */}
       <Modal
-        isOpen={!!cajaNotaModal}
-        onClose={() => setCajaNotaModal(null)}
+        isOpen={!!cajaEditModal}
+        onClose={() => setCajaEditModal(null)}
         title={t('rastreo.detalle.addBoxNote')}
         icon={Edit3}
         size="sm"
         footer={
           <div className="flex gap-2 justify-end">
-            <button onClick={() => setCajaNotaModal(null)} className="btn btn-secondary text-xs">{t('common.cancel')}</button>
+            <button onClick={() => setCajaEditModal(null)} className="btn btn-secondary text-xs">{t('common.cancel')}</button>
             <button
               onClick={() => {
-                if (!cajaNotaText.trim()) return
-                mutateOrden(
-                  { agregar_nota: `[${cajaNotaModal.box_code}] ${cajaNotaText.trim()}` },
-                  {
-                    successMessage: t('rastreo.toast.notaAgregada'),
-                    mutationOptions: { onSuccess: () => setCajaNotaModal(null) },
-                  }
+                updateCajaMutation.mutate(
+                  { id: cajaEditModal.id, body: { notas: cajaEditNotas.trim() || null, causa_rastreo_id: cajaEditCausa || null } },
+                  { onSuccess: () => setCajaEditModal(null) }
                 )
               }}
-              disabled={!cajaNotaText.trim() || updateOrden.isPending}
+              disabled={updateCajaMutation.isPending}
               className="btn btn-primary text-xs flex items-center gap-1.5"
             >
-              {updateOrden.isPending && <Loader2 size={12} className="animate-spin" />}
+              {updateCajaMutation.isPending && <Loader2 size={12} className="animate-spin" />}
               {t('common.save')}
             </button>
           </div>
         }
       >
         <p className="text-xs text-warm-500 mb-3">
-          {t('rastreo.detalle.boxLabel')} <span className="font-mono font-semibold text-warm-900">{cajaNotaModal?.box_code}</span>
+          {t('rastreo.detalle.boxLabel')} <span className="font-mono font-semibold text-warm-900">{cajaEditModal?.box_code}</span>
         </p>
+        {causas.length > 0 && (
+          <div className="mb-3">
+            <label className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400 mb-1">{t('rastreo.causas.col.causa')}</label>
+            <select
+              className="w-full h-9 rounded-xl border border-warm-200 bg-white px-3 text-xs text-warm-700 focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+              value={cajaEditCausa}
+              onChange={e => setCajaEditCausa(e.target.value)}
+            >
+              <option value="">{t('rastreo.causas.sinCausa')}</option>
+              {causas.map(ca => <option key={ca.id} value={ca.id}>{ca.descripcion} ({ca.area})</option>)}
+            </select>
+          </div>
+        )}
+        <label className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400 mb-1">{t('rastreo.detalle.addBoxNote')}</label>
         <textarea
           autoFocus
           className="w-full min-h-[80px] resize-y rounded-xl border border-warm-200 bg-warm-50 px-3 py-2 text-xs text-warm-800 placeholder-warm-300 focus:outline-none focus:border-primary-400 transition-colors"
           placeholder={t('rastreo.detalle.boxNotePlaceholder')}
-          value={cajaNotaText}
-          onChange={e => setCajaNotaText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey && cajaNotaText.trim()) {
-            mutateOrden(
-              { agregar_nota: `[${cajaNotaModal.box_code}] ${cajaNotaText.trim()}` },
-              {
-                successMessage: t('rastreo.toast.notaAgregada'),
-                mutationOptions: { onSuccess: () => setCajaNotaModal(null) },
-              }
+          value={cajaEditNotas}
+          onChange={e => setCajaEditNotas(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) {
+            updateCajaMutation.mutate(
+              { id: cajaEditModal.id, body: { notas: cajaEditNotas.trim() || null, causa_rastreo_id: cajaEditCausa || null } },
+              { onSuccess: () => setCajaEditModal(null) }
             )
           }}}
         />

@@ -1,14 +1,18 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
-import { requirePermission } from '../../../shared/middleware/permissions.js'
+import { requireAnyPermission, requirePermission } from '../../../shared/middleware/permissions.js'
 
 const router = Router()
+const requireDespachoValidar = (action) => requireAnyPermission([
+  { modulePath: 'despacho.validar', action },
+  { modulePath: 'despacho.folios', action },
+])
 
 // ── Conductores ───────────────────────────────────────────────────────────────
 
 router.get('/conductores',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'ver'),
+  requireDespachoValidar('ver'),
   async (req, res) => {
     try {
       const result = await req.tQuery(
@@ -85,7 +89,7 @@ router.delete('/conductores/:id',
 
 router.get('/unidades',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.folios', 'ver'),
+  requireDespachoValidar('ver'),
   async (req, res) => {
     try {
       const result = await req.tQuery(

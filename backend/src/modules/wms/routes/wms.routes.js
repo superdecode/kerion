@@ -1950,22 +1950,18 @@ router.post('/order-tracking/bulk',
         )
         const existingMap = new Map(existingRows.rows.map(r => [r.outbound_order_no, r]))
 
-        // 2. Detect closed orders that would be illegally modified
-        const closedAndModified = obcs.filter(obc => {
+        // 2. Detect closed orders that cannot be modified — skip them instead of aborting
+        const closedObcs = new Set(obcs.filter(obc => {
           const row = existingMap.get(obc)
           if (!row) return false
           if (!CLOSED_ORDER_TRACKING_STATUSES.has(row.status)) return false
           return surtidor_id !== undefined ||
             (status !== undefined && String(status) !== row.status)
-        })
-        if (closedAndModified.length > 0) {
-          const err = new Error('No se puede modificar surtidor o estatus en órdenes completadas o parciales')
-          err.statusCode = 409
-          throw err
-        }
+        }))
+        const processableObcs = obcs.filter(obc => !closedObcs.has(obc))
 
-        const newObcs = obcs.filter(obc => !existingMap.has(obc))
-        const updateObcs = obcs.filter(obc => existingMap.has(obc))
+        const newObcs = processableObcs.filter(obc => !existingMap.has(obc))
+        const updateObcs = processableObcs.filter(obc => existingMap.has(obc))
 
         // 3. Check module limit once for all new OBCs
         if (newObcs.length > 0) {
@@ -2067,10 +2063,10 @@ router.post('/order-tracking/bulk',
           updated.push(...resUpdate.rows)
         }
 
-        return [...inserted, ...updated]
+        return { rows: [...inserted, ...updated], skipped: closedObcs.size }
       })
 
-      res.json({ success: true, data: results })
+      res.json({ success: true, data: results.rows, skipped: results.skipped })
     } catch (err) {
       console.error('POST order-tracking/bulk error:', err.message)
       const status = err.statusCode || 500

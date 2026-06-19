@@ -12,6 +12,7 @@ import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -489,15 +490,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                   </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 pb-2 shrink-0">
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_META_KEYS.ok.pill}`}>
-                    Disponible {totals.ok}
-                  </span>
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_META_KEYS.blocked.pill}`}>
-                    Bloqueado {totals.blocked}
-                  </span>
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_META_KEYS.nowms.pill}`}>
-                    No WMS {totals.nowms}
-                  </span>
+                  <StatusPill size="xs" className={STATUS_META_KEYS.ok.pill}>Disponible {totals.ok}</StatusPill>
+                  <StatusPill size="xs" className={STATUS_META_KEYS.blocked.pill}>Bloqueado {totals.blocked}</StatusPill>
+                  <StatusPill size="xs" className={STATUS_META_KEYS.nowms.pill}>No WMS {totals.nowms}</StatusPill>
                 </div>
               </div>
 
@@ -552,7 +547,6 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                                         <tbody>
                                           {tarima.items.map((sc, i) => {
                                             const meta = STATUS_META_KEYS[sc.scan_status] ?? STATUS_META_KEYS.nowms
-                                            const Icon = meta.icon
                                             return (
                                               <tr key={sc.id || i} className="border-b border-warm-50 last:border-0">
                                                 <td className="py-1.5 pr-3 text-warm-400">{i + 1}</td>
@@ -573,9 +567,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                                                   <span className="text-xs text-warm-500">{sc.cell_no || '—'}</span>
                                                 </td>
                                                 <td className="pr-3">
-                                                  <span className={`badge inline-flex items-center gap-1 ${meta.bg}`}>
-                                                    <Icon size={9} /> {t(meta.labelKey)}
-                                                  </span>
+                                                  <StatusPill className={meta.bg}>{t(meta.labelKey)}</StatusPill>
                                                 </td>
                                                 <td className="text-right text-warm-400 tabular-nums">
                                                   {sc.scanned_at ? fmtDateTime(sc.scanned_at) : '—'}
@@ -618,7 +610,6 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                     <tbody className="divide-y divide-warm-50">
                       {scans.map((sc, i) => {
                         const meta = STATUS_META_KEYS[sc.scan_status] ?? STATUS_META_KEYS.nowms
-                        const Icon = meta.icon
                         return (
                           <tr key={sc.id || i} className="table-row whitespace-nowrap">
                             <td className="table-cell text-warm-400">{i + 1}</td>
@@ -663,9 +654,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
                               <span className="text-xs text-warm-500">{sc.cell_no || '—'}</span>
                             </td>
                             <td className="table-cell">
-                              <span className={`badge inline-flex items-center gap-1 ${meta.bg}`}>
-                                <Icon size={9} /> {t(meta.labelKey)}
-                              </span>
+                              <StatusPill className={meta.bg}>{t(meta.labelKey)}</StatusPill>
                             </td>
                             <td className="table-cell text-right text-warm-400 tabular-nums">
                               {sc.scanned_at ? fmtDateTime(sc.scanned_at) : '—'}

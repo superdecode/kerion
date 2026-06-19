@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import * as XLSX from 'xlsx'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -947,7 +948,7 @@ export default function Escaneo() {
                           <p className="text-sm font-mono font-semibold text-warm-700 truncate">{p.codigo}</p>
                           <p className="text-[10px] text-warm-400 font-medium">{p.cantidad_guias} {t('dashboard.guides')}</p>
                         </div>
-                        <span className={`badge text-[9px] ${estadoBadgeClass(p.estado)}`}>{formatEstado(p.estado)}</span>
+                        <StatusPill size="xs" className={estadoBadgeClass(p.estado)}>{formatEstado(p.estado)}</StatusPill>
                       </div>
                     ))}
                   </div>

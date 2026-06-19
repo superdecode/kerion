@@ -18,6 +18,7 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
+import { usePreloaderStore } from '../../../core/stores/preloaderStore'
 import {
   getOutboundList, getOutboundDetail,
   getSurtidores, createSurtidor, deleteSurtidor,
@@ -32,6 +33,7 @@ import { getBoxStock } from '../../Inventario/services/inventarioService'
 import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import PrintSurtidoUbicaciones from '../components/PrintSurtidoUbicaciones'
 import ModuleLimitBanner from '../../../core/components/common/ModuleLimitBanner'
+import StatusPill from '../../../core/components/common/StatusPill'
 import { useModuleUsage } from '../../../core/hooks/useModuleUsage'
 import { refreshSheet, getCacheTimestamp, subscribeSheetCache } from '../../WmsHub/services/googleSheetsService'
 import { fmtDateTime as formatDateTimeTz, fmtDate as formatDateTz, fmtTimeShort, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
@@ -628,7 +630,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
               </div>
               <div className="flex-1 min-w-0">
                 <PanelObcCopy obc={obc} />
-                <span className={`badge text-[10px] font-semibold mt-0.5 inline-block ${meta.cls}`}>{t(meta.labelKey)}</span>
+                <StatusPill size="xs" className={`mt-0.5 inline-flex ${meta.cls}`}>{t(meta.labelKey)}</StatusPill>
               </div>
               <button onClick={onClose} className="shrink-0 p-1.5 rounded-lg text-warm-400 hover:text-warm-700 hover:bg-warm-100 transition-colors">
                 <X size={16} />
@@ -818,7 +820,7 @@ function ObcCopyHeader({ obc, meta, t }) {
           {copied ? <Check size={14} className="text-success-600" /> : <Copy size={14} />}
         </button>
       </div>
-      <span className={`badge text-[11px] font-semibold shrink-0 ${meta.cls}`}>{t(meta.labelKey)}</span>
+      <StatusPill className={`shrink-0 ${meta.cls}`}>{t(meta.labelKey)}</StatusPill>
     </div>
   )
 }
@@ -926,6 +928,9 @@ export default function Ordenes() {
   const toast = useToastStore.getState()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const beginPreloader = usePreloaderStore(s => s.begin)
+  const endPreloader = usePreloaderStore(s => s.end)
+  const initialPreloaderRef = useRef(null)
   const { hasPermission, user } = useAuthStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
   const { data: moduleUsage } = useModuleUsage()
@@ -1077,7 +1082,7 @@ export default function Ordenes() {
     }
   }
 
-  const { data: wmsData, isLoading: wmsLoading } = useQuery({
+  const { data: wmsData, isLoading: wmsLoading, isFetching: wmsFetching } = useQuery({
     queryKey: ['wms-outbound'],
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
@@ -1109,6 +1114,23 @@ export default function Ordenes() {
   const surtidores    = getRecords(surtidoresData)
   const isPartial     = wmsData?.data?.partial ?? false
   const fromPersistentCache = wmsData?.data?.fromPersistentCache ?? false
+  const showInitialLoader = backendOnline && allWmsRecords.length === 0 && (wmsLoading || wmsFetching || isPartial)
+
+  useEffect(() => {
+    if (showInitialLoader && !initialPreloaderRef.current) {
+      initialPreloaderRef.current = beginPreloader('Cargando órdenes de surtido...', 0)
+    }
+    if (!showInitialLoader && initialPreloaderRef.current) {
+      endPreloader(initialPreloaderRef.current)
+      initialPreloaderRef.current = null
+    }
+    return () => {
+      if (initialPreloaderRef.current) {
+        endPreloader(initialPreloaderRef.current)
+        initialPreloaderRef.current = null
+      }
+    }
+  }, [showInitialLoader, beginPreloader, endPreloader])
 
   useEffect(() => {
     if (!isPartial) return undefined
@@ -1400,9 +1422,15 @@ export default function Ordenes() {
       })
       return { prev }
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
-      toast.success(`${vars.obcs.length} ordenes actualizadas`)
+      const updated = data?.data?.length ?? vars.obcs.length
+      const skipped = data?.skipped ?? 0
+      if (skipped > 0) {
+        toast.success(`${updated} ordenes actualizadas · ${skipped} omitidas (completadas/parciales)`)
+      } else {
+        toast.success(`${updated} ordenes actualizadas`)
+      }
     },
     onError: (err, vars, context) => {
       if (context?.prev) qc.setQueryData(['wms-order-tracking'], context.prev)
@@ -1966,7 +1994,7 @@ export default function Ordenes() {
       {/* Table */}
       <div className="flex-1 min-h-0 overflow-hidden p-4">
         <AnimatePresence mode='wait'>
-          {isTransitioning || wmsLoading ? (
+          {isTransitioning || showInitialLoader ? (
              <motion.div
                key="loader"
                initial={{ opacity: 0 }}
@@ -1992,7 +2020,7 @@ export default function Ordenes() {
                    <div className="absolute inset-1 rounded-[1.15rem] bg-white/90" />
                    <Loader2 size={20} className="relative z-10 animate-spin text-primary-500" />
                  </div>
-                 <p className="text-sm text-warm-500">{t('common.loading')}</p>
+                 <p className="text-sm text-warm-500">Cargando órdenes de surtido...</p>
                </div>
              </motion.div>
           ) : pagedRecords.length === 0 ? (
@@ -2382,7 +2410,7 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
       </td>
 
       <td className="table-cell">
-        <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
+        <StatusPill className={meta.cls}>{t(meta.labelKey)}</StatusPill>
       </td>
 
       <td className="table-cell text-right">
@@ -2469,7 +2497,15 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
   const allFilteredSelected = allFilteredObcs && selected.size === allFilteredObcs.length && allFilteredObcs.every(obc => selected.has(obc))
   const canSelectAllFiltered = someChecked && allFilteredObcs && !allFilteredSelected
   const selectedRecords = sortedRecords.filter(r => selected.has(r.outboundOrderNo))
-  const assignableSelected = selectedRecords.filter(r => !CLOSED_ORDER_STATUSES.has(trackingMap[r.outboundOrderNo]?.status || 'pending_assignment'))
+  const assignableSelected = selectedRecords.filter(r => {
+    const tracking = trackingMap[r.outboundOrderNo]
+    const rawStatus = tracking?.status || 'pending_assignment'
+    if (CLOSED_ORDER_STATUSES.has(rawStatus)) return false
+    const scanned = Number(tracking?.total_scanned ?? 0)
+    const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
+    if (expected > 0 && scanned >= expected) return false
+    return true
+  })
   const assignableSelectedObcs = assignableSelected.map(r => r.outboundOrderNo)
   const statusEditableSelectedObcs = assignableSelectedObcs
   const toggleAll = () => setSelected(prev => {
@@ -2899,7 +2935,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                       </select>
                     ) : (
                       <div className="flex items-center gap-1.5 group/statusEdit">
-                        <span className={`badge text-[11px] font-medium ${meta.cls}`}>{t(meta.labelKey)}</span>
+                        <StatusPill className={meta.cls}>{t(meta.labelKey)}</StatusPill>
                         {canUpdateStatus && (
                           <button
                             title={t('surtido.ordenes.editStatus')}
