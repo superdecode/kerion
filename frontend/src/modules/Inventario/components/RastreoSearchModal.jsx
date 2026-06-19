@@ -27,6 +27,8 @@ const ORDER_STATUS_LABELS = {
 const INVENTORY_STATUS_LABELS = {
   OK: 'rastreo.searchModal.status.ok',
   BLOCKED: 'rastreo.searchModal.status.blocked',
+  Bloqueado: 'rastreo.searchModal.status.blocked',
+  NoWMS: 'rastreo.searchModal.status.nowms',
 }
 
 const SCAN_RESULT_LABELS = {
@@ -39,6 +41,22 @@ const SCAN_STATUS_LABELS = {
   ok: 'rastreo.searchModal.status.ok',
   blocked: 'rastreo.searchModal.status.blocked',
   nowms: 'rastreo.searchModal.status.nowms',
+}
+
+function compactCode(raw) {
+  const normalized = normalizeCodeFast(raw || '')
+  const embedded = normalized.match(/\d{6,}[-/]\d+/)
+  return (embedded?.[0] || normalized).replace(/[-\/]/g, '')
+}
+
+function dedupeRecords(records, keyFn) {
+  const seen = new Set()
+  return (records || []).filter(record => {
+    const key = keyFn(record)
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function SectionHeader({ icon: Icon, title, count, color, open, onToggle }) {
@@ -81,11 +99,11 @@ function InventarioSection({ records, open, onToggle }) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 rounded-xl border border-primary-100 overflow-hidden">
+            <div className="mt-2 rounded-xl border border-primary-100 overflow-x-auto">
               {!records?.length ? (
                 <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.invActual')}</p>
               ) : (
-                <table className="w-full text-xs">
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-primary-50/60 border-b border-primary-100">
                     <tr>
                       {[t('rastreo.searchModal.col.codigoCaja'), t('rastreo.searchModal.col.ubicacion'), t('rastreo.searchModal.col.disponible'), t('rastreo.searchModal.col.bloqueado'), t('rastreo.searchModal.col.producto'), t('common.status')].map(h => (
@@ -144,11 +162,11 @@ function SurtidoSection({ records, open, onToggle }) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 rounded-xl border border-accent-100 overflow-hidden">
+            <div className="mt-2 rounded-xl border border-accent-100 overflow-x-auto">
               {!records?.length ? (
                 <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.ordenesSalida')}</p>
               ) : (
-                <table className="w-full text-xs">
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-accent-50/60 border-b border-accent-100">
                     <tr>
                       {[t('rastreo.searchModal.col.codigoCaja'), t('rastreo.searchModal.col.numeroOrden'), t('rastreo.searchModal.col.destinatario'), t('rastreo.searchModal.col.fechaEntrega'), t('rastreo.searchModal.col.referencia'), t('rastreo.searchModal.col.servicio')].map(h => (
@@ -206,11 +224,11 @@ function EscaneoSection({ records, open, onToggle }) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 rounded-xl border border-warning-100 overflow-hidden">
+            <div className="mt-2 rounded-xl border border-warning-100 overflow-x-auto">
               {!records?.length ? (
                 <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.invEscaneo')}</p>
               ) : (
-                <table className="w-full text-xs">
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-warning-50/60 border-b border-warning-100">
                     <tr>
                       {[t('rastreo.detalle.col.codigo'), t('rastreo.detalle.col.ubicacion'), t('common.status'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
@@ -268,11 +286,11 @@ function ValidacionSection({ records, open, onToggle }) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 rounded-xl border border-success-100 overflow-hidden">
+            <div className="mt-2 rounded-xl border border-success-100 overflow-x-auto">
               {!records?.length ? (
                 <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.validacion')}</p>
               ) : (
-                <table className="w-full text-xs">
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-success-50/60 border-b border-success-100">
                     <tr>
                       {[t('rastreo.searchModal.col.codigoEscaneado'), t('rastreo.col.ordenSalida'), t('rastreo.searchModal.col.resultado'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
@@ -284,7 +302,7 @@ function ValidacionSection({ records, open, onToggle }) {
                     {records.map((r, i) => (
                       <tr key={i} className="hover:bg-primary-100 transition-colors">
                         <td className="px-3 py-2.5">
-                          <CopyableCell text={r.scanned_code || '—'} className="font-mono text-warm-700" />
+                          <CopyableCell text={r.normalized_code || r.scanned_code || '—'} className="font-mono text-warm-700" />
                         </td>
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.outbound_order_no || '—'} className="font-mono font-semibold text-primary-700" />
@@ -333,11 +351,11 @@ function InventarioRegistrosSection({ records, open, onToggle }) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 rounded-xl border border-sky-100 overflow-hidden">
+            <div className="mt-2 rounded-xl border border-sky-100 overflow-x-auto">
               {!records?.length ? (
                 <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.invRegistros')}</p>
               ) : (
-                <table className="w-full text-xs">
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-sky-50/70 border-b border-sky-100">
                     <tr>
                       {[t('rastreo.detalle.col.codigo'), t('rastreo.searchModal.col.code2'), t('rastreo.detalle.col.ubicacion'), t('common.status'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
@@ -401,11 +419,11 @@ function RastreoSection({ records, open, onToggle }) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 rounded-xl border border-rose-100 overflow-hidden">
+            <div className="mt-2 rounded-xl border border-rose-100 overflow-x-auto">
               {!records?.length ? (
                 <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.rastreo')}</p>
               ) : (
-                <table className="w-full text-xs">
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-rose-50/70 border-b border-rose-100">
                     <tr>
                       {[t('rastreo.searchModal.col.caja'), t('rastreo.col.folio'), t('rastreo.col.ordenSalida'), t('rastreo.searchModal.col.estadoCaja'), t('rastreo.detalle.col.ubicacion'), t('rastreo.searchModal.col.estadoOrden')].map(h => (
@@ -447,6 +465,146 @@ const INBOUND_ESTADO_LABELS = {
   faltante: 'rastreo.searchModal.recepcion.faltante',
 }
 
+const ANORM_ESTADO_LABELS = {
+  nuevo: 'rastreo.searchModal.anorm.nuevo',
+  en_proceso: 'rastreo.searchModal.anorm.en_proceso',
+  resuelto: 'rastreo.searchModal.anorm.resuelto',
+  cerrado: 'rastreo.searchModal.anorm.cerrado',
+}
+
+function DespachoSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
+  return (
+    <div>
+      <SectionHeader
+        icon={Package}
+        title={t('rastreo.searchModal.section.despacho')}
+        count={records?.length}
+        color={{ border: 'border-orange-200', bg: 'bg-orange-50/50', icon: 'bg-orange-100 text-orange-600', badge: 'bg-orange-100 text-orange-700' }}
+        open={open}
+        onToggle={onToggle}
+      />
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 rounded-xl border border-orange-100 overflow-x-auto">
+              {!records?.length ? (
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.despacho')}</p>
+              ) : (
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
+                  <thead className="bg-orange-50/70 border-b border-orange-100">
+                    <tr>
+                      {['Cód. caja', 'Folio despacho', 'OBC', 'Cliente', t('common.date')].map(h => (
+                        <th key={h} className="text-left px-3 py-2 font-semibold text-orange-700 uppercase tracking-wide text-[10px]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-orange-50">
+                    {records.map((r, i) => (
+                      <tr key={r.id || i} className="hover:bg-orange-50 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.codigo_caja || '—'} className="font-mono font-semibold text-warm-700" />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.folio_numero || '—'} className="font-mono text-orange-700" />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.outbound_order_no || r.matched_order_no || '—'} className="font-mono text-warm-600" />
+                        </td>
+                        <td className="px-3 py-2.5 text-warm-600 max-w-[120px] truncate">{r.cliente || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-400">
+                          {r.created_at ? new Date(r.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function AnormalidadesSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
+  return (
+    <div>
+      <SectionHeader
+        icon={AlertCircle}
+        title={t('rastreo.searchModal.section.anormalidades')}
+        count={records?.length}
+        color={{ border: 'border-red-200', bg: 'bg-red-50/50', icon: 'bg-red-100 text-red-600', badge: 'bg-red-100 text-red-700' }}
+        open={open}
+        onToggle={onToggle}
+      />
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 rounded-xl border border-red-100 overflow-x-auto">
+              {!records?.length ? (
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.anormalidades')}</p>
+              ) : (
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
+                  <thead className="bg-red-50/70 border-b border-red-100">
+                    <tr>
+                      {['Folio', 'Código', 'Descripción', 'OBC/Orden', t('common.status'), t('common.date')].map(h => (
+                        <th key={h} className="text-left px-3 py-2 font-semibold text-red-700 uppercase tracking-wide text-[10px]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-red-50">
+                    {records.map((r, i) => (
+                      <tr key={r.id || i} className="hover:bg-red-50 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.folio || '—'} className="font-mono font-semibold text-red-700" />
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-warm-600">{r.codigo || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-700 max-w-[200px]">
+                          <span className="block truncate">{r.descripcion || '—'}</span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.contenedor_orden || '—'} className="font-mono text-warm-500" />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
+                            r.estado === 'resuelto' || r.estado === 'cerrado' ? 'bg-success-100 text-success-700'
+                              : r.estado === 'en_proceso' ? 'bg-warning-100 text-warning-700'
+                                : 'bg-red-100 text-red-700'
+                          }`}>
+                            {t(ANORM_ESTADO_LABELS[r.estado] || 'common.status')}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-warm-400">
+                          {r.fecha_ocurrencia || r.created_at
+                            ? new Date(r.fecha_ocurrencia || r.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                            : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function RecepcionSection({ records, open, onToggle }) {
   const { t } = useI18nStore()
   return (
@@ -467,11 +625,11 @@ function RecepcionSection({ records, open, onToggle }) {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-2 rounded-xl border border-violet-100 overflow-hidden">
+            <div className="mt-2 rounded-xl border border-violet-100 overflow-x-auto">
               {!records?.length ? (
                 <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.recepcion')}</p>
               ) : (
-                <table className="w-full text-xs">
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-violet-50/70 border-b border-violet-100">
                     <tr>
                       {['Cód. caja', 'Tipo caja', 'SKU', 'Folio entrada', 'Cliente', t('common.status')].map(h => (
@@ -523,7 +681,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
   const [results, setResults] = useState(null)
   const [gsInv, setGsInv] = useState(null)
   const [gsSurtido, setGsSurtido] = useState(null)
-  const [openSections, setOpenSections] = useState({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true })
+  const [openSections, setOpenSections] = useState({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true })
   const inputRef = useRef(null)
 
   function toggleSection(key) {
@@ -541,8 +699,10 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
     try {
       const [dbRes, invRes, outRes] = await Promise.all([
         buscarCaja(q, searchMode),
-        getInventoryList(),
-        getOutboundList ? getOutboundList() : Promise.resolve({ data: { records: [] } }),
+        getInventoryList().catch(() => ({ data: { records: [] } })),
+        getOutboundList
+          ? getOutboundList().catch(() => ({ data: { records: [] } }))
+          : Promise.resolve({ data: { records: [] } }),
       ])
 
       // Prepare query variants for selected mode
@@ -560,8 +720,11 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
       }
 
       // Filter GS inventory
-      const invRecords = (invRes?.data?.records || []).filter(r =>
-        codeMatches(r.customizeBarcode) || codeMatches(r.customizeCode) || codeMatches(r.boxType)
+      const invRecords = dedupeRecords(
+        (invRes?.data?.records || []).filter(r =>
+          codeMatches(r.customizeBarcode) || codeMatches(r.customizeCode) || codeMatches(r.boxType)
+        ),
+        r => [compactCode(r.customizeBarcode || r.customizeCode || r.boxType), normalizeCodeFast(r.cellNo || r.cell_no), r.status || ''].join('|')
       )
       setGsInv(invRecords)
 
@@ -574,28 +737,57 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
           }
         })
       })
-      setGsSurtido(surtRecords)
+      const dedupedSurtRecords = dedupeRecords(
+        surtRecords,
+        r => [compactCode(r.customizeCode || r.boxType), normalizeCodeFast(r.outboundOrderNo), normalizeCodeFast(r.thirdOrderNo)].join('|')
+      )
+      setGsSurtido(dedupedSurtRecords)
 
-      const dbData = dbRes?.data || { inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], rastreo: [], recepcion: [], meta: null }
-      setResults(dbData)
+      const dbData = dbRes?.data || { inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], surtido_validacion_estado: [], rastreo: [], recepcion: [], anormalidades: [], despacho: [], meta: null }
+      const dedupedDbData = {
+        ...dbData,
+        inventario_escaneo: dedupeRecords(dbData.inventario_escaneo, r => [compactCode(r.barcode), normalizeCodeFast(r.cell_no), r.status || ''].join('|')),
+        inventario_registros: dedupeRecords(dbData.inventario_registros, r => [compactCode(r.normalized_code || r.scanned_code), compactCode(r.code2), normalizeCodeFast(r.cell_no), r.scan_status || ''].join('|')),
+        surtido_validacion: dedupeRecords(dbData.surtido_validacion, r => [compactCode(r.scanned_code || r.normalized_code || r.matched_box_type), normalizeCodeFast(r.outbound_order_no), r.scan_result || ''].join('|')),
+        surtido_validacion_estado: dedupeRecords(dbData.surtido_validacion_estado, r => [compactCode(r.scanned_code || r.normalized_code || r.matched_box_type), normalizeCodeFast(r.outbound_order_no), r.box_status || r.scan_result || ''].join('|')),
+        rastreo: dedupeRecords(dbData.rastreo, r => [compactCode(r.box_code || r.box_code_normalized || r.box_type), normalizeCodeFast(r.folio), normalizeCodeFast(r.outbound_order_no)].join('|')),
+        recepcion: dedupeRecords(dbData.recepcion, r => [compactCode(r.custom_box_barcode || r.box_type), normalizeCodeFast(r.folio || r.inbound_order_no), normalizeCodeFast(r.sku)].join('|')),
+        anormalidades: dedupeRecords(dbData.anormalidades, r => [normalizeCodeFast(r.folio), compactCode(r.codigo || r.sku || r.contenedor_orden), normalizeCodeFast(r.estado)].join('|')),
+        despacho: dedupeRecords(dbData.despacho, r => [compactCode(r.codigo_caja), normalizeCodeFast(r.folio_numero), normalizeCodeFast(r.outbound_order_no || r.matched_order_no)].join('|')),
+      }
+      const validationKeys = new Set(dedupedDbData.surtido_validacion.map(r => [
+        compactCode(r.normalized_code || r.scanned_code || r.matched_box_type),
+        normalizeCodeFast(r.outbound_order_no),
+        r.scan_result || '',
+      ].join('|')))
+      dedupedDbData.surtido_validacion_estado = dedupedDbData.surtido_validacion_estado.filter(r => !validationKeys.has([
+        compactCode(r.normalized_code || r.scanned_code || r.matched_box_type),
+        normalizeCodeFast(r.outbound_order_no),
+        r.scan_result || '',
+      ].join('|')))
+      setResults(dedupedDbData)
 
       // Auto-expand first section that has data
-      const escaneoLen = dbData.inventario_escaneo?.length || 0
-      const registrosLen = dbData.inventario_registros?.length || 0
-      const validLen = dbData.surtido_validacion?.length || 0
-      const rastreoLen = dbData.rastreo?.length || 0
-      const recepcionLen = dbData.recepcion?.length || 0
+      const escaneoLen = dedupedDbData.inventario_escaneo?.length || 0
+      const registrosLen = dedupedDbData.inventario_registros?.length || 0
+      const validLen = (dedupedDbData.surtido_validacion?.length || 0) + (dedupedDbData.surtido_validacion_estado?.length || 0)
+      const rastreoLen = dedupedDbData.rastreo?.length || 0
+      const recepcionLen = dedupedDbData.recepcion?.length || 0
+      const anormLen = dedupedDbData.anormalidades?.length || 0
+      const despLen = dedupedDbData.despacho?.length || 0
       const firstKey =
         invRecords.length ? 'inv' :
-        surtRecords.length ? 'surtido' :
+        dedupedSurtRecords.length ? 'surtido' :
         recepcionLen ? 'recepcion' :
         escaneoLen ? 'escaneo' :
         registrosLen ? 'registros' :
         validLen ? 'validacion' :
-        rastreoLen ? 'rastreo' : null
-      setOpenSections({ inv: false, surtido: false, escaneo: false, registros: false, validacion: false, rastreo: false, recepcion: false, ...(firstKey ? { [firstKey]: true } : {}) })
+        rastreoLen ? 'rastreo' :
+        despLen ? 'despacho' :
+        anormLen ? 'anormalidades' : null
+      setOpenSections({ inv: false, surtido: false, escaneo: false, registros: false, validacion: false, rastreo: false, recepcion: false, anormalidades: false, despacho: false, ...(firstKey ? { [firstKey]: true } : {}) })
     } catch (err) {
-      setResults({ inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], rastreo: [], recepcion: [], meta: null })
+      setResults({ inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], surtido_validacion_estado: [], rastreo: [], recepcion: [], anormalidades: [], despacho: [], meta: null })
     } finally {
       setLoading(false)
     }
@@ -612,8 +804,8 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
 
   const totalResults = (gsInv?.length || 0) + (gsSurtido?.length || 0) +
     (results?.inventario_escaneo?.length || 0) + (results?.inventario_registros?.length || 0) +
-    (results?.surtido_validacion?.length || 0) + (results?.rastreo?.length || 0) +
-    (results?.recepcion?.length || 0)
+    (results?.surtido_validacion?.length || 0) + (results?.surtido_validacion_estado?.length || 0) + (results?.rastreo?.length || 0) +
+    (results?.recepcion?.length || 0) + (results?.anormalidades?.length || 0) + (results?.despacho?.length || 0)
 
   if (!isOpen) return null
 
@@ -698,7 +890,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                 {t('common.search')}
               </button>
               {results && (
-                <button onClick={() => { setQuery(''); setResults(null); setGsInv(null); setGsSurtido(null); setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true }) }} className="btn btn-secondary h-11 px-4">
+                <button onClick={() => { setQuery(''); setResults(null); setGsInv(null); setGsSurtido(null); setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true }) }} className="btn btn-secondary h-11 px-4">
                   {t('common.clear')}
                 </button>
               )}
@@ -763,9 +955,9 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                     onToggle={() => toggleSection('registros')}
                   />
                 )}
-                {results.surtido_validacion?.length > 0 && (
+                {((results.surtido_validacion?.length || 0) + (results.surtido_validacion_estado?.length || 0)) > 0 && (
                   <ValidacionSection
-                    records={results.surtido_validacion}
+                    records={[...(results.surtido_validacion || []), ...(results.surtido_validacion_estado || [])]}
                     open={openSections.validacion}
                     onToggle={() => toggleSection('validacion')}
                   />
@@ -782,6 +974,20 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                     records={results.rastreo}
                     open={openSections.rastreo}
                     onToggle={() => toggleSection('rastreo')}
+                  />
+                )}
+                {results.anormalidades?.length > 0 && (
+                  <AnormalidadesSection
+                    records={results.anormalidades}
+                    open={openSections.anormalidades}
+                    onToggle={() => toggleSection('anormalidades')}
+                  />
+                )}
+                {results.despacho?.length > 0 && (
+                  <DespachoSection
+                    records={results.despacho}
+                    open={openSections.despacho}
+                    onToggle={() => toggleSection('despacho')}
                   />
                 )}
                 {searchMode === 'flexible' && results.meta?.used_base_code && (

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
-import { requirePermission } from '../../../shared/middleware/permissions.js'
+import { getPermissionLevel, requirePermission } from '../../../shared/middleware/permissions.js'
 
 const router = Router()
 
@@ -87,7 +87,12 @@ router.get('/orders',
       const offset = (parseInt(page) - 1) * parseInt(limit)
       params.push(parseInt(limit), offset)
       const result = await req.tQuery(
-        `SELECT o.*, u.nombre_completo AS responsable_nombre
+        `SELECT o.*, u.nombre_completo AS responsable_nombre,
+                COALESCE((
+                  SELECT COUNT(*)::int
+                  FROM inbound_scan_events e
+                  WHERE e.order_id = o.id AND e.tenant_id = o.tenant_id
+                ), 0) AS validation_records
          FROM inbound_orders o
          LEFT JOIN usuarios u ON u.id = o.responsable_id
          WHERE ${whereClause}
@@ -332,25 +337,55 @@ router.patch('/orders/:id',
   }
 )
 
-// DELETE /orders/:id — only if pendiente_validacion
+// DELETE /orders/:id
+// actualizar: only if there are no validation records
+// eliminar: full destructive delete, including validation records
 router.delete('/orders/:id',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.recibir', 'eliminar'),
+  requirePermission('recepcion.recibir', 'actualizar'),
   async (req, res) => {
+    let client
     try {
-      const check = await req.tQuery(
-        `SELECT estado FROM inbound_orders WHERE id=$1 AND tenant_id=$2`,
+      client = await req.tGetClient()
+      const canForceDelete = req.fullUser?.es_admin_tenant === true ||
+        getPermissionLevel(req.fullUser?.permisos, 'recepcion.recibir') === 'eliminar'
+
+      const check = await client.query(
+        `SELECT estado FROM inbound_orders WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
         [req.params.id, req.tenantId]
       )
-      if (check.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
-      if (check.rows[0].estado !== 'pendiente_validacion') {
-        return res.status(400).json({ error: 'Solo se pueden eliminar órdenes pendientes de validación' })
+      if (check.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return res.status(404).json({ error: 'Orden no encontrada' })
       }
-      await req.tQuery(`DELETE FROM inbound_orders WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+
+      const validationRes = await client.query(
+        `SELECT COUNT(*)::int AS validation_records
+         FROM inbound_scan_events
+         WHERE order_id=$1 AND tenant_id=$2`,
+        [req.params.id, req.tenantId]
+      )
+      const validationRecords = Number(validationRes.rows[0]?.validation_records || 0)
+
+      if (!canForceDelete && validationRecords > 0) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'Solo se pueden eliminar órdenes sin registros de validación' })
+      }
+
+      await client.query(`DELETE FROM inbound_scan_events WHERE order_id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+      await client.query(`DELETE FROM inbound_validation_sessions WHERE order_id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+      await client.query(`DELETE FROM inbound_novedades WHERE order_id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+      await client.query(`DELETE FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+      await client.query(`DELETE FROM inbound_orders WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
+      await client.query('COMMIT')
       auditLog(req, 'RECEPCION_ORDER_DELETE', 'inbound_orders', req.params.id, {})
       res.json({ ok: true })
     } catch (err) {
+      if (client) try { await client.query('ROLLBACK') } catch {}
+      console.error('[recepcion] delete order:', err.message)
       res.status(500).json({ error: 'Error al eliminar orden' })
+    } finally {
+      if (client) client.release()
     }
   }
 )

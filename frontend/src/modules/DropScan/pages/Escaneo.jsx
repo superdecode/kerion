@@ -309,29 +309,33 @@ export default function Escaneo() {
     enabled: backendOnline && !!panelDetailId,
   })
 
+  const restoreActiveSessions = useCallback((data) => {
+    const sessions = data?.sesiones || []
+    if (sessions.length === 0) return false
+
+    const nextTabs = sessions.slice(0, MAX_ACTIVE_TABS).map((item) => {
+      const tabId = ++tabCounter
+      const emp = empresas.find(e => e.id === item.sesion.empresa_id)
+      const can = allCanales.find(c => c.id === item.sesion.canal_id)
+      return {
+        ...newTabState(tabId),
+        session: item.sesion,
+        tarima: item.tarima_actual,
+        guias: item.ultimas_guias || [],
+        guiasCount: item.tarima_actual?.cantidad_guias || 0,
+        empresa: emp || { id: item.sesion.empresa_id, nombre: item.sesion.empresa_nombre, color: '#8b5cf6' },
+        canal: can || { id: item.sesion.canal_id, nombre: item.sesion.canal_nombre },
+      }
+    })
+
+    setTabs(nextTabs)
+    setActiveTabId(nextTabs[0].tabId)
+    return true
+  }, [allCanales, empresas])
+
   /* restore active backend sessions on mount (multi-tab) */
   useEffect(() => {
-    ds.getAllActiveSessions().then((data) => {
-      const sessions = data?.sesiones || []
-      if (sessions.length > 0) {
-        const nextTabs = sessions.slice(0, MAX_ACTIVE_TABS).map((item) => {
-          const tabId = ++tabCounter
-          const emp = empresas.find(e => e.id === item.sesion.empresa_id)
-          const can = allCanales.find(c => c.id === item.sesion.canal_id)
-          return {
-            ...newTabState(tabId),
-            session: item.sesion,
-            tarima: item.tarima_actual,
-            guias: item.ultimas_guias || [],
-            guiasCount: item.tarima_actual?.cantidad_guias || 0,
-            empresa: emp || { id: item.sesion.empresa_id, nombre: item.sesion.empresa_nombre, color: '#8b5cf6' },
-            canal: can || { id: item.sesion.canal_id, nombre: item.sesion.canal_nombre },
-          }
-        })
-        setTabs(nextTabs)
-        setActiveTabId(nextTabs[0].tabId)
-      }
-    }).catch(() => {})
+    ds.getAllActiveSessions().then(restoreActiveSessions).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresasData, canalesData])
 
@@ -455,6 +459,19 @@ export default function Escaneo() {
       setPickerCanal('')
       toast.success(t('scan.sessionStarted'))
     } catch (err) {
+      if (err.response?.status === 409 && err.response?.data?.code === 'MAX_ACTIVE_SESSIONS') {
+        try {
+          const activeData = await ds.getAllActiveSessions()
+          if (restoreActiveSessions(activeData)) {
+            setShowStartModal(false)
+            setShowAddTabModal(false)
+            setPickerEmpresa('')
+            setPickerCanal('')
+            toast.warning('Ya tienes 3 sesiones activas. Se recuperaron para continuar escaneando.')
+            return
+          }
+        } catch { /* show original error below */ }
+      }
       const msg = err.response?.data?.detail
         ? `${err.response.data.error}: ${err.response.data.detail}`
         : err.response?.data?.error || t('toast.error')

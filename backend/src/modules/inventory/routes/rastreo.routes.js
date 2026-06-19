@@ -63,6 +63,12 @@ function stripCode(raw) {
   return normalizeCode(raw).replace(/[^A-Z0-9]/g, '')
 }
 
+function canonicalCodeKey(raw) {
+  const normalized = normalizeCode(raw)
+  const embedded = normalized.match(/\d{6,}[-/]\d+/)
+  return stripCode(embedded?.[0] || normalized)
+}
+
 function extractBaseCode(raw) {
   if (!raw) return ''
   let base = normalizeCode(raw).split('/')[0].split('-')[0]
@@ -75,27 +81,32 @@ function extractBaseCode(raw) {
 
 function getSearchTokens(raw) {
   const normalized = normalizeCode(raw)
+  const altNormalized = normalized.includes('-')
+    ? normalized.replace(/-/g, '/')
+    : normalized.replace(/\//g, '-')
   const compact = stripCode(raw)
   const baseCode = extractBaseCode(normalized)
   const baseCompact = baseCode && baseCode !== normalized ? stripCode(baseCode) : ''
   return {
     normalized,
+    altNormalized: altNormalized === normalized ? '' : altNormalized,
     compact,
     baseCode,
     baseCompact: baseCompact.length >= 6 ? baseCompact : '',
-    partialLike: `%${normalized}%`,
+    exactVariants: [...new Set([normalized, altNormalized].filter(Boolean))],
+    partialVariants: [...new Set([normalized, altNormalized].filter(Boolean).map(code => `%${code}%`))],
   }
 }
 
 function buildMatchCase(columns, { exactParam, compactParam, baseParam, partialParam }) {
-  const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = $${exactParam}`).join(' OR ')
+  const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = ANY($${exactParam}::text[])`).join(' OR ')
   const compactCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') = $${compactParam}`).join(' OR ')
-  const baseCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') LIKE $${baseParam} || '%'`).join(' OR ')
-  const partialCols = columns.map(col => `${col} ILIKE $${partialParam}`).join(' OR ')
+  const baseCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') LIKE $${baseParam}::text || '%'`).join(' OR ')
+  const partialCols = columns.map(col => `${col} ILIKE ANY($${partialParam}::text[])`).join(' OR ')
   return `CASE
     WHEN ${upperCols} THEN 'exact'
     WHEN ${compactCols} THEN 'normalized'
-    WHEN $${baseParam} <> '' AND (${baseCols}) THEN 'base'
+    WHEN COALESCE($${baseParam}::text, '') <> '' AND (${baseCols}) THEN 'base'
     WHEN ${partialCols} THEN 'partial'
     ELSE NULL
   END`
@@ -106,20 +117,30 @@ function buildFlexibleMatchWhere(columns, params) {
 }
 
 function buildStrictCodeMatch(columns, { exactParam, compactParam, baseParam }) {
-  const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = $${exactParam}`).join(' OR ')
+  const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = ANY($${exactParam}::text[])`).join(' OR ')
   const compactCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') = $${compactParam}`).join(' OR ')
-  const baseCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') LIKE $${baseParam} || '%'`).join(' OR ')
+  const baseCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') LIKE $${baseParam}::text || '%'`).join(' OR ')
   return `(
     ${upperCols}
     OR ${compactCols}
-    OR ($${baseParam} <> '' AND (${baseCols}))
+    OR (COALESCE($${baseParam}::text, '') <> '' AND (${baseCols}))
   )`
 }
 
 function buildExactOnlyWhere(columns, { exactParam, compactParam }) {
-  const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = $${exactParam}`).join(' OR ')
+  const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = ANY($${exactParam}::text[])`).join(' OR ')
   const compactCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') = $${compactParam}`).join(' OR ')
   return `(${upperCols} OR ${compactCols})`
+}
+
+function dedupeRows(rows, keyFn) {
+  const seen = new Set()
+  return rows.filter(row => {
+    const key = keyFn(row)
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 // ── GET /api/rastreo/causas — catálogo causa tipos ───────────────────────────
@@ -270,18 +291,19 @@ router.get('/buscar',
         ? buildExactOnlyWhere(['sc.scanned_code', 'sc.normalized_code', 'sc.code2'], matchParams)
         : buildFlexibleMatchWhere(['sc.scanned_code', 'sc.normalized_code', 'sc.code2'], matchParams)
       const surtidoWhere = mode === 'exact'
-        ? buildExactOnlyWhere(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type'], matchParams)
-        : buildFlexibleMatchWhere(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type'], matchParams)
+        ? buildExactOnlyWhere(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type', 'ps.outbound_order_no'], matchParams)
+        : buildFlexibleMatchWhere(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type', 'ps.outbound_order_no'], matchParams)
       const rastreoWhere = mode === 'exact'
-        ? buildExactOnlyWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)
-        : buildFlexibleMatchWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)
+        ? buildExactOnlyWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no'], matchParams)
+        : buildFlexibleMatchWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no'], matchParams)
       const inboundWhere = mode === 'exact'
-        ? buildExactOnlyWhere(['il.custom_box_barcode', 'il.box_type'], matchParams)
-        : buildFlexibleMatchWhere(['il.custom_box_barcode', 'il.box_type'], matchParams)
+        ? buildExactOnlyWhere(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)
+        : buildFlexibleMatchWhere(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)
 
-      const searchParams = [req.tenantId, tokens.normalized, tokens.compact, tokens.baseCompact, tokens.partialLike]
+      const searchParams = [req.tenantId, tokens.exactVariants, tokens.compact, tokens.baseCompact, tokens.partialVariants]
+      const flexibleSearchParams = [...searchParams, mode !== 'exact']
       const client = await req.tGetClient()
-      let invRes, invRegRes, pickRes, rastreoRes, inboundRes
+      let invRes, invRegRes, pickRes, pickStatusRes, rastreoRes, inboundRes, anormRes, despRes
       try {
         invRes = await client.query(
           `SELECT s.barcode, s.sku, s.product_name, s.cell_no, s.available_stock,
@@ -332,62 +354,269 @@ router.get('/buscar',
                   pe.normalized_code, pe.matched_box_type,
                   ps.outbound_order_no, ps.status AS session_status,
                   u.nombre_completo AS operador,
-                  ${buildMatchCase(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type'], matchParams)} AS match_type
+                  ${buildMatchCase(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type', 'ps.outbound_order_no'], matchParams)} AS match_type
            FROM pick_events pe
            JOIN pick_sessions ps ON ps.id = pe.session_id
            LEFT JOIN usuarios u ON u.id = ps.operator_id
            WHERE ps.tenant_id = $1
              AND ${surtidoWhere}
            ORDER BY
-             CASE ${buildMatchCase(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type'], matchParams)}
+             CASE ${buildMatchCase(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type', 'ps.outbound_order_no'], matchParams)}
                WHEN 'exact' THEN 1
                WHEN 'normalized' THEN 2
                WHEN 'base' THEN 3
                ELSE 4
              END,
              pe.scanned_at DESC
-           LIMIT 30`,
+           LIMIT 50`,
           searchParams
         )
+        pickStatusRes = await client.query(
+          `SELECT
+             pbs.box_code AS scanned_code,
+             pbs.box_code AS normalized_code,
+             NULL::text AS matched_box_type,
+             pbs.outbound_order_no,
+             CASE
+              WHEN UPPER(COALESCE(pbs.box_code, '')) = ANY($2::text[])
+                OR UPPER(COALESCE(pbs.outbound_order_no, '')) = ANY($2::text[]) THEN 'exact'
+              WHEN REGEXP_REPLACE(UPPER(COALESCE(pbs.box_code, '')), '[^A-Z0-9]', '', 'g') = $3 THEN 'normalized'
+              WHEN $6::boolean AND COALESCE($4::text, '') <> '' AND REGEXP_REPLACE(UPPER(COALESCE(pbs.box_code, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%' THEN 'base'
+              WHEN $6::boolean AND (pbs.box_code ILIKE ANY($5::text[]) OR pbs.outbound_order_no ILIKE ANY($5::text[])) THEN 'partial'
+              ELSE 'partial'
+            END AS match_type,
+             CASE
+               WHEN pbs.estado = 'validada' THEN 'ok'
+               WHEN pbs.estado = 'faltante' THEN 'rejected'
+               WHEN pbs.estado = 'anormalidad' THEN 'duplicate'
+               ELSE 'duplicate'
+             END AS scan_result,
+             pbs.estado AS box_status,
+             pbs.updated_at AS created_at,
+             pbs.updated_by AS operador
+           FROM pick_box_status pbs
+           WHERE pbs.tenant_id = $1
+             AND (
+              UPPER(COALESCE(pbs.box_code, '')) = ANY($2::text[])
+              OR REGEXP_REPLACE(UPPER(COALESCE(pbs.box_code, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR ($6::boolean AND COALESCE($4::text, '') <> '' AND REGEXP_REPLACE(UPPER(COALESCE(pbs.box_code, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%')
+               OR ($6::boolean AND pbs.box_code ILIKE ANY($5::text[]))
+               OR UPPER(COALESCE(pbs.outbound_order_no, '')) = ANY($2::text[])
+               OR REGEXP_REPLACE(UPPER(COALESCE(pbs.outbound_order_no, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR ($6::boolean AND pbs.outbound_order_no ILIKE ANY($5::text[]))
+             )
+           ORDER BY
+             CASE
+               WHEN UPPER(COALESCE(pbs.box_code, '')) = ANY($2::text[])
+                 OR UPPER(COALESCE(pbs.outbound_order_no, '')) = ANY($2::text[]) THEN 1
+               WHEN REGEXP_REPLACE(UPPER(COALESCE(pbs.box_code, '')), '[^A-Z0-9]', '', 'g') = $3 THEN 2
+               ELSE 3
+             END,
+             pbs.updated_at DESC
+           LIMIT 50`,
+          flexibleSearchParams
+        )
         rastreoRes = await client.query(
-          `SELECT rc.id, rc.box_code, rc.box_code_normalized, rc.box_type, rc.estado_caja, rc.ubicacion,
+          `WITH inbound_xref AS (
+             SELECT DISTINCT il.custom_box_barcode AS xref_barcode
+             FROM inbound_lines il
+             JOIN inbound_orders io ON io.id = il.order_id
+             WHERE io.tenant_id = $1
+               AND (
+                 UPPER(COALESCE(il.box_type, '')) = ANY($2::text[])
+                 OR REGEXP_REPLACE(UPPER(COALESCE(il.box_type, '')), '[^A-Z0-9]', '', 'g') = $3
+               )
+               AND il.custom_box_barcode IS NOT NULL
+           )
+           SELECT rc.id, rc.box_code, rc.box_code_normalized, rc.box_type, rc.estado_caja, rc.ubicacion,
                   rc.producto, rc.validada_en_surtido, rc.created_at, rc.updated_at,
                   ro.folio, ro.outbound_order_no, ro.estado AS orden_estado,
-                  ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)} AS match_type
+                  COALESCE(
+                    ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no'], matchParams)},
+                    'triangulated'
+             ) AS match_type
            FROM rastreo_cajas rc
            JOIN rastreo_ordenes ro ON ro.id = rc.rastreo_orden_id
            WHERE rc.tenant_id = $1
-             AND ${rastreoWhere}
+             AND (
+               ${rastreoWhere}
+               OR rc.box_code IN (SELECT xref_barcode FROM inbound_xref)
+               OR rc.box_code_normalized IN (SELECT xref_barcode FROM inbound_xref)
+             )
            ORDER BY
-             CASE ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type'], matchParams)}
+             CASE COALESCE(
+               ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no'], matchParams)},
+               'triangulated'
+             )
                WHEN 'exact' THEN 1
                WHEN 'normalized' THEN 2
                WHEN 'base' THEN 3
+               WHEN 'triangulated' THEN 5
                ELSE 4
              END,
              rc.updated_at DESC
-           LIMIT 30`,
+           LIMIT 100`,
           searchParams
         )
         inboundRes = await client.query(
           `SELECT il.id, il.custom_box_barcode, il.box_type, il.sku, il.qty_per_box,
                   il.estado_validacion, il.validated_at, il.created_at,
                   io.folio, io.cliente, io.inbound_order_no, io.tracking_no, io.estado AS orden_estado,
-                  ${buildMatchCase(['il.custom_box_barcode', 'il.box_type'], matchParams)} AS match_type
+                  ${buildMatchCase(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)} AS match_type
            FROM inbound_lines il
            JOIN inbound_orders io ON io.id = il.order_id
            WHERE io.tenant_id = $1
              AND ${inboundWhere}
            ORDER BY
-             CASE ${buildMatchCase(['il.custom_box_barcode', 'il.box_type'], matchParams)}
+             CASE ${buildMatchCase(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)}
                WHEN 'exact' THEN 1
                WHEN 'normalized' THEN 2
                WHEN 'base' THEN 3
                ELSE 4
              END,
              il.created_at DESC
-           LIMIT 50`,
+           LIMIT 100`,
           searchParams
+        )
+        anormRes = await client.query(
+          `SELECT a.id, a.folio, a.codigo, a.descripcion, a.contenedor_orden,
+                 a.nombre, a.proceso, a.cliente, a.almacen, a.sku, a.ubicacion,
+                 ac.codigo AS codigo_anormalidad, ac.nombre_es AS tipo_anormalidad,
+                 a.estado, a.fecha_ocurrencia, a.created_at,
+                  CASE
+                    WHEN UPPER(COALESCE(a.folio, '')) = ANY($2::text[])
+                      OR UPPER(COALESCE(a.codigo, '')) = ANY($2::text[])
+                      OR UPPER(COALESCE(a.contenedor_orden, '')) = ANY($2::text[])
+                      OR REGEXP_REPLACE(UPPER(COALESCE(a.folio, '')), '[^A-Z0-9]', '', 'g') = $3
+                      OR REGEXP_REPLACE(UPPER(COALESCE(a.codigo, '')), '[^A-Z0-9]', '', 'g') = $3
+                      OR REGEXP_REPLACE(UPPER(COALESCE(a.contenedor_orden, '')), '[^A-Z0-9]', '', 'g') = $3 THEN 'exact'
+                    WHEN $6::boolean AND COALESCE($4::text, '') <> ''
+                      AND (
+                        REGEXP_REPLACE(UPPER(COALESCE(a.folio, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                        OR REGEXP_REPLACE(UPPER(COALESCE(a.codigo, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                        OR REGEXP_REPLACE(UPPER(COALESCE(a.contenedor_orden, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                        OR REGEXP_REPLACE(UPPER(COALESCE(a.sku, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                      ) THEN 'base'
+                    WHEN $6::boolean AND a.descripcion ILIKE ANY($5::text[]) THEN 'partial'
+                    ELSE 'partial'
+                  END AS match_type
+            FROM anormalidades a
+           LEFT JOIN anormalidades_codigos ac ON ac.id = a.codigo_id
+           WHERE a.tenant_id = $1
+             AND (
+               UPPER(COALESCE(a.folio, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(a.codigo, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(a.nombre, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(a.proceso, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(a.cliente, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(a.almacen, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(a.contenedor_orden, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(a.sku, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(a.ubicacion, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(ac.codigo, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(ac.nombre_es, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(ac.descripcion, '')) = ANY($2::text[])
+               OR REGEXP_REPLACE(UPPER(COALESCE(a.folio, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR REGEXP_REPLACE(UPPER(COALESCE(a.codigo, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR REGEXP_REPLACE(UPPER(COALESCE(a.nombre, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR REGEXP_REPLACE(UPPER(COALESCE(a.proceso, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR REGEXP_REPLACE(UPPER(COALESCE(a.cliente, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR REGEXP_REPLACE(UPPER(COALESCE(a.almacen, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR REGEXP_REPLACE(UPPER(COALESCE(a.contenedor_orden, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR REGEXP_REPLACE(UPPER(COALESCE(a.sku, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR REGEXP_REPLACE(UPPER(COALESCE(a.ubicacion, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR REGEXP_REPLACE(UPPER(COALESCE(ac.codigo, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR (
+                 $6::boolean AND COALESCE($4::text, '') <> ''
+                 AND (
+                   REGEXP_REPLACE(UPPER(COALESCE(a.folio, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.codigo, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.nombre, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.proceso, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.cliente, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.almacen, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.contenedor_orden, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.sku, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.ubicacion, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(ac.codigo, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                 )
+               )
+               OR ($6::boolean AND a.descripcion ILIKE ANY($5::text[]))
+             )
+           ORDER BY
+             CASE
+               WHEN UPPER(COALESCE(a.folio, '')) = ANY($2::text[])
+                 OR UPPER(COALESCE(a.codigo, '')) = ANY($2::text[])
+                 OR UPPER(COALESCE(a.contenedor_orden, '')) = ANY($2::text[])
+                 OR REGEXP_REPLACE(UPPER(COALESCE(a.folio, '')), '[^A-Z0-9]', '', 'g') = $3
+                 OR REGEXP_REPLACE(UPPER(COALESCE(a.codigo, '')), '[^A-Z0-9]', '', 'g') = $3
+                 OR REGEXP_REPLACE(UPPER(COALESCE(a.contenedor_orden, '')), '[^A-Z0-9]', '', 'g') = $3 THEN 1
+               WHEN $6::boolean AND COALESCE($4::text, '') <> ''
+                 AND (
+                   REGEXP_REPLACE(UPPER(COALESCE(a.folio, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.codigo, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.contenedor_orden, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(a.sku, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                 ) THEN 2
+               ELSE 3
+             END,
+             a.created_at DESC
+           LIMIT 30`,
+          flexibleSearchParams
+        )
+        despRes = await client.query(
+          `SELECT dos.id, dos.codigo_caja, dos.matched_order_no, dos.created_at,
+                  df.folio_numero,
+                  dfo.outbound_order_no, dfo.cliente,
+                  CASE
+                    WHEN UPPER(COALESCE(dos.codigo_caja, '')) = ANY($2::text[])
+                      OR UPPER(COALESCE(df.folio_numero, '')) = ANY($2::text[])
+                      OR UPPER(COALESCE(dfo.outbound_order_no, '')) = ANY($2::text[]) THEN 'exact'
+                    WHEN REGEXP_REPLACE(UPPER(COALESCE(dos.codigo_caja, '')), '[^A-Z0-9]', '', 'g') = $3 THEN 'normalized'
+                    WHEN $6::boolean AND COALESCE($4::text, '') <> ''
+                      AND (
+                        REGEXP_REPLACE(UPPER(COALESCE(dos.codigo_caja, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                        OR REGEXP_REPLACE(UPPER(COALESCE(df.folio_numero, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                        OR REGEXP_REPLACE(UPPER(COALESCE(dfo.outbound_order_no, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                      ) THEN 'base'
+                    ELSE 'partial'
+                  END AS match_type
+           FROM dispatch_order_scans dos
+           JOIN dispatch_folios df ON df.id = dos.folio_id
+           LEFT JOIN dispatch_folio_orders dfo ON dfo.id = dos.folio_order_id
+           WHERE dos.tenant_id = $1
+             AND (
+               UPPER(COALESCE(dos.codigo_caja, '')) = ANY($2::text[])
+               OR REGEXP_REPLACE(UPPER(COALESCE(dos.codigo_caja, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR ($6::boolean AND dos.codigo_caja ILIKE ANY($5::text[]))
+               OR UPPER(COALESCE(df.folio_numero, '')) = ANY($2::text[])
+               OR UPPER(COALESCE(dfo.outbound_order_no, '')) = ANY($2::text[])
+               OR REGEXP_REPLACE(UPPER(COALESCE(dfo.outbound_order_no, '')), '[^A-Z0-9]', '', 'g') = $3
+               OR (
+                 $6::boolean AND COALESCE($4::text, '') <> ''
+                 AND (
+                   REGEXP_REPLACE(UPPER(COALESCE(dos.codigo_caja, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(df.folio_numero, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(dfo.outbound_order_no, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                 )
+               )
+               OR ($6::boolean AND dfo.outbound_order_no ILIKE ANY($5::text[]))
+            )
+           ORDER BY
+             CASE
+               WHEN UPPER(COALESCE(dos.codigo_caja, '')) = ANY($2::text[])
+                 OR UPPER(COALESCE(dfo.outbound_order_no, '')) = ANY($2::text[]) THEN 1
+               WHEN REGEXP_REPLACE(UPPER(COALESCE(dos.codigo_caja, '')), '[^A-Z0-9]', '', 'g') = $3 THEN 2
+               WHEN $6::boolean AND COALESCE($4::text, '') <> ''
+                 AND (
+                   REGEXP_REPLACE(UPPER(COALESCE(dos.codigo_caja, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   OR REGEXP_REPLACE(UPPER(COALESCE(dfo.outbound_order_no, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                 ) THEN 3
+               ELSE 4
+             END,
+             dos.created_at DESC
+           LIMIT 50`,
+          flexibleSearchParams
         )
         await client.query('COMMIT')
       } catch (err) {
@@ -397,12 +626,35 @@ router.get('/buscar',
         client.release()
       }
 
+      const pickRows = dedupeRows(pickRes.rows, row => [
+        canonicalCodeKey(row.normalized_code || row.scanned_code || row.matched_box_type),
+        normalizeCode(row.outbound_order_no),
+        row.scan_result || '',
+      ].join('|'))
+      const pickStatusRows = dedupeRows(pickStatusRes.rows, row => [
+        canonicalCodeKey(row.normalized_code || row.scanned_code || row.matched_box_type),
+        normalizeCode(row.outbound_order_no),
+        row.box_status || row.scan_result || '',
+      ].join('|'))
+      const pickEventKeys = new Set(pickRows.map(row => [
+        canonicalCodeKey(row.normalized_code || row.scanned_code || row.matched_box_type),
+        normalizeCode(row.outbound_order_no),
+        row.scan_result || '',
+      ].join('|')))
+      const filteredPickStatusRows = pickStatusRows.filter(row => !pickEventKeys.has([
+        canonicalCodeKey(row.normalized_code || row.scanned_code || row.matched_box_type),
+        normalizeCode(row.outbound_order_no),
+        row.scan_result || '',
+      ].join('|')))
       const datasets = [
         ...invRes.rows,
         ...invRegRes.rows,
-        ...pickRes.rows,
+        ...pickRows,
+        ...filteredPickStatusRows,
         ...rastreoRes.rows,
         ...inboundRes.rows,
+        ...anormRes.rows,
+        ...despRes.rows,
       ]
       const usedBaseCode = datasets.some(row => row.match_type === 'base')
 
@@ -411,9 +663,12 @@ router.get('/buscar',
         data: {
           inventario_escaneo: invRes.rows,
           inventario_registros: invRegRes.rows,
-          surtido_validacion: pickRes.rows,
+          surtido_validacion: pickRows,
+          surtido_validacion_estado: filteredPickStatusRows,
           rastreo: rastreoRes.rows,
           recepcion: inboundRes.rows,
+          anormalidades: anormRes.rows,
+          despacho: despRes.rows,
           meta: {
             query: q,
             mode,

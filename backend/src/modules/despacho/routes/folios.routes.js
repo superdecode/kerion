@@ -23,6 +23,48 @@ async function generateFolioNumero(req) {
   return `DSP-${dateStr}-${seq}`
 }
 
+async function syncOrderProgressByOrderNo(req, folioId, orderNo) {
+  if (!orderNo) return
+  await req.tQuery(
+    `WITH counts AS (
+       SELECT COUNT(*)::int AS scanned
+       FROM dispatch_order_scans
+       WHERE tenant_id = $3 AND folio_id = $1 AND matched_order_no = $2
+     )
+     UPDATE dispatch_folio_orders o
+     SET bultos = counts.scanned,
+         estado = CASE
+           WHEN o.estado IN ('entregado', 'devolucion') THEN o.estado
+           WHEN COALESCE(o.bultos_esperados, 0) > 0 AND counts.scanned >= o.bultos_esperados THEN 'cargado'
+           ELSE 'pendiente'
+         END
+     FROM counts
+     WHERE o.folio_id = $1 AND o.outbound_order_no = $2 AND o.tenant_id = $3`,
+    [folioId, orderNo, req.tenantId]
+  )
+}
+
+async function syncOrderProgressById(req, folioOrderId) {
+  if (!folioOrderId) return
+  await req.tQuery(
+    `WITH counts AS (
+       SELECT COUNT(*)::int AS scanned
+       FROM dispatch_order_scans
+       WHERE tenant_id = $2 AND folio_order_id = $1
+     )
+     UPDATE dispatch_folio_orders o
+     SET bultos = counts.scanned,
+         estado = CASE
+           WHEN o.estado IN ('entregado', 'devolucion') THEN o.estado
+           WHEN COALESCE(o.bultos_esperados, 0) > 0 AND counts.scanned >= o.bultos_esperados THEN 'cargado'
+           ELSE 'pendiente'
+         END
+     FROM counts
+     WHERE o.id = $1 AND o.tenant_id = $2`,
+    [folioOrderId, req.tenantId]
+  )
+}
+
 async function getFolioDetail(req, folioId) {
   const [folioRes, ordersRes] = await Promise.all([
     req.tQuery(
@@ -56,19 +98,27 @@ async function getFolioDetail(req, folioId) {
   if (folioRes.rows.length === 0) return null
 
   const orderIds = ordersRes.rows.map(o => o.id)
+  const orderNos = ordersRes.rows.map(o => o.outbound_order_no).filter(Boolean)
+  const orderIdByNo = new Map(ordersRes.rows.map(o => [o.outbound_order_no, o.id]))
   const scansMap = {}
   if (orderIds.length > 0) {
     const scansRes = await req.tQuery(
       `SELECT s.*, u.nombre_completo AS validated_by_nombre
        FROM dispatch_order_scans s
        LEFT JOIN usuarios u ON u.id = s.validated_by
-       WHERE s.tenant_id = $1 AND s.folio_order_id = ANY($2::uuid[])
+       WHERE s.tenant_id = $1
+         AND (
+           s.folio_order_id = ANY($2::uuid[])
+           OR (s.folio_id = $3 AND s.matched_order_no = ANY($4::text[]))
+         )
        ORDER BY s.created_at ASC`,
-      [req.tenantId, orderIds]
+      [req.tenantId, orderIds, folioId, orderNos]
     )
     for (const scan of scansRes.rows) {
-      if (!scansMap[scan.folio_order_id]) scansMap[scan.folio_order_id] = []
-      scansMap[scan.folio_order_id].push(scan)
+      const orderId = scan.folio_order_id || orderIdByNo.get(scan.matched_order_no)
+      if (!orderId) continue
+      if (!scansMap[orderId]) scansMap[orderId] = []
+      scansMap[orderId].push(scan)
     }
   }
 
@@ -372,17 +422,8 @@ router.post('/:id/scans',
         [req.tenantId, req.params.id, codigo_caja.trim(), tarima_ref || null, matched_order_no || null, req.user.id]
       )
 
-      // If matched to an order in this folio, update that order's bultos
       if (matched_order_no) {
-        await req.tQuery(
-          `UPDATE dispatch_folio_orders
-           SET bultos = (
-             SELECT COUNT(*) FROM dispatch_order_scans s2
-             WHERE s2.folio_id = $1 AND s2.matched_order_no = $2 AND s2.tenant_id = $3
-           )
-           WHERE folio_id = $1 AND outbound_order_no = $2 AND tenant_id = $3`,
-          [req.params.id, matched_order_no, req.tenantId]
-        )
+        await syncOrderProgressByOrderNo(req, req.params.id, matched_order_no)
       }
 
       await req.tQuery(
@@ -433,15 +474,7 @@ router.delete('/:id/scans/:scanId',
 
       const matchedOrderNo = delRes.rows[0].matched_order_no
       if (matchedOrderNo) {
-        await req.tQuery(
-          `UPDATE dispatch_folio_orders
-           SET bultos = (
-             SELECT COUNT(*) FROM dispatch_order_scans s2
-             WHERE s2.folio_id = $1 AND s2.matched_order_no = $2 AND s2.tenant_id = $3
-           )
-           WHERE folio_id = $1 AND outbound_order_no = $2 AND tenant_id = $3`,
-          [req.params.id, matchedOrderNo, req.tenantId]
-        )
+        await syncOrderProgressByOrderNo(req, req.params.id, matchedOrderNo)
       }
       const scansRes = await req.tQuery(
         `SELECT s.*, u.nombre_completo AS validated_by_nombre
@@ -455,6 +488,48 @@ router.delete('/:id/scans/:scanId',
     } catch (error) {
       console.error('Delete folio scan error:', error)
       res.status(500).json({ error: 'Error eliminando escaneo' })
+    }
+  }
+)
+
+// Move a specific scan to another tarima (por_destino — by scan id)
+router.patch('/:id/scans/:scanId/tarima',
+  authenticateToken, loadFullUser,
+  requireDespachoValidar('actualizar'),
+  async (req, res) => {
+    try {
+      const { tarima_ref = null } = req.body
+      const cleanTarimaRef = String(tarima_ref || '').trim() || null
+
+      const folioRes = await req.tQuery(
+        `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [req.params.id, req.tenantId]
+      )
+      if (!folioRes.rows.length || !['borrador','en_proceso'].includes(folioRes.rows[0].estado)) {
+        return res.status(409).json({ error: 'Folio no editable' })
+      }
+
+      const updateRes = await req.tQuery(
+        `UPDATE dispatch_order_scans
+         SET tarima_ref = $1
+         WHERE id = $2 AND folio_id = $3 AND tenant_id = $4
+         RETURNING id`,
+        [cleanTarimaRef, req.params.scanId, req.params.id, req.tenantId]
+      )
+      if (updateRes.rows.length === 0) return res.status(404).json({ error: 'Escaneo no encontrado' })
+
+      const scansRes = await req.tQuery(
+        `SELECT s.*, u.nombre_completo AS validated_by_nombre
+         FROM dispatch_order_scans s
+         LEFT JOIN usuarios u ON u.id = s.validated_by
+         WHERE s.tenant_id = $1 AND s.folio_id = $2
+         ORDER BY s.validated_at ASC`,
+        [req.tenantId, req.params.id]
+      )
+      res.json({ scans: scansRes.rows })
+    } catch (error) {
+      console.error('Move folio scan tarima error:', error)
+      res.status(500).json({ error: 'Error moviendo escaneo de tarima' })
     }
   }
 )
@@ -573,13 +648,7 @@ router.post('/:id/orders/:orderId/scans',
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [req.tenantId, req.params.id, req.params.orderId, codigo_caja.trim(), tarima_ref || null, req.user.id]
       )
-      await req.tQuery(
-        `UPDATE dispatch_folio_orders
-         SET bultos = (SELECT COUNT(*) FROM dispatch_order_scans
-                       WHERE folio_order_id = $1 AND tenant_id = $2)
-         WHERE id = $1 AND tenant_id = $2`,
-        [req.params.orderId, req.tenantId]
-      )
+      await syncOrderProgressById(req, req.params.orderId)
       const detail = await getFolioDetail(req, req.params.id)
       res.json(detail)
     } catch (error) {
@@ -608,13 +677,7 @@ router.delete('/:id/orders/:orderId/scans/last',
         `DELETE FROM dispatch_order_scans WHERE id = $1 AND tenant_id = $2`,
         [lastRes.rows[0].id, req.tenantId]
       )
-      await req.tQuery(
-        `UPDATE dispatch_folio_orders
-         SET bultos = (SELECT COUNT(*) FROM dispatch_order_scans
-                       WHERE folio_order_id = $1 AND tenant_id = $2)
-         WHERE id = $1 AND tenant_id = $2`,
-        [req.params.orderId, req.tenantId]
-      )
+      await syncOrderProgressById(req, req.params.orderId)
       const detail = await getFolioDetail(req, req.params.id)
       res.json(detail)
     } catch (error) {

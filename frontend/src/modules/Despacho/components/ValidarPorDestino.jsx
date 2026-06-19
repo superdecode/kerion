@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ScanLine, Loader2, X, Check, CheckCircle2, XCircle, AlertCircle,
-  Layers, MapPin, Trash2, Radio, Clock3, Search,
+  Layers, MapPin, Trash2, Radio, Clock3, Search, MoveRight,
   PanelRightClose, PanelRightOpen, PartyPopper, ExternalLink, Plus, Copy,
 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
@@ -13,14 +13,28 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
 import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
+import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
 import {
   getFolio, getFolioScans, addFolioScan, deleteFolioScan,
-  cerrarFolio, cancelarFolio,
+  moveFolioScanTarima, cerrarFolio, cancelarFolio,
 } from '../services/despachoService'
 
 function genTarimaRef(num) {
   return 'T' + String(num).padStart(2, '0')
+}
+
+function normalizeTarimaRef(value) {
+  const raw = String(value || '').trim().toUpperCase()
+  if (!raw) return ''
+  if (/^\d+$/.test(raw)) return genTarimaRef(Number(raw))
+  if (/^T\d+$/.test(raw)) return 'T' + raw.slice(1).padStart(2, '0')
+  return raw
+}
+
+function getTarimaNum(tarimaRef) {
+  const match = String(tarimaRef || '').match(/^T(\d+)$/i)
+  return match ? Number(match[1]) : null
 }
 
 function isOrderComplete(order, validatedCount) {
@@ -52,6 +66,18 @@ function hasCodeVariant(codeSet, variants) {
   return variants.some((variant) => codeSet.has(variant))
 }
 
+function normalizeBaseCode(rawCode) {
+  const normalized = normalizeCodeFast(extractBaseCode(rawCode) || rawCode)
+  return normalized || ''
+}
+
+function metadataMatchesBase(rawValue, baseCode) {
+  if (!rawValue || !baseCode) return false
+  const normalizedValue = normalizeCodeFast(rawValue)
+  const metadataBase = normalizeBaseCode(rawValue)
+  return metadataBase === baseCode || normalizedValue.includes(baseCode)
+}
+
 function CopyMetaPill({ label, value, tone = 'primary' }) {
   const [copied, setCopied] = useState(false)
 
@@ -71,7 +97,7 @@ function CopyMetaPill({ label, value, tone = 'primary' }) {
     : 'bg-primary-50 text-primary-600 border-primary-100 hover:border-primary-200'
 
   return (
-    <span className={`group inline-flex min-w-0 max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-mono whitespace-nowrap ${toneClass}`}>
+    <span className={`group inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-mono whitespace-nowrap ${toneClass}`}>
       {label ? <span className="shrink-0 font-semibold not-italic">{label}</span> : null}
       <span className="min-w-0 truncate">{value}</span>
       <button
@@ -80,7 +106,7 @@ function CopyMetaPill({ label, value, tone = 'primary' }) {
         className="shrink-0 rounded p-0.5 text-current opacity-0 transition-opacity hover:bg-white/70 group-hover:opacity-100"
         title="Copiar"
       >
-        {copied ? <Check className="h-2.5 w-2.5 text-success-500" /> : <Copy className="h-2.5 w-2.5" />}
+        {copied ? <Check className="h-3 w-3 text-success-500" /> : <Copy className="h-3 w-3" />}
       </button>
     </span>
   )
@@ -109,6 +135,9 @@ export default function ValidarPorDestino({ folioId }) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [orderEnrichment, setOrderEnrichment] = useState({})
   const [enrichmentLoading, setEnrichmentLoading] = useState(false)
+  const [forceModal, setForceModal] = useState({ open: false, code: '', orderNo: '' })
+  const [overLimitModal, setOverLimitModal] = useState({ open: false, payload: null, scanned: 0, expected: 0 })
+  const [moveModal, setMoveModal] = useState({ open: false, scan: null, target: '' })
 
   const { data: folioData, isLoading: loadingFolio } = useQuery({
     queryKey: ['despacho-folio', folioId],
@@ -168,20 +197,37 @@ export default function ValidarPorDestino({ folioId }) {
     if (editable) setTimeout(() => scanRef.current?.focus(), 100)
   }, [editable, folioId])
 
+  useEffect(() => {
+    if (currentTarimaNum !== 1 || scans.length === 0) return
+    const latestScan = scans[scans.length - 1]
+    const latestTarimaNum = getTarimaNum(latestScan?.tarima_ref)
+    if (latestTarimaNum && latestTarimaNum > 1) setCurrentTarimaNum(latestTarimaNum)
+  }, [currentTarimaNum, scans])
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['despacho-folio', folioId] })
     qc.invalidateQueries({ queryKey: ['despacho-folio-scans', folioId] })
     qc.invalidateQueries({ queryKey: ['despacho-folios'] })
+    qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
   }
 
+  const currentTarimaHasScans = useMemo(
+    () => scans.some((scan) => (scan.tarima_ref || 'Sin tarima') === currentTarimaRef),
+    [scans, currentTarimaRef]
+  )
+
   const handleNextTarima = useCallback(() => {
-    setCurrentTarimaNum(prev => {
-      const next = prev + 1
-      addToast(`Tarima ${genTarimaRef(next)} lista para escaneo`, 'success')
+    if (!currentTarimaHasScans) {
+      addToast(t('desp.validar.destino.tarimaVacia'), 'warning')
       setTimeout(() => scanRef.current?.focus(), 60)
-      return next
-    })
-  }, [addToast])
+      return
+    }
+
+    const next = currentTarimaNum + 1
+    setCurrentTarimaNum(next)
+    addToast(`${t('desp.validar.destino.tarimaLista')} ${genTarimaRef(next)}`, 'success')
+    setTimeout(() => scanRef.current?.focus(), 60)
+  }, [addToast, currentTarimaHasScans, currentTarimaNum, t])
 
   const { mutate: doCerrar, isPending: cerrando } = useMutation({
     mutationFn: () => cerrarFolio(folioId),
@@ -201,9 +247,29 @@ export default function ValidarPorDestino({ folioId }) {
 
   const { mutate: doAddScan, isPending: scanning } = useMutation({
     mutationFn: (body) => addFolioScan(folioId, body),
-    onSuccess: () => {
+    onSuccess: (data, body) => {
       qc.invalidateQueries({ queryKey: ['despacho-folio-scans', folioId] })
       qc.invalidateQueries({ queryKey: ['despacho-folio', folioId] })
+      qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
+      const matchedOrderNo = body?.matched_order_no
+      if (matchedOrderNo) {
+        const matchedOrder = orders.find(order => order.outbound_order_no === matchedOrderNo)
+        const expected = Number(matchedOrder?.bultos_esperados || 0)
+        if (expected > 0) {
+          const scansAfterSave = data?.scans || []
+          const scanned = scansAfterSave.filter(scan => scan.matched_order_no === matchedOrderNo).length
+          if (scanned === expected) {
+            addToast(t('desp.validar.destino.ordenCompletaAlert')
+              .replace('{orden}', matchedOrderNo)
+              .replace('{count}', String(scanned)), 'warning')
+          } else if (scanned > expected) {
+            addToast(t('desp.validar.destino.ordenExcedidaAlert')
+              .replace('{orden}', matchedOrderNo)
+              .replace('{scanned}', String(scanned))
+              .replace('{expected}', String(expected)), 'error')
+          }
+        }
+      }
       setScanInput('')
       setTimeout(() => scanRef.current?.focus(), 50)
     },
@@ -227,10 +293,42 @@ export default function ValidarPorDestino({ folioId }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['despacho-folio-scans', folioId] })
       qc.invalidateQueries({ queryKey: ['despacho-folio', folioId] })
+      qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
       addToast('Escaneo eliminado', 'success')
     },
     onError: (err) => addToast(err?.response?.data?.error || 'Error eliminando escaneo', 'error'),
   })
+
+  const { mutate: doMoveScan, isPending: movingScan } = useMutation({
+    mutationFn: ({ scanId, tarimaRef }) => moveFolioScanTarima(folioId, scanId, { tarima_ref: tarimaRef }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['despacho-folio-scans', folioId] })
+      setMoveModal({ open: false, scan: null, target: '' })
+      addToast(t('desp.validar.destino.tarimaMovida'), 'success')
+      setTimeout(() => scanRef.current?.focus(), 60)
+    },
+    onError: (err) => addToast(err?.response?.data?.error || t('desp.validar.destino.tarimaMoverError'), 'error'),
+  })
+
+  const requestAddScan = useCallback((payload, { skipOverLimit = false } = {}) => {
+    const matchedOrderNo = payload?.matched_order_no
+    if (!skipOverLimit && matchedOrderNo) {
+      const matchedOrder = orders.find(order => order.outbound_order_no === matchedOrderNo)
+      const expected = Number(matchedOrder?.bultos_esperados || 0)
+      const scanned = scans.filter(scan => scan.matched_order_no === matchedOrderNo).length
+      if (expected > 0 && scanned >= expected) {
+        setOverLimitModal({ open: true, payload, scanned, expected })
+        return
+      }
+    }
+    doAddScan(payload)
+  }, [doAddScan, orders, scans])
+
+  const submitOverLimitScan = useCallback(() => {
+    if (!overLimitModal.payload) return
+    doAddScan(overLimitModal.payload)
+    setOverLimitModal({ open: false, payload: null, scanned: 0, expected: 0 })
+  }, [doAddScan, overLimitModal.payload])
 
   const handleScan = useCallback(() => {
     const raw = scanInput.trim()
@@ -256,28 +354,66 @@ export default function ValidarPorDestino({ folioId }) {
       return
     }
 
-    // Match by outbound_order_no, logisticsTrackNo or thirdOrderNo
+    const baseCode = normalizeBaseCode(code)
+
+    // Match by outbound_order_no, logisticsTrackNo, thirdOrderNo, or scanned base
+    // against tracking/reference metadata for orders already inside this folio.
     let matchedOrderNo = null
     for (const order of orders) {
+      const enrichment = orderEnrichment[order.outbound_order_no] || {}
       const lookupCodes = buildLookupCodeSet([
         order.outbound_order_no,
-        orderEnrichment[order.outbound_order_no]?.logisticsTrackNo,
-        orderEnrichment[order.outbound_order_no]?.thirdOrderNo,
+        enrichment.logisticsTrackNo,
+        enrichment.thirdOrderNo,
       ])
       if (hasCodeVariant(lookupCodes, variants)) {
+        matchedOrderNo = order.outbound_order_no
+        break
+      }
+
+      if (
+        metadataMatchesBase(order.outbound_order_no, baseCode) ||
+        metadataMatchesBase(enrichment.logisticsTrackNo, baseCode) ||
+        metadataMatchesBase(enrichment.thirdOrderNo, baseCode)
+      ) {
         matchedOrderNo = order.outbound_order_no
         break
       }
     }
 
     if (!matchedOrderNo) {
-      setErrorModal({ type: 'nomatch', code })
+      setErrorModal({ type: 'nomatch', code, allowForce: true })
       setTimeout(() => scanRef.current?.focus(), 100)
       return
     }
 
-    doAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: matchedOrderNo })
-  }, [scanInput, scans, orders, orderEnrichment, currentTarimaRef, doAddScan])
+    requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: matchedOrderNo })
+  }, [scanInput, scans, orders, orderEnrichment, currentTarimaRef, requestAddScan])
+
+  const openForceModal = useCallback((code) => {
+    setErrorModal(null)
+    setForceModal({ open: true, code: code || '', orderNo: '' })
+  }, [])
+
+  const closeForceModal = useCallback(() => {
+    setForceModal({ open: false, code: '', orderNo: '' })
+    setTimeout(() => scanRef.current?.focus(), 100)
+  }, [])
+
+  const submitForceScan = useCallback(() => {
+    const code = normalizeScanCode(forceModal.code)
+    const orderNo = normalizeCodeFast(forceModal.orderNo)
+    if (!code || !orderNo) return
+    requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: orderNo })
+    setForceModal({ open: false, code: '', orderNo: '' })
+  }, [forceModal.code, forceModal.orderNo, currentTarimaRef, requestAddScan])
+
+  const submitMoveScan = useCallback(() => {
+    const scanId = moveModal.scan?.id
+    const tarimaRef = normalizeTarimaRef(moveModal.target)
+    if (!scanId || !tarimaRef) return
+    doMoveScan({ scanId, tarimaRef })
+  }, [doMoveScan, moveModal.scan?.id, moveModal.target])
 
   // KPI counts
   const totalEsperadas = orders.reduce((s, o) => s + (o.bultos_esperados || 0), 0)
@@ -294,6 +430,9 @@ export default function ValidarPorDestino({ folioId }) {
     }, {})
   ), [scans])
   const tarimaKeys = Object.keys(scansByTarima).sort()
+  const tarimaSummary = useMemo(() => (
+    tarimaKeys.map((tarima) => ({ tarima, count: scansByTarima[tarima].length }))
+  ), [tarimaKeys, scansByTarima])
 
   const validatedCountByOrderNo = useMemo(() => (
     scans.reduce((acc, scan) => {
@@ -431,7 +570,9 @@ export default function ValidarPorDestino({ folioId }) {
               <button
                 type="button"
                 onClick={handleNextTarima}
-                className="h-9 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl border border-accent-300 bg-accent-50 text-accent-700 text-xs font-semibold hover:bg-accent-100 transition-colors w-full sm:w-auto"
+                disabled={!currentTarimaHasScans}
+                title={!currentTarimaHasScans ? t('desp.validar.destino.tarimaVacia') : ''}
+                className="h-9 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl border border-accent-300 bg-accent-50 text-accent-700 text-xs font-semibold hover:bg-accent-100 transition-colors w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-accent-50"
               >
                 <Layers className="w-3 h-3" />
                 {t('desp.validar.destino.sigTarima')} ({genTarimaRef(currentTarimaNum + 1)})
@@ -521,9 +662,28 @@ export default function ValidarPorDestino({ folioId }) {
 
       {/* ── SCAN STREAM ───────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col bg-white overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-warm-100 bg-warm-50/70 shrink-0 flex items-center justify-between">
-            <span className="text-xs font-semibold text-warm-700">{t('desp.validar.destino.flujo')}</span>
-            <span className="text-[11px] text-warm-400 tabular-nums">{scans.length} total</span>
+          <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/70 shrink-0 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-warm-700">{t('desp.validar.destino.flujo')}</span>
+              <span className="text-[11px] text-warm-400 tabular-nums">{scans.length} total</span>
+            </div>
+            {tarimaSummary.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {tarimaSummary.map(({ tarima, count }) => (
+                  <span
+                    key={tarima}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 shadow-sm ${
+                      tarima === currentTarimaRef
+                        ? 'border-accent-300 bg-accent-100 text-accent-800'
+                        : 'border-warm-200 bg-white text-warm-700'
+                    }`}
+                  >
+                    <span className="text-xs font-black">{tarima}</span>
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-sm font-black tabular-nums">{count}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -536,11 +696,12 @@ export default function ValidarPorDestino({ folioId }) {
               <div className="divide-y divide-warm-50">
                 {tarimaKeys.slice().reverse().map(tarima => (
                   <div key={tarima}>
-                    <div className="flex items-center gap-2 px-4 py-2 bg-warm-50/80 sticky top-0 z-[2] border-b border-warm-100">
-                      <Layers className="w-3 h-3 text-accent-500 shrink-0" />
-                      <span className="text-[11px] font-bold text-accent-700">{tarima}</span>
-                      <span className="ml-auto text-[10px] text-warm-400">
-                        {scansByTarima[tarima].length} {t('desp.validar.destino.cajasTotal')}
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-warm-50/90 sticky top-0 z-[2] border-b border-warm-100">
+                      <Layers className="w-4 h-4 text-accent-600 shrink-0" />
+                      <span className="text-sm font-black text-accent-800">{tarima}</span>
+                      <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-accent-100 px-3 py-1 text-sm font-black text-accent-800 tabular-nums">
+                        {scansByTarima[tarima].length}
+                        <span className="text-[10px] font-bold uppercase tracking-wide">{t('desp.validar.destino.cajasTotal')}</span>
                       </span>
                     </div>
                     {[...scansByTarima[tarima]].reverse().map((s, i) => (
@@ -565,12 +726,24 @@ export default function ValidarPorDestino({ folioId }) {
                           <span className="text-[10px] text-warm-400">{fmtDateTime(s.validated_at)}</span>
                         </div>
                         {editable && (
-                          <button
-                            onClick={() => doDeleteScan(s.id)}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded-lg text-warm-300 hover:text-danger-500 hover:bg-danger-50 transition-all"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={() => setMoveModal({ open: true, scan: s, target: s.tarima_ref || currentTarimaRef })}
+                              className="p-1 rounded-lg text-warm-300 hover:text-accent-600 hover:bg-accent-50 transition-all"
+                              title={t('desp.validar.destino.moverTarima')}
+                            >
+                              <MoveRight className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => doDeleteScan(s.id)}
+                              className="p-1 rounded-lg text-warm-300 hover:text-danger-500 hover:bg-danger-50 transition-all"
+                              title={t('common.delete')}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -584,7 +757,7 @@ export default function ValidarPorDestino({ folioId }) {
       </div>{/* ── LEFT COLUMN end ── */}
 
       {/* Right: orders side panel */}
-      <div className={`shrink-0 relative transition-all ${showPanel ? 'w-full xl:w-[26rem] 2xl:w-[30rem]' : 'w-0 xl:w-0'}`}>
+      <div className={`shrink-0 relative transition-all ${showPanel ? 'w-full xl:w-[29rem] 2xl:w-[33rem]' : 'w-0 xl:w-0'}`}>
         {showPanel && (
         <div className="w-full h-full flex flex-col border-t xl:border-t-0 xl:border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] overflow-hidden">
             <button
@@ -593,42 +766,42 @@ export default function ValidarPorDestino({ folioId }) {
               title={t('desp.validar.destino.ocultarPanel')}
               className="hidden xl:flex absolute -left-4 top-4 z-20 h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-600 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
             >
-              <PanelRightClose size={14} />
+              <PanelRightClose size={15} />
             </button>
             {/* Panel header */}
-            <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50 shrink-0">
-              <div className="flex items-center gap-2 mb-2.5 min-w-0">
-                <h4 className="min-w-0 flex-1 truncate text-sm font-bold text-warm-700">{t('desp.validar.destino.ordenesDestino')}</h4>
-                <span className="badge shrink-0 bg-primary-100 text-primary-700 text-[11px] font-semibold">{orders.length}</span>
+            <div className="px-5 py-4 border-b border-warm-100 bg-warm-50/50 shrink-0">
+              <div className="flex items-center gap-2.5 mb-3 min-w-0">
+                <h4 className="min-w-0 flex-1 truncate text-[15px] font-bold text-warm-700">{t('desp.validar.destino.ordenesDestino')}</h4>
+                <span className="badge shrink-0 bg-primary-100 text-primary-700 text-xs font-semibold">{orders.length}</span>
               </div>
 
               {/* Search */}
-              <div className="flex items-center gap-1.5 rounded-2xl border border-primary-100/80 bg-gradient-to-r from-white via-primary-50/55 to-white px-2.5 h-8 shadow-[0_8px_18px_-14px_rgba(37,99,235,0.45)] focus-within:border-primary-300 focus-within:ring-1 focus-within:ring-primary-100 mb-2 transition-all">
-                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-100/80 shrink-0">
-                  <Search className="w-2.5 h-2.5 text-primary-500" />
+              <div className="flex items-center gap-2 rounded-2xl border border-primary-100/80 bg-gradient-to-r from-white via-primary-50/55 to-white px-3 h-9 shadow-[0_8px_18px_-14px_rgba(37,99,235,0.45)] focus-within:border-primary-300 focus-within:ring-1 focus-within:ring-primary-100 mb-2.5 transition-all">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100/80 shrink-0">
+                  <Search className="w-3 h-3 text-primary-500" />
                 </div>
                 <input
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder={t('desp.validar.destino.searchPlaceholder')}
-                  className="flex-1 min-w-0 bg-transparent text-xs text-warm-700 outline-none placeholder:text-warm-400 focus-visible:outline-none"
+                  className="flex-1 min-w-0 bg-transparent text-[13px] text-warm-700 outline-none placeholder:text-warm-400 focus-visible:outline-none"
                 />
                 {searchQuery && (
                   <button onClick={() => setSearchQuery('')} className="text-warm-400 hover:text-warm-600 shrink-0">
-                    <X className="w-3 h-3" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
 
               {/* Status filters */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                 {[
                   { k: 'all', l: t('desp.validar.destino.filtroTodas') },
                   { k: 'pending', l: t('desp.validar.destino.filtroPend') },
                   { k: 'complete', l: t('desp.validar.destino.filtroListas') },
                 ].map(({ k, l }) => (
                   <button key={k} onClick={() => setStatusFilter(k)}
-                    className={`flex-1 h-7 px-2 text-[11px] font-semibold rounded-lg border transition-all ${
+                    className={`flex-1 h-8 px-2.5 text-xs font-semibold rounded-lg border transition-all ${
                       statusFilter === k
                         ? k === 'complete'
                           ? 'bg-success-100 text-success-700 border-success-200'
@@ -639,7 +812,7 @@ export default function ValidarPorDestino({ folioId }) {
                     }`}>
                     <span className="flex items-center justify-between gap-2">
                       <span>{l}</span>
-                      <span className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                      <span className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
                         statusFilter === k
                           ? 'bg-white/70'
                           : 'bg-warm-100 text-warm-600'
@@ -653,15 +826,15 @@ export default function ValidarPorDestino({ folioId }) {
             </div>
 
             {/* Panel body: order cards */}
-            <div className="flex-1 overflow-y-auto p-2.5 bg-warm-50/55">
+            <div className="flex-1 overflow-y-auto p-3 bg-warm-50/55">
               {filteredOrders.length === 0 ? (
-                <div className="py-8 text-center text-xs text-warm-400">
+                <div className="py-9 text-center text-sm text-warm-400">
                   {searchQuery || statusFilter !== 'all'
                     ? 'Sin resultados'
                     : t('desp.validar.destino.sinOrdenes')}
                 </div>
               ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredOrders.map(order => {
                 const validadas = validatedCountByOrderNo[order.outbound_order_no] || 0
                 const esperadas = order.bultos_esperados ?? 0
@@ -671,13 +844,13 @@ export default function ValidarPorDestino({ folioId }) {
                 const enrichDone = order.outbound_order_no in orderEnrichment
 
                 return (
-                  <div key={order.id} className={`p-3 rounded-2xl border transition-all shadow-[0_10px_24px_-18px_rgba(15,23,42,0.28)] ${
+                  <div key={order.id} className={`p-3.5 rounded-2xl border transition-all shadow-[0_10px_24px_-18px_rgba(15,23,42,0.28)] ${
                     complete
                       ? 'border-success-200 bg-gradient-to-br from-success-50/60 via-white to-white'
                       : 'border-warm-200/90 bg-white hover:border-primary-100 hover:shadow-[0_14px_28px_-18px_rgba(37,99,235,0.3)]'
                   }`}>
                     {/* Order header */}
-                    <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-start justify-between gap-2.5 mb-2.5">
                       <button
                         type="button"
                         onClick={async (event) => {
@@ -688,43 +861,42 @@ export default function ValidarPorDestino({ folioId }) {
                           } catch {}
                         }}
                         title="Copiar orden"
-                        className="group inline-flex min-w-0 items-start gap-1.5 text-left"
+                        className="group inline-flex min-w-0 items-start gap-2 text-left"
                       >
-                        <span className="min-w-0 font-mono text-[11px] font-black leading-snug text-primary-700 break-all">
+                        <span className="min-w-0 font-mono text-xs font-black leading-snug text-primary-700 break-all">
                           {order.outbound_order_no}
                         </span>
                         <span className="shrink-0 rounded p-0.5 text-warm-300 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-warm-100 hover:text-primary-600">
-                          <Copy className="h-2.5 w-2.5" />
+                          <Copy className="h-3 w-3" />
                         </span>
                       </button>
-                      {complete ? (
-                        <CheckCircle2 className="w-3 h-3 shrink-0 text-success-600" />
-                      ) : (
-                        <span className="text-[10px] font-bold text-warm-600 tabular-nums shrink-0">
-                          {validadas}/{esperadas || '?'}
-                        </span>
-                      )}
+                      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-black tabular-nums ${
+                        complete ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-600'
+                      }`}>
+                        {complete && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        {validadas}/{esperadas || '?'}
+                      </span>
                     </div>
 
                     {/* Destinatario */}
                     {order.destinatario && (
-                      <p className="text-[10px] leading-4 text-warm-500 font-medium break-words min-h-[2rem] mb-1.5">
+                      <p className="text-[11px] leading-[1.1rem] text-warm-500 font-medium break-words min-h-[2.25rem] mb-2">
                         {order.destinatario}
                       </p>
                     )}
 
                     {/* Trucking + Reference */}
-                    <div className="flex min-h-[1.5rem] flex-nowrap items-start gap-1 mb-2 overflow-hidden">
+                    <div className="flex min-h-[1.75rem] flex-nowrap items-start gap-1.5 mb-2.5 overflow-hidden">
                       {enrichmentLoading && !enrichDone ? (
-                        <span className="text-[9px] text-warm-400 flex items-center gap-0.5">
-                          <Loader2 className="w-2.5 h-2.5 animate-spin" />cargando WMS...
+                        <span className="text-[10px] text-warm-400 flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />cargando WMS...
                         </span>
                       ) : (
                         <>
                           {enrich?.logisticsTrackNo ? (
                             <CopyMetaPill value={enrich.logisticsTrackNo} tone="primary" />
                           ) : enrichDone ? (
-                            <span className="shrink-0 text-[9px] text-warm-300 italic">{t('desp.validar.destino.sinTracking')}</span>
+                            <span className="shrink-0 text-[10px] text-warm-300 italic">{t('desp.validar.destino.sinTracking')}</span>
                           ) : null}
                           {enrich?.thirdOrderNo && (
                             <CopyMetaPill label="Ref:" value={enrich.thirdOrderNo} tone="warm" />
@@ -744,8 +916,8 @@ export default function ValidarPorDestino({ folioId }) {
                         </div>
                         {!complete && (
                           <div className="flex justify-between mt-0.5">
-                            <span className="text-[9px] text-warm-400">{pct}%</span>
-                            <span className="text-[9px] text-danger-500">{Math.max(0, esperadas - validadas)} pend.</span>
+                            <span className="text-[10px] text-warm-400">{pct}%</span>
+                            <span className="text-[10px] text-danger-500">{Math.max(0, esperadas - validadas)} pend.</span>
                           </div>
                         )}
                       </>
@@ -772,7 +944,16 @@ export default function ValidarPorDestino({ folioId }) {
         icon={errorModal?.type === 'nomatch' ? XCircle : AlertCircle}
         size="sm"
         footer={
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {errorModal?.type === 'nomatch' && errorModal?.allowForce && editable && (
+              <button
+                type="button"
+                onClick={() => openForceModal(errorModal.code)}
+                className="btn-danger text-sm"
+              >
+                {t('desp.validar.destino.forceOpen')}
+              </button>
+            )}
             <button onClick={closeErrorModal} className="btn-primary text-sm">
               {t('desp.validar.destino.entendido')}
             </button>
@@ -791,6 +972,203 @@ export default function ValidarPorDestino({ folioId }) {
             {t('desp.validar.destino.folioLabel')}: <span className="font-mono font-semibold">{errorModal?.folio_numero}</span>
           </p>
         )}
+      </Modal>
+
+      {/* ── Move scan to tarima modal ── */}
+      <Modal
+        isOpen={moveModal.open}
+        onClose={() => setMoveModal({ open: false, scan: null, target: '' })}
+        title={t('desp.validar.destino.moverTarima')}
+        icon={MoveRight}
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setMoveModal({ open: false, scan: null, target: '' })}
+              className="btn-secondary text-sm"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={submitMoveScan}
+              disabled={!moveModal.target.trim() || movingScan}
+              className="btn-primary text-sm flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {movingScan && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {t('desp.validar.destino.confirmarMover')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="rounded-xl border border-warm-100 bg-warm-50 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-warm-400">
+              {t('desp.validar.destino.codigoEscaneado')}
+            </p>
+            <p className="font-mono text-sm font-bold text-warm-800 break-all">{moveModal.scan?.codigo_caja}</p>
+            <p className="mt-1 text-xs text-warm-500">
+              {t('desp.validar.destino.tarimaActual')}: <span className="font-mono font-semibold">{moveModal.scan?.tarima_ref || 'Sin tarima'}</span>
+            </p>
+          </div>
+
+          {tarimaSummary.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {tarimaSummary.map(({ tarima, count }) => (
+                <button
+                  key={`move-${tarima}`}
+                  type="button"
+                  onClick={() => setMoveModal(prev => ({ ...prev, target: tarima }))}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${
+                    normalizeTarimaRef(moveModal.target) === tarima
+                      ? 'border-primary-300 bg-primary-100 text-primary-700'
+                      : 'border-warm-200 bg-white text-warm-600 hover:border-primary-200 hover:text-primary-600'
+                  }`}
+                >
+                  {tarima}
+                  <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[11px] tabular-nums">{count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-warm-600">
+              {t('desp.validar.destino.tarimaDestino')}
+            </span>
+            <input
+              type="text"
+              value={moveModal.target}
+              onChange={e => setMoveModal(prev => ({ ...prev, target: e.target.value }))}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  submitMoveScan()
+                }
+              }}
+              placeholder="T02"
+              className="w-full rounded-xl border border-warm-200 px-3 py-2 text-sm font-mono uppercase outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-100"
+              autoComplete="off"
+              autoFocus
+            />
+          </label>
+        </div>
+      </Modal>
+
+      {/* ── Over-limit forced box confirmation ── */}
+      <Modal
+        isOpen={overLimitModal.open}
+        onClose={() => {
+          setOverLimitModal({ open: false, payload: null, scanned: 0, expected: 0 })
+          setTimeout(() => scanRef.current?.focus(), 100)
+        }}
+        title={t('desp.validar.destino.overLimitTitle')}
+        icon={AlertCircle}
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setOverLimitModal({ open: false, payload: null, scanned: 0, expected: 0 })
+                setTimeout(() => scanRef.current?.focus(), 100)
+              }}
+              className="btn-secondary text-sm"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={submitOverLimitScan}
+              disabled={scanning}
+              className="btn-danger text-sm flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {scanning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {t('desp.validar.destino.overLimitConfirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">
+            {t('desp.validar.destino.overLimitBody')
+              .replace('{orden}', overLimitModal.payload?.matched_order_no || '—')
+              .replace('{scanned}', String(overLimitModal.scanned))
+              .replace('{expected}', String(overLimitModal.expected))}
+          </p>
+          <div className="rounded-xl border border-danger-100 bg-danger-50 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-danger-500">
+              {t('desp.validar.destino.codigoEscaneado')}
+            </p>
+            <p className="font-mono text-sm font-bold text-danger-800 break-all">
+              {overLimitModal.payload?.codigo_caja}
+            </p>
+          </div>
+          <p className="text-xs text-warm-500">
+            {t('desp.validar.destino.overLimitWarning')}
+          </p>
+        </div>
+      </Modal>
+
+      {/* ── Force scan assignment modal ── */}
+      <Modal
+        isOpen={forceModal.open}
+        onClose={closeForceModal}
+        title={t('desp.validar.destino.forceTitle')}
+        icon={AlertCircle}
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={closeForceModal} className="btn-secondary text-sm">
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={submitForceScan}
+              disabled={!forceModal.orderNo.trim() || scanning}
+              className="btn-danger text-sm flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {scanning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {t('desp.validar.destino.forceConfirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">
+            {t('desp.validar.destino.forceBody')}
+          </p>
+          <div className="rounded-xl border border-danger-100 bg-danger-50 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-danger-500">
+              {t('desp.validar.destino.codigoEscaneado')}
+            </p>
+            <p className="font-mono text-sm font-bold text-danger-800 break-all">{forceModal.code}</p>
+          </div>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-warm-600">
+              {t('desp.validar.destino.forceOrderLabel')}
+            </span>
+            <input
+              type="text"
+              value={forceModal.orderNo}
+              onChange={e => setForceModal(prev => ({ ...prev, orderNo: e.target.value }))}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  submitForceScan()
+                }
+              }}
+              placeholder={t('desp.validar.destino.forceOrderPlaceholder')}
+              className="w-full rounded-xl border border-warm-200 px-3 py-2 text-sm font-mono uppercase outline-none focus:border-danger-300 focus:ring-2 focus:ring-danger-100"
+              autoComplete="off"
+              autoFocus
+            />
+          </label>
+          <p className="text-xs text-warm-500">
+            {t('desp.validar.destino.forceWarning')}
+          </p>
+        </div>
       </Modal>
 
       {/* ── Cerrar folio confirm modal ── */}

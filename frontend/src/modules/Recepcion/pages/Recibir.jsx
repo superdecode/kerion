@@ -73,7 +73,7 @@ function CopyCell({ value, className = '', muted = false }) {
 export default function Recibir() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { hasPermission, canDelete, isAuthenticated, token } = useAuthStore()
+  const { hasPermission, getPermissionLevel, isAuthenticated, token } = useAuthStore()
   const toast = useToastStore()
   const { t } = useI18nStore()
 
@@ -138,7 +138,7 @@ export default function Recibir() {
   const deleteMutation = useMutation({
     mutationFn: (id) => deleteOrder(id),
     onSuccess: () => {
-      toast.success('Orden eliminada')
+      toast.success(t('rec.toast.order_deleted'))
       qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
       qc.invalidateQueries({ queryKey: ['recepcion-orders-active'] })
       setDeleteRow(null)
@@ -150,8 +150,8 @@ export default function Recibir() {
     mutationFn: async (ids) => {
       for (const id of ids) await deleteOrder(id)
     },
-    onSuccess: () => {
-      toast.success(`${selected.size} órdenes eliminadas`)
+    onSuccess: (_data, ids) => {
+      toast.success(t('rec.toast.orders_deleted').replace('{count}', String(ids.length)))
       qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
       qc.invalidateQueries({ queryKey: ['recepcion-orders-active'] })
       setSelected(new Set())
@@ -198,7 +198,8 @@ export default function Recibir() {
   ]
 
   const canCreate = hasPermission('recepcion.recibir', 'crear')
-  const canDel = canDelete('recepcion.recibir')
+  const canUpdateDelete = hasPermission('recepcion.recibir', 'actualizar')
+  const canForceDelete = getPermissionLevel('recepcion.recibir') === 'eliminar'
   const canValidate = hasPermission('recepcion.recibir', 'actualizar')
   const canManageTipos = hasPermission('recepcion.validacion', 'actualizar')
   const hasActiveFilters =
@@ -223,8 +224,11 @@ export default function Recibir() {
     return next
   })
 
+  const canDeleteOrder = (order) =>
+    canForceDelete || Number(order.validation_records || 0) === 0
+
   const deletableSelected = orders
-    .filter(o => selected.has(o.id) && o.estado === 'pendiente_validacion')
+    .filter(o => selected.has(o.id) && canDeleteOrder(o))
     .map(o => o.id)
 
   const handleApply = () => { setQFilter(q); setPage(1) }
@@ -361,12 +365,12 @@ export default function Recibir() {
                 <span className="text-xs text-sky-700 font-semibold tabular-nums">
                   {selected.size} {selected.size === 1 ? 'orden seleccionada' : 'órdenes seleccionadas'}
                 </span>
-                {canDel && deletableSelected.length > 0 && (
+                {canUpdateDelete && deletableSelected.length > 0 && (
                   <button
                     className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-danger-700 border border-danger-200 hover:bg-danger-50 transition-colors"
                     onClick={() => setBulkDelOpen(true)}
                   >
-                    <Trash2 size={12} /> Eliminar seleccionadas ({deletableSelected.length})
+                    <Trash2 size={12} /> {t('rec.delete.selected').replace('{count}', String(deletableSelected.length))}
                   </button>
                 )}
                 <button
@@ -457,7 +461,7 @@ export default function Recibir() {
                                 <ScanBarcode className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            {canDel && order.estado === 'pendiente_validacion' && (
+                            {canUpdateDelete && canDeleteOrder(order) && (
                               <button
                                 onClick={() => setDeleteRow(order)}
                                 className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
@@ -493,6 +497,11 @@ export default function Recibir() {
                 <p className="text-sm text-warm-500 font-mono">{deleteRow.folio}</p>
               </div>
             </div>
+            <p className="text-sm text-warm-600">
+              {canForceDelete
+                ? t('rec.delete.force_body')
+                : t('rec.delete.update_body')}
+            </p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setDeleteRow(null)} className="btn-ghost">{t('common.cancel')}</button>
               <button onClick={() => deleteMutation.mutate(deleteRow.id)} disabled={deleteMutation.isPending} className="btn-danger disabled:opacity-50">
@@ -512,8 +521,10 @@ export default function Recibir() {
                 <Trash2 className="w-5 h-5 text-danger-600" />
               </div>
               <div>
-                <p className="font-semibold text-warm-900">Eliminar {deletableSelected.length} órdenes</p>
-                <p className="text-xs text-warm-500">Solo se eliminarán las órdenes en estado pendiente</p>
+                <p className="font-semibold text-warm-900">{t('rec.delete.bulk_title').replace('{count}', String(deletableSelected.length))}</p>
+                <p className="text-xs text-warm-500">
+                  {canForceDelete ? t('rec.delete.bulk_force_body') : t('rec.delete.bulk_update_body')}
+                </p>
               </div>
             </div>
             <div className="flex gap-2 justify-end">
