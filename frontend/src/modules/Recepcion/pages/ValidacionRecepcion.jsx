@@ -1452,21 +1452,20 @@ export default function ValidacionRecepcion() {
           </div>
         </div>
 
-        {/* Panel open button — absolute, no column */}
-        {!sidebarVisible && (
-          <button
-            type="button"
-            onClick={() => setSidebarVisible(true)}
-            title="Mostrar panel"
-            className="hidden lg:flex absolute right-4 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-          >
-            <PanelRightOpen size={16} />
-          </button>
-        )}
-
-        {/* ── Side panel (desktop lg+) ── */}
-        {sidebarVisible && (
-          <div className={`hidden lg:flex w-[400px] flex-col border-l border-warm-100 backdrop-blur-2xl shrink-0 animate-fade-in relative ${
+        {/* ── Side panel — wrapper always rendered so toggle stays at panel edge ── */}
+        <div className={`hidden lg:flex shrink-0 relative ${sidebarVisible ? 'w-[400px]' : 'w-0'}`}>
+          {!sidebarVisible && (
+            <button
+              type="button"
+              onClick={() => setSidebarVisible(true)}
+              title="Mostrar panel"
+              className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+            >
+              <PanelRightOpen size={16} />
+            </button>
+          )}
+          {sidebarVisible && (
+          <div className={`w-full h-full flex flex-col border-l border-warm-100 backdrop-blur-2xl animate-fade-in relative ${
             withTarimas
               ? 'bg-gradient-to-b from-white via-white to-sky-50/20 shadow-[-16px_0_34px_-28px_rgba(14,165,233,0.38)]'
               : 'bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]'
@@ -1481,7 +1480,8 @@ export default function ValidacionRecepcion() {
             </button>
             {withTarimas ? renderPanelBody() : renderUbicacionPanelBody()}
           </div>
-        )}
+          )}
+        </div>
 
       </div>
 

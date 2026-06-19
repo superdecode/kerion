@@ -557,16 +557,15 @@ export default function ValidarPorDestino({ folioId }) {
 
       {/* Right: orders side panel — wrapper always rendered so toggle button stays at the panel edge */}
       <div className={`shrink-0 relative ${showPanel ? 'w-[26rem] xl:w-[28rem] 2xl:w-[30rem]' : 'w-0'}`}>
-        {!showPanel && (
-          <button
-            type="button"
-            onClick={() => setShowPanel(true)}
-            title={t('desp.validar.destino.mostrarPanel')}
-            className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-          >
-            <PanelRightOpen size={16} />
-          </button>
-        )}
+        {/* Toggle button — always at panel left border, overlapping into content */}
+        <button
+          type="button"
+          onClick={() => setShowPanel(v => !v)}
+          title={showPanel ? t('desp.validar.destino.ocultarPanel') : t('desp.validar.destino.mostrarPanel')}
+          className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+        >
+          {showPanel ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+        </button>
         {showPanel && (
         <div className="w-full h-full flex flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] overflow-hidden">
             {/* Panel header */}
@@ -574,14 +573,6 @@ export default function ValidarPorDestino({ folioId }) {
               <div className="flex items-center gap-2 mb-2.5 min-w-0">
                 <h4 className="min-w-0 flex-1 truncate text-sm font-bold text-warm-700">{t('desp.validar.destino.ordenesDestino')}</h4>
                 <span className="badge shrink-0 bg-primary-100 text-primary-700 text-[11px] font-semibold">{orders.length}</span>
-                <button
-                  type="button"
-                  onClick={() => setShowPanel(false)}
-                  title={t('desp.validar.destino.ocultarPanel')}
-                  className="hidden lg:flex shrink-0 h-8 w-8 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-                >
-                  <PanelRightClose size={15} />
-                </button>
               </div>
 
               {/* Search */}

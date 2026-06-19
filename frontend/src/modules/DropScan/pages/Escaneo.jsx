@@ -1492,7 +1492,8 @@ export default function Escaneo() {
                 }
               </div>
             </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 

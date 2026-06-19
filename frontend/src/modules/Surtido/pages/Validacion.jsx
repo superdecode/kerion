@@ -1682,35 +1682,34 @@ const { data: reasonsData } = useQuery({
         </div>
       </div>
 
-      {/* Panel open button — absolute, no column */}
-      {!sidebarVisible && (
-        <button
-          type="button"
-          onClick={() => {
-            setSidebarVisible(true)
-            localStorage.setItem(sidebarStorageKey, 'visible')
-          }}
-          title="Mostrar panel"
-          className="hidden lg:flex absolute right-4 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-        >
-          <PanelRightOpen size={16} />
-        </button>
-      )}
-
-      {/* Right sidebar: orders with progress */}
-      {sidebarVisible && (
-      <div className="hidden lg:flex w-80 border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shrink-0 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] relative">
-        <button
-          type="button"
-          onClick={() => {
-            setSidebarVisible(false)
-            localStorage.setItem(sidebarStorageKey, 'hidden')
-          }}
-          title="Ocultar panel"
-          className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-        >
-          <PanelRightClose size={16} />
-        </button>
+      {/* Right sidebar — wrapper always rendered so toggle stays at panel edge */}
+      <div className={`hidden lg:flex shrink-0 relative ${sidebarVisible ? 'w-80' : 'w-0'}`}>
+        {!sidebarVisible && (
+          <button
+            type="button"
+            onClick={() => {
+              setSidebarVisible(true)
+              localStorage.setItem(sidebarStorageKey, 'visible')
+            }}
+            title="Mostrar panel"
+            className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+          >
+            <PanelRightOpen size={16} />
+          </button>
+        )}
+        {sidebarVisible && (
+        <div className="w-full h-full hidden lg:flex border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] relative">
+          <button
+            type="button"
+            onClick={() => {
+              setSidebarVisible(false)
+              localStorage.setItem(sidebarStorageKey, 'hidden')
+            }}
+            title="Ocultar panel"
+            className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+          >
+            <PanelRightClose size={16} />
+          </button>
         <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50">
           <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
             <Zap className="w-3.5 h-3.5 text-primary-500" /> {t('surtido.validacion.sidebar_title')}
@@ -1814,6 +1813,7 @@ const { data: reasonsData } = useQuery({
         </div>
       </div>
       )}
+      </div>
 
       {/* Rejected box modal */}
       <Modal
