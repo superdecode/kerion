@@ -295,18 +295,18 @@ export default function Validar() {
         </div>
       ) : (
         /* Tab layout */
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-            {tabs.map(tab => (
-              <div key={tab.id} className={tab.id === activeTabId ? 'block' : 'hidden'}>
-                {tab.tipo === 'por_destino' ? (
-                  <ValidarPorDestino folioId={tab.folioId} />
-                ) : (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {tabs.map(tab => (
+            <div key={tab.id} className={tab.id === activeTabId ? 'h-full flex flex-col' : 'hidden'}>
+              {tab.tipo === 'por_destino' ? (
+                <ValidarPorDestino folioId={tab.folioId} />
+              ) : (
+                <div className="flex-1 overflow-y-auto px-5 py-4">
                   <ValidarPorOrden folioId={tab.folioId} />
-                )}
-              </div>
-            ))}
-          </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

@@ -325,20 +325,22 @@ export default function ValidarPorDestino({ folioId }) {
         </div>
 
         {/* Row 2: KPI metrics strip */}
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           {[
             { label: t('desp.validar.destino.ordenes'), value: orders.length, accent: 'bg-primary-500', tone: 'text-warm-900' },
             { label: t('desp.validar.destino.esperadas'), value: totalEsperadas || '—', accent: 'bg-warm-400', tone: 'text-warm-900' },
             { label: t('desp.validar.destino.escaneadas'), value: totalScaneadas, accent: 'bg-success-500', tone: totalScaneadas > 0 ? 'text-success-600' : 'text-warm-400' },
             { label: t('desp.validar.destino.pendientes'), value: pendientes, accent: pendientes > 0 ? 'bg-danger-500' : 'bg-success-500', tone: pendientes > 0 ? 'text-danger-500' : 'text-success-600' },
           ].map(({ label, value, accent, tone }) => (
-            <div key={label} className="flex items-center gap-1.5 rounded-xl border border-warm-200 bg-warm-50 px-2.5 py-1.5">
-              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${accent}`} />
-              <span className="text-[10px] font-semibold text-warm-400 uppercase tracking-wider">{label}</span>
-              <span className={`font-mono font-bold tabular-nums text-sm leading-none ${tone}`}>{value}</span>
+            <div key={label} className="flex-1 min-w-0 rounded-xl border border-warm-200 bg-warm-50 px-3 py-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${accent}`} />
+                <span className="text-[10px] font-semibold text-warm-400 uppercase tracking-wider leading-none truncate">{label}</span>
+              </div>
+              <span className={`font-mono font-black tabular-nums text-2xl leading-none ${tone}`}>{value}</span>
             </div>
           ))}
-          {loadingScans && <Loader2 className="w-3.5 h-3.5 animate-spin text-warm-400 ml-1" />}
+          {loadingScans && <Loader2 className="w-3.5 h-3.5 animate-spin text-warm-400 self-center" />}
         </div>
 
         {/* Row 3: scan input */}
@@ -384,13 +386,23 @@ export default function ValidarPorDestino({ folioId }) {
       </div>
 
       {/* ── BODY ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 bg-warm-50/40">
+      <div className="flex flex-1 min-h-0 bg-warm-50/40 overflow-hidden">
 
-        {/* Scan stream — fixed width, left column */}
-        <div className="w-[420px] shrink-0 flex flex-col bg-white border-r border-warm-100 overflow-hidden">
+        {/* Scan stream — responsive, fills remaining space */}
+        <div className="flex-1 min-w-0 flex flex-col bg-white border-r border-warm-100 overflow-hidden">
           <div className="px-4 py-2.5 border-b border-warm-100 bg-warm-50/70 shrink-0 flex items-center justify-between">
             <span className="text-xs font-semibold text-warm-700">{t('desp.validar.destino.flujo')}</span>
-            <span className="text-[11px] text-warm-400 tabular-nums">{scans.length} total</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-warm-400 tabular-nums">{scans.length} total</span>
+              <button
+                type="button"
+                onClick={() => setShowPanel(v => !v)}
+                title={showPanel ? 'Ocultar panel de órdenes' : 'Mostrar panel de órdenes'}
+                className="h-6 w-6 inline-flex items-center justify-center rounded-lg border border-warm-200 bg-white text-warm-500 shadow-sm hover:bg-warm-50 hover:text-primary-600 transition-all"
+              >
+                {showPanel ? <PanelRightClose size={12} /> : <PanelRightOpen size={12} />}
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -448,21 +460,9 @@ export default function ValidarPorDestino({ folioId }) {
           </div>
         </div>
 
-        {/* Panel toggle button */}
-        <div className="flex flex-col items-center pt-4 px-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowPanel(v => !v)}
-            title={showPanel ? 'Ocultar panel de órdenes' : 'Mostrar panel de órdenes'}
-            className="h-8 w-8 inline-flex items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm hover:bg-warm-50 hover:text-primary-600 transition-all"
-          >
-            {showPanel ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-          </button>
-        </div>
-
         {/* Right: orders side panel (collapsible) */}
         {showPanel && (
-          <div className="w-72 shrink-0 flex flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]">
+          <div className="w-80 shrink-0 flex flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]">
             {/* Panel header */}
             <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50 shrink-0">
               <div className="flex items-center justify-between mb-2.5">
@@ -512,14 +512,16 @@ export default function ValidarPorDestino({ folioId }) {
             </div>
 
             {/* Panel body: order cards */}
-            <div className="flex-1 overflow-y-auto p-2.5 space-y-2 bg-warm-50/55">
+            <div className="flex-1 overflow-y-auto p-2.5 bg-warm-50/55">
               {filteredOrders.length === 0 ? (
                 <div className="py-8 text-center text-xs text-warm-400">
                   {searchQuery || statusFilter !== 'all'
                     ? 'Sin resultados'
                     : t('desp.validar.destino.sinOrdenes')}
                 </div>
-              ) : filteredOrders.map(order => {
+              ) : (
+              <div className="grid grid-cols-2 gap-2">
+              {filteredOrders.map(order => {
                 const orderScans = scans.filter(s => s.matched_order_no === order.outbound_order_no)
                 const validadas = orderScans.length
                 const esperadas = order.bultos_esperados ?? 0
@@ -535,16 +537,14 @@ export default function ValidarPorDestino({ folioId }) {
                       : 'border-warm-200/90 bg-white hover:border-primary-100 hover:shadow-[0_14px_28px_-18px_rgba(37,99,235,0.3)]'
                   }`}>
                     {/* Order header */}
-                    <div className="flex items-start justify-between gap-1.5 mb-1">
-                      <span className="font-mono font-bold text-primary-700 text-[11px] leading-snug">
+                    <div className="flex items-start justify-between gap-1 mb-1">
+                      <span className="font-mono font-bold text-primary-700 text-[10px] leading-snug truncate min-w-0">
                         {order.outbound_order_no}
                       </span>
                       {complete ? (
-                        <span className="inline-flex items-center gap-0.5 shrink-0 rounded-full bg-success-100 border border-success-200 px-1.5 py-0.5 text-[9px] font-bold text-success-700">
-                          <CheckCircle2 className="w-2.5 h-2.5" />{t('desp.validar.destino.completa')}
-                        </span>
+                        <CheckCircle2 className="w-3 h-3 shrink-0 text-success-600" />
                       ) : (
-                        <span className="text-[11px] font-bold text-warm-700 tabular-nums shrink-0">
+                        <span className="text-[10px] font-bold text-warm-600 tabular-nums shrink-0">
                           {validadas}/{esperadas || '?'}
                         </span>
                       )}
@@ -552,7 +552,7 @@ export default function ValidarPorDestino({ folioId }) {
 
                     {/* Destinatario */}
                     {order.destinatario && (
-                      <p className="text-[10px] text-warm-500 font-medium truncate mb-1">
+                      <p className="text-[9px] text-warm-500 font-medium truncate mb-1">
                         {order.destinatario}
                       </p>
                     )}
@@ -601,6 +601,8 @@ export default function ValidarPorDestino({ folioId }) {
                   </div>
                 )
               })}
+              </div>
+              )}
             </div>
           </div>
         )}
