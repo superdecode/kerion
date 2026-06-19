@@ -90,6 +90,27 @@ function isTenantAdmin(user) {
   return false
 }
 
+function clearPersistedAuth() {
+  Object.keys(localStorage)
+    .filter(k => k === 'wms-auth' || k.startsWith('kirion_'))
+    .forEach(k => localStorage.removeItem(k))
+}
+
+function getReadableAuthError(error) {
+  if (error.response?.data?.error) {
+    const err = error.response.data.error
+    return typeof err === 'object' ? (err.message || JSON.stringify(err)) : err
+  }
+  if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '')) {
+    return 'El servidor tardó demasiado en responder. Intenta de nuevo.'
+  }
+  if (!error.response && (error.code === 'ERR_NETWORK' || /Network Error/i.test(error.message || ''))) {
+    return 'No se pudo conectar con el servidor. Verifica la conexión e intenta de nuevo.'
+  }
+  if (error.message) return error.message
+  return 'Error de conexión'
+}
+
 export const useAuthStore = create(
   persist(
     (set, get) => ({
@@ -119,7 +140,7 @@ export const useAuthStore = create(
           }
           
           // API real
-          const { data } = await api.post('/auth/login', { email, password })
+          const { data } = await api.post('/auth/login', { email, password }, { timeout: 30000 })
           if (data.user?.zona_horaria) setTimezone(data.user.zona_horaria)
           set({
             user: data.user,
@@ -144,14 +165,7 @@ export const useAuthStore = create(
           return { success: true }
         } catch (error) {
           set({ isLoading: false })
-          let errorMsg = 'Error de conexión'
-          if (error.response?.data?.error) {
-            const err = error.response.data.error
-            errorMsg = typeof err === 'object' ? (err.message || JSON.stringify(err)) : err
-          } else if (error.message) {
-            errorMsg = error.message
-          }
-          return { success: false, error: errorMsg }
+          return { success: false, error: getReadableAuthError(error) }
         }
       },
 
@@ -170,7 +184,7 @@ export const useAuthStore = create(
           })
           // Call me endpoint to get full user info
           api.defaults.headers.common.Authorization = `Bearer ${token}`
-          api.get('/auth/me').then(({ data }) => {
+          api.get('/auth/me', { timeout: 30000 }).then(({ data }) => {
             if (data.zona_horaria) setTimezone(data.zona_horaria)
             set({
               user: data,
@@ -189,18 +203,19 @@ export const useAuthStore = create(
       },
 
       logout: async () => {
+        const { token, isAuthenticated } = get()
         try {
-          await api.post('/auth/logout')
+          if (token && isAuthenticated) {
+            await api.post('/auth/logout')
+          }
         } catch (_e) { /* ignore — token may already be expired */ }
         set({ user: null, token: null, isAuthenticated: false, enabledModules: [] })
-        Object.keys(localStorage)
-          .filter(k => k === 'wms-auth' || k.startsWith('kirion_'))
-          .forEach(k => localStorage.removeItem(k))
+        clearPersistedAuth()
       },
 
       refreshUser: async () => {
         try {
-          const { data } = await api.get('/auth/me')
+          const { data } = await api.get('/auth/me', { timeout: 30000 })
           if (data.zona_horaria) setTimezone(data.zona_horaria)
           set((state) => ({
             user: { ...state.user, ...data },
@@ -216,7 +231,8 @@ export const useAuthStore = create(
           // Only logout on 401 (token truly invalid/expired).
           // Other errors (network, 5xx) should NOT trigger logout — prevents login loops.
           if (e.response?.status === 401) {
-            get().logout()
+            set({ user: null, token: null, isAuthenticated: false, enabledModules: [] })
+            clearPersistedAuth()
           }
           // Silently ignore non-auth errors to avoid disrupting the user session
         }
@@ -331,4 +347,5 @@ setUnauthorizedCallback(() => {
     isAuthenticated: false,
     enabledModules: [],
   })
+  clearPersistedAuth()
 })
