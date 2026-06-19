@@ -42,6 +42,16 @@ function buildLookupCodeSet(rawCodes = []) {
   return codes
 }
 
+function buildScanCodeVariants(rawCode) {
+  const normalized = normalizeScanCode(rawCode)
+  if (!normalized) return []
+  return generateCodeVariations(normalized, false)
+}
+
+function hasCodeVariant(codeSet, variants) {
+  return variants.some((variant) => codeSet.has(variant))
+}
+
 function CopyMetaPill({ label, value, tone = 'primary' }) {
   const [copied, setCopied] = useState(false)
 
@@ -225,9 +235,13 @@ export default function ValidarPorDestino({ folioId }) {
   const handleScan = useCallback(() => {
     const raw = scanInput.trim()
     if (!raw) return
-    const code = normalizeScanCode(raw)
-    if (!code) return
-    if (code !== raw) setScanInput(code)
+    const variants = buildScanCodeVariants(raw)
+    const code = variants[0] || ''
+    setScanInput('')
+    if (!code) {
+      setTimeout(() => scanRef.current?.focus(), 50)
+      return
+    }
 
     // Duplicate check
     const scannedCodes = new Set()
@@ -236,9 +250,8 @@ export default function ValidarPorDestino({ folioId }) {
       if (!normalized) return
       generateCodeVariations(normalized, false).forEach((variant) => scannedCodes.add(variant))
     })
-    if (scannedCodes.has(code)) {
+    if (hasCodeVariant(scannedCodes, variants)) {
       setErrorModal({ type: 'duplicate', code })
-      setScanInput('')
       setTimeout(() => scanRef.current?.focus(), 100)
       return
     }
@@ -251,7 +264,7 @@ export default function ValidarPorDestino({ folioId }) {
         orderEnrichment[order.outbound_order_no]?.logisticsTrackNo,
         orderEnrichment[order.outbound_order_no]?.thirdOrderNo,
       ])
-      if (lookupCodes.has(code)) {
+      if (hasCodeVariant(lookupCodes, variants)) {
         matchedOrderNo = order.outbound_order_no
         break
       }
@@ -259,7 +272,6 @@ export default function ValidarPorDestino({ folioId }) {
 
     if (!matchedOrderNo) {
       setErrorModal({ type: 'nomatch', code })
-      setScanInput('')
       setTimeout(() => scanRef.current?.focus(), 100)
       return
     }
