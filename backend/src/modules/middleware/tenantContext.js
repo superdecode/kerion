@@ -1,11 +1,12 @@
 import jwt from 'jsonwebtoken'
-import { query } from '../../config/database.js'
+import { isDatabaseUnavailableError, query } from '../../config/database.js'
 import env from '../../config/env.js'
 
 // Statuses that allow read-only access (frontend shows upgrade prompt)
 const READ_ONLY_STATUSES = new Set(['trial_expired', 'expired'])
 // Statuses that block access entirely
 const BLOCKED_STATUSES = new Set(['suspended', 'rejected', 'pending'])
+const TENANT_DB_DEADLINE_MS = parseInt(process.env.TENANT_DB_DEADLINE_MS, 10) || 12000
 
 function extractSlugFromHost(host) {
   if (!host) return null
@@ -13,7 +14,8 @@ function extractSlugFromHost(host) {
   const withoutPort = host.split(':')[0]
 
   if (withoutPort.endsWith(`.${baseDomain}`)) {
-    return withoutPort.slice(0, -(baseDomain.length + 1))
+    const slug = withoutPort.slice(0, -(baseDomain.length + 1))
+    return slug === 'www' ? null : slug
   }
 
   return null
@@ -66,12 +68,23 @@ export async function tenantContext(req, res, next) {
   try {
     const tenantParam = slug || (jwtTenantId ?? env.LEGACY_TENANT_ID)
     const byId = !!jwtTenantId || useDevFallback
-    const result = await query(
-      byId
-        ? 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE id = $1 LIMIT 1'
-        : 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE slug = $1 LIMIT 1',
-      [tenantParam]
-    )
+    let timeoutId
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const error = new Error(`Tenant query exceeded ${TENANT_DB_DEADLINE_MS}ms`)
+        error.code = 'DB_QUERY_DEADLINE'
+        reject(error)
+      }, TENANT_DB_DEADLINE_MS)
+    })
+    const result = await Promise.race([
+      query(
+        byId
+          ? 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE id = $1 LIMIT 1'
+          : 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE slug = $1 LIMIT 1',
+        [tenantParam]
+      ),
+      timeoutPromise,
+    ]).finally(() => clearTimeout(timeoutId))
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tenant no encontrado' })
@@ -95,6 +108,9 @@ export async function tenantContext(req, res, next) {
     next()
   } catch (err) {
     console.error('[tenantContext] DB error:', err.message)
+    if (isDatabaseUnavailableError(err)) {
+      return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+    }
     return res.status(500).json({ error: 'Error interno' })
   }
 }

@@ -1,4 +1,4 @@
-import { query } from '../../config/database.js'
+import { isDatabaseUnavailableError, query } from '../../config/database.js'
 
 // Returns middleware that verifies the tenant has access to the given module.
 // Requires tenantContext middleware to have run first (sets req.tenantId + req.tenant).
@@ -60,6 +60,9 @@ export function moduleGuard(moduleCode) {
       next()
     } catch (err) {
       console.error('[moduleGuard]', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+      }
       return res.status(500).json({ error: 'Error interno' })
     }
   }

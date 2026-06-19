@@ -1132,7 +1132,7 @@ export default function Escaneo() {
 
       {/* Active tab content */}
       {tab && (
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden relative">
           {/* Main scan area */}
           <div className="flex-1 overflow-y-auto p-6">
             <div className="max-w-3xl mx-auto">
@@ -1417,20 +1417,28 @@ export default function Escaneo() {
             </div>
           </div>
 
-          <div className="hidden lg:flex shrink-0 items-start pt-4 pr-2">
-            <button
-              type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-              onClick={() => setShowPanel(!showPanel)}
-              title={showPanel ? 'Ocultar panel' : 'Mostrar panel'}
-            >
-              {showPanel ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
-            </button>
-          </div>
-
-          {/* Right panel */}
-          {showPanel && (
-            <div className="hidden lg:flex w-80 border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shrink-0 animate-fade-in shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]">
+          {/* Right panel — wrapper always rendered so toggle stays at panel edge */}
+          <div className={`hidden lg:flex shrink-0 relative ${showPanel ? 'w-80' : 'w-0'}`}>
+            {!showPanel && (
+              <button
+                type="button"
+                onClick={() => setShowPanel(true)}
+                title="Mostrar panel"
+                className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+              >
+                <PanelRightOpen size={16} />
+              </button>
+            )}
+            {showPanel && (
+            <div className="w-full h-full border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex flex-col animate-fade-in shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] relative">
+              <button
+                type="button"
+                onClick={() => setShowPanel(false)}
+                title="Ocultar panel"
+                className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+              >
+                <PanelRightClose size={16} />
+              </button>
               <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50">
                 <h4 className="text-sm font-bold text-warm-700 mb-2">{t('scan.sessionPallets')}</h4>
                 <div className="flex items-center gap-1.5 rounded-2xl border border-primary-100/80 bg-gradient-to-r from-white via-primary-50/55 to-white px-3 h-11 shadow-[0_12px_26px_-24px_rgba(37,99,235,0.6)] transition-all focus-within:border-primary-300 focus-within:ring-2 focus-within:ring-primary-100">

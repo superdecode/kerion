@@ -775,7 +775,7 @@ router.post('/resolver',
 
         await client.query(
           `UPDATE rastreo_ordenes SET estado = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
-          [normalizedEstado, orden_id, req.tenantId]
+          [persistEstado(normalizedEstado), orden_id, req.tenantId]
         )
 
         const notFoundCount = updates.filter(u => !u.found).length

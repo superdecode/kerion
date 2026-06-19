@@ -7,12 +7,23 @@ const BASE_URL = 'https://api.xlwms.com/openapi'
 // In-memory config cache per tenant (2 min TTL)
 const _configCache = new Map()
 const CONFIG_TTL_MS = 2 * 60 * 1000
+const CONFIG_CACHE_MAX = parseInt(process.env.WMS_CONFIG_CACHE_MAX, 10) || 100
 
 // In-flight request deduplication (500ms window)
 const _inFlight = new Map()
+const IN_FLIGHT_MAX = parseInt(process.env.WMS_IN_FLIGHT_MAX, 10) || 100
 
 // Track which endpoints we've already logged fields for
 const _fieldLogDone = new Set()
+const FIELD_LOG_MAX = 50
+
+function pruneOldest(map, maxSize) {
+  while (map.size > maxSize) {
+    const firstKey = map.keys().next().value
+    if (firstKey === undefined) break
+    map.delete(firstKey)
+  }
+}
 
 function makeReqTime() {
   // xlwms requires UNIX timestamp in seconds (10-digit)
@@ -54,6 +65,7 @@ async function getConfig(tenantId) {
       }
     : null
   _configCache.set(tenantId, { config, at: Date.now() })
+  pruneOldest(_configCache, CONFIG_CACHE_MAX)
   return config
 }
 
@@ -105,6 +117,7 @@ async function wmsPost(tenantId, endpoint, data) {
       // Log first record of first successful response to inspect field names
       if (json.data && !_fieldLogDone.has(endpoint)) {
         _fieldLogDone.add(endpoint)
+        pruneOldest(_fieldLogDone, FIELD_LOG_MAX)
         const sample = json.data?.records?.[0] ?? json.data?.[0] ?? json.data
         console.log(`[xlwms] FIELDS ${endpoint}: ${JSON.stringify(sample)}`)
       }
@@ -131,6 +144,7 @@ async function wmsPostDedup(tenantId, endpoint, data) {
     _inFlight.delete(key)
   })
   _inFlight.set(key, promise)
+  pruneOldest(_inFlight, IN_FLIGHT_MAX)
   setTimeout(() => _inFlight.delete(key), 500)
   return promise
 }

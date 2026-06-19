@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback, useEffect, Fragment } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Loader2, Plus, Trash2, CheckCircle2, XCircle, ScanLine, X,
   Check, PackageCheck, AlertCircle, ShieldCheck, ChevronDown, ChevronUp,
-  Layers, MapPin,
+  Layers, MapPin, PartyPopper, ExternalLink,
 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import StatusPill from '../../../core/components/common/StatusPill'
@@ -13,7 +14,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
+import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import {
   getFolio, addOrder, updateOrder, removeOrder,
   cerrarFolio, cancelarFolio, findOrderByBarcode,
@@ -28,6 +29,16 @@ const ORDER_ESTADO_META = {
   devolucion: { label: 'Devolución', cls: 'bg-danger-100 text-danger-700' },
 }
 const ORDER_ESTADOS = ['pendiente', 'cargado', 'entregado', 'devolucion']
+
+function buildLookupCodeSet(rawCodes = []) {
+  const codes = new Set()
+  rawCodes.filter(Boolean).forEach((rawCode) => {
+    const normalized = normalizeCodeFast(rawCode)
+    if (!normalized) return
+    generateCodeVariations(normalized, false).forEach((variant) => codes.add(variant))
+  })
+  return codes
+}
 
 // ── Validation panel (per order) ─────────────────────────────────────────────
 function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onClose, validarPorTarimas }) {
@@ -71,16 +82,23 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
 
   const validCodes = useCallback(() => {
     if (!orderDetail) return new Set()
-    const codes = new Set()
-    ;(orderDetail.packageList ?? orderDetail.outboundBoxList ?? []).forEach(p => {
-      if (p.customizeCode) codes.add(normalizeCodeFast(p.customizeCode))
+    const rawCodes = []
+    ;(orderDetail.packageList ?? orderDetail.outboundBoxList ?? []).forEach((p) => {
+      rawCodes.push(p.customizeCode, p.boxType, p.boxCode)
     })
-    if (orderDetail.thirdOrderNo) codes.add(normalizeCodeFast(orderDetail.thirdOrderNo))
-    if (orderDetail.logisticsTrackNo) codes.add(normalizeCodeFast(orderDetail.logisticsTrackNo))
-    return codes
+    rawCodes.push(orderDetail.thirdOrderNo, orderDetail.logisticsTrackNo)
+    return buildLookupCodeSet(rawCodes)
   }, [orderDetail])
 
-  const alreadyScanned = new Set(scans.map(s => normalizeCodeFast(s.codigo_caja)))
+  const alreadyScanned = useMemo(() => {
+    const scanned = new Set()
+    scans.forEach((s) => {
+      const normalized = normalizeCodeFast(s.codigo_caja)
+      if (!normalized) return
+      generateCodeVariations(normalized, false).forEach((variant) => scanned.add(variant))
+    })
+    return scanned
+  }, [scans])
   const expected = order.bultos_esperados ?? orderDetail?.outboundBoxCount ?? null
 
   const { mutate: doAddScan, isPending: scanning } = useMutation({
@@ -113,7 +131,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
   })
 
   const handleScan = useCallback(() => {
-    const code = normalizeCodeFast(input.trim())
+    const code = normalizeScanCode(input.trim())
     if (!code) return
     if (alreadyScanned.has(code)) {
       addToast('Código ya escaneado en esta orden', 'warning')
@@ -146,7 +164,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     return (
       <div className="bg-success-50 border-t border-success-100 px-5 py-6 flex flex-col items-center gap-2">
         <CheckCircle2 className="w-8 h-8 text-success-500" />
-        <p className="text-sm font-bold text-success-700">Validación completa</p>
+        <p className="text-sm font-bold text-success-700">{t('desp.validar.orden.valCompleta')}</p>
         <p className="text-xs text-success-600 tabular-nums">
           {scans.length} caja{scans.length !== 1 ? 's' : ''} confirmada{scans.length !== 1 ? 's' : ''} — orden marcada como Cargada
         </p>
@@ -237,7 +255,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       )}
 
       {!detailLoading && orderDetail && !orderDetail.packageList?.length && (
-        <p className="text-[11px] text-warm-400 mb-2">Sin detalle de cajas disponible — se aceptará cualquier código</p>
+        <p className="text-[11px] text-warm-400 mb-2">{t('desp.validar.orden.sinDetalle')}</p>
       )}
 
       {scans.length > 0 ? (
@@ -278,7 +296,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
           </div>
         )
       ) : (
-        !detailLoading && <p className="text-xs text-primary-500/70">Sin escaneos — escanea la primera caja</p>
+        !detailLoading && <p className="text-xs text-primary-500/70">{t('desp.validar.orden.sinEscaneos')}</p>
       )}
     </div>
   )
@@ -286,6 +304,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ValidarPorOrden({ folioId }) {
+  const navigate = useNavigate()
   const { addToast } = useToastStore()
   const { t } = useI18nStore()
   const { canWrite, canDelete } = useAuthStore()
@@ -312,6 +331,8 @@ export default function ValidarPorOrden({ folioId }) {
   const [lookupDetail, setLookupDetail] = useState(null)
   const [validatingOrderId, setValidatingOrderId] = useState(null)
   const [showConfirmCancel, setShowConfirmCancel] = useState(false)
+  const [showConfirmCerrar, setShowConfirmCerrar] = useState(false)
+  const [folioCerradoNum, setFolioCerradoNum] = useState(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['despacho-folio', folioId],
@@ -336,7 +357,11 @@ export default function ValidarPorOrden({ folioId }) {
 
   const { mutate: doCerrar, isPending: cerrando } = useMutation({
     mutationFn: () => cerrarFolio(folioId),
-    onSuccess: () => { invalidate(); addToast('Folio cerrado', 'success') },
+    onSuccess: () => {
+      invalidate()
+      setShowConfirmCerrar(false)
+      setFolioCerradoNum(folio?.folio_numero ?? folio?.folio ?? folioId)
+    },
     onError: (err) => addToast(err?.response?.data?.error || 'Error cerrando folio', 'error'),
   })
 
@@ -407,11 +432,16 @@ export default function ValidarPorOrden({ folioId }) {
   const handleLookup = useCallback(async (code) => {
     const raw = (code || lookupInput).trim()
     if (!raw) return
-    const q = normalizeCodeFast(raw)
+    const q = normalizeScanCode(raw)
     setLookupLoading(true)
     setLookupResult(null)
     try {
-      const found = await findOrderByBarcode(q)
+      let found = null
+      for (const variant of generateCodeVariations(q, false)) {
+        // Try scanner-safe variants so slash/dash mismatches behave like Surtido.
+        found = await findOrderByBarcode(variant)
+        if (found) break
+      }
       if (found) {
         const detail = await getOutboundDetail(found.outboundOrderNo || q)
         const boxCount = detail?.data?.outboundBoxCount || found.outboundBoxCount || null
@@ -448,9 +478,12 @@ export default function ValidarPorOrden({ folioId }) {
   }
 
   const handleInlineScan = useCallback(() => {
-    const code = normalizeCodeFast(scanInput.trim())
+    const code = normalizeScanCode(scanInput.trim())
     if (!code) return
-    const alreadyScanned = new Set(localScans.map(c => normalizeCodeFast(c)))
+    const alreadyScanned = new Set()
+    localScans.forEach((localCode) => {
+      generateCodeVariations(localCode, false).forEach((variant) => alreadyScanned.add(variant))
+    })
     if (alreadyScanned.has(code)) {
       addToast('Código ya escaneado', 'warning')
       setScanInput('')
@@ -458,12 +491,12 @@ export default function ValidarPorOrden({ folioId }) {
       return
     }
     if (lookupDetail) {
-      const codes = new Set()
+      const rawCodes = []
       ;(lookupDetail.packageList ?? lookupDetail.outboundBoxList ?? []).forEach(p => {
-        if (p.customizeCode) codes.add(normalizeCodeFast(p.customizeCode))
+        rawCodes.push(p.customizeCode, p.boxType, p.boxCode)
       })
-      if (lookupDetail.thirdOrderNo) codes.add(normalizeCodeFast(lookupDetail.thirdOrderNo))
-      if (lookupDetail.logisticsTrackNo) codes.add(normalizeCodeFast(lookupDetail.logisticsTrackNo))
+      rawCodes.push(lookupDetail.thirdOrderNo, lookupDetail.logisticsTrackNo)
+      const codes = buildLookupCodeSet(rawCodes)
       if (codes.size > 0 && !codes.has(code)) {
         addToast('Código no corresponde a esta orden — rechazado', 'error')
         setScanInput('')
@@ -489,6 +522,36 @@ export default function ValidarPorOrden({ folioId }) {
 
   if (isLoading) {
     return <div className="flex justify-center py-16"><LoadingSpinner /></div>
+  }
+
+  if (folioCerradoNum) {
+    return (
+      <div className="flex flex-col min-h-[60vh] items-center justify-center gap-6 bg-warm-50/40 rounded-2xl px-6 py-12">
+        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-success-100 text-success-600">
+          <PartyPopper className="w-10 h-10" />
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-bold text-warm-800 mb-1">{t('desp.validar.folioCerrado.title')}</p>
+          <p className="text-sm text-warm-500">
+            El folio <span className="font-mono font-semibold text-warm-700">{folioCerradoNum}</span> ha sido cerrado y registrado.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate('/despacho/validar')}
+            className="btn-primary flex items-center gap-2 px-6 py-2.5">
+            <Plus className="w-4 h-4" />
+            {t('desp.validar.folioCerrado.nuevaValidacion')}
+          </button>
+          <button
+            onClick={() => navigate(`/despacho/folios/${folioId}`)}
+            className="btn-secondary flex items-center gap-2 px-6 py-2.5">
+            <ExternalLink className="w-4 h-4" />
+            {t('desp.validar.folioCerrado.verFolio')}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -522,7 +585,7 @@ export default function ValidarPorOrden({ folioId }) {
               </button>
             )}
             {folio?.estado === 'en_proceso' && canWrite('despacho.folios') && (
-              <button onClick={() => doCerrar()} disabled={cerrando}
+              <button onClick={() => setShowConfirmCerrar(true)} disabled={cerrando}
                 className="btn-success text-xs flex items-center gap-1.5 h-8">
                 {cerrando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                 {t('desp.validar.orden.cerrarFolio')}
@@ -693,10 +756,10 @@ export default function ValidarPorOrden({ folioId }) {
                               </div>
                               <div className="flex items-center gap-3">
                                 {[
-                                  { label: 'Esperadas', value: lookupResult.outboundBoxCount ?? '—', cls: 'text-warm-700' },
-                                  { label: 'Escaneadas', value: localScans.length, cls: localScans.length > 0 ? 'text-success-600' : 'text-warm-400' },
+                                  { label: t('desp.validar.destino.esperadas'), value: lookupResult.outboundBoxCount ?? '—', cls: 'text-warm-700' },
+                                  { label: t('desp.validar.destino.escaneadas'), value: localScans.length, cls: localScans.length > 0 ? 'text-success-600' : 'text-warm-400' },
                                   lookupResult.outboundBoxCount != null && {
-                                    label: 'Pendientes',
+                                    label: t('desp.validar.destino.pendientes'),
                                     value: Math.max(0, lookupResult.outboundBoxCount - localScans.length),
                                     cls: localScans.length >= lookupResult.outboundBoxCount ? 'text-success-600' : 'text-danger-500',
                                   },
@@ -771,13 +834,13 @@ export default function ValidarPorOrden({ folioId }) {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-1">
-                      <label className="block text-xs font-semibold text-warm-600 mb-1.5">No. Orden *</label>
+                      <label className="block text-xs font-semibold text-warm-600 mb-1.5">{t('desp.validar.orden.noOrden')} *</label>
                       <input value={addForm.outbound_order_no}
                         onChange={e => setAddForm(f => ({ ...f, outbound_order_no: e.target.value }))}
                         className="input-field w-full text-sm font-mono" placeholder="OBC-12345" />
                     </div>
                     <div className="sm:col-span-1">
-                      <label className="block text-xs font-semibold text-warm-600 mb-1.5">Destinatario</label>
+                      <label className="block text-xs font-semibold text-warm-600 mb-1.5">{t('desp.validar.orden.destinatarioLabel')}</label>
                       <input value={addForm.destinatario}
                         onChange={e => setAddForm(f => ({ ...f, destinatario: e.target.value }))}
                         className="input-field w-full text-sm" placeholder="Receptor o canal..." />
@@ -833,12 +896,12 @@ export default function ValidarPorOrden({ folioId }) {
           <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
             <tr>
               <th className="table-header w-10"></th>
-              <th className="table-header">Orden</th>
-              <th className="table-header">Destinatario</th>
-              <th className="table-header text-center">Esp.</th>
-              <th className="table-header text-center">Valid.</th>
-              <th className="table-header text-center">Desp.</th>
-              <th className="table-header">Estado</th>
+              <th className="table-header">{t('desp.validar.orden.col.orden')}</th>
+              <th className="table-header">{t('desp.validar.orden.col.destinatario')}</th>
+              <th className="table-header text-center">{t('desp.validar.orden.col.esperadas')}</th>
+              <th className="table-header text-center">{t('desp.validar.orden.col.validadas')}</th>
+              <th className="table-header text-center">{t('desp.validar.orden.col.despachadas')}</th>
+              <th className="table-header">{t('desp.validar.orden.col.estado')}</th>
               {editable && <th className="table-header w-10"></th>}
             </tr>
           </thead>
@@ -960,6 +1023,31 @@ export default function ValidarPorOrden({ folioId }) {
           </tbody>
         </table>
       </div>
+
+      {/* Cerrar folio confirm modal */}
+      <Modal
+        isOpen={showConfirmCerrar}
+        onClose={() => setShowConfirmCerrar(false)}
+        title={t('desp.validar.cerrarFolioTitle')}
+        icon={CheckCircle2}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowConfirmCerrar(false)} className="btn-secondary text-sm">
+              {t('common.back')}
+            </button>
+            <button onClick={() => doCerrar()} disabled={cerrando}
+              className="btn-success text-sm flex items-center gap-1.5">
+              {cerrando && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {t('desp.validar.confirmarCierre')}
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm text-warm-700">
+          {t('desp.validar.cerrarConfirmPre')} <span className="font-mono font-semibold">{folio?.folio_numero ?? folio?.folio}</span>{t('desp.validar.cerrarConfirmPost')}
+        </p>
+      </Modal>
 
       {/* Cancel confirm modal */}
       <Modal

@@ -1949,7 +1949,7 @@ export default function Escaneo() {
 
       {/* Active tab content + optional side panel */}
       {activeTab && (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden relative">
           <div className="flex-1 overflow-y-auto xl:overflow-hidden flex flex-col p-6">
             <div className="max-w-6xl 2xl:max-w-7xl mx-auto w-full space-y-4 xl:space-y-0 xl:flex xl:flex-col xl:gap-4 xl:h-full xl:min-h-0">
 
@@ -2139,21 +2139,24 @@ export default function Escaneo() {
             </div>
           </div>
 
-          <div className="hidden lg:flex shrink-0 items-start pt-4 pr-2">
-            <button
-              type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
-              onClick={() => setShowPanel(v => !v)}
-              title={showPanel ? 'Ocultar panel' : 'Mostrar panel'}
-            >
-              {showPanel ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
-            </button>
+          {/* Right side panel — wrapper always rendered so toggle stays at panel edge */}
+          <div className={`hidden lg:flex shrink-0 relative ${showPanel ? '' : 'w-0'}`}>
+            {!showPanel && (
+              <button
+                type="button"
+                onClick={() => setShowPanel(true)}
+                title="Mostrar panel"
+                className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+              >
+                <PanelRightOpen size={16} />
+              </button>
+            )}
+            {showPanel && (
+              <div className="relative">
+                <SidePanel tab={activeTab} items={activeTab.items} />
+              </div>
+            )}
           </div>
-
-          {/* Right side panel */}
-          {showPanel && (
-            <SidePanel tab={activeTab} items={activeTab.items} />
-          )}
         </div>
       )}
 

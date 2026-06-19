@@ -67,6 +67,7 @@ import invDashboardRoutes from './modules/inventory/routes/dashboard.routes.js'
 import surtidoDashboardRoutes from './modules/wms/routes/surtido.dashboard.routes.js'
 
 const app = express()
+app.set('trust proxy', 1)
 
 function isAllowedDevOrigin(origin) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
@@ -114,7 +115,7 @@ app.use(cors({
 // Rate limiting — global (all /api routes)
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: parseInt(process.env.API_RATE_LIMIT_MAX, 10) || 240,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas solicitudes, intenta más tarde' }
@@ -124,14 +125,14 @@ app.use('/api', generalLimiter)
 // Rate limiting — stricter for login
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: parseInt(process.env.LOGIN_RATE_LIMIT_MAX, 10) || 12,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiados intentos, intenta más tarde' }
 })
 
-// Body parsing — evidence uploads travel as base64 JSON, so allow enough headroom for 2 MB files.
-app.use(express.json({ limit: '5mb' }))
+// Evidence uploads travel as base64 JSON; keep the limit bounded for small instances.
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '4mb' }))
 
 // Health check
 app.get('/api/health', (_req, res) => {

@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import env from '../../config/env.js'
-import { query } from '../../config/database.js'
+import { isDatabaseUnavailableError, query } from '../../config/database.js'
 import { authenticateToken, auditLog } from '../../shared/middleware/auth.js'
 import { normalizeLevel } from '../../shared/middleware/permissions.js'
 
@@ -44,6 +44,45 @@ async function comparePasswordSafe(password, passwordHash) {
   }
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+const AUTH_DB_DEADLINE_MS = parseInt(process.env.AUTH_DB_DEADLINE_MS, 10) || 12000
+const NON_RETRYABLE_AUTH_DB_CODES = new Set(['ECHECKOUTTIMEOUT', 'DB_QUERY_DEADLINE'])
+
+async function queryAuthWithRetry(text, params) {
+  const execute = () => {
+    let timeoutId
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const error = new Error(`Database query exceeded ${AUTH_DB_DEADLINE_MS}ms`)
+        error.code = 'DB_QUERY_DEADLINE'
+        reject(error)
+      }, AUTH_DB_DEADLINE_MS)
+    })
+    return Promise.race([query(text, params), timeoutPromise]).finally(() => clearTimeout(timeoutId))
+  }
+
+  try {
+    return await execute()
+  } catch (error) {
+    if (!isDatabaseUnavailableError(error) || NON_RETRYABLE_AUTH_DB_CODES.has(error.code)) throw error
+    console.warn('[auth] transient DB error, retrying query once:', error.code || error.message)
+    await sleep(350)
+    return execute()
+  }
+}
+
+function sendAuthServiceError(res, error, label, fallbackMessage = 'Error interno del servidor') {
+  if (isDatabaseUnavailableError(error)) {
+    console.error(`[${label}] database unavailable:`, error.message)
+    return res.status(503).json({ error: 'Servicio temporalmente no disponible. Intenta de nuevo.' })
+  }
+  console.error(`${label}:`, error)
+  return res.status(500).json({ error: fallbackMessage })
+}
+
 const router = Router()
 const DEFAULT_MODULES = ['dropscan']
 
@@ -62,6 +101,7 @@ async function resolveTenantIdFromRequest(req) {
   let slug = null
   if (withoutPort.endsWith(`.${baseDomain}`)) {
     slug = withoutPort.slice(0, -(baseDomain.length + 1))
+    if (slug === 'www') slug = null
   } else if (env.NODE_ENV !== 'production' && isLocalDevHost(host) && req.headers['x-tenant-slug']) {
     slug = req.headers['x-tenant-slug']
   }
@@ -69,7 +109,7 @@ async function resolveTenantIdFromRequest(req) {
   console.log('[auth/login] host=' + host + ' baseDomain=' + baseDomain + ' slug=' + (slug || '(none)'))
 
   if (slug) {
-    const res = await query(
+    const res = await queryAuthWithRetry(
       'SELECT id, slug, status FROM tenants WHERE slug = $1 LIMIT 1',
       [slug]
     )
@@ -82,7 +122,7 @@ async function resolveTenantIdFromRequest(req) {
 
   // Fallback: no subdomain — use legacy tenant (single-tenant production or local dev)
   if (env.LEGACY_TENANT_ID) {
-    const res = await query(
+    const res = await queryAuthWithRetry(
       'SELECT id, slug, status FROM tenants WHERE id = $1 LIMIT 1',
       [env.LEGACY_TENANT_ID]
     )
@@ -97,7 +137,7 @@ async function resolveTenantIdFromRequest(req) {
 
 async function getTenantInfoSafe(tenantId) {
   try {
-    const res = await query(
+    const res = await queryAuthWithRetry(
       `SELECT status, trial_expires_at, subscription_expires_at, legal_name, contact_email, contact_phone, current_plan_id, zona_horaria
        FROM tenants WHERE id = $1`,
       [tenantId]
@@ -111,7 +151,7 @@ async function getTenantInfoSafe(tenantId) {
 
 async function getPlanModulesSafe(tenantId) {
   try {
-    const res = await query(
+    const res = await queryAuthWithRetry(
       `SELECT p.modules FROM subscriptions s
        JOIN plans p ON s.plan_id = p.id
        WHERE s.tenant_id = $1 AND s.status = 'active'
@@ -128,7 +168,7 @@ async function getPlanModulesSafe(tenantId) {
 
 async function getEnabledModulesSafe(tenantId, fallbackModules = DEFAULT_MODULES) {
   try {
-    const res = await query(
+    const res = await queryAuthWithRetry(
       'SELECT module_code FROM tenant_modules WHERE tenant_id = $1 AND enabled = true',
       [tenantId]
     )
@@ -158,7 +198,7 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Cuenta no disponible. Contacta a soporte.' })
     }
 
-    const result = await query(
+    const result = await queryAuthWithRetry(
       `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos
        FROM usuarios u
        LEFT JOIN roles r ON u.rol_id = r.id
@@ -182,7 +222,7 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-      await query(
+      await queryAuthWithRetry(
         'UPDATE usuarios SET ultimo_acceso = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2',
         [user.id, tenant.id]
       )
@@ -245,8 +285,7 @@ router.post('/login', async (req, res) => {
       }
     })
   } catch (error) {
-    console.error('Login error:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendAuthServiceError(res, error, 'Login error')
   }
 })
 
@@ -256,7 +295,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
 
     const [result, tenantInfo] = await Promise.all([
-      query(
+      queryAuthWithRetry(
         `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id
@@ -297,8 +336,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       enabledModules,
     })
   } catch (error) {
-    console.error('Auth/me error:', error)
-    res.status(500).json({ error: 'Error interno del servidor' })
+    return sendAuthServiceError(res, error, 'Auth/me error')
   }
 })
 
@@ -315,7 +353,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 
     if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })
 
-    const userRes = await query(
+    const userRes = await queryAuthWithRetry(
       'SELECT password_hash FROM usuarios WHERE id = $1 AND tenant_id = $2',
       [req.user.id, req.user.tenant_id]
     )
@@ -329,15 +367,14 @@ router.post('/change-password', authenticateToken, async (req, res) => {
     }
 
     const newHash = await bcrypt.hash(new_password, 12)
-    await query(
+    await queryAuthWithRetry(
       'UPDATE usuarios SET password_hash = $1 WHERE id = $2 AND tenant_id = $3',
       [newHash, req.user.id, req.user.tenant_id]
     )
     await auditLog(req, 'CHANGE_PASSWORD', 'usuario', req.user.id, null)
     res.json({ success: true })
   } catch (error) {
-    console.error('Change password error:', error)
-    res.status(500).json({ error: 'Error al cambiar contraseña' })
+    return sendAuthServiceError(res, error, 'Change password error', 'Error al cambiar contraseña')
   }
 })
 

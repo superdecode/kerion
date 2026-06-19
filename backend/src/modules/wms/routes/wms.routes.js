@@ -20,17 +20,77 @@ const _tableColumnCache = new Map()
 const _csvCache = new Map()
 const _inFlight = new Map()
 const CSV_CACHE_TTL = 5 * 60 * 1000 // 5 min
+const CSV_MAX_ENTRY_BYTES = parseInt(process.env.CSV_MAX_ENTRY_BYTES, 10) || 1_500_000
+const CSV_MAX_TOTAL_BYTES = parseInt(process.env.CSV_MAX_TOTAL_BYTES, 10) || 6_000_000
+const CSV_DB_CACHE_MAX_BYTES = parseInt(process.env.CSV_DB_CACHE_MAX_BYTES, 10) || 1_500_000
+const CSV_MAX_LIMIT_ROWS = parseInt(process.env.CSV_MAX_LIMIT_ROWS, 10) || 3000
+const WMS_PREWARM_SHEETS = process.env.WMS_PREWARM_SHEETS === 'true'
 
 function getLastNRows(text, n) {
   if (!n || n <= 0) return text
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const newlines = []
-  for (let i = 0; i < normalized.length; i++) {
-    if (normalized[i] === '\n') newlines.push(i)
+  let headerEnd = normalized.indexOf('\n')
+  if (headerEnd === -1) return normalized
+
+  let rowsSeen = 0
+  let cutIndex = -1
+  for (let i = normalized.length - 1; i > headerEnd; i--) {
+    if (normalized[i] === '\n') {
+      rowsSeen += 1
+      if (rowsSeen > n) {
+        cutIndex = i
+        break
+      }
+    }
   }
-  if (newlines.length <= n) return normalized
-  const cutLine = newlines[newlines.length - n - 1] // keep last n data rows + header
-  return normalized.slice(0, newlines[0] + 1) + normalized.slice(cutLine + 1)
+  if (cutIndex === -1) return normalized
+  return normalized.slice(0, headerEnd + 1) + normalized.slice(cutIndex + 1)
+}
+
+function getTextBytes(text) {
+  return Buffer.byteLength(String(text || ''), 'utf8')
+}
+
+function getCsvCacheTotalBytes() {
+  let total = 0
+  for (const entry of _csvCache.values()) total += entry.bytes || 0
+  return total
+}
+
+function pruneCsvCache() {
+  const now = Date.now()
+  for (const [key, entry] of _csvCache.entries()) {
+    if (now - entry.fetchedAt > CSV_CACHE_TTL) _csvCache.delete(key)
+  }
+
+  let total = getCsvCacheTotalBytes()
+  if (total <= CSV_MAX_TOTAL_BYTES) return
+
+  const entries = [..._csvCache.entries()]
+    .sort((a, b) => (a[1].lastAccessedAt || a[1].fetchedAt) - (b[1].lastAccessedAt || b[1].fetchedAt))
+  for (const [key, entry] of entries) {
+    if (total <= CSV_MAX_TOTAL_BYTES) break
+    _csvCache.delete(key)
+    total -= entry.bytes || 0
+  }
+}
+
+function setCsvCache(cacheKey, text, rowCount) {
+  const bytes = getTextBytes(text)
+  if (bytes > CSV_MAX_ENTRY_BYTES) {
+    _csvCache.delete(cacheKey)
+    return false
+  }
+  _csvCache.set(cacheKey, {
+    text,
+    rowCount,
+    bytes,
+    fetchedAt: Date.now(),
+    lastAccessedAt: Date.now(),
+    refreshing: false,
+  })
+  pruneCsvCache()
+  return true
 }
 
 async function fetchAndCacheSheet(tenantId, url, dbWriter = null) {
@@ -52,7 +112,7 @@ async function fetchAndCacheSheet(tenantId, url, dbWriter = null) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const text = await res.text()
       const rowCount = (text.match(/\n/g) || []).length
-      _csvCache.set(cacheKey, { text, rowCount, fetchedAt: Date.now(), refreshing: false })
+      setCsvCache(cacheKey, text, rowCount)
       if (dbWriter) dbWriter(text, rowCount).catch(() => {})
       return text
     } catch (err) {
@@ -394,9 +454,11 @@ router.post('/config/sheets',
         )
       }
       res.json({ success: true })
-      // Pre-warm CSV cache in background so first real user gets a cache hit
-      if (sheet_inventory_url) fetchAndCacheSheet(req.tenantId, sheet_inventory_url).catch(() => {})
-      if (sheet_outbound_url)  fetchAndCacheSheet(req.tenantId, sheet_outbound_url).catch(() => {})
+      // Keep production memory predictable; pre-warm can load large Sheets into a Nano instance.
+      if (WMS_PREWARM_SHEETS) {
+        if (sheet_inventory_url) fetchAndCacheSheet(req.tenantId, sheet_inventory_url).catch(() => {})
+        if (sheet_outbound_url)  fetchAndCacheSheet(req.tenantId, sheet_outbound_url).catch(() => {})
+      }
     } catch (err) {
       console.error('PUT wmshub/config/sheets error:', err.message)
       res.status(500).json({ success: false, error: 'Error guardando URLs de hojas' })
@@ -440,7 +502,8 @@ router.get('/proxy/sheet',
         return res.status(403).json({ success: false, error: 'URL no autorizada para este tenant' })
       }
 
-      const limitNum = parseInt(limit) || 0
+      const requestedLimit = parseInt(limit) || 0
+      const limitNum = requestedLimit > 0 ? Math.min(requestedLimit, CSV_MAX_LIMIT_ROWS) : 0
       const cacheKey = `${req.tenantId}:${normalizedUrl}`
       const pgKey = `csv:proxy:${crypto.createHash('sha256').update(normalizedUrl).digest('hex').slice(0, 24)}`
       const cached = _csvCache.get(cacheKey)
@@ -456,6 +519,7 @@ router.get('/proxy/sheet',
 
       // DB writer: persist to wms_cache after a Google fetch so it survives restarts
       const dbWriter = async (text, rowCount) => {
+        if (getTextBytes(text) > CSV_DB_CACHE_MAX_BYTES) return
         await req.tQuery(
           `INSERT INTO wms_cache (key, data, expires_at, tenant_id)
            VALUES ($1, $2, now() + interval '360 seconds', $3)
@@ -466,6 +530,7 @@ router.get('/proxy/sheet',
       }
 
       if (cached) {
+        cached.lastAccessedAt = now
         const age = now - cached.fetchedAt
         if (age < CSV_CACHE_TTL) {
           return send(cached.text, 'hit', cached.rowCount)
@@ -486,7 +551,7 @@ router.get('/proxy/sheet',
         )
         if (pgResult.rows.length > 0) {
           const { text, rowCount } = pgResult.rows[0].data
-          _csvCache.set(cacheKey, { text, rowCount, fetchedAt: Date.now(), refreshing: false })
+          setCsvCache(cacheKey, text, rowCount)
           return send(text, 'pg-hit', rowCount)
         }
       } catch { /* non-fatal: fall through to Google fetch */ }

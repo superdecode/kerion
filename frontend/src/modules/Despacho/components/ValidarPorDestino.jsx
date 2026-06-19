@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ScanLine, Loader2, X, Check, CheckCircle2, XCircle, AlertCircle,
   Layers, MapPin, Trash2, Radio, Clock3, Search,
-  PanelRightClose, PanelRightOpen,
+  PanelRightClose, PanelRightOpen, PartyPopper, ExternalLink, Plus, Copy,
 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -11,7 +12,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
+import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
 import {
   getFolio, getFolioScans, addFolioScan, deleteFolioScan,
@@ -22,7 +23,61 @@ function genTarimaRef(num) {
   return 'T' + String(num).padStart(2, '0')
 }
 
+function isOrderComplete(order, validatedCount) {
+  const expected = order.bultos_esperados ?? 0
+  return expected > 0 && validatedCount >= expected
+}
+
+function isOrderPending(order, validatedCount) {
+  return validatedCount < (order.bultos_esperados ?? 1)
+}
+
+function buildLookupCodeSet(rawCodes = []) {
+  const codes = new Set()
+  rawCodes.filter(Boolean).forEach((rawCode) => {
+    const normalized = normalizeCodeFast(rawCode)
+    if (!normalized) return
+    generateCodeVariations(normalized, false).forEach((variant) => codes.add(variant))
+  })
+  return codes
+}
+
+function CopyMetaPill({ label, value, tone = 'primary' }) {
+  const [copied, setCopied] = useState(false)
+
+  if (!value) return null
+
+  const handleCopy = async (event) => {
+    event.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(String(value))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {}
+  }
+
+  const toneClass = tone === 'warm'
+    ? 'bg-warm-100 text-warm-600 border-warm-200 hover:border-warm-300'
+    : 'bg-primary-50 text-primary-600 border-primary-100 hover:border-primary-200'
+
+  return (
+    <span className={`group inline-flex min-w-0 max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-mono whitespace-nowrap ${toneClass}`}>
+      {label ? <span className="shrink-0 font-semibold not-italic">{label}</span> : null}
+      <span className="min-w-0 truncate">{value}</span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="shrink-0 rounded p-0.5 text-current opacity-0 transition-opacity hover:bg-white/70 group-hover:opacity-100"
+        title="Copiar"
+      >
+        {copied ? <Check className="h-2.5 w-2.5 text-success-500" /> : <Copy className="h-2.5 w-2.5" />}
+      </button>
+    </span>
+  )
+}
+
 export default function ValidarPorDestino({ folioId }) {
+  const navigate = useNavigate()
   const { addToast } = useToastStore()
   const { t } = useI18nStore()
   const { canWrite } = useAuthStore()
@@ -37,6 +92,8 @@ export default function ValidarPorDestino({ folioId }) {
   const [currentTarimaNum, setCurrentTarimaNum] = useState(1)
   const [errorModal, setErrorModal] = useState(null)
   const [showConfirmCancel, setShowConfirmCancel] = useState(false)
+  const [showConfirmCerrar, setShowConfirmCerrar] = useState(false)
+  const [folioCerradoNum, setFolioCerradoNum] = useState(null)
   const [showPanel, setShowPanel] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -118,7 +175,11 @@ export default function ValidarPorDestino({ folioId }) {
 
   const { mutate: doCerrar, isPending: cerrando } = useMutation({
     mutationFn: () => cerrarFolio(folioId),
-    onSuccess: () => { invalidate(); addToast('Folio cerrado', 'success') },
+    onSuccess: () => {
+      invalidate()
+      setShowConfirmCerrar(false)
+      setFolioCerradoNum(folio?.folio_numero ?? folio?.folio ?? folioId)
+    },
     onError: (err) => addToast(err?.response?.data?.error || 'Error cerrando folio', 'error'),
   })
 
@@ -164,12 +225,18 @@ export default function ValidarPorDestino({ folioId }) {
   const handleScan = useCallback(() => {
     const raw = scanInput.trim()
     if (!raw) return
-    const code = normalizeCodeFast(raw)
+    const code = normalizeScanCode(raw)
     if (!code) return
 
     // Duplicate check
-    if (scans.some(s => normalizeCodeFast(s.codigo_caja) === code)) {
-      setErrorModal({ type: 'duplicate', message: `El código "${code}" ya fue registrado en este folio.` })
+    const scannedCodes = new Set()
+    scans.forEach((scan) => {
+      const normalized = normalizeCodeFast(scan.codigo_caja)
+      if (!normalized) return
+      generateCodeVariations(normalized, false).forEach((variant) => scannedCodes.add(variant))
+    })
+    if (scannedCodes.has(code)) {
+      setErrorModal({ type: 'duplicate', code })
       setScanInput('')
       setTimeout(() => scanRef.current?.focus(), 100)
       return
@@ -178,26 +245,19 @@ export default function ValidarPorDestino({ folioId }) {
     // Match by outbound_order_no, logisticsTrackNo or thirdOrderNo
     let matchedOrderNo = null
     for (const order of orders) {
-      if (normalizeCodeFast(order.outbound_order_no) === code) {
-        matchedOrderNo = order.outbound_order_no
-        break
-      }
-      const enrich = orderEnrichment[order.outbound_order_no]
-      if (enrich?.logisticsTrackNo && normalizeCodeFast(enrich.logisticsTrackNo) === code) {
-        matchedOrderNo = order.outbound_order_no
-        break
-      }
-      if (enrich?.thirdOrderNo && normalizeCodeFast(enrich.thirdOrderNo) === code) {
+      const lookupCodes = buildLookupCodeSet([
+        order.outbound_order_no,
+        orderEnrichment[order.outbound_order_no]?.logisticsTrackNo,
+        orderEnrichment[order.outbound_order_no]?.thirdOrderNo,
+      ])
+      if (lookupCodes.has(code)) {
         matchedOrderNo = order.outbound_order_no
         break
       }
     }
 
     if (!matchedOrderNo) {
-      setErrorModal({
-        type: 'nomatch',
-        message: `El código "${code}" no corresponde a ninguna orden de este destino. Verifica que la caja pertenezca a este folio.`,
-      })
+      setErrorModal({ type: 'nomatch', code })
       setScanInput('')
       setTimeout(() => scanRef.current?.focus(), 100)
       return
@@ -222,20 +282,16 @@ export default function ValidarPorDestino({ folioId }) {
   ), [scans])
   const tarimaKeys = Object.keys(scansByTarima).sort()
 
-  // Filtered orders for panel
-  const filteredOrders = useMemo(() => {
+  const validatedCountByOrderNo = useMemo(() => (
+    scans.reduce((acc, scan) => {
+      if (!scan.matched_order_no) return acc
+      acc[scan.matched_order_no] = (acc[scan.matched_order_no] || 0) + 1
+      return acc
+    }, {})
+  ), [scans])
+
+  const searchedOrders = useMemo(() => {
     let filtered = [...orders]
-    if (statusFilter === 'complete') {
-      filtered = filtered.filter(o => {
-        const count = scans.filter(s => s.matched_order_no === o.outbound_order_no).length
-        return (o.bultos_esperados ?? 0) > 0 && count >= (o.bultos_esperados ?? 0)
-      })
-    } else if (statusFilter === 'pending') {
-      filtered = filtered.filter(o => {
-        const count = scans.filter(s => s.matched_order_no === o.outbound_order_no).length
-        return count < (o.bultos_esperados ?? 1)
-      })
-    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim()
       filtered = filtered.filter(o => {
@@ -248,10 +304,57 @@ export default function ValidarPorDestino({ folioId }) {
       })
     }
     return filtered
-  }, [orders, scans, statusFilter, searchQuery, orderEnrichment])
+  }, [orders, searchQuery, orderEnrichment])
+
+  const statusCounts = useMemo(() => ({
+    all: searchedOrders.length,
+    pending: searchedOrders.filter(order => isOrderPending(order, validatedCountByOrderNo[order.outbound_order_no] || 0)).length,
+    complete: searchedOrders.filter(order => isOrderComplete(order, validatedCountByOrderNo[order.outbound_order_no] || 0)).length,
+  }), [searchedOrders, validatedCountByOrderNo])
+
+  // Filtered orders for panel
+  const filteredOrders = useMemo(() => {
+    if (statusFilter === 'complete') {
+      return searchedOrders.filter(order => isOrderComplete(order, validatedCountByOrderNo[order.outbound_order_no] || 0))
+    }
+    if (statusFilter === 'pending') {
+      return searchedOrders.filter(order => isOrderPending(order, validatedCountByOrderNo[order.outbound_order_no] || 0))
+    }
+    return searchedOrders
+  }, [searchedOrders, statusFilter, validatedCountByOrderNo])
 
   if (loadingFolio) {
     return <div className="flex justify-center py-16"><LoadingSpinner /></div>
+  }
+
+  if (folioCerradoNum) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center gap-6 bg-warm-50/40 px-6">
+        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-success-100 text-success-600">
+          <PartyPopper className="w-10 h-10" />
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-bold text-warm-800 mb-1">{t('desp.validar.folioCerrado.title')}</p>
+          <p className="text-sm text-warm-500">
+            El folio <span className="font-mono font-semibold text-warm-700">{folioCerradoNum}</span> ha sido cerrado y registrado.
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate('/despacho/validar')}
+            className="btn-primary flex items-center gap-2 px-6 py-2.5">
+            <Plus className="w-4 h-4" />
+            {t('desp.validar.folioCerrado.nuevaValidacion')}
+          </button>
+          <button
+            onClick={() => navigate(`/despacho/folios/${folioId}`)}
+            className="btn-secondary flex items-center gap-2 px-6 py-2.5">
+            <ExternalLink className="w-4 h-4" />
+            {t('desp.validar.folioCerrado.verFolio')}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   const closeErrorModal = () => {
@@ -260,7 +363,7 @@ export default function ValidarPorDestino({ folioId }) {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden relative">
 
       {/* ── LEFT COLUMN (header + scan stream) ───────────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
@@ -276,7 +379,7 @@ export default function ValidarPorDestino({ folioId }) {
             </div>
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400 leading-none mb-0.5">
-                Validación por destino
+                {t('desp.validar.destino.subtitulo')}
               </p>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-mono font-black text-warm-900 text-sm">
@@ -312,7 +415,7 @@ export default function ValidarPorDestino({ folioId }) {
               </button>
             )}
             {folio?.estado === 'en_proceso' && canWrite('despacho.folios') && (
-              <button onClick={() => doCerrar()} disabled={cerrando}
+              <button onClick={() => setShowConfirmCerrar(true)} disabled={cerrando}
                 className="btn-success text-xs flex items-center gap-1 h-8 px-3">
                 {cerrando ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
                 {t('desp.validar.destino.cerrarFolio')}
@@ -382,9 +485,9 @@ export default function ValidarPorDestino({ folioId }) {
         {/* Row 4: scan hint */}
         <p className="text-[11px] text-warm-400 flex items-center gap-1.5">
           <Clock3 className="w-3 h-3" />
-          Enter para registrar rápido
+          {t('desp.validar.destino.scanHint')}
           <span className="mx-1 text-warm-300">·</span>
-          {editable ? `Tarima activa: ${currentTarimaRef}` : `Folio ${folio?.estado || ''}`}
+          {editable ? `${t('desp.validar.destino.tarimaActiva')}: ${currentTarimaRef}` : `Folio ${folio?.estado || ''}`}
         </p>
       </div>
 
@@ -392,17 +495,7 @@ export default function ValidarPorDestino({ folioId }) {
       <div className="flex-1 flex flex-col bg-white overflow-hidden">
           <div className="px-4 py-2.5 border-b border-warm-100 bg-warm-50/70 shrink-0 flex items-center justify-between">
             <span className="text-xs font-semibold text-warm-700">{t('desp.validar.destino.flujo')}</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-warm-400 tabular-nums">{scans.length} total</span>
-              <button
-                type="button"
-                onClick={() => setShowPanel(v => !v)}
-                title={showPanel ? 'Ocultar panel de órdenes' : 'Mostrar panel de órdenes'}
-                className="h-6 w-6 inline-flex items-center justify-center rounded-lg border border-warm-200 bg-white text-warm-500 shadow-sm hover:bg-warm-50 hover:text-primary-600 transition-all"
-              >
-                {showPanel ? <PanelRightClose size={12} /> : <PanelRightOpen size={12} />}
-              </button>
-            </div>
+            <span className="text-[11px] text-warm-400 tabular-nums">{scans.length} total</span>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -462,14 +555,33 @@ export default function ValidarPorDestino({ folioId }) {
 
       </div>{/* ── LEFT COLUMN end ── */}
 
-      {/* Right: orders side panel (collapsible) */}
-      {showPanel && (
-        <div className="w-80 shrink-0 flex flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]">
+      {/* Right: orders side panel — wrapper always rendered so toggle button stays at the panel edge */}
+      <div className={`shrink-0 relative ${showPanel ? 'w-[26rem] xl:w-[28rem] 2xl:w-[30rem]' : 'w-0'}`}>
+        {!showPanel && (
+          <button
+            type="button"
+            onClick={() => setShowPanel(true)}
+            title={t('desp.validar.destino.mostrarPanel')}
+            className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+          >
+            <PanelRightOpen size={16} />
+          </button>
+        )}
+        {showPanel && (
+        <div className="w-full h-full flex flex-col border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] overflow-hidden">
             {/* Panel header */}
             <div className="px-4 py-3 border-b border-warm-100 bg-warm-50/50 shrink-0">
-              <div className="flex items-center justify-between mb-2.5">
-                <h4 className="text-sm font-bold text-warm-700">{t('desp.validar.destino.ordenesDestino')}</h4>
-                <span className="badge bg-primary-100 text-primary-700 text-[11px] font-semibold">{orders.length}</span>
+              <div className="flex items-center gap-2 mb-2.5 min-w-0">
+                <h4 className="min-w-0 flex-1 truncate text-sm font-bold text-warm-700">{t('desp.validar.destino.ordenesDestino')}</h4>
+                <span className="badge shrink-0 bg-primary-100 text-primary-700 text-[11px] font-semibold">{orders.length}</span>
+                <button
+                  type="button"
+                  onClick={() => setShowPanel(false)}
+                  title={t('desp.validar.destino.ocultarPanel')}
+                  className="hidden lg:flex shrink-0 h-8 w-8 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+                >
+                  <PanelRightClose size={15} />
+                </button>
               </div>
 
               {/* Search */}
@@ -480,7 +592,7 @@ export default function ValidarPorDestino({ folioId }) {
                 <input
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Orden, tracking, referencia..."
+                  placeholder={t('desp.validar.destino.searchPlaceholder')}
                   className="flex-1 min-w-0 bg-transparent text-xs text-warm-700 outline-none placeholder:text-warm-400 focus-visible:outline-none"
                 />
                 {searchQuery && (
@@ -493,12 +605,12 @@ export default function ValidarPorDestino({ folioId }) {
               {/* Status filters */}
               <div className="flex gap-1">
                 {[
-                  { k: 'all', l: 'Todas' },
-                  { k: 'pending', l: 'Pend.' },
-                  { k: 'complete', l: 'Listas' },
+                  { k: 'all', l: t('desp.validar.destino.filtroTodas') },
+                  { k: 'pending', l: t('desp.validar.destino.filtroPend') },
+                  { k: 'complete', l: t('desp.validar.destino.filtroListas') },
                 ].map(({ k, l }) => (
                   <button key={k} onClick={() => setStatusFilter(k)}
-                    className={`flex-1 h-6 text-[11px] font-semibold rounded-lg border transition-all ${
+                    className={`flex-1 h-7 px-2 text-[11px] font-semibold rounded-lg border transition-all ${
                       statusFilter === k
                         ? k === 'complete'
                           ? 'bg-success-100 text-success-700 border-success-200'
@@ -507,7 +619,16 @@ export default function ValidarPorDestino({ folioId }) {
                           : 'bg-primary-100 text-primary-700 border-primary-200'
                         : 'bg-white text-warm-500 border-warm-200 hover:border-warm-300 hover:text-warm-700'
                     }`}>
-                    {l}
+                    <span className="flex items-center justify-between gap-2">
+                      <span>{l}</span>
+                      <span className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                        statusFilter === k
+                          ? 'bg-white/70'
+                          : 'bg-warm-100 text-warm-600'
+                      }`}>
+                        {statusCounts[k]}
+                      </span>
+                    </span>
                   </button>
                 ))}
               </div>
@@ -522,27 +643,42 @@ export default function ValidarPorDestino({ folioId }) {
                     : t('desp.validar.destino.sinOrdenes')}
                 </div>
               ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2.5">
               {filteredOrders.map(order => {
-                const orderScans = scans.filter(s => s.matched_order_no === order.outbound_order_no)
-                const validadas = orderScans.length
+                const validadas = validatedCountByOrderNo[order.outbound_order_no] || 0
                 const esperadas = order.bultos_esperados ?? 0
                 const pct = esperadas > 0 ? Math.min(100, Math.round((validadas / esperadas) * 100)) : null
-                const complete = esperadas > 0 && validadas >= esperadas
+                const complete = isOrderComplete(order, validadas)
                 const enrich = orderEnrichment[order.outbound_order_no]
                 const enrichDone = order.outbound_order_no in orderEnrichment
 
                 return (
-                  <div key={order.id} className={`p-2.5 rounded-2xl border transition-all shadow-[0_10px_24px_-18px_rgba(15,23,42,0.28)] ${
+                  <div key={order.id} className={`p-3 rounded-2xl border transition-all shadow-[0_10px_24px_-18px_rgba(15,23,42,0.28)] ${
                     complete
                       ? 'border-success-200 bg-gradient-to-br from-success-50/60 via-white to-white'
                       : 'border-warm-200/90 bg-white hover:border-primary-100 hover:shadow-[0_14px_28px_-18px_rgba(37,99,235,0.3)]'
                   }`}>
                     {/* Order header */}
-                    <div className="flex items-start justify-between gap-1 mb-1">
-                      <span className="font-mono font-bold text-primary-700 text-[10px] leading-snug truncate min-w-0">
-                        {order.outbound_order_no}
-                      </span>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <button
+                        type="button"
+                        onClick={async (event) => {
+                          event.stopPropagation()
+                          try {
+                            await navigator.clipboard.writeText(String(order.outbound_order_no))
+                            addToast('Orden copiada', 'success')
+                          } catch {}
+                        }}
+                        title="Copiar orden"
+                        className="group inline-flex min-w-0 items-start gap-1.5 text-left"
+                      >
+                        <span className="min-w-0 font-mono text-[11px] font-black leading-snug text-primary-700 break-all">
+                          {order.outbound_order_no}
+                        </span>
+                        <span className="shrink-0 rounded p-0.5 text-warm-300 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-warm-100 hover:text-primary-600">
+                          <Copy className="h-2.5 w-2.5" />
+                        </span>
+                      </button>
                       {complete ? (
                         <CheckCircle2 className="w-3 h-3 shrink-0 text-success-600" />
                       ) : (
@@ -554,13 +690,13 @@ export default function ValidarPorDestino({ folioId }) {
 
                     {/* Destinatario */}
                     {order.destinatario && (
-                      <p className="text-[9px] text-warm-500 font-medium truncate mb-1">
+                      <p className="text-[10px] leading-4 text-warm-500 font-medium break-words min-h-[2rem] mb-1.5">
                         {order.destinatario}
                       </p>
                     )}
 
                     {/* Trucking + Reference */}
-                    <div className="flex flex-wrap gap-1 mb-1.5">
+                    <div className="flex min-h-[1.5rem] flex-nowrap items-start gap-1 mb-2 overflow-hidden">
                       {enrichmentLoading && !enrichDone ? (
                         <span className="text-[9px] text-warm-400 flex items-center gap-0.5">
                           <Loader2 className="w-2.5 h-2.5 animate-spin" />cargando WMS...
@@ -568,16 +704,12 @@ export default function ValidarPorDestino({ folioId }) {
                       ) : (
                         <>
                           {enrich?.logisticsTrackNo ? (
-                            <span className="inline-block text-[9px] bg-primary-50 text-primary-600 border border-primary-100 px-1.5 py-0.5 rounded font-mono">
-                              {enrich.logisticsTrackNo}
-                            </span>
+                            <CopyMetaPill value={enrich.logisticsTrackNo} tone="primary" />
                           ) : enrichDone ? (
-                            <span className="text-[9px] text-warm-300 italic">sin tracking</span>
+                            <span className="shrink-0 text-[9px] text-warm-300 italic">{t('desp.validar.destino.sinTracking')}</span>
                           ) : null}
                           {enrich?.thirdOrderNo && (
-                            <span className="inline-block text-[9px] bg-warm-100 text-warm-600 border border-warm-200 px-1.5 py-0.5 rounded font-mono">
-                              Ref: {enrich.thirdOrderNo}
-                            </span>
+                            <CopyMetaPill label="Ref:" value={enrich.thirdOrderNo} tone="warm" />
                           )}
                         </>
                       )}
@@ -586,7 +718,7 @@ export default function ValidarPorDestino({ folioId }) {
                     {/* Progress bar */}
                     {pct !== null && (
                       <>
-                        <div className="w-full h-1 bg-warm-100 rounded-full overflow-hidden">
+                        <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${complete ? 'bg-success-500' : 'bg-primary-500'}`}
                             style={{ width: `${pct}%` }}
@@ -607,7 +739,8 @@ export default function ValidarPorDestino({ folioId }) {
               )}
             </div>
         </div>
-      )}
+        )}
+      </div>
 
       {/* ── Blocking error modal ── */}
       <Modal
@@ -615,8 +748,8 @@ export default function ValidarPorDestino({ folioId }) {
         onClose={closeErrorModal}
         title={
           errorModal?.type === 'duplicate' ? t('desp.validar.destino.codDuplicado')
-          : errorModal?.type === 'cross_folio' ? 'Código en otro folio'
-          : 'Código no reconocido'
+          : errorModal?.type === 'cross_folio' ? t('desp.validar.destino.codOtroFolio')
+          : t('desp.validar.destino.codNoReconocido')
         }
         icon={errorModal?.type === 'nomatch' ? XCircle : AlertCircle}
         size="sm"
@@ -628,12 +761,43 @@ export default function ValidarPorDestino({ folioId }) {
           </div>
         }
       >
-        <p className="text-sm text-warm-700">{errorModal?.message}</p>
+        <p className="text-sm text-warm-700">
+          {errorModal?.type === 'nomatch'
+            ? <>{t('desp.validar.destino.codNoMatchPre')}<span className="font-mono font-semibold">{errorModal.code}</span>{t('desp.validar.destino.codNoMatchPost')}</>
+            : errorModal?.type === 'duplicate' && errorModal?.code
+            ? <>{t('desp.validar.destino.codDupLocalPre')}<span className="font-mono font-semibold">{errorModal.code}</span>{t('desp.validar.destino.codDupLocalPost')}</>
+            : errorModal?.message}
+        </p>
         {errorModal?.type === 'cross_folio' && (
           <p className="text-xs text-warm-500 mt-2">
-            Folio: <span className="font-mono font-semibold">{errorModal?.folio_numero}</span>
+            {t('desp.validar.destino.folioLabel')}: <span className="font-mono font-semibold">{errorModal?.folio_numero}</span>
           </p>
         )}
+      </Modal>
+
+      {/* ── Cerrar folio confirm modal ── */}
+      <Modal
+        isOpen={showConfirmCerrar}
+        onClose={() => setShowConfirmCerrar(false)}
+        title={t('desp.validar.cerrarFolioTitle')}
+        icon={CheckCircle2}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowConfirmCerrar(false)} className="btn-secondary text-sm">
+              {t('common.back')}
+            </button>
+            <button onClick={() => doCerrar()} disabled={cerrando}
+              className="btn-success text-sm flex items-center gap-1.5">
+              {cerrando && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {t('desp.validar.confirmarCierre')}
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm text-warm-700">
+          {t('desp.validar.cerrarConfirmPre')} <span className="font-mono font-semibold">{folio?.folio_numero ?? folio?.folio}</span>{t('desp.validar.cerrarConfirmPost')}
+        </p>
       </Modal>
 
       {/* ── Cancel confirm modal ── */}

@@ -100,7 +100,8 @@ api.interceptors.response.use(
   },
   (error) => {
     const isNetworkFailure = !error.response && (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || /Network Error/i.test(error.message || ''))
-    if (isNetworkFailure && !shouldSkipBackendCooldown(error.config)) {
+    const isServiceUnavailable = error.response?.status === 503
+    if ((isNetworkFailure || isServiceUnavailable) && !shouldSkipBackendCooldown(error.config)) {
       backendUnavailableUntil = Date.now() + BACKEND_COOLDOWN_MS
       _onBackendStatus?.(false)
     }

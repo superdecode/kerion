@@ -1,10 +1,23 @@
 import { createHmac } from 'crypto'
-import { query } from '../../config/database.js'
+import { tenantQuery } from '../../config/database.js'
 import { loadCredentials } from './wmsCredentials.js'
 
 // In-memory credentials cache per tenant (5 min TTL)
 const _credCache = new Map()
 const CRED_TTL_MS = 5 * 60 * 1000
+const CRED_CACHE_MAX = parseInt(process.env.WMS_CRED_CACHE_MAX, 10) || 100
+
+function pruneCredCache() {
+  const now = Date.now()
+  for (const [key, entry] of _credCache.entries()) {
+    if (now - entry.at > CRED_TTL_MS) _credCache.delete(key)
+  }
+  while (_credCache.size > CRED_CACHE_MAX) {
+    const firstKey = _credCache.keys().next().value
+    if (firstKey === undefined) break
+    _credCache.delete(firstKey)
+  }
+}
 
 async function getCreds(tenantId) {
   const cached = _credCache.get(tenantId)
@@ -12,6 +25,7 @@ async function getCreds(tenantId) {
   
   const creds = await loadCredentials(tenantId)
   _credCache.set(tenantId, { creds, at: Date.now() })
+  pruneCredCache()
   return creds
 }
 

@@ -1,6 +1,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../config/database.js', () => ({
+  isDatabaseUnavailableError: vi.fn((error) => error?.code === 'ECHECKOUTTIMEOUT'),
   query: vi.fn(),
 }))
 
@@ -154,6 +155,21 @@ describe('moduleGuard', () => {
     await guard(req, res, next)
 
     expect(res._status).toBe(500)
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('returns 503 when database is temporarily unavailable', async () => {
+    const error = new Error('unable to check out connection from the pool')
+    error.code = 'ECHECKOUTTIMEOUT'
+    query.mockRejectedValueOnce(error)
+    const guard = moduleGuard('dropscan')
+    const req = makeReq()
+    const res = makeRes()
+    const next = vi.fn()
+
+    await guard(req, res, next)
+
+    expect(res._status).toBe(503)
     expect(next).not.toHaveBeenCalled()
   })
 })

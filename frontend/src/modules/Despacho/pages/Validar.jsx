@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Plus, X, ScanBarcode, List, MapPin, Loader2, Layers } from 'lucide-react'
+import { Plus, X, ScanBarcode, List, MapPin, Layers } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import UserMenu from '../../../core/components/layout/UserMenu'
 import FolioTypeModal from '../components/FolioTypeModal'
 import ValidarPorOrden from '../components/ValidarPorOrden'
 import ValidarPorDestino from '../components/ValidarPorDestino'
@@ -19,7 +20,7 @@ function genId() { return Math.random().toString(36).slice(2, 9) }
 
 function TabBar({ tabs, activeTabId, onSelect, onClose, onAdd, canAdd, t }) {
   return (
-    <div className="flex items-center gap-1.5 flex-1 min-w-0 max-w-full overflow-x-auto overflow-y-hidden scrollbar-hide">
+    <div className="flex h-full min-w-max items-end gap-1.5 overflow-x-auto overflow-y-hidden scrollbar-hide pr-1 whitespace-nowrap">
       {tabs.map(tab => {
         const isActive = tab.id === activeTabId
         const dotColor = tab.tipo === 'por_destino' ? 'bg-accent-400' : 'bg-primary-400'
@@ -195,33 +196,35 @@ export default function Validar() {
     onError: (err) => addToast(err?.response?.data?.error || 'Error creando folio', 'error'),
   })
 
-  const activeTab = tabs.find(t => t.id === activeTabId)
-
   return (
     <div className="flex flex-col h-full bg-warm-50">
       {/* Page header */}
-      <header className="bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-5 py-3 flex items-center gap-4 shrink-0 sticky top-0 z-10">
+      <header className="bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-5 py-3 flex items-center gap-4 shrink-0 sticky top-0 z-10 overflow-hidden">
         <div className="flex items-center gap-3 shrink-0 min-w-fit">
           <ScanBarcode className="w-5 h-5 text-primary-600 shrink-0" />
           <h1 className="text-base font-bold text-warm-800 whitespace-nowrap">{t('desp.validar.title')}</h1>
         </div>
 
-        {tabs.length > 0 && (
-          <TabBar
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSelect={saveActiveTab}
-            onClose={closeTab}
-            onAdd={openAdd}
-            canAdd={canCreate}
-            t={t}
-          />
-        )}
+        <div className="flex-1 min-w-0 h-11 overflow-hidden">
+          {tabs.length > 0 && (
+            <TabBar
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelect={saveActiveTab}
+              onClose={closeTab}
+              onAdd={openAdd}
+              canAdd={canCreate}
+              t={t}
+            />
+          )}
+        </div>
 
-        <div className="inline-flex items-center gap-2 rounded-full border border-warm-200 bg-white/80 px-3 py-1 text-[11px] font-semibold text-warm-500">
+        <div className="inline-flex shrink-0 items-center gap-2 rounded-full border border-warm-200 bg-white/80 px-3 py-1 text-[11px] font-semibold text-warm-500">
           <span className="inline-flex h-2 w-2 rounded-full bg-primary-500" />
           {tabs.length > 0 ? `${tabs.length}/${MAX_TABS} sesiones` : t('desp.validar.empty.modos')}
         </div>
+
+        <UserMenu compact />
       </header>
 
       {tabs.length === 0 ? (

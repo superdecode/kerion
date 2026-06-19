@@ -353,9 +353,9 @@ export default function Rastreo() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowCausas(true)}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100 transition-all text-xs font-semibold"
+              className="btn-ghost text-xs flex items-center gap-1.5"
             >
-              <BookOpen size={13} />
+              <BookOpen size={14} />
               {t('rastreo.causas.btnGestion')}
             </button>
             <button

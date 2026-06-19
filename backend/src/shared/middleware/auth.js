@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import env from '../../config/env.js'
-import { query, tenantQuery } from '../../config/database.js'
+import { isDatabaseUnavailableError, query, tenantQuery } from '../../config/database.js'
 import { normalizeLevel } from './permissions.js'
 
 function normalizePermisos(obj) {
@@ -24,6 +24,36 @@ function getSafePermisos(user) {
     }
   }
   return normalizePermisos(rawPermisos)
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+const AUTH_DB_DEADLINE_MS = parseInt(process.env.AUTH_DB_DEADLINE_MS, 10) || 12000
+const NON_RETRYABLE_AUTH_DB_CODES = new Set(['ECHECKOUTTIMEOUT', 'DB_QUERY_DEADLINE'])
+
+async function tenantQueryWithRetry(tenantId, text, params) {
+  const execute = () => {
+    let timeoutId
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const error = new Error(`Tenant query exceeded ${AUTH_DB_DEADLINE_MS}ms`)
+        error.code = 'DB_QUERY_DEADLINE'
+        reject(error)
+      }, AUTH_DB_DEADLINE_MS)
+    })
+    return Promise.race([tenantQuery(tenantId, text, params), timeoutPromise]).finally(() => clearTimeout(timeoutId))
+  }
+
+  try {
+    return await execute()
+  } catch (error) {
+    if (!isDatabaseUnavailableError(error) || NON_RETRYABLE_AUTH_DB_CODES.has(error.code)) throw error
+    console.warn('[auth] transient DB error in tenantQuery, retrying once:', error.code || error.message)
+    await sleep(350)
+    return execute()
+  }
 }
 
 export async function authenticateToken(req, res, next) {
@@ -104,7 +134,7 @@ export async function loadFullUser(req, res, next) {
     // Use tenantQuery so that SET LOCAL app.tenant_id is applied within the
     // transaction — required because usuarios and roles have FORCE ROW LEVEL
     // SECURITY with a policy that reads current_setting('app.tenant_id').
-    const result = await tenantQuery(
+    const result = await tenantQueryWithRetry(
       tenantId,
       `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos,
               t.zona_horaria as tenant_zona_horaria
@@ -136,6 +166,9 @@ export async function loadFullUser(req, res, next) {
     next()
   } catch (err) {
     console.error('[loadFullUser] error:', err.message)
+    if (isDatabaseUnavailableError(err)) {
+      return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+    }
     return res.status(500).json({ error: 'Error cargando usuario' })
   }
 }

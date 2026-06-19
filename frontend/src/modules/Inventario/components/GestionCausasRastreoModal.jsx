@@ -82,7 +82,7 @@ export default function GestionCausasRastreoModal({ isOpen, onClose }) {
       onClose={() => { setSearch(''); setNewDesc(''); setNewArea(''); setEditingId(null); onClose() }}
       title={t('rastreo.causas.title')}
       icon={BookOpen}
-      size="md"
+      size="lg"
     >
       <div className="space-y-4">
         {/* Create form */}
@@ -117,7 +117,7 @@ export default function GestionCausasRastreoModal({ isOpen, onClose }) {
               {createMut.isPending
                 ? <Loader2 size={13} className="animate-spin" />
                 : <Plus size={13} />}
-              {t('common.add')}
+              {t('rastreo.causas.add')}
             </button>
           </div>
         </div>

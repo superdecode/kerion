@@ -1682,25 +1682,35 @@ const { data: reasonsData } = useQuery({
         </div>
       </div>
 
-      <div className="hidden lg:flex shrink-0 items-start pt-4 pr-2">
+      {/* Panel open button — absolute, no column */}
+      {!sidebarVisible && (
         <button
           type="button"
-          className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
           onClick={() => {
-            setSidebarVisible((prev) => {
-              const next = !prev
-              localStorage.setItem(sidebarStorageKey, next ? 'visible' : 'hidden')
-              return next
-            })
+            setSidebarVisible(true)
+            localStorage.setItem(sidebarStorageKey, 'visible')
           }}
-          title={sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}
+          title="Mostrar panel"
+          className="hidden lg:flex absolute right-4 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
         >
-          {sidebarVisible ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+          <PanelRightOpen size={16} />
         </button>
-      </div>
+      )}
 
       {/* Right sidebar: orders with progress */}
-      <div className={`${sidebarVisible ? 'hidden lg:flex w-80' : 'hidden'} border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shrink-0 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)]`}>
+      {sidebarVisible && (
+      <div className="hidden lg:flex w-80 border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 backdrop-blur-2xl flex-col shrink-0 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] relative">
+        <button
+          type="button"
+          onClick={() => {
+            setSidebarVisible(false)
+            localStorage.setItem(sidebarStorageKey, 'hidden')
+          }}
+          title="Ocultar panel"
+          className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
+        >
+          <PanelRightClose size={16} />
+        </button>
         <div className="px-4 py-3.5 border-b border-warm-100 bg-warm-50/50">
           <h3 className="text-sm font-bold text-warm-700 flex items-center gap-2">
             <Zap className="w-3.5 h-3.5 text-primary-500" /> {t('surtido.validacion.sidebar_title')}
@@ -1803,6 +1813,7 @@ const { data: reasonsData } = useQuery({
           )}
         </div>
       </div>
+      )}
 
       {/* Rejected box modal */}
       <Modal

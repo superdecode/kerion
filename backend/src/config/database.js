@@ -4,10 +4,48 @@ import env from './env.js'
 const { Pool } = pg
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const TRANSIENT_DB_ERROR_CODES = new Set([
+  '57P01', // admin shutdown
+  '57P03', // cannot connect now
+  '53300', // too many connections
+  '08000', // connection exception
+  '08003', // connection does not exist
+  '08006', // connection failure
+  '08001', // unable to establish connection
+  'ECHECKOUTTIMEOUT',
+  'DB_QUERY_DEADLINE',
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'EPIPE',
+])
+const DEFAULT_POOL_MAX = env.NODE_ENV === 'production' ? 2 : 5
+const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX, 10) || DEFAULT_POOL_MAX
+const DB_IDLE_TIMEOUT_MS = parseInt(process.env.DB_IDLE_TIMEOUT_MS, 10) || 5000
+const DB_CONNECTION_TIMEOUT_MS = parseInt(process.env.DB_CONNECTION_TIMEOUT_MS, 10) || 15000
+const DB_QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS, 10) || 12000
+const DB_STATEMENT_TIMEOUT_MS = parseInt(process.env.DB_STATEMENT_TIMEOUT_MS, 10) || 12000
+
 function assertTenantId(tenantId) {
   if (!tenantId || !UUID_RE.test(tenantId)) {
     throw new Error(`Invalid tenantId: ${String(tenantId).slice(0, 40)}`)
   }
+}
+
+export function isDatabaseUnavailableError(error) {
+  if (!error) return false
+  if (TRANSIENT_DB_ERROR_CODES.has(error.code)) return true
+  const message = String(error.message || '').toLowerCase()
+  return (
+    message.includes('not accepting connections') ||
+    message.includes('terminating connection due to administrator command') ||
+    message.includes('connection terminated unexpectedly') ||
+    message.includes('connection timeout') ||
+    message.includes('authentication did not complete') ||
+    message.includes('failed to connect to database') ||
+    message.includes('timeout expired') ||
+    message.includes('socket hang up')
+  )
 }
 
 const pool = new Pool({
@@ -17,9 +55,12 @@ const pool = new Pool({
   user: env.DB_USER,
   password: env.DB_PASSWORD,
   ssl: env.DB_SSL ? { rejectUnauthorized: false } : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+  max: DB_POOL_MAX,
+  idleTimeoutMillis: DB_IDLE_TIMEOUT_MS,
+  connectionTimeoutMillis: DB_CONNECTION_TIMEOUT_MS,
+  query_timeout: DB_QUERY_TIMEOUT_MS,
+  statement_timeout: DB_STATEMENT_TIMEOUT_MS,
+  maxLifetimeSeconds: 60,
 })
 
 pool.on('error', (err) => {

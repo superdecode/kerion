@@ -180,7 +180,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
   const isPreparingDestinos = (
     tipoSelected === 'por_destino' &&
     !!fechaEnvio &&
-    (loadingDestinos || shouldKeepLoadingDestinos || deferredFechaEnvio !== fechaEnvio || deferredDestinoSearch !== destinoSearch)
+    (loadingDestinos || shouldKeepLoadingDestinos || deferredFechaEnvio !== fechaEnvio)
   )
 
   function handleCreate() {
@@ -304,7 +304,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                         className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2"
                       >
                         <p className="text-[11px] font-semibold text-danger-700">
-                          Debe completar conductor, unidad y fecha de salida para crear el folio.
+                          {t('desp.validar.modal.debeCompletarCUF')}
                         </p>
                       </motion.div>
                     )}
@@ -370,13 +370,13 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                         className={`input-field w-full text-xs ${showMissingFieldsError && missingFechaSalida ? 'border-danger-400 bg-danger-50 text-danger-700 focus:border-danger-500 focus:ring-danger-100' : ''}`}
                       />
                       {showMissingFieldsError && missingFechaSalida && (
-                        <p className="mt-1 text-[11px] font-medium text-danger-700">Selecciona una fecha de salida.</p>
+                        <p className="mt-1 text-[11px] font-medium text-danger-700">{t('desp.validar.modal.selFechaSalida')}</p>
                       )}
                     </div>
                   </div>
                   {!hasRequiredAssignment && !showMissingFieldsError && (
                     <p className="text-[11px] text-warning-700">
-                      Debe seleccionar conductor, unidad y fecha de salida antes de crear el folio.
+                      {t('desp.validar.modal.debeSelCUF')}
                     </p>
                   )}
                 </motion.div>
@@ -429,9 +429,9 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                               className="flex-1 text-xs outline-none bg-transparent text-warm-700 placeholder-warm-300"
                               placeholder={
                                 requiresFechaEnvio
-                                  ? 'Selecciona primero una fecha'
+                                  ? t('desp.validar.modal.selPrimeroFecha')
                                   : isPreparingDestinos
-                                  ? 'Cargando destinos...'
+                                  ? t('desp.validar.modal.cargandoDestinos')
                                   : t('desp.validar.modal.buscarDestino')
                               }
                               value={destinoSearch}
@@ -454,22 +454,22 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                           </div>
                           {requiresFechaEnvio && (
                             <p className={`mt-1 text-[11px] ${showDestinoError ? 'font-semibold text-danger-700' : 'text-warning-700'}`}>
-                              Debe seleccionar fecha primero.
+                              {t('desp.validar.modal.debeFecha')}
                             </p>
                           )}
                           {!requiresFechaEnvio && isPreparingDestinos && (
                             <p className="mt-1 text-[11px] text-accent-700">
-                              Preparando destinos para la fecha seleccionada...
+                              {t('desp.validar.modal.preparandoDestinos')}
                             </p>
                           )}
                           {!requiresFechaEnvio && !isPreparingDestinos && fechaEnvio && filteredDestinos.length === 0 && (
                             <p className={`mt-1 text-[11px] ${showDestinoError ? 'font-semibold text-danger-700' : 'text-warning-700'}`}>
-                              No hay destinos disponibles para esa fecha.
+                              {t('desp.validar.modal.sinDestinosFecha')}
                             </p>
                           )}
                           {!requiresFechaEnvio && !isPreparingDestinos && fechaEnvio && filteredDestinos.length > 0 && !selectedDestinoOption && showDestinoError && (
                             <p className="mt-1 text-[11px] font-semibold text-danger-700">
-                              Selecciona un destino de la lista para crear el folio.
+                              {t('desp.validar.modal.selDestinoLista')}
                             </p>
                           )}
                           {/* Dropdown rendered via portal to escape overflow:hidden parents */}
@@ -488,6 +488,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                                 <button
                                   key={d.name}
                                   className="w-full text-left px-3 py-2 text-xs hover:bg-accent-50 transition-colors flex items-center justify-between"
+                                  onMouseDown={e => e.preventDefault()}
                                   onClick={() => selectDestino(d)}
                                 >
                                   <span className="font-medium text-warm-800 truncate">{d.name}</span>
@@ -512,8 +513,8 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                           <div className="flex items-center gap-2">
                             <Loader2 size={14} className="animate-spin text-accent-500 shrink-0" />
                             <div>
-                              <p className="text-xs font-semibold text-warm-800">Preparando destinos</p>
-                              <p className="text-[11px] text-warm-500">La fecha ya fue tomada. Cargando opciones disponibles...</p>
+                              <p className="text-xs font-semibold text-warm-800">{t('desp.validar.modal.preparandoDestinosTitle')}</p>
+                              <p className="text-[11px] text-warm-500">{t('desp.validar.modal.preparandoDestinosBody')}</p>
                             </div>
                           </div>
                         </motion.div>
