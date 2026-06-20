@@ -6,6 +6,7 @@ import {
   Download, Clock, CheckCircle2, AlertCircle,
   Eye, Edit3, Trash2, Loader2,
   ChevronRight, FileText, History, Link2, RefreshCw, ArrowUpDown, Target,
+  CalendarDays, Workflow, UserRound, MapPin, Package2, Wallet, ClipboardList, Sparkles,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -49,11 +50,28 @@ const STATUS_TABS = ['todos', 'nuevo', 'en_proceso', 'cerrado', 'vencido']
 
 const TH = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500'
+const MODAL_PANEL = 'rounded-2xl border border-warm-100/90 bg-white shadow-[0_10px_24px_-20px_rgba(15,23,42,0.16),0_4px_10px_-8px_rgba(59,130,246,0.08)]'
+const MODAL_PANEL_TINT = 'rounded-2xl border border-primary-100/70 bg-gradient-to-br from-white via-white to-primary-50/35 shadow-[0_12px_26px_-20px_rgba(15,23,42,0.16),0_6px_14px_-10px_rgba(59,130,246,0.08)]'
+const INPUT_BASE = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-300 transition-all'
+const INPUT_DISABLED = `${INPUT_BASE} disabled:opacity-70 disabled:bg-warm-50 disabled:cursor-not-allowed`
 
-function SectionBlock({ title, children }) {
+function SectionBlock({ title, icon: Icon, children, accent = 'primary' }) {
+  const accentStyles = accent === 'warning'
+    ? 'bg-warning-100 text-warning-700 border-warning-200'
+    : accent === 'success'
+    ? 'bg-success-100 text-success-700 border-success-200'
+    : 'bg-primary-100 text-primary-700 border-primary-200'
   return (
-    <div className="mb-6">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-warm-500 mb-3 pb-1 border-b border-warm-100">{title}</h3>
+    <div className={`${MODAL_PANEL} p-4 md:p-5`}>
+      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-warm-100/80">
+        <div className={`h-10 w-10 rounded-2xl border flex items-center justify-center ${accentStyles}`}>
+          {Icon ? <Icon className="w-4 h-4" /> : <ClipboardList className="w-4 h-4" />}
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold tracking-wide text-warm-900">{title}</h3>
+          <p className="text-xs text-warm-500">Información organizada para captura y revisión.</p>
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-3">{children}</div>
     </div>
   )
@@ -85,6 +103,43 @@ function EstadoChip({ estado }) {
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${m.cls}`}>
       {t(m.labelKey)}
     </span>
+  )
+}
+
+function DetailStatCard({ icon: Icon, label, value, tone = 'neutral' }) {
+  const toneStyles = tone === 'danger'
+    ? 'border-danger-200 bg-danger-50 text-danger-700'
+    : tone === 'accent'
+    ? 'border-primary-200 bg-primary-50 text-primary-700'
+    : 'border-warm-100 bg-warm-50 text-warm-700'
+  return (
+    <div className={`rounded-2xl border p-3.5 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.14)] ${toneStyles}`}>
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 rounded-2xl bg-white/80 border border-white/70 flex items-center justify-center shadow-sm">
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70 mb-1">{label}</p>
+          <p className="text-sm font-semibold leading-snug">{value}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DetailInfoCard({ icon: Icon, label, value, multiline = false }) {
+  return (
+    <div className={`${MODAL_PANEL} p-4`}>
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 rounded-2xl border border-warm-100 bg-warm-50 flex items-center justify-center text-warm-600 shrink-0">
+          <Icon className="w-4 h-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400 mb-1">{label}</p>
+          <p className={`text-sm text-warm-800 ${multiline ? 'whitespace-pre-wrap leading-relaxed' : 'truncate'}`}>{value}</p>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -653,7 +708,17 @@ export default function AnormalidadesRegistro() {
 
       {/* Delete confirm */}
       <Modal isOpen={!!deleteId} onClose={() => setDeleteId(null)} title={t('anorm.delete.title')} icon={Trash2} size="sm">
-        <p className="text-warm-600 text-sm">{t('anorm.delete.confirm')}</p>
+        <div className={`${MODAL_PANEL_TINT} p-4`}>
+          <div className="flex items-start gap-3">
+            <div className="h-11 w-11 rounded-2xl border border-danger-200 bg-danger-50 text-danger-600 flex items-center justify-center shrink-0">
+              <Trash2 className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-warm-900 mb-1">Confirmación requerida</p>
+              <p className="text-warm-600 text-sm leading-relaxed">{t('anorm.delete.confirm')}</p>
+            </div>
+          </div>
+        </div>
         <div className="flex justify-end gap-3 mt-6">
           <button onClick={() => setDeleteId(null)} className="btn-secondary text-sm">{t('common.cancel')}</button>
           <button onClick={() => deleteMut.mutate(deleteId)} disabled={deleteMut.isPending} className="btn-danger text-sm flex items-center gap-2">
@@ -711,14 +776,27 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
     onSubmit(payload)
   }
 
-  const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
+  const inp = INPUT_BASE
   const sel = inp
-  const disabledInput = `${inp} disabled:opacity-60 disabled:bg-warm-50 disabled:cursor-not-allowed`
+  const disabledInput = INPUT_DISABLED
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} icon={AlertTriangle} size="xl">
-      <form onSubmit={handleSubmit}>
-        <SectionBlock title={t('anorm.section.identificacion')}>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className={`${MODAL_PANEL_TINT} p-4 md:p-5`}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500 mb-1">Registro operativo</p>
+              <p className="text-sm text-warm-700">Captura la incidencia con contexto, responsables y trazabilidad clara.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {form.nivel ? <NivelChip nivel={form.nivel} /> : null}
+              {form.proceso ? <span className="inline-flex items-center rounded-full border border-primary-200 bg-white/80 px-3 py-1 text-xs font-semibold text-primary-700">{form.proceso}</span> : null}
+            </div>
+          </div>
+        </div>
+
+        <SectionBlock title={t('anorm.section.identificacion')} icon={ClipboardList}>
           <Field label={t('anorm.field.fechaOcurrencia')}>
             <input type="datetime-local" value={form.fecha_ocurrencia} onChange={e => set('fecha_ocurrencia', e.target.value)} disabled={!isEditing} className={disabledInput} required />
           </Field>
@@ -749,7 +827,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
           </Field>
         </SectionBlock>
 
-        <SectionBlock title={t('anorm.section.contexto')}>
+        <SectionBlock title={t('anorm.section.contexto')} icon={MapPin}>
           <Field label={t('anorm.field.cliente')}>
             <input value={form.cliente} onChange={e => set('cliente', e.target.value)} disabled={!isEditing} className={disabledInput} placeholder={t('anorm.field.clientePlaceholder')} />
           </Field>
@@ -790,7 +868,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
           </Field>
         </SectionBlock>
 
-        <SectionBlock title={t('anorm.section.responsabilidad')}>
+        <SectionBlock title={t('anorm.section.responsabilidad')} icon={UserRound} accent="warning">
           <Field label={t('anorm.field.detectadoPor')}>
             <select value={form.detectado_por_id} onChange={e => set('detectado_por_id', e.target.value)} disabled={!isEditing} className={disabledInput}>
               <option value="">{t('common.select')}</option>
@@ -811,7 +889,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
           </Field>
         </SectionBlock>
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-warm-100">
+        <div className={`${MODAL_PANEL} flex justify-end gap-2 p-4 border-t-0`}>
           <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
           {!isEditing && !isCreateMode ? (
             <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-warning-700 bg-warning-50 hover:bg-warning-100 rounded-lg border border-warning-200 transition-colors">
@@ -939,12 +1017,24 @@ function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canC
         <div className="flex justify-center py-12"><LoadingSpinner /></div>
       ) : (
         <>
-          {/* KPI cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <KpiCard label={t('anorm.field.proceso')} value={d.proceso} />
-            <KpiCard label={t('anorm.field.cliente')} value={d.cliente || '—'} />
-            <KpiCard label={t('anorm.field.responsable')} value={d.responsable_nombre || t('anorm.field.sinAsignar')} />
-            <KpiCard label={t('anorm.field.dias')} value={`${d.dias_abierto ? Math.floor(d.dias_abierto) : 0}d`} danger={d.vencido && d.estado !== 'cerrado'} />
+          <div className={`${MODAL_PANEL_TINT} p-4 mb-5`}>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500 mb-1">Resumen ejecutivo</p>
+                <p className="text-sm text-warm-700">Vista concentrada para revisar el impacto, responsables y resolución de la incidencia.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full border border-primary-200 bg-white/85 px-3 py-1 text-xs font-semibold text-primary-700">{d.codigo}</span>
+                {d.proceso ? <span className="inline-flex items-center rounded-full border border-warm-200 bg-white/85 px-3 py-1 text-xs font-semibold text-warm-700">{d.proceso}</span> : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+            <DetailStatCard icon={Workflow} label={t('anorm.field.proceso')} value={d.proceso || '—'} tone="accent" />
+            <DetailStatCard icon={UserRound} label={t('anorm.field.responsable')} value={d.responsable_nombre || t('anorm.field.sinAsignar')} />
+            <DetailStatCard icon={CalendarDays} label={t('anorm.field.dias')} value={`${d.dias_abierto ? Math.floor(d.dias_abierto) : 0}d`} tone={d.vencido && d.estado !== 'cerrado' ? 'danger' : 'neutral'} />
+            <DetailStatCard icon={AlertCircle} label={t('common.status')} value={t(ESTADO_META[d.vencido && d.estado !== 'cerrado' ? 'vencido' : d.estado]?.labelKey || d.estado)} tone={d.vencido && d.estado !== 'cerrado' ? 'danger' : 'accent'} />
           </div>
 
           {/* Tabs */}
@@ -987,37 +1077,29 @@ function KpiCard({ label, value, danger }) {
 
 function TabDetalle({ d, t }) {
   const rows = [
-    [t('anorm.field.folio'), d.folio],
-    [t('anorm.field.fechaOcurrencia'), fmtDateTime(d.fecha_ocurrencia)],
-    [t('anorm.field.proceso'), d.proceso],
-    [t('anorm.field.codigo'), `${d.codigo} — ${d.nombre}`],
-    [t('anorm.field.nivel'), d.nivel],
-    [t('anorm.field.cliente'), d.cliente || '—'],
-    [t('anorm.field.almacen'), d.almacen || '—'],
-    [t('anorm.field.contenedor'), d.contenedor_orden || '—'],
-    [t('anorm.field.sku'), d.sku || '—'],
-    [t('anorm.field.ubicacion'), d.ubicacion || '—'],
-    [t('anorm.field.cantidad'), d.cantidad_afectada ?? '—'],
-    [t('anorm.field.monto'), d.monto_impacto ? `$${parseFloat(d.monto_impacto).toLocaleString()} MXN` : '—'],
-    [t('anorm.field.origen'), d.origen_responsabilidad || '—'],
-    [t('anorm.field.detectadoPor'), d.detectado_nombre || d.detectado_por_nombre || '—'],
-    [t('anorm.field.responsable'), d.responsable_nombre || '—'],
+    { label: t('anorm.field.folio'), value: d.folio, icon: FileText },
+    { label: t('anorm.field.fechaOcurrencia'), value: fmtDateTime(d.fecha_ocurrencia), icon: CalendarDays },
+    { label: t('anorm.field.codigo'), value: `${d.codigo} — ${d.nombre}`, icon: ClipboardList },
+    { label: t('anorm.field.cliente'), value: d.cliente || '—', icon: UserRound },
+    { label: t('anorm.field.almacen'), value: d.almacen || '—', icon: MapPin },
+    { label: t('anorm.field.contenedor'), value: d.contenedor_orden || '—', icon: Package2 },
+    { label: t('anorm.field.sku'), value: d.sku || '—', icon: Package2 },
+    { label: t('anorm.field.ubicacion'), value: d.ubicacion || '—', icon: MapPin },
+    { label: t('anorm.field.cantidad'), value: d.cantidad_afectada ?? '—', icon: Package2 },
+    { label: t('anorm.field.monto'), value: d.monto_impacto ? `$${parseFloat(d.monto_impacto).toLocaleString()} MXN` : '—', icon: Wallet },
+    { label: t('anorm.field.origen'), value: d.origen_responsabilidad || '—', icon: Workflow },
+    { label: t('anorm.field.detectadoPor'), value: d.detectado_nombre || d.detectado_por_nombre || '—', icon: UserRound },
+    { label: t('anorm.field.responsable'), value: d.responsable_nombre || '—', icon: UserRound },
   ]
   return (
-    <div>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2 mb-4">
-        {rows.map(([label, val]) => (
-          <div key={label} className="flex flex-col">
-            <span className="text-[10px] uppercase tracking-wider text-warm-400">{label}</span>
-            <span className="text-sm text-warm-800">{val}</span>
-          </div>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {rows.map(({ label, value, icon }) => (
+          <DetailInfoCard key={label} icon={icon} label={label} value={value} />
         ))}
       </div>
       {d.descripcion && (
-        <div className="mt-3">
-          <p className="text-[10px] uppercase tracking-wider text-warm-400 mb-1">{t('common.description')}</p>
-          <p className="text-sm text-warm-700 bg-warm-50 rounded-xl p-3 border border-warm-100">{d.descripcion}</p>
-        </div>
+        <DetailInfoCard icon={FileText} label={t('common.description')} value={d.descripcion} multiline />
       )}
     </div>
   )
@@ -1025,21 +1107,28 @@ function TabDetalle({ d, t }) {
 
 function TabResolucion({ d, t }) {
   const fields = [
-    [t('anorm.field.accionInmediata'), d.accion_inmediata],
-    [t('anorm.field.causaRaiz'), d.causa_raiz],
-    [t('anorm.field.accionPreventiva'), d.accion_preventiva],
-    [t('anorm.field.fechaCierre'), d.fecha_cierre ? fmtDateTime(d.fecha_cierre) : null],
+    [t('anorm.field.accionInmediata'), d.accion_inmediata, Sparkles],
+    [t('anorm.field.causaRaiz'), d.causa_raiz, AlertTriangle],
+    [t('anorm.field.accionPreventiva'), d.accion_preventiva, Target],
+    [t('anorm.field.fechaCierre'), d.fecha_cierre ? fmtDateTime(d.fecha_cierre) : null, CalendarDays],
   ]
   return (
-    <div className="space-y-4">
-      {fields.map(([label, val]) => (
-        <div key={label}>
-          <p className="text-[10px] uppercase tracking-wider text-warm-400 mb-1">{label}</p>
+    <div className="space-y-3">
+      {fields.map(([label, val, icon]) => (
+        <div key={label} className={`${MODAL_PANEL} p-4`}>
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-2xl border border-warm-100 bg-warm-50 flex items-center justify-center text-warm-600 shrink-0">
+              {icon ? (() => { const Icon = icon; return <Icon className="w-4 h-4" /> })() : <FileText className="w-4 h-4" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-warm-400 mb-1">{label}</p>
           {val ? (
-            <p className="text-sm text-warm-700 bg-warm-50 rounded-xl p-3 border border-warm-100">{val}</p>
+                <p className="text-sm text-warm-700 whitespace-pre-wrap leading-relaxed">{val}</p>
           ) : (
-            <p className="text-sm text-warm-300 italic">{t('anorm.field.sinRegistro')}</p>
+                <p className="text-sm text-warm-300 italic">{t('anorm.field.sinRegistro')}</p>
           )}
+            </div>
+          </div>
         </div>
       ))}
     </div>
@@ -1111,7 +1200,7 @@ function MejoraDesdeAnormModal({ isOpen, onClose, prefill, usuarios, procesos, o
   const { t } = useI18nStore()
   const [form, setForm] = useState({ ...MEJORA_EMPTY, ...prefill })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
+  const inp = INPUT_BASE
 
   useEffect(() => {
     if (isOpen) setForm({ ...MEJORA_EMPTY, ...prefill })
@@ -1124,8 +1213,19 @@ function MejoraDesdeAnormModal({ isOpen, onClose, prefill, usuarios, procesos, o
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('anorm.action.crearMejora')} icon={Target} size="lg">
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className={`${MODAL_PANEL_TINT} p-4`}>
+          <div className="flex items-start gap-3">
+            <div className="h-11 w-11 rounded-2xl border border-primary-200 bg-primary-100 text-primary-700 flex items-center justify-center shrink-0">
+              <Target className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-warm-900">Crear mejora vinculada</p>
+              <p className="text-xs text-warm-500 mt-1">Convierte la incidencia en una acción estructurada con responsable, fecha límite y seguimiento.</p>
+            </div>
+          </div>
+        </div>
+        <div className={`${MODAL_PANEL} p-4 grid grid-cols-2 gap-3`}>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.proceso')} *</label>
             <select value={form.proceso} onChange={e => set('proceso', e.target.value)} className={inp} required>
@@ -1141,19 +1241,19 @@ function MejoraDesdeAnormModal({ isOpen, onClose, prefill, usuarios, procesos, o
             </select>
           </div>
         </div>
-        <div>
+        <div className={`${MODAL_PANEL} p-4`}>
           <label className="block text-xs font-medium text-warm-700 mb-1">Descripción del problema *</label>
           <textarea value={form.descripcion_problema} onChange={e => set('descripcion_problema', e.target.value)} className={`${inp} resize-none`} rows={3} required />
         </div>
-        <div>
+        <div className={`${MODAL_PANEL} p-4`}>
           <label className="block text-xs font-medium text-warm-700 mb-1">Causa raíz</label>
           <textarea value={form.causa_raiz_principal} onChange={e => set('causa_raiz_principal', e.target.value)} className={`${inp} resize-none`} rows={2} />
         </div>
-        <div>
+        <div className={`${MODAL_PANEL} p-4`}>
           <label className="block text-xs font-medium text-warm-700 mb-1">Acción de mejora *</label>
           <textarea value={form.accion_mejora} onChange={e => set('accion_mejora', e.target.value)} className={`${inp} resize-none`} rows={2} required />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`${MODAL_PANEL} p-4 grid grid-cols-2 gap-3`}>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.responsableAsignado')}</label>
             <select value={form.responsable_id} onChange={e => set('responsable_id', e.target.value)} className={inp}>
@@ -1166,7 +1266,7 @@ function MejoraDesdeAnormModal({ isOpen, onClose, prefill, usuarios, procesos, o
             <input type="date" value={form.fecha_limite} onChange={e => set('fecha_limite', e.target.value)} className={inp} />
           </div>
         </div>
-        <div className="flex justify-end gap-2 pt-2 border-t border-warm-100">
+        <div className={`${MODAL_PANEL} flex justify-end gap-2 p-4`}>
           <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
           <button type="submit" disabled={loading} className="btn-primary text-sm flex items-center gap-2">
             {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
@@ -1190,18 +1290,22 @@ function CambiarEstadoModal({ estadoActual, onClose, onSubmit, loading }) {
   return (
     <Modal isOpen onClose={onClose} title={t('anorm.action.cambiarEstado')} icon={ArrowUpDown} size="sm">
       <div className="space-y-4">
-        <div>
+        <div className={`${MODAL_PANEL_TINT} p-4`}>
+          <p className="text-sm font-semibold text-warm-900 mb-1">Actualización de flujo</p>
+          <p className="text-xs text-warm-500">El cambio de estado se registra en historial y ayuda a mantener el seguimiento operativo.</p>
+        </div>
+        <div className={`${MODAL_PANEL} p-4`}>
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.nuevoEstado')}</label>
           <select value={estado} onChange={e => setEstado(e.target.value)}
-            className="w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300">
+            className={INPUT_BASE}>
             <option value="">{t('common.select')}</option>
             {NEXT_ESTADOS.map(e => <option key={e} value={e}>{t(ESTADO_META[e]?.labelKey || e)}</option>)}
           </select>
         </div>
-        <div>
+        <div className={`${MODAL_PANEL} p-4`}>
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.nota')} ({t('common.optional')})</label>
           <textarea value={nota} onChange={e => setNota(e.target.value)} rows={3}
-            className="w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
+            className={`${INPUT_BASE} resize-none`} />
         </div>
       </div>
       <div className="flex justify-end gap-3 mt-6">

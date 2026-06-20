@@ -5,6 +5,8 @@ import './index.css'
 
 const APP_VERSION = '2026-06-15-v13'
 const APP_VERSION_KEY = 'kirion-app-version'
+const EXTENSION_ASYNC_RESPONSE_ERROR =
+  'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received'
 
 async function resetStaleClientState() {
   try {
@@ -46,7 +48,26 @@ async function registerServiceWorker() {
   }
 }
 
+function suppressKnownBrowserNoise() {
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason
+    const message =
+      typeof reason === 'string'
+        ? reason
+        : reason instanceof Error
+          ? reason.message
+          : ''
+
+    // Browser extensions can inject this rejection into the page. Ignore only
+    // this exact noise so real application promise failures still surface.
+    if (message.includes(EXTENSION_ASYNC_RESPONSE_ERROR)) {
+      event.preventDefault()
+    }
+  })
+}
+
 void resetStaleClientState().finally(() => {
+  suppressKnownBrowserNoise()
   void registerServiceWorker()
 })
 

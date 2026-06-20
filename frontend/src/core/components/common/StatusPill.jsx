@@ -33,7 +33,7 @@ export default function StatusPill({
   return (
     <span
       title={title}
-      className={`inline-flex items-center gap-1.5 rounded-full font-semibold whitespace-nowrap ${SIZE_CLASSES[size] || SIZE_CLASSES.sm} ${className}`}
+      className={`status-pop inline-flex items-center gap-1.5 rounded-full font-semibold whitespace-nowrap ${SIZE_CLASSES[size] || SIZE_CLASSES.sm} ${className}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotClassName || inferDotClass(className)}`} />
       <span>{content}</span>

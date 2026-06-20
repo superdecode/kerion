@@ -120,7 +120,7 @@ describe.skipIf(!DB_AVAILABLE)('Multi-tenant data isolation', () => {
   })
 
   it('tenant_modules backfill: all module codes present for each tenant', async () => {
-    const EXPECTED = ['dropscan', 'surtido', 'inventario', 'devoluciones']
+    const EXPECTED = ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades', 'despacho', 'recepcion']
 
     for (const tenant of [tenantA, tenantB]) {
       const res = await adminPool.query(

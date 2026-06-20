@@ -7,6 +7,7 @@ import { query, getClient } from '../../config/database.js'
 import { provisionTenant } from '../../services/provisioningService.js'
 import { endOfDayInTimezone } from '../../shared/utils/timezone.js'
 import { dateInTZ } from '../../shared/utils/dateUtils.js'
+import { ALL_MODULE_CODES, FULL_ACCESS_PERMISSIONS } from '../../shared/constants/moduleCatalog.js'
 
 const router = Router()
 
@@ -313,13 +314,17 @@ router.get('/tenants/:id/stats', authenticateAdmin, async (req, res) => {
     const { id } = req.params
 
     // Simple queries without tenant filter first to test connectivity
-    const [totalGuias, guias30d, tarimas, folios, scanners, users] = await Promise.all([
+    const [totalGuias, guias30d, tarimas, dispatchFolios, scanners, users, inboundOrders, inboundScans, anormalidades, pickOrders] = await Promise.all([
       query(`SELECT COUNT(*) AS total FROM guias WHERE tenant_id = $1`, [id]).catch(err => { console.error('[guias query]', err.message); return { rows: [{ total: 0 }] } }),
       query(`SELECT COUNT(*) AS total FROM guias WHERE tenant_id = $1 AND created_at >= now() - INTERVAL '30 days'`, [id]).catch(err => { console.error('[guias 30d]', err.message); return { rows: [{ total: 0 }] } }),
       query(`SELECT COUNT(*) AS total FROM tarimas WHERE tenant_id = $1`, [id]).catch(err => { console.error('[tarimas]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM folios_entrega WHERE tenant_id = $1`, [id]).catch(err => { console.error('[folios_entrega]', err.message); return { rows: [{ total: 0 }] } }),
+      query(`SELECT COUNT(*) AS total FROM dispatch_folios WHERE tenant_id = $1`, [id]).catch(err => { console.error('[dispatch_folios]', err.message); return { rows: [{ total: 0 }] } }),
       query(`SELECT COUNT(*) AS total FROM usuarios_internos WHERE tenant_id = $1 AND activo = true`, [id]).catch(err => { console.error('[usuarios_internos]', err.message); return { rows: [{ total: 0 }] } }),
       query(`SELECT COUNT(*) AS total FROM usuarios WHERE tenant_id = $1`, [id]).catch(err => { console.error('[usuarios]', err.message); return { rows: [{ total: 0 }] } }),
+      query(`SELECT COUNT(*) AS total FROM inbound_orders WHERE tenant_id = $1`, [id]).catch(err => { console.error('[inbound_orders]', err.message); return { rows: [{ total: 0 }] } }),
+      query(`SELECT COUNT(*) AS total FROM inbound_scan_events WHERE tenant_id = $1`, [id]).catch(err => { console.error('[inbound_scan_events]', err.message); return { rows: [{ total: 0 }] } }),
+      query(`SELECT COUNT(*) AS total FROM anormalidades WHERE tenant_id = $1`, [id]).catch(err => { console.error('[anormalidades]', err.message); return { rows: [{ total: 0 }] } }),
+      query(`SELECT COUNT(*) AS total FROM pick_order_tracking WHERE tenant_id = $1`, [id]).catch(err => { console.error('[pick_order_tracking]', err.message); return { rows: [{ total: 0 }] } }),
     ])
 
     res.json({
@@ -328,9 +333,13 @@ router.get('/tenants/:id/stats', authenticateAdmin, async (req, res) => {
         total_guias: Number(totalGuias.rows[0]?.total ?? 0),
         guias_last_30d: Number(guias30d.rows[0]?.total ?? 0),
         total_tarimas: Number(tarimas.rows[0]?.total ?? 0),
-        total_folios: Number(folios.rows[0]?.total ?? 0),
+        total_folios: Number(dispatchFolios.rows[0]?.total ?? 0),
         active_scanners: Number(scanners.rows[0]?.total ?? 0),
         total_users: Number(users.rows[0]?.total ?? 0),
+        total_recepcion_ordenes: Number(inboundOrders.rows[0]?.total ?? 0),
+        total_recepcion_scans: Number(inboundScans.rows[0]?.total ?? 0),
+        total_anormalidades: Number(anormalidades.rows[0]?.total ?? 0),
+        total_surtido_ordenes: Number(pickOrders.rows[0]?.total ?? 0),
       },
     })
   } catch (err) {
@@ -417,7 +426,7 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
 // POST /api/admin/tenants — create tenant directly without signup flow
 router.post('/tenants', authenticateAdmin, async (req, res) => {
   const { legal_name, contact_name, contact_email, contact_phone, country, admin_password, slug, plan_id, subscription_type, started_at, zona_horaria, modules: reqModules } = req.body
-  const KNOWN_MODULES = ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades', 'despacho', 'recepcion']
+  const KNOWN_MODULES = ALL_MODULE_CODES
   const modulesToSeed = Array.isArray(reqModules) && reqModules.length > 0
     ? reqModules.filter(m => KNOWN_MODULES.includes(m))
     : KNOWN_MODULES
@@ -492,18 +501,7 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
 
     // 3. Create Admin role (is_default = true, non-deletable from frontend)
     console.log('[admin/tenants POST] step 3: creating admin role for tenant', tenant.id)
-    const rolePermisos = {
-      global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
-      dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
-      fep: { folios: 'eliminar' },
-      inventario: { escaneo: 'eliminar', registros: 'eliminar', rastreo: 'eliminar' },
-      devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
-      surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
-      anormalidades: { registro: 'eliminar', dashboard: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
-      despacho: { validar: 'eliminar', ordenes: 'eliminar', folios: 'eliminar' },
-      recepcion: { recibir: 'eliminar' },
-      sistema: { wms: 'eliminar' },
-    }
+    const rolePermisos = FULL_ACCESS_PERMISSIONS
     const roleRes = await client.query(
       `INSERT INTO roles (tenant_id, nombre, permisos, is_default)
        VALUES ($1, 'Administrador', $2, true)
@@ -786,7 +784,7 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [safeCode, name, description || null, guide_limit ?? null, warehouse_count || 1,
        price_amount, price_annual ?? null, price_currency || 'USD',
-       JSON.stringify(modules || ['dropscan']), is_active !== false, is_visible !== false, display_order || 0,
+       JSON.stringify(Array.isArray(modules) && modules.length > 0 ? modules : ALL_MODULE_CODES), is_active !== false, is_visible !== false, display_order || 0,
        surtido_limit ?? null, inventario_limit ?? null, devoluciones_limit ?? null]
     )
     adminAudit(req.admin.id, 'CREATE_PLAN', 'plan', result.rows[0].id, { name })
@@ -1100,8 +1098,10 @@ router.get('/usage-stats', authenticateAdmin, async (_req, res) => {
     }
 
     const [
-      totalGuias, guias30d, topTenants, dbSize, tarimas, folios, usersInternos,
+      totalGuias, guias30d, topTenants, dbSize, tarimas, dispatchFolios, dispatchFolios30d, usersInternos,
       totalOBCs, obcs30d, totalScans, scans30d, totalDevs, devs30d,
+      totalInboundOrders, inboundOrders30d, totalInboundScans, inboundScans30d,
+      totalAnormalidades, anormalidades30d,
     ] = await Promise.all([
       safeQuery(`SELECT COUNT(*) AS total FROM guias`),
       safeQuery(`SELECT COUNT(*) AS total FROM guias WHERE created_at >= now() - INTERVAL '30 days'`),
@@ -1115,7 +1115,8 @@ router.get('/usage-stats', authenticateAdmin, async (_req, res) => {
       `),
       safeQuery(`SELECT pg_size_pretty(pg_database_size(current_database())) AS db_size`),
       safeQuery(`SELECT COUNT(*) AS total FROM tarimas`),
-      safeQuery(`SELECT COUNT(*) AS total FROM folios_entrega`),
+      safeQuery(`SELECT COUNT(*) AS total FROM dispatch_folios`),
+      safeQuery(`SELECT COUNT(*) AS total FROM dispatch_folios WHERE created_at >= now() - INTERVAL '30 days'`),
       safeQuery(`SELECT COUNT(*) AS total FROM usuarios_internos WHERE activo = true`),
       safeQuery(`SELECT COUNT(*) AS total FROM pick_order_tracking`),
       safeQuery(`SELECT COUNT(*) AS total FROM pick_order_tracking WHERE created_at >= now() - INTERVAL '30 days'`),
@@ -1123,6 +1124,12 @@ router.get('/usage-stats', authenticateAdmin, async (_req, res) => {
       safeQuery(`SELECT COUNT(*) AS total FROM inventory_scans WHERE created_at >= now() - INTERVAL '30 days'`),
       safeQuery(`SELECT COUNT(*) AS total FROM dev_sesiones WHERE estado = 'confirmado'`),
       safeQuery(`SELECT COUNT(*) AS total FROM dev_sesiones WHERE estado = 'confirmado' AND confirmado_at >= now() - INTERVAL '30 days'`),
+      safeQuery(`SELECT COUNT(*) AS total FROM inbound_orders`),
+      safeQuery(`SELECT COUNT(*) AS total FROM inbound_orders WHERE created_at >= now() - INTERVAL '30 days'`),
+      safeQuery(`SELECT COUNT(*) AS total FROM inbound_scan_events`),
+      safeQuery(`SELECT COUNT(*) AS total FROM inbound_scan_events WHERE created_at >= now() - INTERVAL '30 days'`),
+      safeQuery(`SELECT COUNT(*) AS total FROM anormalidades`),
+      safeQuery(`SELECT COUNT(*) AS total FROM anormalidades WHERE created_at >= now() - INTERVAL '30 days'`),
     ])
 
     res.json({
@@ -1130,7 +1137,8 @@ router.get('/usage-stats', authenticateAdmin, async (_req, res) => {
       total_guias: Number(totalGuias[0]?.total ?? 0),
       guias_last_30d: Number(guias30d[0]?.total ?? 0),
       total_tarimas: Number(tarimas[0]?.total ?? 0),
-      total_folios: Number(folios[0]?.total ?? 0),
+      total_folios: Number(dispatchFolios[0]?.total ?? 0),
+      folios_last_30d: Number(dispatchFolios30d[0]?.total ?? 0),
       active_scanners: Number(usersInternos[0]?.total ?? 0),
       db_size: dbSize[0]?.db_size ?? 'N/A',
       top_tenants: topTenants,
@@ -1140,6 +1148,12 @@ router.get('/usage-stats', authenticateAdmin, async (_req, res) => {
       scans_last_30d: Number(scans30d[0]?.total ?? 0),
       total_devoluciones: Number(totalDevs[0]?.total ?? 0),
       devoluciones_last_30d: Number(devs30d[0]?.total ?? 0),
+      total_recepcion_ordenes: Number(totalInboundOrders[0]?.total ?? 0),
+      recepcion_ordenes_last_30d: Number(inboundOrders30d[0]?.total ?? 0),
+      total_recepcion_scans: Number(totalInboundScans[0]?.total ?? 0),
+      recepcion_scans_last_30d: Number(inboundScans30d[0]?.total ?? 0),
+      total_anormalidades: Number(totalAnormalidades[0]?.total ?? 0),
+      anormalidades_last_30d: Number(anormalidades30d[0]?.total ?? 0),
     })
   } catch (err) {
     console.error('[admin/usage-stats]', err)

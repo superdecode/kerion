@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 import { fmtDate, fmtDateString, toDateKey } from '../../../core/utils/dateFormat'
+import { MODULE_CATALOG, ALL_MODULE_CODES } from '../../../core/constants/moduleCatalog'
 
 // ── Plans CRUD (3-col modal: Configuracion | Precios | Limites) ───────────────
 
@@ -51,6 +52,7 @@ function PlanModal({ plan, onClose, onSaved }) {
     try {
       const payload = {
         ...form,
+        modules: ALL_MODULE_CODES,
         price_amount: form.price_amount !== '' ? parseFloat(form.price_amount) : null,
         price_annual: form.price_annual !== '' ? parseFloat(form.price_annual) : null,
         guide_limit: form.guide_limit !== '' ? parseInt(form.guide_limit) : null,
@@ -217,6 +219,19 @@ function PlanModal({ plan, onClose, onSaved }) {
                 </div>
               ))}
               <p className="text-gray-600 text-[10px] pt-1">Vacio = sin limite (NULL en base de datos).</p>
+              <div className="pt-2 border-t border-gray-800">
+                <p className="text-gray-500 text-[10px] uppercase tracking-wider mb-2">Modulos incluidos</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {MODULE_CATALOG.map(module => (
+                    <span
+                      key={module.code}
+                      className={`px-2 py-1 rounded-full border text-[10px] font-medium ${module.bg} ${module.border} ${module.color}`}
+                    >
+                      {module.shortName}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 

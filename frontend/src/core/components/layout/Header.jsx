@@ -18,9 +18,9 @@ export default function Header({ title, subtitle, actions, showSearch = false })
 
   return (
     <>
-      <header className="h-16 bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6 flex items-center gap-3 shrink-0 sticky top-0 z-[110]">
+      <header className="chrome-shell h-16 bg-white/60 backdrop-blur-2xl border-b border-warm-100/40 px-6 flex items-center gap-3 shrink-0 sticky top-0 z-[110]">
         {/* Title */}
-        <div className="flex-1 min-w-0">
+        <div className="surface-enter-fast flex-1 min-w-0">
           {title && (
             <div>
               <h1 className="text-lg font-bold text-warm-800 truncate">{title}</h1>
@@ -31,7 +31,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
 
         {/* Actions from page */}
         {actions && (
-          <div className="flex items-center gap-2">
+          <div className="surface-enter-soft flex items-center gap-2">
             {actions}
           </div>
         )}
@@ -52,7 +52,7 @@ export default function Header({ title, subtitle, actions, showSearch = false })
             ) : (
               <button
                 onClick={() => setSearchOpen(true)}
-                className="p-2.5 rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50 transition-all duration-200"
+                className="interactive-lift p-2.5 rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50"
                 title={t('common.search')}
               >
                 <Search className="w-[18px] h-[18px]" />

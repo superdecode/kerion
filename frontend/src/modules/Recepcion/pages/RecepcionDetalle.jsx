@@ -1,10 +1,10 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useDeferredValue } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Copy, Check, PackageCheck, ScanBarcode, Printer,
   Download, Trash2, CheckCircle2, Clock, Search, X,
-  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, MapPin, Plus, Tags, Edit3,
+  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, MapPin, Plus,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -14,7 +14,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos, createNovedadTipo, updateNovedadTipo, deleteNovedadTipo } from '../services/recepcionService'
+import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos } from '../services/recepcionService'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
 import { normalizeCode } from '../../Shared/Wms/normalizeCode'
@@ -151,10 +151,9 @@ export default function RecepcionDetalle() {
   const [nuevoTipo, setNuevoTipo] = useState('')
   const [nuevoCodigo, setNuevoCodigo] = useState('')
   const [nuevaUbicacion, setNuevaUbicacion] = useState('')
-  const [tiposModalOpen, setTiposModalOpen] = useState(false)
-  const [nuevoTipoNombreLocal, setNuevoTipoNombreLocal] = useState('')
-  const [editingTipoId, setEditingTipoId] = useState(null)
-  const [editingTipoNombre, setEditingTipoNombre] = useState('')
+  const deferredLineSearch = useDeferredValue(lineSearch)
+  const deferredEventSearch = useDeferredValue(eventSearch)
+  const deferredNovedadSearch = useDeferredValue(novedadSearch)
 
   useEffect(() => {
     setNuevoTipo('')
@@ -249,36 +248,10 @@ export default function RecepcionDetalle() {
     onError: () => toast.error(t('toast.error')),
   })
 
-  const createTipoMut = useMutation({
-    mutationFn: (payload) => createNovedadTipo(payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['recepcion-novedad-tipos'] })
-      setNuevoTipoNombreLocal('')
-    },
-    onError: () => toast.error(t('toast.error')),
-  })
-
-  const updateTipoMut = useMutation({
-    mutationFn: ({ id, nombre }) => updateNovedadTipo(id, { nombre }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['recepcion-novedad-tipos'] })
-      setEditingTipoId(null)
-      setEditingTipoNombre('')
-    },
-    onError: () => toast.error(t('toast.error')),
-  })
-
-  const deleteTipoMut = useMutation({
-    mutationFn: (tid) => deleteNovedadTipo(tid),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['recepcion-novedad-tipos'] }),
-    onError: () => toast.error(t('toast.error')),
-  })
-
   const canValidate = hasPermission('recepcion.recibir', 'actualizar')
   const canEdit = hasPermission('recepcion.recibir', 'actualizar')
   const canCreate = hasPermission('recepcion.recibir', 'crear')
   const canDeleteEvents = hasPermission('recepcion.recibir', 'eliminar')
-  const canManageTipos = hasPermission('recepcion.validacion', 'actualizar')
 
   const submitNuevaNovedad = () => {
     if (!nuevoTipo || createNovedadMut.isPending) return
@@ -303,28 +276,24 @@ export default function RecepcionDetalle() {
     return map
   }, [eventsData?.events])
 
-  if (isLoading) return <div className="flex items-center justify-center h-full"><LoadingSpinner /></div>
-  if (isError || !data) return (
-    <div className="flex flex-col h-full">
-      <Header title={t('rec.recibir.title')} icon={PackageCheck} />
-      <div className="flex flex-col items-center justify-center h-full gap-3">
-        <p className="text-sm text-danger-500">{t('toast.error')}</p>
-        <button onClick={() => navigate('/recepcion/recibir')} className="btn-ghost text-sm flex items-center gap-1.5">
-          <ArrowLeft className="w-4 h-4" /> Volver
-        </button>
-      </div>
-    </div>
-  )
-
-  const { order, lines = [] } = data
+  const order = data?.order ?? {}
+  const lines = data?.lines ?? []
   const events = eventsData?.events || []
   const novedades = novedadesData?.novedades || []
 
   const totalBase = Number(order.total_cajas || 0) > 0 ? Number(order.total_cajas) : lines.length
   const validadasFromOrder = Number(order.cajas_validadas || 0)
-  const validadasFromLines = lines.filter((l) => l.estado_validacion === 'validada').length
-  const validadas = validadasFromOrder > 0 ? validadasFromOrder : validadasFromLines
-  const faltantes = lines.filter((l) => l.estado_validacion === 'faltante').length
+  const lineStatusCounts = useMemo(() => {
+    let validada = 0
+    let faltante = 0
+    for (const line of lines) {
+      if (line.estado_validacion === 'validada') validada++
+      else if (line.estado_validacion === 'faltante') faltante++
+    }
+    return { validada, faltante }
+  }, [lines])
+  const validadas = validadasFromOrder > 0 ? validadasFromOrder : lineStatusCounts.validada
+  const faltantes = lineStatusCounts.faltante
   const pendientes = Math.max(totalBase - validadas - faltantes, 0)
   const progresoRaw = totalBase > 0 ? Math.min(100, (validadas / totalBase) * 100) : 0
   const progreso = progresoRaw > 0 && progresoRaw < 1
@@ -343,33 +312,60 @@ export default function RecepcionDetalle() {
     else { setEventSortKey(key); setEventSortDir(key === 'scanned_at' ? 'desc' : 'asc') }
   }
 
-  const filteredLines = lineSearch
-    ? lines.filter(l => [l.box_type, l.custom_box_barcode, l.sku].some(v => String(v || '').toLowerCase().includes(lineSearch.toLowerCase())))
-    : lines
+  const filteredLines = useMemo(() => {
+    const q = deferredLineSearch.trim().toLowerCase()
+    if (!q) return lines
+    return lines.filter((l) => [l.box_type, l.custom_box_barcode, l.sku].some((v) => String(v || '').toLowerCase().includes(q)))
+  }, [lines, deferredLineSearch])
 
-  const sortedLines = [...filteredLines].sort((a, b) => {
-    const av = a?.[lineSortKey] ?? ''
-    const bv = b?.[lineSortKey] ?? ''
-    const cmp = String(av).localeCompare(String(bv), 'es')
-    return lineSortDir === 'asc' ? cmp : -cmp
-  })
+  const sortedLines = useMemo(() => {
+    const collator = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
+    return [...filteredLines].sort((a, b) => {
+      const av = a?.[lineSortKey] ?? ''
+      const bv = b?.[lineSortKey] ?? ''
+      const cmp = lineSortKey === 'created_at'
+        ? new Date(av).getTime() - new Date(bv).getTime()
+        : collator.compare(String(av), String(bv))
+      return lineSortDir === 'asc' ? cmp : -cmp
+    })
+  }, [filteredLines, lineSortKey, lineSortDir])
 
-  const filteredEvents = eventSearch
-    ? events.filter(e => [e.codigo_escaneado, e.sku_asociado, e.resultado, e.scanned_by_nombre].some(v => String(v || '').toLowerCase().includes(eventSearch.toLowerCase())))
-    : events
+  const filteredEvents = useMemo(() => {
+    const q = deferredEventSearch.trim().toLowerCase()
+    if (!q) return events
+    return events.filter((e) => [e.codigo_escaneado, e.sku_asociado, e.resultado, e.scanned_by_nombre].some((v) => String(v || '').toLowerCase().includes(q)))
+  }, [events, deferredEventSearch])
 
-  const filteredNovedades = novedadSearch
-    ? novedades.filter(n => [n.tipo, n.codigo, n.ubicacion, n.created_by_nombre].some(v => String(v || '').toLowerCase().includes(novedadSearch.toLowerCase())))
-    : novedades
+  const filteredNovedades = useMemo(() => {
+    const q = deferredNovedadSearch.trim().toLowerCase()
+    if (!q) return novedades
+    return novedades.filter((n) => [n.tipo, n.codigo, n.ubicacion, n.created_by_nombre].some((v) => String(v || '').toLowerCase().includes(q)))
+  }, [novedades, deferredNovedadSearch])
 
-  const sortedEvents = [...filteredEvents].sort((a, b) => {
-    const av = a?.[eventSortKey] ?? ''
-    const bv = b?.[eventSortKey] ?? ''
-    const cmp = eventSortKey === 'scanned_at'
-      ? new Date(av).getTime() - new Date(bv).getTime()
-      : String(av).localeCompare(String(bv), 'es')
-    return eventSortDir === 'asc' ? cmp : -cmp
-  })
+  const sortedEvents = useMemo(() => {
+    const collator = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
+    return [...filteredEvents].sort((a, b) => {
+      const av = a?.[eventSortKey] ?? ''
+      const bv = b?.[eventSortKey] ?? ''
+      const cmp = eventSortKey === 'scanned_at'
+        ? new Date(av).getTime() - new Date(bv).getTime()
+        : collator.compare(String(av), String(bv))
+      return eventSortDir === 'asc' ? cmp : -cmp
+    })
+  }, [filteredEvents, eventSortKey, eventSortDir])
+
+  if (isLoading) return <div className="flex items-center justify-center h-full"><LoadingSpinner /></div>
+  if (isError || !data) return (
+    <div className="flex flex-col h-full">
+      <Header title={t('rec.recibir.title')} icon={PackageCheck} />
+      <div className="flex flex-col items-center justify-center h-full gap-3">
+        <p className="text-sm text-danger-500">{t('toast.error')}</p>
+        <button onClick={() => navigate('/recepcion/recibir')} className="btn-ghost text-sm flex items-center gap-1.5">
+          <ArrowLeft className="w-4 h-4" /> Volver
+        </button>
+      </div>
+    </div>
+  )
 
   const handleExportWorkbook = () => {
     const wb = XLSX.utils.book_new()
@@ -547,15 +543,6 @@ export default function RecepcionDetalle() {
               <Download className="w-4 h-4" />
               {t('rec.btn.exportar')}
             </button>
-            {canManageTipos && (
-              <button
-                onClick={() => setTiposModalOpen(true)}
-                className="btn-ghost flex items-center gap-1.5 text-sm"
-              >
-                <Tags className="w-4 h-4" />
-                {t('rec.tipos.btn_header')}
-              </button>
-            )}
             {canValidate && (
               <button
                 onClick={() => navigate(`/recepcion/recibir/${id}/validar`)}
@@ -1026,121 +1013,6 @@ export default function RecepcionDetalle() {
           </div>
         </div>
       )}
-
-      {/* Tipos de incidencia modal */}
-      <Modal
-        isOpen={tiposModalOpen}
-        onClose={() => { setTiposModalOpen(false); setNuevoTipoNombreLocal(''); setEditingTipoId(null); setEditingTipoNombre('') }}
-        title={t('rec.tipos.title')}
-        size="md"
-      >
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={nuevoTipoNombreLocal}
-              onChange={e => setNuevoTipoNombreLocal(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && nuevoTipoNombreLocal.trim() && createTipoMut.mutate({ nombre: nuevoTipoNombreLocal.trim() })}
-              placeholder={t('rec.tipos.placeholder')}
-              className="flex-1 px-3 py-2 rounded-xl border border-warm-200 text-sm outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-              autoComplete="off"
-            />
-            <button
-              type="button"
-              onClick={() => nuevoTipoNombreLocal.trim() && createTipoMut.mutate({ nombre: nuevoTipoNombreLocal.trim() })}
-              disabled={!nuevoTipoNombreLocal.trim() || createTipoMut.isPending}
-              className="btn-primary inline-flex items-center gap-1.5 px-3 py-2 text-sm disabled:opacity-50 whitespace-nowrap"
-            >
-              {createTipoMut.isPending
-                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                : <Plus className="w-4 h-4" />}
-              {t('rec.tipos.add')}
-            </button>
-          </div>
-          <div className="border border-warm-100 rounded-xl overflow-hidden">
-            {(tiposData?.tipos || []).length === 0 ? (
-              <div className="py-8 text-center text-sm text-warm-400">{t('rec.tipos.empty')}</div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="table-header">{t('common.name')}</th>
-                    <th className="table-header text-right">{t('common.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-warm-50">
-                  {(tiposData?.tipos || []).map(tipo => (
-                    <tr key={tipo.id} className="table-row">
-                      <td className="px-3 py-2.5">
-                        {editingTipoId === tipo.id ? (
-                          <input
-                            autoFocus
-                            type="text"
-                            value={editingTipoNombre}
-                            onChange={e => setEditingTipoNombre(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' && editingTipoNombre.trim()) updateTipoMut.mutate({ id: tipo.id, nombre: editingTipoNombre.trim() })
-                              if (e.key === 'Escape') { setEditingTipoId(null); setEditingTipoNombre('') }
-                            }}
-                            className="w-full px-2 py-1 rounded-lg border border-primary-300 text-xs font-medium outline-none focus:ring-2 focus:ring-primary-100"
-                          />
-                        ) : (
-                          <span className="text-warm-700 text-xs font-medium">{tipo.nombre}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="inline-flex items-center gap-0.5">
-                          {editingTipoId === tipo.id ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => editingTipoNombre.trim() && updateTipoMut.mutate({ id: tipo.id, nombre: editingTipoNombre.trim() })}
-                                disabled={!editingTipoNombre.trim() || updateTipoMut.isPending}
-                                className="inline-flex rounded-lg p-1.5 text-success-600 hover:bg-success-50 disabled:opacity-30"
-                                title={t('common.save')}
-                              >
-                                {updateTipoMut.isPending
-                                  ? <div className="w-3.5 h-3.5 border-2 border-success-600 border-t-transparent rounded-full animate-spin" />
-                                  : <Check className="w-3.5 h-3.5" />}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { setEditingTipoId(null); setEditingTipoNombre('') }}
-                                className="inline-flex rounded-lg p-1.5 text-warm-400 hover:bg-warm-50"
-                                title={t('common.cancel')}
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => { setEditingTipoId(tipo.id); setEditingTipoNombre(tipo.nombre) }}
-                              className="inline-flex rounded-lg p-1.5 text-warm-400 hover:bg-warm-50 hover:text-primary-600"
-                              title={t('common.edit')}
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => deleteTipoMut.mutate(tipo.id)}
-                            disabled={deleteTipoMut.isPending || editingTipoId === tipo.id}
-                            className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:opacity-30"
-                            title={t('common.delete')}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      </Modal>
 
       <ListaRecepcionPreviewModal
         isOpen={listaPreviewOpen}

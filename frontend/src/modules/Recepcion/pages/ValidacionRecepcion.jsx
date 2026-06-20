@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, startTransition } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -112,6 +112,7 @@ export default function ValidacionRecepcion() {
   const scanRefMobile  = useRef(null)
   const locationRef    = useRef(null)
   const sessionBootOrderRef = useRef(null)
+  const scanStartRef = useRef(null)
 
   const [sessionId, setSessionId] = useState(null)
   const [withTarimas, setWithTarimas] = useState(false)
@@ -185,6 +186,9 @@ export default function ValidacionRecepcion() {
   const lines    = orderData?.lines ?? []
   const savedValidationConfig = order?.validation_config ?? null
   const tarimaConfigLocked = savedValidationConfig?.mode === 'tarimas' && savedValidationConfig?.locked === true
+  const isTarimaMode = withTarimas
+  const correctHistory = useMemo(() => history.filter((h) => h.result === 'correcto'), [history])
+  const correctHistoryCount = correctHistory.length
   const total    = Math.max(Number(order?.total_cajas || 0), lines.length)
   const validadas  = Math.max(lines.filter(l => l.estado_validacion === 'validada').length, Number(order?.cajas_validadas || 0))
   const faltantes  = lines.filter(l => l.estado_validacion === 'faltante').length
@@ -192,7 +196,7 @@ export default function ValidacionRecepcion() {
   const progressPct = total > 0 ? Math.min(100, Math.round((validadas / total) * 100)) : 0
 
   const persistedTarimaMap = useMemo(() => {
-    if (!withTarimas && tarimaOverrides.size === 0) return new Map()
+    if (!isTarimaMode) return new Map()
     const map = new Map()
     for (const ev of serverEvents) {
       if (ev.resultado !== 'correcto') continue
@@ -207,21 +211,27 @@ export default function ValidacionRecepcion() {
       if (base && tarimaNum) map.set(base, tarimaNum)
     }
     return map
-  }, [serverEvents, history, withTarimas, tarimaOverrides])
+  }, [serverEvents, history, isTarimaMode, tarimaOverrides])
   const lockedTarimaMap = useMemo(() => {
+    if (!isTarimaMode) return new Map()
     const map = new Map(tarimaOverrides)
     for (const [base, num] of persistedTarimaMap) map.set(base, num)
     return map
-  }, [tarimaOverrides, persistedTarimaMap])
+  }, [tarimaOverrides, persistedTarimaMap, isTarimaMode])
   const hasLockedTarimaAssignments = lockedTarimaMap.size > 0
 
   const baseTarimaMap = useMemo(
-    () => buildTarimaMap(
-      lines,
-      lockedTarimaMap,
-      groupSmallCodes ? { enabled: true, minCajas: minCajasParaAgrupar, maxCajas: maxCajasEnGrupo } : null
-    ),
-    [lines, lockedTarimaMap, groupSmallCodes, minCajasParaAgrupar, maxCajasEnGrupo]
+    () => {
+      if (!isTarimaMode && !hasLockedTarimaAssignments && !groupSmallCodes && !sectionMode) {
+        return new Map()
+      }
+      return buildTarimaMap(
+        lines,
+        lockedTarimaMap,
+        groupSmallCodes ? { enabled: true, minCajas: minCajasParaAgrupar, maxCajas: maxCajasEnGrupo } : null
+      )
+    },
+    [lines, lockedTarimaMap, groupSmallCodes, minCajasParaAgrupar, maxCajasEnGrupo, isTarimaMode, hasLockedTarimaAssignments, sectionMode]
   )
   const effectiveTarimaMap = baseTarimaMap
   const totalTarimas = useMemo(() => new Set(effectiveTarimaMap.values()).size, [effectiveTarimaMap])
@@ -236,7 +246,7 @@ export default function ValidacionRecepcion() {
   const lastTarimaColor = lastTarimaNum ? getTarimaColor(lastTarimaNum) : null
 
   const tarimaStats = useMemo(() => {
-    if (!withTarimas) return []
+    if (!isTarimaMode) return []
     // Build linesByBase for O(n) lookup
     const linesByBase = new Map()
     for (const l of lines) {
@@ -264,7 +274,7 @@ export default function ValidacionRecepcion() {
       }
       return a.num - b.num
     })
-  }, [withTarimas, effectiveTarimaMap, lines, sortTarimasByCountDesc])
+  }, [isTarimaMode, effectiveTarimaMap, lines, sortTarimasByCountDesc])
 
   const tarimaCounts = useMemo(() => ({
     completo:   tarimaStats.filter(ts => ts.validated === ts.total && ts.total > 0).length,
@@ -320,6 +330,7 @@ export default function ValidacionRecepcion() {
 
   // Server events grouped by ubicacion (persists across page reloads / different computers)
   const allUbicacionGroups = useMemo(() => {
+    if (isTarimaMode) return []
     const map = new Map()
     // Load from server events (source of truth)
     for (const ev of serverEvents) {
@@ -330,7 +341,7 @@ export default function ValidacionRecepcion() {
       map.set(key, existing)
     }
     // Merge current in-session history (optimistic — may not yet be in server events)
-    const activeCodes = history.filter(h => h.result === 'correcto')
+    const activeCodes = correctHistory
     if (activeCodes.length > 0) {
       const key = selectedUbicacion ?? ''
       const existing = map.get(key) ?? { ubicacion: selectedUbicacion, codes: [] }
@@ -345,9 +356,10 @@ export default function ValidacionRecepcion() {
       if (!b.ubicacion) return -1
       return a.ubicacion.localeCompare(b.ubicacion)
     })
-  }, [serverEvents, history, selectedUbicacion])
+  }, [serverEvents, correctHistory, selectedUbicacion, isTarimaMode])
 
   const filteredUbicacionGroups = useMemo(() => {
+    if (isTarimaMode) return []
     let result = allUbicacionGroups
     if (ubicacionFilter === 'activa') result = result.filter(g => g.ubicacion === selectedUbicacion && ubicacionConfirmed)
     if (ubicacionFilter === 'con_registros') result = result.filter(g => g.codes.length > 0)
@@ -368,9 +380,12 @@ export default function ValidacionRecepcion() {
       }))
       .filter(g => g.codes.length > 0 || (g.ubicacion ?? '').toLowerCase().includes(q))
     )
-  }, [allUbicacionGroups, ubicacionSearch, ubicacionFilter, selectedUbicacion, ubicacionConfirmed])
+  }, [allUbicacionGroups, ubicacionSearch, ubicacionFilter, selectedUbicacion, ubicacionConfirmed, isTarimaMode])
 
-  const totalUbicacionCodes = allUbicacionGroups.reduce((s, g) => s + g.codes.length, 0)
+  const totalUbicacionCodes = useMemo(() => {
+    if (isTarimaMode) return 0
+    return allUbicacionGroups.reduce((s, g) => s + g.codes.length, 0)
+  }, [allUbicacionGroups, isTarimaMode])
 
   const refocus = useCallback(() => {
     setTimeout(() => {
@@ -446,49 +461,56 @@ export default function ValidacionRecepcion() {
     mutationFn: ({ codigo, ubicacion }) => scanCode(id, { codigo_escaneado: codigo, session_id: sessionId, tarimas_enabled: withTarimas, ubicacion: ubicacion || null }),
     onSuccess: (data, variables) => {
       const ev = data.event
-      setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado })
-      if (ev.resultado === 'no_encontrado') {
-        setRejectModal({ open: true, code: ev.codigo_escaneado })
+      if (import.meta.env.DEV && scanStartRef.current != null) {
+        const elapsed = performance.now() - scanStartRef.current
+        console.debug(`[recepcion] scan client ${elapsed.toFixed(1)}ms`)
+        scanStartRef.current = null
       }
-      if (ev.resultado === 'duplicado') {
-        playDupAudio()
-        setDupModal({
-          open: true,
-          code: ev.codigo_escaneado,
-          entry: {
-            scannedAt: data.previous_event?.scanned_at || null,
-            scannedBy: data.previous_event?.scanned_by_nombre || '—',
-          },
-        })
-      }
-      if (ev.resultado === 'correcto') {
-        const tarimaNum = parseTarimaNumber(variables.ubicacion)
-        const base = extractBaseCode(ev.codigo_escaneado)
-        if (base && tarimaNum) {
-          setTarimaOverrides(prev => {
-            const next = new Map(prev)
-            next.set(base, tarimaNum)
-            return next
+      startTransition(() => {
+        setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado })
+        if (ev.resultado === 'no_encontrado') {
+          setRejectModal({ open: true, code: ev.codigo_escaneado })
+        }
+        if (ev.resultado === 'duplicado') {
+          playDupAudio()
+          setDupModal({
+            open: true,
+            code: ev.codigo_escaneado,
+            entry: {
+              scannedAt: data.previous_event?.scanned_at || null,
+              scannedBy: data.previous_event?.scanned_by_nombre || '—',
+            },
           })
         }
-        setHistory(prev => [{
-          id: ev.id, result: ev.resultado, code: ev.codigo_escaneado,
-          sku: ev.sku_asociado, scannedAt: ev.scanned_at, scannedBy: ev.scanned_by_nombre || '—',
-          ubicacion: variables.ubicacion || null,
-        }, ...prev.slice(0, 49)])
-        if (data.line) {
-          qc.setQueryData(['recepcion-order', id], (cur) => {
-            if (!cur) return cur
-            return {
-              ...cur,
-              order: { ...cur.order, cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0, estado: data.estado || cur.order?.estado },
-              lines: (cur.lines || []).map(l => l.id === data.line.id
-                ? { ...l, estado_validacion: 'validada', validated_at: ev.scanned_at, validated_by_nombre: ev.scanned_by_nombre || l.validated_by_nombre }
-                : l),
-            }
-          })
+        if (ev.resultado === 'correcto') {
+          const tarimaNum = parseTarimaNumber(variables.ubicacion)
+          const base = extractBaseCode(ev.codigo_escaneado)
+          if (base && tarimaNum) {
+            setTarimaOverrides(prev => {
+              const next = new Map(prev)
+              next.set(base, tarimaNum)
+              return next
+            })
+          }
+          setHistory(prev => [{
+            id: ev.id, result: ev.resultado, code: ev.codigo_escaneado,
+            sku: ev.sku_asociado, scannedAt: ev.scanned_at, scannedBy: ev.scanned_by_nombre || '—',
+            ubicacion: variables.ubicacion || null,
+          }, ...prev.slice(0, 49)])
+          if (data.line) {
+            qc.setQueryData(['recepcion-order', id], (cur) => {
+              if (!cur) return cur
+              return {
+                ...cur,
+                order: { ...cur.order, cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0, estado: data.estado || cur.order?.estado },
+                lines: (cur.lines || []).map(l => l.id === data.line.id
+                  ? { ...l, estado_validacion: 'validada', validated_at: ev.scanned_at, validated_by_nombre: ev.scanned_by_nombre || l.validated_by_nombre }
+                  : l),
+              }
+            })
+          }
         }
-      }
+      })
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)()
         const osc = ctx.createOscillator(); const gain = ctx.createGain()
@@ -498,7 +520,14 @@ export default function ValidacionRecepcion() {
         osc.start(); osc.stop(ctx.currentTime + 0.12)
       } catch { /* audio not available */ }
     },
-    onError: () => toast.error('Error al procesar escaneo'),
+    onError: () => {
+      if (import.meta.env.DEV && scanStartRef.current != null) {
+        const elapsed = performance.now() - scanStartRef.current
+        console.debug(`[recepcion] scan client failed ${elapsed.toFixed(1)}ms`)
+        scanStartRef.current = null
+      }
+      toast.error('Error al procesar escaneo')
+    },
     onSettled: () => refocus(),
   })
 
@@ -577,14 +606,6 @@ export default function ValidacionRecepcion() {
         refocus()
         return
       }
-      // Also check server events for cross-session / cross-computer duplicates
-      const serverDup = serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
-      if (serverDup) {
-        playDupAudio()
-        setDupModal({ open: true, code, entry: { scannedAt: serverDup.scanned_at, scannedBy: serverDup.scanned_by_nombre || '—' } })
-        refocus()
-        return
-      }
       if (withTarimas && sectionMode && activeTarimaSet) {
         const base = extractBaseCode(code)
         const tarimaNum = base ? effectiveTarimaMap.get(base) : null
@@ -596,6 +617,7 @@ export default function ValidacionRecepcion() {
       }
       const tarimaNum = withTarimas ? effectiveTarimaMap.get(extractBaseCode(code)) : null
       const ubicacion = withTarimas ? formatTarimaLocation(tarimaNum) : selectedUbicacion
+      if (import.meta.env.DEV) scanStartRef.current = performance.now()
       scanMut.mutate({ codigo: code, ubicacion })
     }
   }
@@ -612,7 +634,7 @@ export default function ValidacionRecepcion() {
   }, [])
 
   const completarUbicacion = useCallback(() => {
-    const batchCodes = history.filter(h => h.result === 'correcto').map(h => ({
+    const batchCodes = correctHistory.map(h => ({
       id: h.id, code: h.code, scannedAt: h.scannedAt,
     }))
     if (batchCodes.length > 0 || selectedUbicacion) {
@@ -624,7 +646,7 @@ export default function ValidacionRecepcion() {
     setLocationInputValue('')
     setSelectedUbicacion(null)
     setTimeout(() => locationRef.current?.focus(), 150)
-  }, [history, selectedUbicacion])
+  }, [correctHistory, selectedUbicacion])
 
   const handleHistorySort = (key) => {
     if (historySortKey === key) setHistorySortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -682,7 +704,7 @@ export default function ValidacionRecepcion() {
                   {selectedUbicacion || <span className="text-primary-400 font-semibold">{t('rec.val.ubicacion.panel.sin_ub')}</span>}
                 </p>
                 <p className="text-[10px] text-primary-400 mt-0.5 tabular-nums">
-                  {history.filter(h => h.result === 'correcto').length} {t('rec.val.ubicacion.lote_actual')}
+                  {correctHistoryCount} {t('rec.val.ubicacion.lote_actual')}
                 </p>
               </div>
               <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">{t('rec.val.ubicacion.badge')}</span>
@@ -695,7 +717,7 @@ export default function ValidacionRecepcion() {
                 <Edit3 size={12} />
               </button>
             </div>
-            {history.filter(h => h.result === 'correcto').length > 0 && (
+            {correctHistoryCount > 0 && (
               <div className="px-3 pb-2.5">
                 <button
                   type="button"
@@ -1122,7 +1144,7 @@ export default function ValidacionRecepcion() {
               </button>
             )}
             {/* Completar ubicacion (when confirmed and has scans) */}
-            {!withTarimas && ubicacionConfirmed && history.filter(h => h.result === 'correcto').length > 0 && (
+            {!withTarimas && ubicacionConfirmed && correctHistoryCount > 0 && (
               <button
                 type="button"
                 onClick={completarUbicacion}
@@ -1271,7 +1293,7 @@ export default function ValidacionRecepcion() {
 
             {/* ── Ubicación — unified card: input → summary in one block ── */}
             {!withTarimas && (() => {
-              const batchCount = history.filter(h => h.result === 'correcto').length
+              const batchCount = correctHistoryCount
               return (
                 <div className="hidden sm:block card overflow-hidden border border-accent-100 z-[10] bg-white/97 backdrop-blur-sm">
                   {!ubicacionConfirmed ? (

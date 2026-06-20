@@ -1,6 +1,7 @@
 import env from './env.js'
 import pg from 'pg'
 import bcrypt from 'bcryptjs'
+import { FULL_ACCESS_PERMISSIONS } from '../shared/constants/moduleCatalog.js'
 
 const { Client } = pg
 
@@ -31,18 +32,7 @@ async function seedDatabase() {
       {
         nombre: 'Administrador',
         descripcion: 'Acceso total al sistema',
-        permisos: {
-          global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
-          dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
-          fep: { folios: 'eliminar' },
-          inventario: { dashboard: 'eliminar', escaneo: 'eliminar', registros: 'eliminar', rastreo: 'eliminar' },
-          devoluciones: { dashboard: 'eliminar', entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
-          surtido: { dashboard: 'eliminar', ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
-          anormalidades: { dashboard: 'eliminar', registro: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
-          despacho: { dashboard: 'eliminar', validar: 'eliminar', ordenes: 'eliminar', folios: 'eliminar' },
-          recepcion: { dashboard: 'eliminar', recibir: 'eliminar', validacion: 'eliminar' },
-          sistema: { wms: 'eliminar' },
-        }
+        permisos: FULL_ACCESS_PERMISSIONS
       },
     ]
 

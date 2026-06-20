@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
@@ -104,7 +104,7 @@ function MobileOrderCard({ order, t, onValidate, onView, highlight = false }) {
   )
 }
 
-export default function RecepcionMobileHub({ orders, isLoading, t }) {
+function RecepcionMobileHub({ orders, isLoading, t }) {
   const navigate = useNavigate()
   const inputRef = useRef(null)
   const [code, setCode] = useState('')
@@ -308,3 +308,5 @@ export default function RecepcionMobileHub({ orders, isLoading, t }) {
     </div>
   )
 }
+
+export default memo(RecepcionMobileHub)

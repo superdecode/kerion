@@ -140,6 +140,8 @@ router.post('/orders/:id/scan',
   authenticateToken, loadFullUser,
   requirePermission('recepcion.validacion', 'actualizar'),
   async (req, res) => {
+    const timingEnabled = process.env.NODE_ENV !== 'production'
+    const startedAt = timingEnabled ? process.hrtime.bigint() : null
     try {
       const { codigo_escaneado, ubicacion } = req.body
       if (!codigo_escaneado) return res.status(400).json({ error: 'Se requiere el código escaneado' })
@@ -171,7 +173,8 @@ router.post('/orders/:id/scan',
              AND e.tenant_id=$2
              AND e.resultado='correcto'
              AND ${normalizedCodeSql('e.codigo_escaneado')} = ANY($3::text[])
-           ORDER BY e.scanned_at DESC, e.id DESC`,
+           ORDER BY e.scanned_at DESC, e.id DESC
+           LIMIT 1`,
           [req.params.id, req.tenantId, scanVariations]
         ),
       ])
@@ -269,16 +272,25 @@ router.post('/orders/:id/scan',
         [req.params.id, req.tenantId, validadas, newEstado]
       )
 
-      res.json({
+      const payload = {
         resultado: 'correcto',
         codigo: normalizedCode || rawCode,
         line,
         cajas_validadas: validadas,
         estado: newEstado,
         event: eventRes.rows[0],
-      })
+      }
+      if (timingEnabled && startedAt) {
+        const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
+        console.info(`[recepcion] scan ${req.params.id} ${elapsedMs.toFixed(1)}ms`)
+      }
+      res.json(payload)
     } catch (err) {
       console.error('[recepcion] scan:', err.message)
+      if (timingEnabled && startedAt) {
+        const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
+        console.info(`[recepcion] scan ${req.params.id} failed after ${elapsedMs.toFixed(1)}ms`)
+      }
       res.status(500).json({ error: 'Error al procesar escaneo' })
     }
   }

@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { Search, RefreshCw, Building2, ChevronRight, AlertCircle, CheckCircle2, Clock, XCircle, PauseCircle, Users, Calendar, Database, Zap, Plus, Eye, EyeOff, X, Save } from 'lucide-react'
 import adminApi from '../services/adminApi'
 import { fmtDate } from '../../../core/utils/dateFormat'
+import { MODULE_CATALOG, ALL_MODULE_CODES } from '../../../core/constants/moduleCatalog'
 
 const STATUS_CFG = {
   trial:         { label: 'Trial',          bg: 'bg-blue-500/15',    text: 'text-blue-300',   border: 'border-blue-500/25',    dot: 'bg-blue-400' },
@@ -244,12 +245,10 @@ export default function AdminTenants() {
   )
 }
 
-const ALL_MODULES = [
-  { code: 'dropscan', label: 'DropScan (escaneo de guias)' },
-  { code: 'surtido', label: 'Surtido (ordenes de picking)' },
-  { code: 'inventario', label: 'Inventario (conteos)' },
-  { code: 'devoluciones', label: 'Devoluciones (DEV)' },
-]
+const ALL_MODULES = MODULE_CATALOG.map(module => ({
+  code: module.code,
+  label: `${module.name} (${module.tagline.toLowerCase()})`,
+}))
 
 function CreateTenantModal({ onClose, onSuccess }) {
   const [form, setForm] = useState({
@@ -261,7 +260,7 @@ function CreateTenantModal({ onClose, onSuccess }) {
     plan_id: '',
     subscription_type: 'monthly',
     zona_horaria: 'America/Mexico_City',
-    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones'],
+    modules: ALL_MODULE_CODES,
   })
   const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(false)

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
@@ -79,6 +80,7 @@ function SortHeader({ label, field, sortField, sortDir, onSort, className = '' }
 
 export default function Ordenes() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const { t } = useI18nStore()
   const beginPreloader = usePreloaderStore(s => s.begin)
   const endPreloader = usePreloaderStore(s => s.end)
@@ -110,10 +112,16 @@ export default function Ordenes() {
     return <StatusPill className={meta.cls}>{t(meta.labelKey)}</StatusPill>
   }
 
+  function getDispatchFolioPath(dispatch) {
+    const folioId = dispatch?.folio_id ?? dispatch?.id
+    return folioId ? `/despacho/folios/${folioId}` : null
+  }
+
   const canManageCatalogs = useAuthStore(s => {
     const lvl = s.getPermissionLevel('despacho.ordenes')
     return lvl === 'actualizar' || lvl === 'eliminar'
   })
+  const canOpenFolios = useAuthStore(s => s.canView('despacho.folios'))
   const canDispatch = useAuthStore(s => {
     const lvl = s.getPermissionLevel('despacho.folios')
     return ['crear', 'actualizar', 'eliminar'].includes(lvl)
@@ -399,18 +407,44 @@ export default function Ordenes() {
     setShowDispatchQty(true)
   }
 
+  function openDispatchFolio(dispatch, event) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+
+    const path = getDispatchFolioPath(dispatch)
+    if (!path) return
+
+    if (!canOpenFolios) {
+      window.location.assign(path)
+      return
+    }
+
+    navigate(path)
+
+    window.setTimeout(() => {
+      if (window.location.pathname !== path) {
+        window.location.assign(path)
+      }
+    }, 0)
+  }
+
   const hasFilters = search || statusFilter.length > 0 || dispatchFilter.length > 0 || dateFrom || dateTo
 
   const isPartial = sheetsData?.data?.partial ?? false
   const hasNoOrdersLoaded = allOrders.length === 0
-  const waitingForSheets = loadingSheets || fetchingSheets || !sheetsData || isPartial
+  const waitingForSheets = !sheetsData || loadingSheets || fetchingSheets || isPartial
   const waitingForDispatch = (loadingDispatch || fetchingDispatch) && !dispatchData
-  const showInitialLoader = !isError && hasNoOrdersLoaded && (waitingForSheets || waitingForDispatch)
+  const isBootstrapping = waitingForSheets || waitingForDispatch
+  const showInitialLoader = !isError && hasNoOrdersLoaded && isBootstrapping
+  const showTableLoader = !isError && (
+    showInitialLoader ||
+    (paginated.length === 0 && (isBootstrapping || isPartial || loadingSheets || fetchingSheets || loadingDispatch || fetchingDispatch))
+  )
   const sp = { sortField, sortDir, onSort: handleSort }
 
   useEffect(() => {
     if (showInitialLoader && !initialPreloaderRef.current) {
-      initialPreloaderRef.current = beginPreloader('Cargando órdenes de despacho...', 0)
+      initialPreloaderRef.current = beginPreloader(t('desp.ordenes.loading'), 0)
     }
     if (!showInitialLoader && initialPreloaderRef.current) {
       endPreloader(initialPreloaderRef.current)
@@ -449,7 +483,7 @@ export default function Ordenes() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="relative flex flex-col h-full">
       <Header
         title={t('desp.ordenes.title')}
         subtitle={t('desp.ordenes.subtitle')}
@@ -542,7 +576,7 @@ export default function Ordenes() {
                     </button>
                   )}
                   <span className="text-[10px] font-bold text-primary-500 uppercase tracking-wide shrink-0 border-l border-primary-200/80 pl-2.5 ml-0.5">
-                    Despacho
+                    {t('nav.despacho')}
                   </span>
                 </div>
                 {scanStatus !== SCAN_IDLE && (
@@ -621,9 +655,13 @@ export default function Ordenes() {
         </div>
 
         {/* Table */}
-        {showInitialLoader ? (
-          <div className="flex min-h-[360px] items-center justify-center px-5 py-16">
-            <LoadingSpinner size="lg" text="Cargando órdenes de despacho..." />
+        {showTableLoader ? (
+          <div className="px-5 py-4">
+            <div className="relative min-h-[360px] overflow-hidden rounded-2xl border border-warm-100 bg-white shadow-sm">
+              <div className="absolute inset-0 z-[18] flex items-center justify-center bg-white/82 backdrop-blur-sm">
+                <LoadingSpinner size="lg" text={t('desp.ordenes.loading')} />
+              </div>
+            </div>
           </div>
         ) : isError ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
@@ -685,7 +723,7 @@ export default function Ordenes() {
                             {orderNo && (
                               <button
                                 onClick={() => {
-                                  navigator.clipboard.writeText(orderNo)
+                                  navigator.clipboard.writeText(orderNo).catch(() => {})
                                   setCopiedOrderNo(orderNo)
                                   setTimeout(() => setCopiedOrderNo(n => n === orderNo ? null : n), 1500)
                                 }}
@@ -722,7 +760,18 @@ export default function Ordenes() {
                           {dispatch ? (
                             <div className="flex items-center gap-1.5">
                               <Truck className="w-3 h-3 text-warm-400" />
-                              <span className="font-mono text-xs text-warm-600">{dispatch.folio_numero}</span>
+                              {getDispatchFolioPath(dispatch) ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => openDispatchFolio(dispatch, event)}
+                                  className="font-mono text-xs text-primary-700 hover:text-primary-800 hover:underline underline-offset-2 transition-colors"
+                                  title={t('desp.btn.irFolio')}
+                                >
+                                  {dispatch.folio_numero}
+                                </button>
+                              ) : (
+                                <span className="font-mono text-xs text-warm-600">{dispatch.folio_numero}</span>
+                              )}
                             </div>
                           ) : (
                             <span className="text-warm-300 text-xs">—</span>
@@ -731,7 +780,7 @@ export default function Ordenes() {
                         {/* Estado Folio */}
                         <td className="px-4 py-3">
                           {dm
-                            ? <StatusPill className={dm.cls}>{dm.label}</StatusPill>
+                            ? <StatusPill className={dm.cls}>{t(dm.labelKey)}</StatusPill>
                             : <span className="text-warm-200 text-xs">—</span>
                           }
                         </td>
@@ -843,7 +892,19 @@ export default function Ordenes() {
         icon={AlertCircle}
         size="sm"
         footer={
-          <div className="flex justify-end w-full">
+          <div className="flex justify-end gap-2 w-full">
+            {getDispatchFolioPath(conflictModal.dispatch) && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  openDispatchFolio(conflictModal.dispatch, event)
+                  setConflictModal({ open: false, orderNo: null, dispatch: null })
+                }}
+                className="btn-secondary"
+              >
+                {t('desp.btn.irFolio')}
+              </button>
+            )}
             <button onClick={() => setConflictModal({ open: false, orderNo: null, dispatch: null })} className="btn-primary">
               {t('desp.conflict.confirm')}
             </button>
@@ -857,7 +918,20 @@ export default function Ordenes() {
             {conflictModal.dispatch?.folio_numero && (
               <p className="text-xs text-warning-700">
                 <span className="font-semibold">{t('desp.conflict.folio')}:</span>{' '}
-                <span className="font-mono">{conflictModal.dispatch.folio_numero}</span>
+                {getDispatchFolioPath(conflictModal.dispatch) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      openDispatchFolio(conflictModal.dispatch)
+                      setConflictModal({ open: false, orderNo: null, dispatch: null })
+                    }}
+                    className="font-mono text-primary-700 hover:text-primary-800 hover:underline underline-offset-2 transition-colors"
+                  >
+                    {conflictModal.dispatch.folio_numero}
+                  </button>
+                ) : (
+                  <span className="font-mono">{conflictModal.dispatch.folio_numero}</span>
+                )}
               </p>
             )}
             {conflictModal.dispatch?.order_estado && (
@@ -885,7 +959,7 @@ export default function Ordenes() {
 
       {/* Full-screen agenda overlay */}
       {showAgenda && (
-        <div className="fixed inset-0 z-[150] bg-white flex flex-col">
+        <div className="absolute inset-0 z-[150] bg-white flex flex-col">
           <AgendaView
             orders={filtered}
             dispatchMap={dispatchMap}

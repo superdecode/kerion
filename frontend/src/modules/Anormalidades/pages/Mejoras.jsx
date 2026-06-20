@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, RefreshCw, Target, CheckCircle2, Clock, Edit3, Eye, Link2, XCircle, Search, AlertTriangle, X, Trash2 } from 'lucide-react'
+import { Plus, RefreshCw, Target, CheckCircle2, Clock, Edit3, Eye, Link2, XCircle, Search, AlertTriangle, X, Trash2, CalendarDays, Workflow, UserRound, Sparkles } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import Header from '../../../core/components/layout/Header'
 import MultiSelect from '../../../core/components/common/MultiSelect'
@@ -40,9 +40,13 @@ const FORM_EMPTY = {
   estado: 'nuevo',
   resultado_revision: '',
 }
+const MODAL_PANEL = 'rounded-2xl border border-warm-100/90 bg-white shadow-[0_10px_24px_-20px_rgba(15,23,42,0.16),0_4px_10px_-8px_rgba(59,130,246,0.08)]'
+const MODAL_PANEL_TINT = 'rounded-2xl border border-primary-100/70 bg-gradient-to-br from-white via-white to-primary-50/35 shadow-[0_12px_26px_-20px_rgba(15,23,42,0.16),0_6px_14px_-10px_rgba(59,130,246,0.08)]'
+const INPUT_BASE = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-300 transition-all'
 
 export default function AnormMejoras() {
   const { hasPermission } = useAuthStore()
+  const user = useAuthStore(s => s.user)
   const backendOnline = useAuthStore(s => s.backendOnline)
   const toast = useToastStore()
   const { t } = useI18nStore()
@@ -68,6 +72,20 @@ export default function AnormMejoras() {
   const [editId, setEditId] = useState(null)
   const [vincularMejoraId, setVincularMejoraId] = useState(null)
   const [deleteId, setDeleteId] = useState(null)
+
+  const dismissedCandidatesKey = useMemo(() => {
+    const userId = user?.id || 'anon'
+    return `kirion_anorm_mejoras_candidatas_hidden_${userId}`
+  }, [user?.id])
+
+  const [dismissedCandidates, setDismissedCandidates] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`kirion_anorm_mejoras_candidatas_hidden_${useAuthStore.getState().user?.id || 'anon'}`)
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })
 
   const queryParams = useMemo(() => {
     const p = { page, limit: 20, search: search || undefined }
@@ -108,6 +126,10 @@ export default function AnormMejoras() {
   const rows = data?.data || []
   const total = data?.total || 0
   const candidatas = candidatasData?.data || []
+  const visibleCandidatas = useMemo(() => {
+    const hidden = new Set(dismissedCandidates)
+    return candidatas.filter(item => !hidden.has(`${item.codigo}::${item.proceso}`))
+  }, [candidatas, dismissedCandidates])
 
   const { data: detailData, isLoading: detailLoading } = useQuery({
     queryKey: ['anorm-mejora-detail', detailId],
@@ -118,7 +140,12 @@ export default function AnormMejoras() {
 
   const createMut = useMutation({
     mutationFn: createMejora,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['anorm-mejoras'] }); setCreateOpen(false); toast.success(t('anorm.mejoras.created')) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['anorm-mejoras'] })
+      qc.invalidateQueries({ queryKey: ['anorm-mejoras-candidatas'] })
+      setCreateOpen(false)
+      toast.success(t('anorm.mejoras.created'))
+    },
     onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 
@@ -140,8 +167,47 @@ export default function AnormMejoras() {
     onError: e => toast.error(e?.response?.data?.error || t('anorm.toast.errorGeneric')),
   })
 
-  const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
+  useEffect(() => {
+    try {
+      localStorage.setItem(dismissedCandidatesKey, JSON.stringify(dismissedCandidates))
+    } catch {}
+  }, [dismissedCandidates, dismissedCandidatesKey])
+
+  const inp = INPUT_BASE
   const hasFilters = !!(search || estadoFilter || soloVencidas || soloVinculadas || sinVinculos || fechaDesde || fechaHasta || selectedProcesos.length || selectedOrigenes.length || selectedResponsables.length)
+
+  function getCandidateKey(item) {
+    return `${item.codigo}::${item.proceso}`
+  }
+
+  function dismissCandidate(item) {
+    const key = getCandidateKey(item)
+    setDismissedCandidates(prev => prev.includes(key) ? prev : [...prev, key])
+  }
+
+  async function createCandidate(item) {
+    const payload = {
+      descripcion_problema: item.nombre,
+      ocurrencias: Number(item.sin_mejora || item.ocurrencias || 1),
+      proceso: item.proceso || '',
+      origen: '',
+      causa_raiz_principal: '',
+      accion_mejora: `${t('anorm.mejoras.autoDraftActionPrefix')}: ${item.codigo} - ${item.nombre}`,
+      responsable_id: '',
+      fecha_limite: '',
+      estado: 'nuevo',
+      resultado_revision: '',
+    }
+
+    try {
+      await createMut.mutateAsync(payload)
+      dismissCandidate(item)
+      qc.invalidateQueries({ queryKey: ['anorm-mejoras-candidatas'] })
+      toast.success(t('anorm.mejoras.autoCandidateCreated'))
+    } catch {
+      // handled in mutation onError
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -274,19 +340,57 @@ export default function AnormMejoras() {
 
       <div className="flex-1 min-h-0 overflow-hidden p-4 space-y-4">
 
-        {candidatas.length > 0 && (
-          <div className="card p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-warm-500" />
-              <h3 className="text-sm font-semibold text-warm-800">{t('anorm.mejoras.autoCandidates')}</h3>
+        {visibleCandidatas.length > 0 && (
+          <div className={`${MODAL_PANEL_TINT} p-3`}>
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-xl border border-warning-200 bg-warning-100 text-warning-700 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-warm-900">{t('anorm.mejoras.autoCandidates')}</h3>
+                  <p className="text-[11px] text-warm-500 mt-0.5">{t('anorm.mejoras.autoCandidatesHint')}</p>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-              {candidatas.slice(0, 4).map((item) => (
-                <div key={item.codigo} className="rounded-xl border border-warm-100 bg-warm-50 px-3 py-2">
-                  <p className="text-sm font-semibold text-warm-800">{item.codigo} · {item.nombre}</p>
-                  <p className="text-xs text-warm-500">
-                    {item.proceso} · {t('anorm.mejoras.occurrencesCount').replace('{n}', item.ocurrencias)} · {t('anorm.mejoras.withoutLinkedImprovement').replace('{n}', item.sin_mejora)}
-                  </p>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
+              {visibleCandidatas.slice(0, 4).map((item) => (
+                <div key={getCandidateKey(item)} className={`${MODAL_PANEL} p-3`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-warm-900 truncate">{item.codigo} · {item.nombre}</p>
+                      <p className="text-[11px] text-warm-500 mt-0.5">
+                        {item.proceso} · {t('anorm.mejoras.occurrencesCount').replace('{n}', item.ocurrencias)} · {t('anorm.mejoras.withoutLinkedImprovement').replace('{n}', item.sin_mejora)}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mt-2.5">
+                        <button
+                          type="button"
+                          onClick={() => createCandidate(item)}
+                          disabled={createMut.isPending}
+                          className="btn-primary inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1.5"
+                        >
+                          {createMut.isPending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                          {t('anorm.mejoras.createFromCandidate')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => dismissCandidate(item)}
+                          className="btn-secondary inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1.5"
+                        >
+                          <X className="w-3 h-3" />
+                          {t('anorm.mejoras.dismissCandidate')}
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => dismissCandidate(item)}
+                      className="inline-flex items-center justify-center rounded-lg border border-warm-200 bg-white px-2 py-2 text-warm-400 hover:text-warm-700 hover:border-warm-300 transition-colors shrink-0"
+                      title={t('anorm.mejoras.dismissCandidate')}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -374,22 +478,32 @@ export default function AnormMejoras() {
           <div className="flex justify-center py-12"><LoadingSpinner /></div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center gap-2"><EstadoChip estado={detail.estado} /></div>
-            <InfoRow label={t('anorm.field.proceso')} value={detail.proceso || '—'} />
-            <InfoRow label={t('anorm.field.origen')} value={detail.origen || '—'} />
-            <InfoRow label={t('anorm.mejoras.problema')} value={detail.descripcion_problema} />
-            <InfoRow label={t('anorm.mejoras.ocurrencias')} value={detail.ocurrencias} />
-            <InfoRow label={t('anorm.mejoras.causaRaiz')} value={detail.causa_raiz_principal || '—'} />
-            <InfoRow label={t('anorm.mejoras.accion')} value={detail.accion_mejora} />
-            <InfoRow label={t('anorm.field.responsable')} value={detail.responsable_nombre || '—'} />
-            <InfoRow label={t('anorm.mejoras.fechaLimite')} value={detail.fecha_limite ? fmtDate(detail.fecha_limite) : '—'} />
-            {detail.resultado_revision && <InfoRow label={t('anorm.mejoras.resultado')} value={detail.resultado_revision} />}
+            <div className={`${MODAL_PANEL_TINT} p-4`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500 mb-1">Seguimiento de mejora</p>
+                  <p className="text-sm text-warm-700">Vista enfocada en causa raíz, acción correctiva, responsable y anormalidades vinculadas.</p>
+                </div>
+                <EstadoChip estado={detail.estado} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <InfoRow icon={Workflow} label={t('anorm.field.proceso')} value={detail.proceso || '—'} />
+              <InfoRow icon={Target} label={t('anorm.field.origen')} value={detail.origen || '—'} />
+              <InfoRow icon={Sparkles} label={t('anorm.mejoras.problema')} value={detail.descripcion_problema} multiline />
+              <InfoRow icon={AlertTriangle} label={t('anorm.mejoras.causaRaiz')} value={detail.causa_raiz_principal || '—'} multiline />
+              <InfoRow icon={CheckCircle2} label={t('anorm.mejoras.accion')} value={detail.accion_mejora} multiline />
+              <InfoRow icon={UserRound} label={t('anorm.field.responsable')} value={detail.responsable_nombre || '—'} />
+              <InfoRow icon={CalendarDays} label={t('anorm.mejoras.fechaLimite')} value={detail.fecha_limite ? fmtDate(detail.fecha_limite) : '—'} />
+              <InfoRow icon={Clock} label={t('anorm.mejoras.ocurrencias')} value={detail.ocurrencias} />
+            </div>
+            {detail.resultado_revision && <InfoRow icon={CheckCircle2} label={t('anorm.mejoras.resultado')} value={detail.resultado_revision} multiline />}
             {detail.anormalidades_vinculadas?.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-warm-500 mb-2">{t('anorm.mejoras.anormsVinculadas')}</p>
+              <div className={`${MODAL_PANEL} p-4`}>
+                <p className="text-xs font-semibold uppercase tracking-wider text-warm-500 mb-3">{t('anorm.mejoras.anormsVinculadas')}</p>
                 <div className="space-y-1">
                   {detail.anormalidades_vinculadas.map(a => (
-                    <div key={a.anormalidad_id} className="flex items-center gap-2 text-xs text-warm-700 bg-warm-50 rounded-lg px-3 py-1.5">
+                    <div key={a.anormalidad_id} className="flex items-center gap-2 text-xs text-warm-700 bg-warm-50 rounded-xl px-3 py-2 border border-warm-100">
                       <span className="font-mono font-semibold text-primary-700">{a.folio}</span>
                       <span className="text-warm-400">·</span>
                       <span>{a.nombre}</span>
@@ -448,11 +562,18 @@ export default function AnormMejoras() {
   )
 }
 
-function InfoRow({ label, value }) {
+function InfoRow({ icon: Icon, label, value, multiline = false }) {
   return (
-    <div>
-      <p className="text-[10px] uppercase tracking-wider text-warm-400 mb-0.5">{label}</p>
-      <p className="text-sm text-warm-800">{value}</p>
+    <div className={`${MODAL_PANEL} p-4`}>
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 rounded-2xl border border-warm-100 bg-warm-50 flex items-center justify-center text-warm-600 shrink-0">
+          {Icon ? <Icon className="w-4 h-4" /> : <Target className="w-4 h-4" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-warm-400 mb-1">{label}</p>
+          <p className={`text-sm text-warm-800 ${multiline ? 'whitespace-pre-wrap leading-relaxed' : ''}`}>{value}</p>
+        </div>
+      </div>
     </div>
   )
 }
@@ -463,7 +584,7 @@ function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubm
   const [isEditing, setIsEditing] = useState(!initialData)
   const isCreateMode = !initialData
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const inp = 'w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300'
+  const inp = INPUT_BASE
 
   useEffect(() => {
     setForm(initialData || { ...FORM_EMPTY })
@@ -480,7 +601,18 @@ function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubm
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} icon={Target} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`${MODAL_PANEL_TINT} p-4`}>
+          <div className="flex items-start gap-3">
+            <div className="h-11 w-11 rounded-2xl border border-primary-200 bg-primary-100 text-primary-700 flex items-center justify-center shrink-0">
+              <Target className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-warm-900">Ficha de mejora</p>
+              <p className="text-xs text-warm-500 mt-1">Define problema, acción, responsable y fecha límite con una estructura más clara.</p>
+            </div>
+          </div>
+        </div>
+        <div className={`${MODAL_PANEL} p-4 grid grid-cols-2 gap-3`}>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.proceso')} *</label>
             <select value={form.proceso} onChange={e => set('proceso', e.target.value)} disabled={!isEditing} className={disabledInput} required>
@@ -496,11 +628,11 @@ function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubm
             </select>
           </div>
         </div>
-        <div>
+        <div className={`${MODAL_PANEL} p-4`}>
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.problema')} *</label>
           <textarea value={form.descripcion_problema} onChange={e => set('descripcion_problema', e.target.value)} disabled={!isEditing} className={`${disabledInput} resize-none`} rows={3} required />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`${MODAL_PANEL} p-4 grid grid-cols-2 gap-3`}>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.ocurrencias')}</label>
             <input type="number" min="1" value={form.ocurrencias} onChange={e => set('ocurrencias', e.target.value)} disabled={!isEditing} className={disabledInput} />
@@ -510,15 +642,15 @@ function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubm
             <input type="date" value={form.fecha_limite} onChange={e => set('fecha_limite', e.target.value)} disabled={!isEditing} className={disabledInput} />
           </div>
         </div>
-        <div>
+        <div className={`${MODAL_PANEL} p-4`}>
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.causaRaiz')}</label>
           <textarea value={form.causa_raiz_principal} onChange={e => set('causa_raiz_principal', e.target.value)} disabled={!isEditing} className={`${disabledInput} resize-none`} rows={2} />
         </div>
-        <div>
+        <div className={`${MODAL_PANEL} p-4`}>
           <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.accion')} *</label>
           <textarea value={form.accion_mejora} onChange={e => set('accion_mejora', e.target.value)} disabled={!isEditing} className={`${disabledInput} resize-none`} rows={3} required />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`${MODAL_PANEL} p-4 grid grid-cols-2 gap-3`}>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.responsable')}</label>
             <select value={form.responsable_id} onChange={e => set('responsable_id', e.target.value)} disabled={!isEditing} className={disabledInput}>
@@ -534,12 +666,12 @@ function MejoraFormModal({ isOpen, onClose, usuarios, procesos, origenes, onSubm
           </div>
         </div>
         {form.estado === 'cerrado' && (
-          <div>
+          <div className={`${MODAL_PANEL} p-4`}>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.mejoras.resultado')}</label>
             <textarea value={form.resultado_revision} onChange={e => set('resultado_revision', e.target.value)} disabled={!isEditing} className={`${disabledInput} resize-none`} rows={2} />
           </div>
         )}
-        <div className="flex justify-end gap-3 pt-2 border-t border-warm-100">
+        <div className={`${MODAL_PANEL} flex justify-end gap-3 p-4`}>
           <button type="button" onClick={onClose} className="btn-secondary text-sm">{t('common.cancel')}</button>
           {!isEditing && !isCreateMode ? (
             <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-warning-700 bg-warning-50 hover:bg-warning-100 rounded-lg border border-warning-200 transition-colors">
@@ -599,12 +731,16 @@ function VincularModal({ mejoraId, onClose, onVincular, loading }) {
   return (
     <Modal isOpen onClose={onClose} title={t('anorm.mejoras.vincular')} icon={Link2} size="md">
       <div className="space-y-3">
+        <div className={`${MODAL_PANEL_TINT} p-4`}>
+          <p className="text-sm font-semibold text-warm-900 mb-1">{t('anorm.mejoras.vincular')}</p>
+          <p className="text-xs text-warm-500">Busca una anormalidad y relaciónala con esta mejora para eliminarla de las candidatas futuras.</p>
+        </div>
         <input
           type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder={t('anorm.registro.searchPlaceholder')}
-          className="w-full text-sm border border-warm-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-300"
+          className={INPUT_BASE}
         />
-        <div className="space-y-1 max-h-64 overflow-y-auto">
+        <div className={`${MODAL_PANEL} p-3 space-y-1 max-h-64 overflow-y-auto`}>
           {rows.map(a => (
             <button
               key={a.id}

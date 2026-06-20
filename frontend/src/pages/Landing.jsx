@@ -15,6 +15,7 @@ import {
   AlertTriangle, X, Layers, Clock, Smartphone,
   RotateCcw, Boxes, Truck, TrendingUp,
 } from 'lucide-react'
+import { MODULE_CATALOG } from '../core/constants/moduleCatalog'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,24 @@ const FEATURES = [
     desc: 'Registra y clasifica mercancia devuelta con trazabilidad completa: SKU, embalaje, evidencia fotografica y movimientos de inventario en cada entrada.',
   },
   {
+    icon: Package,
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/10',
+    border: 'border-cyan-500/20',
+    module: 'Recepcion',
+    title: 'Recepcion inbound con validacion',
+    desc: 'Administra ordenes inbound, lineas, listas de recepcion, validaciones por escaneo y novedades por ubicacion sin salir del flujo operativo.',
+  },
+  {
+    icon: FileText,
+    color: 'text-fuchsia-400',
+    bg: 'bg-fuchsia-500/10',
+    border: 'border-fuchsia-500/20',
+    module: 'Despacho',
+    title: 'Despacho y cierre de folios',
+    desc: 'Consolida folios de salida, agenda operativa, validacion final y seguimiento del cierre para despachar con menos retrabajo.',
+  },
+  {
     icon: Smartphone,
     color: 'text-indigo-400',
     bg: 'bg-indigo-500/10',
@@ -74,6 +93,15 @@ const FEATURES = [
     module: 'Todos',
     title: 'Reportes y metricas unificados',
     desc: 'Productividad por operador, tasa de error y tiempos por proceso desde todos los modulos. Exportacion a Excel y filtros avanzados incluidos en cada plan.',
+  },
+  {
+    icon: AlertTriangle,
+    color: 'text-rose-400',
+    bg: 'bg-rose-500/10',
+    border: 'border-rose-500/20',
+    module: 'Anormalidades',
+    title: 'Incidencias con SLA y mejora continua',
+    desc: 'Centraliza anormalidades, responsables, niveles criticos y mejoras vinculadas para cerrar problemas operativos con trazabilidad.',
   },
 ]
 
@@ -108,57 +136,7 @@ const STATS = [
 ]
 
 
-// Module metadata used in plan cards and module section
-const MODULES_META = [
-  {
-    id: 'dropscan',
-    icon: ScanLine,
-    color: 'text-blue-400',
-    bg: 'bg-blue-500/10',
-    border: 'border-blue-500/20',
-    name: 'DropScan',
-    tagline: 'Escaneo de guias',
-    desc: 'Registra guias en tiempo real con validacion automatica de duplicados. Control de tarimas, sesiones de escaneo y reportes de productividad.',
-    limitKey: 'guide_limit',
-    unit: 'guías',
-  },
-  {
-    id: 'surtido',
-    icon: Truck,
-    color: 'text-purple-400',
-    bg: 'bg-purple-500/10',
-    border: 'border-purple-500/20',
-    name: 'Surtido WMS',
-    tagline: 'Gestión de órdenes de salida',
-    desc: 'Asigna, rastrea y valida órdenes de salida (OBCs) desde Google Sheets hasta el cierre. Control de surtidores y discrepancias en tiempo real.',
-    limitKey: 'surtido_limit',
-    unit: 'órdenes',
-  },
-  {
-    id: 'inventario',
-    icon: Boxes,
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-500/20',
-    name: 'Inventario',
-    tagline: 'Control de stock en bodega',
-    desc: 'Sesiones de conteo con escaneo de barcodes, localización de cajas por celda, reportes de disponibilidad y exportación a Excel.',
-    limitKey: 'inventario_limit',
-    unit: 'escaneos',
-  },
-  {
-    id: 'devoluciones',
-    icon: RotateCcw,
-    color: 'text-amber-400',
-    bg: 'bg-amber-500/10',
-    border: 'border-amber-500/20',
-    name: 'Devoluciones',
-    tagline: 'Gestión de entradas y salidas de retornos',
-    desc: 'Registra, clasifica y da seguimiento a mercancía devuelta con trazabilidad completa: SKU, embalaje, evidencia fotográfica y movimientos de inventario.',
-    limitKey: 'devoluciones_limit',
-    unit: 'entradas',
-  },
-]
+const MODULES_META = MODULE_CATALOG
 
 const PLANS_CONFIG = [
   {
@@ -167,12 +145,13 @@ const PLANS_CONFIG = [
     desc: 'Operaciones medianas con módulos esenciales',
     color: 'border-gray-700',
     badge: null,
-    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones'],
+    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones', 'recepcion', 'despacho', 'anormalidades'],
     features: [
       'DropScan: hasta 10,000 guías / mes',
       'Surtido: hasta 5,000 órdenes / mes',
       'Inventario: hasta 50,000 escaneos / mes',
       'Devoluciones: hasta 50 entradas / mes',
+      'Recepcion, Despacho y Anormalidades incluidos',
       'Operadores ilimitados',
       'Soporte por email',
     ],
@@ -184,12 +163,13 @@ const PLANS_CONFIG = [
     color: 'border-blue-500',
     badge: 'Mas popular',
     badgeColor: 'bg-blue-600',
-    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones'],
+    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones', 'recepcion', 'despacho', 'anormalidades'],
     features: [
       'DropScan: guías ilimitadas',
       'Surtido: hasta 20,000 órdenes / mes',
       'Inventario: hasta 500,000 escaneos / mes',
       'Devoluciones: hasta 500 entradas / mes',
+      'Recepcion, Despacho y Anormalidades incluidos',
       'Operadores ilimitados',
       'Soporte prioritario',
       'Onboarding incluido',
@@ -202,7 +182,7 @@ const PLANS_CONFIG = [
     color: 'border-purple-500',
     badge: 'Empresas grandes',
     badgeColor: 'bg-purple-600',
-    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones'],
+    modules: ['dropscan', 'surtido', 'inventario', 'devoluciones', 'recepcion', 'despacho', 'anormalidades'],
     features: [
       'Todos los módulos sin límite',
       'Múltiples bodegas',
@@ -283,7 +263,7 @@ function HeroSection() {
         </h1>
 
         <p className="text-lg sm:text-xl text-gray-400 leading-relaxed mb-10 max-w-2xl mx-auto">
-          Kirion cubre los vacios operativos que los sistemas generales no atienden: escaneo de guias, asignacion de surtido, conteo de inventario y control de devoluciones.
+          Kirion cubre los vacios operativos que los sistemas generales no atienden: escaneo de guias, recepcion inbound, surtido, inventario, despacho, devoluciones y gestion de anormalidades.
           <span className="text-white font-medium"> Procesos mas rapidos, trazabilidad completa, mejor control.</span>
         </p>
 
@@ -304,7 +284,7 @@ function HeroSection() {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
-          {['Sin tarjeta de credito', 'Setup en menos de 10 min', '4 modulos integrados'].map(t => (
+          {['Sin tarjeta de credito', 'Setup en menos de 10 min', '7 modulos integrados'].map(t => (
             <span key={t} className="flex items-center gap-1.5">
               <Check className="w-3.5 h-3.5 text-emerald-500" />
               {t}
@@ -376,7 +356,7 @@ function FeaturesSection() {
             Todo lo que necesitas para operar sin errores
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Cuatro modulos especializados que cubren cada etapa de tu operacion logistica: desde el ingreso de guias hasta las devoluciones.
+            Siete modulos especializados que cubren cada etapa de tu operacion logistica: desde la recepcion inbound hasta el despacho final y la mejora continua.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -443,12 +423,12 @@ function BenefitsSection() {
               <ShieldCheck className="w-6 h-6 text-purple-400" />
             </div>
             <div className="mb-3">
-              <span className="text-4xl font-black text-purple-400">4</span>
+              <span className="text-4xl font-black text-purple-400">7</span>
               <span className="text-sm font-medium text-purple-400 ml-1.5">modulos integrados</span>
             </div>
             <h3 className="text-white font-bold mb-2">Control centralizado</h3>
             <p className="text-gray-400 text-sm leading-relaxed">
-              DropScan, Surtido WMS, Inventario y Devoluciones en una sola plataforma. Un login, una base de datos, reportes unificados para toda la operacion.
+              DropScan, Recepcion, Surtido WMS, Inventario, Despacho, Devoluciones y Anormalidades en una sola plataforma. Un login, una base de datos y reportes unificados para toda la operacion.
             </p>
           </div>
         </div>
@@ -521,7 +501,7 @@ function PricingSection() {
             Transparente y sin sorpresas
           </h2>
           <p className="text-gray-400 text-lg max-w-xl mx-auto mb-8">
-            Prueba 30 días gratis. Cancela cuando quieras. Sin contratos de largo plazo.
+            Prueba 30 días gratis. Cancela cuando quieras. Planes listos para operar los modulos core y los flujos avanzados.
           </p>
 
           {/* Billing toggle */}
@@ -617,19 +597,24 @@ function PricingSection() {
         <div className="mt-14">
           <div className="text-center mb-8">
             <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2">Módulos disponibles</p>
-            <h3 className="text-white text-xl font-bold">Un sistema, cuatro módulos integrados</h3>
+            <h3 className="text-white text-xl font-bold">Un sistema, siete modulos integrados</h3>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {MODULES_META.map(({ id, icon: Icon, color, bg, border, name, tagline, desc }) => (
-              <div key={id} className={`bg-gray-900 border rounded-xl p-5 ${border}`}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {MODULES_META.map(({ code, icon: Icon, color, bg, border, name, tagline, landingDescription, family }) => (
+              <div key={code} className={`bg-gray-900 border rounded-xl p-5 ${border}`}>
                 <div className="flex items-start gap-3">
                   <div className={`w-10 h-10 rounded-xl ${bg} border ${border} flex items-center justify-center flex-shrink-0`}>
                     <Icon className={`w-5 h-5 ${color}`} />
                   </div>
                   <div>
-                    <p className="text-white font-semibold text-sm mb-0.5">{name}</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-white font-semibold text-sm">{name}</p>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${bg} ${border} ${color}`}>
+                        {family === 'core' ? 'Core' : 'Advanced'}
+                      </span>
+                    </div>
                     <p className={`text-xs font-medium mb-1.5 ${color}`}>{tagline}</p>
-                    <p className="text-gray-400 text-xs leading-relaxed">{desc}</p>
+                    <p className="text-gray-400 text-xs leading-relaxed">{landingDescription}</p>
                   </div>
                 </div>
               </div>
@@ -736,7 +721,7 @@ function Footer() {
               <span className="text-white font-bold">Kirion</span>
             </div>
             <p className="text-gray-500 text-sm leading-relaxed">
-              Plataforma WMS para logistica moderna: DropScan, Surtido, Inventario y Devoluciones integrados en un solo sistema.
+              Plataforma WMS para logistica moderna: DropScan, Recepcion, Surtido, Inventario, Despacho, Devoluciones y Anormalidades integrados en un solo sistema.
             </p>
           </div>
           <div>

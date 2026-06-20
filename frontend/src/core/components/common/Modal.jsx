@@ -52,14 +52,14 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
 
           {/* Content */}
           <motion.div
-            className={`${sizes[size]} w-full bg-white rounded-2xl shadow-depth border border-warm-100 max-h-[96vh] flex flex-col relative z-10`}
+            className={`surface-enter ${sizes[size]} w-full bg-white rounded-2xl shadow-depth border border-warm-100 max-h-[96vh] flex flex-col relative z-10`}
             style={{ transformOrigin: 'center center', willChange: 'transform, opacity' }}
             initial={{ opacity: 0, scale: 0.985, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.99, y: 6 }}
             transition={{ type: 'spring', stiffness: 520, damping: 40, mass: 0.75 }}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-primary-100/60
+            <div className="chrome-shell flex items-center justify-between px-6 py-4 border-b border-primary-100/60
                             bg-gradient-to-r from-primary-50/80 via-primary-100/50 to-accent-50/40 rounded-t-2xl">
               <div className="flex items-center gap-3">
                 {Icon && (
@@ -81,7 +81,7 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
                 </motion.button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5 scrollbar-thin">
+            <div className="surface-enter-soft flex-1 overflow-y-auto px-6 py-5 scrollbar-thin">
               {children}
             </div>
             {footer && (

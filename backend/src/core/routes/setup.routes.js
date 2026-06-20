@@ -2,6 +2,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { query } from '../../config/database.js'
 import env from '../../config/env.js'
+import { FULL_ACCESS_PERMISSIONS } from '../../shared/constants/moduleCatalog.js'
 
 const router = Router()
 
@@ -9,16 +10,7 @@ const DEFAULT_ROLES = [
   {
     nombre: 'Administrador',
     descripcion: 'Acceso total al sistema',
-    permisos: {
-      global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
-      dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar', folios: 'eliminar' },
-      fep: { folios: 'eliminar' },
-      inventario: { escaneo: 'eliminar', registros: 'eliminar' },
-      devoluciones: { entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
-      surtido: { ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
-      anormalidades: { registro: 'eliminar', dashboard: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
-      sistema: { wms: 'eliminar' },
-    }
+    permisos: FULL_ACCESS_PERMISSIONS
   },
 ]
 

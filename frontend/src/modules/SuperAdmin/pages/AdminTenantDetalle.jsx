@@ -3,12 +3,13 @@ import { useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft, RefreshCw, CheckCircle2, XCircle, PauseCircle, PlayCircle,
   Edit2, Save, X, Plus, Calendar, Users, CreditCard, Activity,
-  AlertCircle, Check, Clock, Building2, FileText, Package, Zap,
+  AlertCircle, Check, Clock, Building2, FileText, Package, PackageCheck, Truck, Zap,
   Trash2, KeyRound, Copy, Search, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, SlidersHorizontal,
   ChevronUp, ChevronDown, Puzzle, ToggleLeft, ToggleRight
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 import { fmtDate, fmtDateTime, fmtTime } from '../../../core/utils/dateFormat'
+import { MODULE_CATALOG, ALL_MODULE_CODES } from '../../../core/constants/moduleCatalog'
 
 const STATUS_CFG = {
   trial:         { label: 'Trial activo',   bg: 'bg-blue-500/15',    text: 'text-blue-300',    border: 'border-blue-500/25' },
@@ -953,16 +954,7 @@ function ResetPasswordModal({ tenant, onClose }) {
   )
 }
 
-const MODULE_LABELS = {
-  dropscan: 'DropScan',
-  surtido: 'Surtido',
-  inventario: 'Inventario',
-  devoluciones: 'Devoluciones',
-  anormalidades: 'Anormalidades',
-  despacho: 'Despacho',
-  recepcion: 'Recepción',
-}
-const ALL_MODULE_CODES = ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades', 'despacho', 'recepcion']
+const MODULE_LABELS = Object.fromEntries(MODULE_CATALOG.map(module => [module.code, module.name]))
 
 function ModulesPanel({ tenantId, onSaved }) {
   const [modules, setModules] = useState([])
@@ -1248,10 +1240,14 @@ export default function AdminTenantDetalle() {
       </div>
 
       {/* Stats section */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
         <StatCard icon={Zap} label="Guias totales" value={stats?.total_guias.toLocaleString() ?? '—'} color="text-blue-400" loading={statsLoading} />
         <StatCard icon={Package} label="Tarimas" value={stats?.total_tarimas.toLocaleString() ?? '—'} color="text-blue-400" loading={statsLoading} />
         <StatCard icon={FileText} label="Folios" value={stats?.total_folios.toLocaleString() ?? '—'} color="text-cyan-400" loading={statsLoading} />
+        <StatCard icon={Truck} label="Ordenes surtido" value={stats?.total_surtido_ordenes.toLocaleString() ?? '—'} color="text-purple-400" loading={statsLoading} />
+        <StatCard icon={PackageCheck} label="Recepcion" value={stats?.total_recepcion_ordenes.toLocaleString() ?? '—'} color="text-cyan-400" loading={statsLoading} />
+        <StatCard icon={Zap} label="Scans recepcion" value={stats?.total_recepcion_scans.toLocaleString() ?? '—'} color="text-cyan-400" loading={statsLoading} />
+        <StatCard icon={AlertCircle} label="Anormalidades" value={stats?.total_anormalidades.toLocaleString() ?? '—'} color="text-rose-400" loading={statsLoading} />
         <StatCard icon={Users} label="Escaneadores activos" value={stats?.active_scanners.toLocaleString() ?? '—'} color="text-amber-400" loading={statsLoading} />
       </div>
       {!statsLoading && stats ? (

@@ -17,7 +17,7 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { fmtDate, fmtTimeShort, getToday, subtractDays } from '../../../core/utils/dateFormat'
-import { getFolios, getConductores, getUnidades, deleteFolio } from '../services/despachoService'
+import { getFolios, getConductores, getUnidades, deleteFolio, cancelarFolio } from '../services/despachoService'
 import { ConductoresModal, UnidadesModal, FolioFormModal } from '../components/CatalogsModals'
 
 const ESTADO_META = {
@@ -74,6 +74,7 @@ export default function Folios() {
   const [showConductores, setShowConductores] = useState(false)
   const [showUnidades, setShowUnidades] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null)
 
   const { data: foliosData, isLoading, isError, refetch } = useQuery({
     queryKey: ['despacho-folios'],
@@ -97,6 +98,18 @@ export default function Folios() {
     },
     onError: (err) => {
       addToast(err?.response?.data?.error || t('desp.toast.errorEliminarFolio'), 'error')
+    },
+  })
+
+  const { mutate: doCancelFolio, isPending: cancellingFolio } = useMutation({
+    mutationFn: (folioId) => cancelarFolio(folioId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['despacho-folios'] })
+      addToast(t('desp.toast.folioCancelado'), 'success')
+      setCancelTarget(null)
+    },
+    onError: (err) => {
+      addToast(err?.response?.data?.error || t('desp.toast.errorCancelarFolio'), 'error')
     },
   })
 
@@ -185,9 +198,22 @@ export default function Folios() {
     if (!deletingFolio) setDeleteTarget(null)
   }
 
+  function openCancelModal(folio) {
+    setCancelTarget(folio)
+  }
+
+  function closeCancelModal() {
+    if (!cancellingFolio) setCancelTarget(null)
+  }
+
   function confirmDelete() {
     if (!deleteTarget?.id) return
     doDeleteFolio(deleteTarget.id)
+  }
+
+  function confirmCancel() {
+    if (!cancelTarget?.id) return
+    doCancelFolio(cancelTarget.id)
   }
 
   const hasFilters = q || dateFrom || dateTo ||
@@ -404,6 +430,16 @@ export default function Folios() {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
+                        {canWrite('despacho.folios') && (
+                          <button
+                            onClick={() => openCancelModal(folio)}
+                            title={t('desp.folios.quickCancelAction')}
+                            disabled={folio.estado !== 'borrador' && folio.estado !== 'en_proceso'}
+                            className="p-1.5 rounded-xl text-warm-300 hover:text-danger-600 hover:bg-danger-50 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-warm-300"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        )}
                         {canDeleteFolios && (
                           <button
                             onClick={() => openDeleteModal(folio)}
@@ -441,6 +477,38 @@ export default function Folios() {
       />
       <ConductoresModal isOpen={showConductores} onClose={() => setShowConductores(false)} canManage={canManageCatalogs} />
       <UnidadesModal isOpen={showUnidades} onClose={() => setShowUnidades(false)} canManage={canManageCatalogs} />
+      <Modal
+        isOpen={!!cancelTarget}
+        onClose={closeCancelModal}
+        title={t('desp.folios.quickCancelTitle')}
+        icon={XCircle}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <button onClick={closeCancelModal} className="btn-secondary text-sm" disabled={cancellingFolio}>
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={confirmCancel}
+              disabled={cancellingFolio}
+              className="btn-danger text-sm flex items-center gap-1.5"
+            >
+              {cancellingFolio && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {t('desp.folios.quickCancelConfirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">{t('desp.folios.quickCancelBody')}</p>
+          {cancelTarget?.folio_numero && (
+            <div className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-danger-700">{t('desp.col.folio')}</p>
+              <p className="font-mono text-sm font-bold text-danger-800">{cancelTarget.folio_numero}</p>
+            </div>
+          )}
+        </div>
+      </Modal>
       <Modal
         isOpen={!!deleteTarget}
         onClose={closeDeleteModal}

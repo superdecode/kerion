@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
@@ -20,6 +20,8 @@ import { listOrders, listClientes, deleteOrder, getNovedadTipos, createNovedadTi
 import { fmtDate } from '../../../core/utils/dateFormat'
 import ImportarOrdenModal from '../components/ImportarOrdenModal'
 import ListaRecepcionSelectorModal from '../components/ListaRecepcionSelectorModal'
+
+const MemoRecepcionMobileHub = memo(RecepcionMobileHub)
 
 const ESTADO_META = {
   pendiente_validacion: { cls: 'bg-warm-100 text-warm-600' },
@@ -69,6 +71,174 @@ function CopyCell({ value, className = '', muted = false }) {
     </div>
   )
 }
+
+const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
+  orders,
+  total,
+  selected,
+  setSelected,
+  deletableSelected,
+  canUpdateDelete,
+  canValidate,
+  canDeleteOrder,
+  handleExportSelected,
+  onOpenBulkDelete,
+  onDeleteRow,
+  page,
+  pageSize,
+  setPage,
+  t,
+}) {
+  const navigate = useNavigate()
+
+  const pageIds = useMemo(() => orders.map(o => o.id), [orders])
+  const allChecked = pageIds.length > 0 && pageIds.every(id => selected.has(id))
+  const someChecked = pageIds.some(id => selected.has(id))
+
+  const toggleAll = useCallback(() => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (allChecked) pageIds.forEach(id => next.delete(id))
+      else pageIds.forEach(id => next.add(id))
+      return next
+    })
+  }, [allChecked, pageIds, setSelected])
+
+  const toggleRow = useCallback((id) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }, [setSelected])
+
+  return (
+    <div className="flex-1 overflow-hidden flex flex-col px-5 py-3 gap-3">
+      <div className="card overflow-hidden table-shell">
+        {selected.size > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2.5 bg-sky-50 border-b border-sky-100 flex-wrap">
+            <span className="text-xs text-sky-700 font-semibold tabular-nums">
+              {selected.size} {selected.size === 1 ? 'orden seleccionada' : 'órdenes seleccionadas'}
+            </span>
+            {canUpdateDelete && deletableSelected.length > 0 && (
+              <button
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-danger-700 border border-danger-200 hover:bg-danger-50 transition-colors"
+                onClick={onOpenBulkDelete}
+              >
+                <Trash2 size={12} /> {t('rec.delete.selected').replace('{count}', String(deletableSelected.length))}
+              </button>
+            )}
+            <button
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors"
+              onClick={handleExportSelected}
+            >
+              <Download size={12} /> {t('common.export')} ({selected.size})
+            </button>
+            <button
+              className="inline-flex items-center gap-1 text-xs text-warm-500 hover:text-warm-700 transition-colors ml-auto"
+              onClick={() => setSelected(new Set())}
+            >
+              <X size={12} /> {t('common.clear')}
+            </button>
+          </div>
+        )}
+
+        {orders.length === 0 ? null : (
+          <div className="overflow-x-auto table-scroll">
+            <table className="w-full text-sm">
+              <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
+                <tr>
+                  <th className={`${TH} w-8`}>
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
+                      onChange={toggleAll}
+                      className="cb"
+                      onClick={e => e.stopPropagation()}
+                    />
+                  </th>
+                  <th className={TH}>{t('rec.folio')}</th>
+                  <th className={TH}>{t('rec.created_at')}</th>
+                  <th className={TH}>{t('rec.cliente')}</th>
+                  <th className={TH}>{t('rec.inbound_order_no')}</th>
+                  <th className={TH}>{t('rec.tracking_no')}</th>
+                  <th className={TH}>{t('rec.reference_no')}</th>
+                  <th className={`${TH} text-right`}>{t('rec.total_cajas')}</th>
+                  <th className={`${TH} text-right`}>{t('rec.cajas_validadas')}</th>
+                  <th className={TH}>{t('common.status')}</th>
+                  <th className={`${TH} text-right`}>{t('common.actions')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-warm-50">
+                {orders.map(order => (
+                  <tr
+                    key={order.id}
+                    onClick={() => navigate(`/recepcion/recibir/${order.id}`)}
+                    className="hover:bg-primary-100 cursor-pointer transition-colors"
+                  >
+                    <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={selected.has(order.id)} onChange={() => toggleRow(order.id)} className="cb" />
+                    </td>
+                    <td className="group px-3 py-2.5 font-mono font-semibold text-primary-700 text-xs">
+                      <CopyCell value={order.folio} />
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDate(order.created_at)}</td>
+                    <td className="px-3 py-2.5 text-xs text-warm-700 font-medium max-w-[140px] truncate">{order.cliente || '—'}</td>
+                    <td className="group px-3 py-2.5 font-mono text-xs text-warm-600"><CopyCell value={order.inbound_order_no} muted /></td>
+                    <td className="group px-3 py-2.5 font-mono text-xs text-warm-600"><CopyCell value={order.tracking_no} muted /></td>
+                    <td className="group px-3 py-2.5 text-xs text-warm-600"><CopyCell value={order.reference_no} muted /></td>
+                    <td className="px-3 py-2.5 text-right text-xs font-medium text-warm-700">{order.total_cajas}</td>
+                    <td className="px-3 py-2.5 text-right text-xs font-medium text-success-700">{order.cajas_validadas}</td>
+                    <td className="px-3 py-2.5"><EstadoBadge estado={order.estado} t={t} /></td>
+                    <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1 justify-end">
+                        <button
+                          onClick={() => navigate(`/recepcion/recibir/${order.id}`)}
+                          className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 hover:text-primary-600 transition-colors"
+                          title={t('common.view')}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        {canValidate && (
+                          <button
+                            onClick={() => navigate(`/recepcion/recibir/${order.id}/validar`)}
+                            className="p-1.5 rounded-lg hover:bg-sky-50 text-warm-400 hover:text-sky-600 transition-colors"
+                            title={t('rec.btn.validar')}
+                          >
+                            <ScanBarcode className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {canUpdateDelete && canDeleteOrder(order) && (
+                          <button
+                            onClick={() => onDeleteRow(order)}
+                            className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
+                            title={t('common.delete')}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {orders.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-16 text-warm-400">
+            <PackageCheck className="w-10 h-10 mb-3 text-warm-200" />
+            <p className="text-sm">{t('common.noData')}</p>
+          </div>
+        )}
+
+        <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+      </div>
+    </div>
+  )
+})
 
 export default function Recibir() {
   const navigate = useNavigate()
@@ -132,7 +302,7 @@ export default function Recibir() {
   })
   const activeOrders = useMemo(() =>
     (activeData?.orders || []).filter(o => o.estado !== 'completo' && o.estado !== 'cancelado'),
-    [activeData]
+    [activeData?.orders]
   )
 
   const deleteMutation = useMutation({
@@ -188,14 +358,17 @@ export default function Recibir() {
 
   const orders = data?.orders || []
   const total = data?.total || 0
-  const clienteOptions = (clientesData?.clientes || []).map(c => ({ value: c, label: c }))
-  const estadoOptions = [
+  const clienteOptions = useMemo(() =>
+    (clientesData?.clientes || []).map(c => ({ value: c, label: c })),
+    [clientesData?.clientes]
+  )
+  const estadoOptions = useMemo(() => [
     { value: 'pendiente_validacion', label: t('rec.status.pendiente_validacion') },
     { value: 'en_validacion',        label: t('rec.status.en_validacion') },
     { value: 'completo',             label: t('rec.status.completo') },
     { value: 'parcial',              label: t('rec.status.parcial') },
     { value: 'cancelado',            label: t('rec.status.cancelado') },
-  ]
+  ], [t])
 
   const canCreate = hasPermission('recepcion.recibir', 'crear')
   const canUpdateDelete = hasPermission('recepcion.recibir', 'actualizar')
@@ -207,37 +380,23 @@ export default function Recibir() {
     estados.length > 0 || clienteFilter.length > 0 ||
     Boolean(fechaDesde) || Boolean(fechaHasta)
 
-  const pageIds = orders.map(o => o.id)
-  const allChecked = pageIds.length > 0 && pageIds.every(id => selected.has(id))
-  const someChecked = pageIds.some(id => selected.has(id))
-  const toggleAll = () => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (allChecked) pageIds.forEach(id => next.delete(id))
-      else pageIds.forEach(id => next.add(id))
-      return next
-    })
-  }
-  const toggleRow = (id) => setSelected(prev => {
-    const next = new Set(prev)
-    next.has(id) ? next.delete(id) : next.add(id)
-    return next
-  })
-
-  const canDeleteOrder = (order) =>
+  const canDeleteOrder = useCallback((order) =>
     canForceDelete || Number(order.validation_records || 0) === 0
+  , [canForceDelete])
 
-  const deletableSelected = orders
-    .filter(o => selected.has(o.id) && canDeleteOrder(o))
-    .map(o => o.id)
+  const deletableSelected = useMemo(() =>
+    orders.filter(o => selected.has(o.id) && canDeleteOrder(o)).map(o => o.id),
+    [orders, selected, canDeleteOrder]
+  )
 
-  const handleApply = () => { setQFilter(q); setPage(1) }
-  const handleClear = () => {
+  const handleApply = useCallback(() => { setQFilter(q); setPage(1) }, [q])
+  const handleClear = useCallback(() => {
     setQ(''); setQFilter(''); setEstados([]); setClienteFilter([])
     setFechaDesde(''); setFechaHasta(''); setPage(1); setSelected(new Set())
-  }
+  }, [])
+  const handleOpenBulkDelete = useCallback(() => setBulkDelOpen(true), [])
 
-  const handleExportSelected = () => {
+  const handleExportSelected = useCallback(() => {
     const sel = orders.filter(o => selected.has(o.id))
     if (!sel.length) return
     const rows = sel.map(o => [
@@ -256,7 +415,7 @@ export default function Recibir() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Recepcion')
     XLSX.writeFile(wb, `recepcion-${new Date().toISOString().slice(0, 10)}.xlsx`)
-  }
+  }, [orders, selected, t])
 
   return (
     <div className="flex flex-col h-full">
@@ -298,7 +457,7 @@ export default function Recibir() {
 
       {/* MOBILE: scan hub — completely different layout */}
       <div className="flex sm:hidden flex-col flex-1 overflow-hidden">
-        <RecepcionMobileHub orders={activeOrders} isLoading={activeLoading} t={t} />
+        <MemoRecepcionMobileHub orders={activeOrders} isLoading={activeLoading} t={t} />
       </div>
 
       {/* DESKTOP: filter bar + table */}
@@ -357,131 +516,23 @@ export default function Recibir() {
           </div>
         </div>
 
-        {/* Content area */}
-        <div className="flex-1 overflow-hidden flex flex-col px-5 py-3 gap-3">
-          <div className="card overflow-hidden table-shell">
-            {selected.size > 0 && (
-              <div className="flex items-center gap-3 px-4 py-2.5 bg-sky-50 border-b border-sky-100 flex-wrap">
-                <span className="text-xs text-sky-700 font-semibold tabular-nums">
-                  {selected.size} {selected.size === 1 ? 'orden seleccionada' : 'órdenes seleccionadas'}
-                </span>
-                {canUpdateDelete && deletableSelected.length > 0 && (
-                  <button
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white text-danger-700 border border-danger-200 hover:bg-danger-50 transition-colors"
-                    onClick={() => setBulkDelOpen(true)}
-                  >
-                    <Trash2 size={12} /> {t('rec.delete.selected').replace('{count}', String(deletableSelected.length))}
-                  </button>
-                )}
-                <button
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors"
-                  onClick={handleExportSelected}
-                >
-                  <Download size={12} /> {t('common.export')} ({selected.size})
-                </button>
-                <button
-                  className="inline-flex items-center gap-1 text-xs text-warm-500 hover:text-warm-700 transition-colors ml-auto"
-                  onClick={() => setSelected(new Set())}
-                >
-                  <X size={12} /> {t('common.clear')}
-                </button>
-              </div>
-            )}
-
-            {isLoading ? (
-              <div className="flex items-center justify-center py-16"><LoadingSpinner /></div>
-            ) : orders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-warm-400">
-                <PackageCheck className="w-10 h-10 mb-3 text-warm-200" />
-                <p className="text-sm">{t('common.noData')}</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto table-scroll">
-                <table className="w-full text-sm">
-                  <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
-                    <tr>
-                      <th className={`${TH} w-8`}>
-                        <input
-                          type="checkbox"
-                          checked={allChecked}
-                          ref={el => { if (el) el.indeterminate = someChecked && !allChecked }}
-                          onChange={toggleAll}
-                          className="cb"
-                          onClick={e => e.stopPropagation()}
-                        />
-                      </th>
-                      <th className={TH}>{t('rec.folio')}</th>
-                      <th className={TH}>{t('rec.created_at')}</th>
-                      <th className={TH}>{t('rec.cliente')}</th>
-                      <th className={TH}>{t('rec.inbound_order_no')}</th>
-                      <th className={TH}>{t('rec.tracking_no')}</th>
-                      <th className={TH}>{t('rec.reference_no')}</th>
-                      <th className={`${TH} text-right`}>{t('rec.total_cajas')}</th>
-                      <th className={`${TH} text-right`}>{t('rec.cajas_validadas')}</th>
-                      <th className={TH}>{t('common.status')}</th>
-                      <th className={`${TH} text-right`}>{t('common.actions')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-warm-50">
-                    {orders.map(order => (
-                      <tr
-                        key={order.id}
-                        onClick={() => navigate(`/recepcion/recibir/${order.id}`)}
-                        className="hover:bg-primary-100 cursor-pointer transition-colors"
-                      >
-                        <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
-                          <input type="checkbox" checked={selected.has(order.id)} onChange={() => toggleRow(order.id)} className="cb" />
-                        </td>
-                        <td className="group px-3 py-2.5 font-mono font-semibold text-primary-700 text-xs">
-                          <CopyCell value={order.folio} />
-                        </td>
-                        <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDate(order.created_at)}</td>
-                        <td className="px-3 py-2.5 text-xs text-warm-700 font-medium max-w-[140px] truncate">{order.cliente || '—'}</td>
-                        <td className="group px-3 py-2.5 font-mono text-xs text-warm-600"><CopyCell value={order.inbound_order_no} muted /></td>
-                        <td className="group px-3 py-2.5 font-mono text-xs text-warm-600"><CopyCell value={order.tracking_no} muted /></td>
-                        <td className="group px-3 py-2.5 text-xs text-warm-600"><CopyCell value={order.reference_no} muted /></td>
-                        <td className="px-3 py-2.5 text-right text-xs font-medium text-warm-700">{order.total_cajas}</td>
-                        <td className="px-3 py-2.5 text-right text-xs font-medium text-success-700">{order.cajas_validadas}</td>
-                        <td className="px-3 py-2.5"><EstadoBadge estado={order.estado} t={t} /></td>
-                        <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center gap-1 justify-end">
-                            <button
-                              onClick={() => navigate(`/recepcion/recibir/${order.id}`)}
-                              className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 hover:text-primary-600 transition-colors"
-                              title={t('common.view')}
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            {canValidate && (
-                              <button
-                                onClick={() => navigate(`/recepcion/recibir/${order.id}/validar`)}
-                                className="p-1.5 rounded-lg hover:bg-sky-50 text-warm-400 hover:text-sky-600 transition-colors"
-                                title={t('rec.btn.validar')}
-                              >
-                                <ScanBarcode className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            {canUpdateDelete && canDeleteOrder(order) && (
-                              <button
-                                onClick={() => setDeleteRow(order)}
-                                className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-600 transition-colors"
-                                title={t('common.delete')}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
-          </div>
-        </div>
+        <DesktopOrdersPanel
+          orders={orders}
+          total={total}
+          selected={selected}
+          setSelected={setSelected}
+          deletableSelected={deletableSelected}
+          canUpdateDelete={canUpdateDelete}
+          canValidate={canValidate}
+          canDeleteOrder={canDeleteOrder}
+          handleExportSelected={handleExportSelected}
+          onOpenBulkDelete={handleOpenBulkDelete}
+          onDeleteRow={setDeleteRow}
+          page={page}
+          pageSize={pageSize}
+          setPage={setPage}
+          t={t}
+        />
       </div>
 
       {/* Delete confirm */}

@@ -6,6 +6,7 @@ import env from '../../config/env.js'
 import { isDatabaseUnavailableError, query, tenantQuery } from '../../config/database.js'
 import { authenticateToken, auditLog } from '../../shared/middleware/auth.js'
 import { normalizeLevel } from '../../shared/middleware/permissions.js'
+import { ALL_MODULE_CODES } from '../../shared/constants/moduleCatalog.js'
 
 
 // Deep-normalize all permission level values in a permissions object
@@ -107,7 +108,7 @@ function sendAuthServiceError(res, error, label, fallbackMessage = 'Error intern
 }
 
 const router = Router()
-const DEFAULT_MODULES = ['dropscan']
+const DEFAULT_MODULES = ALL_MODULE_CODES
 
 function isLocalDevHost(host) {
   const withoutPort = String(host || '').split(':')[0].trim().toLowerCase()

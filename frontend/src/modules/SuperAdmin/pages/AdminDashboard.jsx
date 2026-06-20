@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, TrendingUp, AlertCircle, Clock, CheckCircle2, XCircle,
   ArrowRight, RefreshCw, Database, BarChart3, Package, Users, ScanLine, FileStack,
-  Truck, Boxes, RotateCcw,
+  Truck, Boxes, RotateCcw, PackageCheck, Waypoints,
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
@@ -192,11 +192,26 @@ export default function AdminDashboard() {
               total={usage.total_devoluciones} month={usage.devoluciones_last_30d}
               unit="entradas" color="text-amber-400" border="border-amber-500/20" bg="bg-amber-500/10"
             />
+            <ModuleStatCard
+              icon={PackageCheck} label="Recepcion"
+              total={usage.total_recepcion_ordenes} month={usage.recepcion_ordenes_last_30d}
+              unit="ordenes" color="text-cyan-400" border="border-cyan-500/20" bg="bg-cyan-500/10"
+            />
+            <ModuleStatCard
+              icon={Waypoints} label="Despacho"
+              total={usage.total_folios} month={usage.folios_last_30d}
+              unit="folios" color="text-fuchsia-400" border="border-fuchsia-500/20" bg="bg-fuchsia-500/10"
+            />
+            <ModuleStatCard
+              icon={AlertCircle} label="Anormalidades"
+              total={usage.total_anormalidades} month={usage.anormalidades_last_30d}
+              unit="casos" color="text-rose-400" border="border-rose-500/20" bg="bg-rose-500/10"
+            />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
             <UsageCard icon={Users}     label="Operadores activos" value={fmt(usage.active_scanners)} color="text-rose-400"   border="border-rose-500/20" />
             <UsageCard icon={Package}   label="Tarimas (total)"    value={fmt(usage.total_tarimas)}   color="text-gray-400"   border="border-gray-700" />
-            <UsageCard icon={FileStack} label="Folios emitidos"    value={fmt(usage.total_folios)}    color="text-cyan-400"   border="border-cyan-500/20" />
+            <UsageCard icon={FileStack} label="Scans recepcion"    value={fmt(usage.total_recepcion_scans)}    color="text-cyan-400"   border="border-cyan-500/20" />
           </div>
         </div>
       )}

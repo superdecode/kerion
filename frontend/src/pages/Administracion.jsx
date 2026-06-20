@@ -45,6 +45,7 @@ const MODULE_GROUPS = [
     modules: [
       { key: 'recepcion.dashboard', label: 'Dashboard', labelKey: 'perm.sub.dashboard' },
       { key: 'recepcion.recibir',   label: 'Recibir',   labelKey: 'perm.sub.recepcion.recibir' },
+      { key: 'recepcion.validacion', label: 'Validación', labelKey: 'perm.sub.recepcion.validar' },
     ]
   },
   {

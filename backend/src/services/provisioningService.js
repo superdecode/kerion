@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { getClient, query } from '../config/database.js'
 import env from '../config/env.js'
+import { ALL_MODULE_CODES, FULL_ACCESS_PERMISSIONS } from '../shared/constants/moduleCatalog.js'
 
 const TRIAL_PLAN_CODE = 'trial_30d'
 const TRIAL_DAYS = 30
@@ -151,18 +152,7 @@ export async function provisionTenant(requestId, approvedByAdminId) {
          VALUES ($1, 'Administrador', 'Acceso total', $2, true)
          ON CONFLICT (tenant_id, nombre) DO UPDATE SET nombre = EXCLUDED.nombre
          RETURNING id`,
-        [tenantId, JSON.stringify({
-          global: { inicio: 'eliminar', administracion: 'eliminar', wms: 'eliminar' },
-          dropscan: { dashboard: 'eliminar', escaneo: 'eliminar', tarimas: 'eliminar', reportes: 'eliminar', configuracion: 'eliminar' },
-          fep: { folios: 'eliminar' },
-          inventario: { dashboard: 'eliminar', escaneo: 'eliminar', registros: 'eliminar', rastreo: 'eliminar' },
-          devoluciones: { dashboard: 'eliminar', entradas: 'eliminar', inventario: 'eliminar', salidas: 'eliminar' },
-          surtido: { dashboard: 'eliminar', ordenes: 'eliminar', validacion: 'eliminar', registros: 'eliminar' },
-          anormalidades: { dashboard: 'eliminar', registro: 'eliminar', mejoras: 'eliminar', configuracion: 'eliminar' },
-          despacho: { dashboard: 'eliminar', validar: 'eliminar', ordenes: 'eliminar', folios: 'eliminar' },
-          recepcion: { dashboard: 'eliminar', recibir: 'eliminar', validacion: 'eliminar' },
-          sistema: { wms: 'eliminar' },
-        })]
+        [tenantId, JSON.stringify(FULL_ACCESS_PERMISSIONS)]
       )
       const roleId = roleRes.rows[0].id
 
@@ -189,7 +179,7 @@ export async function provisionTenant(requestId, approvedByAdminId) {
     }
 
     try {
-      for (const code of ['dropscan', 'surtido', 'inventario', 'devoluciones', 'anormalidades', 'despacho', 'recepcion']) {
+      for (const code of ALL_MODULE_CODES) {
         await client.query(
           `INSERT INTO tenant_modules (tenant_id, module_code, enabled, enabled_at, enabled_by, notes)
            VALUES ($1, $2, true, now(), 'system', 'provisioned with tenant')

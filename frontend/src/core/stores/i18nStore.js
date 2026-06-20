@@ -1183,6 +1183,7 @@ const translations = {
 
     // ── Surtido ───────────────────────────────────────────────────────────
     'surtido.ordenes.title': '出库单',
+    'surtido.ordenes.loading': '正在加载出库单...',
     'surtido.ordenes.search_placeholder': '按单号搜索...',
     'surtido.ordenes.order_no': 'Wms 单号',
     'surtido.ordenes.third_order_no': '外部单号',
@@ -1206,6 +1207,8 @@ const translations = {
     'surtido.historial.status': '状态',
     'surtido.historial.scanned': '已扫描',
     'surtido.historial.expected': '预期',
+
+    'desp.ordenes.loading': '正在加载发货订单...',
 
     // ── Nav additions ─────────────────────────────────────────────────────
     'nav.inv.escaneo':   '扫描',
@@ -1671,6 +1674,7 @@ const translations = {
     'perm.sub.despacho.folios':          '发货单',
     'perm.group.recepcion':              '收货',
     'perm.sub.recepcion.recibir':        '接收入库',
+    'perm.sub.recepcion.validar':        '收货复核',
 
     // ── Inventario escaneo missing keys ────────────────────────────────────
     'inventario.escaneo.start_session':     '开始会话',
@@ -2745,6 +2749,11 @@ const translations = {
     'anorm.mejoras.searchPlaceholder': '搜索改善、措施或根因',
     'anorm.mejoras.emptyLinked': '暂无关联改善。',
     'anorm.mejoras.autoCandidates': '自动改善候选',
+    'anorm.mejoras.autoCandidatesHint': '可按基础信息快速生成改善，或按当前用户关闭不再显示。',
+    'anorm.mejoras.createFromCandidate': '快速创建改善',
+    'anorm.mejoras.dismissCandidate': '关闭建议',
+    'anorm.mejoras.autoCandidateCreated': '候选建议已转为改善',
+    'anorm.mejoras.autoDraftActionPrefix': '自动建议改善动作',
     'anorm.mejoras.occurrencesCount': '{n} 次发生',
     'anorm.mejoras.withoutLinkedImprovement': '{n} 条未关联改善',
     'anorm.config.title': '异常管理配置',
@@ -3030,6 +3039,7 @@ const translations = {
     'desp.btn.unidades': '车辆',
     'desp.btn.nuevoFolio': '新建发货单',
     'desp.btn.verDetalle': '查看详情',
+    'desp.btn.irFolio': '前往发货单',
     'desp.btn.reintentar': '重试',
     'desp.scan.placeholder': '扫描或输入订单号...',
     'desp.scan.buscando': '搜索中...',
@@ -3155,6 +3165,10 @@ const translations = {
     'desp.folios.deleteTitle': '删除已取消发货单',
     'desp.folios.deleteBody': '此操作将永久删除该发货单。仅允许删除已取消的发货单。',
     'desp.folios.deleteConfirm': '永久删除',
+    'desp.folios.quickCancelAction': '取消发货单',
+    'desp.folios.quickCancelTitle': '取消发货单',
+    'desp.folios.quickCancelBody': '此操作会将发货单标记为取消。之后只能删除，不能重新激活。',
+    'desp.folios.quickCancelConfirm': '确认取消',
     // Validar module / 复核模块
     'desp.validar.title': '复核管理',
     'desp.validar.nuevaSesion': '新建会话',
@@ -4445,6 +4459,7 @@ const translations = {
     'inventario.historial.scanned': 'Escaneados',
     // ── Surtido ───────────────────────────────────────────────────────────
     'surtido.ordenes.title': 'Órdenes de Salida',
+    'surtido.ordenes.loading': 'Cargando órdenes de surtido...',
     'surtido.ordenes.search_placeholder': 'Buscar por número de orden...',
     'surtido.ordenes.order_no': 'Orden WMS',
     'surtido.ordenes.third_order_no': 'Orden Externa',
@@ -4973,6 +4988,7 @@ const translations = {
     'perm.sub.despacho.folios':          'Folios',
     'perm.group.recepcion':              'Recepción',
     'perm.sub.recepcion.recibir':        'Recibir',
+    'perm.sub.recepcion.validar':        'Validación',
     // ── Common additions ───────────────────────────────────────────────────
     'common.saving':   'Guardando...',
     'common.back':     'Volver',
@@ -6024,6 +6040,11 @@ const translations = {
     'anorm.mejoras.searchPlaceholder': 'Buscar mejora, acción o causa raíz',
     'anorm.mejoras.emptyLinked': 'Sin mejoras vinculadas.',
     'anorm.mejoras.autoCandidates': 'Candidatas automáticas a mejora',
+    'anorm.mejoras.autoCandidatesHint': 'Puedes convertirlas en mejora con la información básica o cerrarlas para que no vuelvan a aparecer para este usuario.',
+    'anorm.mejoras.createFromCandidate': 'Crear mejora básica',
+    'anorm.mejoras.dismissCandidate': 'Cerrar sugerencia',
+    'anorm.mejoras.autoCandidateCreated': 'Sugerencia convertida en mejora',
+    'anorm.mejoras.autoDraftActionPrefix': 'Acción inicial sugerida',
     'anorm.mejoras.occurrencesCount': '{n} ocurrencias',
     'anorm.mejoras.withoutLinkedImprovement': '{n} sin mejora vinculada',
     'anorm.config.title': 'Configuración Anormalidades',
@@ -6301,6 +6322,7 @@ const translations = {
 
     // Despacho module
     'desp.ordenes.title': 'Órdenes de Despacho',
+    'desp.ordenes.loading': 'Cargando órdenes de despacho...',
     'desp.ordenes.subtitle': 'Órdenes de salida disponibles para embarque',
     'desp.folios.title': 'Folios de Despacho',
     'desp.folios.subtitle': 'Gestión de embarques y salidas',
@@ -6309,6 +6331,7 @@ const translations = {
     'desp.btn.unidades': 'Unidades',
     'desp.btn.nuevoFolio': 'Nuevo Folio',
     'desp.btn.verDetalle': 'Ver detalle',
+    'desp.btn.irFolio': 'Ir al folio',
     'desp.btn.reintentar': 'Reintentar',
     'desp.scan.placeholder': 'Escanear o escribir orden...',
     'desp.scan.buscando': 'Buscando...',
@@ -6428,12 +6451,18 @@ const translations = {
     'desp.toast.unidadActualizada': 'Unidad actualizada',
     'desp.toast.folioCreado': 'Folio creado',
     'desp.toast.ordenAgregada': 'Orden agregada al folio',
+    'desp.toast.folioCancelado': 'Folio cancelado',
     'desp.toast.folioEliminado': 'Folio eliminado',
     'desp.toast.errorCrearFolio': 'Error al crear folio',
+    'desp.toast.errorCancelarFolio': 'Error al cancelar folio',
     'desp.toast.errorEliminarFolio': 'Error al eliminar folio',
     'desp.folios.deleteTitle': 'Eliminar folio cancelado',
     'desp.folios.deleteBody': 'Esta acción eliminará el folio permanentemente. Solo es posible eliminar folios cancelados.',
     'desp.folios.deleteConfirm': 'Eliminar definitivamente',
+    'desp.folios.quickCancelAction': 'Cancelar folio',
+    'desp.folios.quickCancelTitle': 'Cancelar folio',
+    'desp.folios.quickCancelBody': 'Esta acción marcará el folio como cancelado. Después solo podrá eliminarse y no podrá reactivarse.',
+    'desp.folios.quickCancelConfirm': 'Sí, cancelar folio',
     // Validar module
     'desp.validar.title': 'Validar Despacho',
     'desp.validar.nuevaSesion': 'Nueva sesión',

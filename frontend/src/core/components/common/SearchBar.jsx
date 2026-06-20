@@ -73,7 +73,7 @@ export default function SearchBar() {
   }
 
   return (
-    <div ref={wrapperRef} className="relative w-full max-w-[780px]">
+    <div ref={wrapperRef} className="surface-enter-soft relative w-full max-w-[780px]">
       <div className="relative rounded-xl transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
         <input
@@ -89,7 +89,7 @@ export default function SearchBar() {
                      transition-all outline-none placeholder:text-warm-400"
         />
         {query && (
-          <button onClick={handleClear} className="absolute right-3 top-1/2 -translate-y-1/2">
+          <button onClick={handleClear} className="interactive-lift absolute right-3 top-1/2 -translate-y-1/2 rounded-full">
             <X className="w-4 h-4 text-warm-400 hover:text-warm-600" />
           </button>
         )}
@@ -106,12 +106,12 @@ export default function SearchBar() {
             className="absolute top-full left-0 right-0 mt-2 z-50 bg-white/95 backdrop-blur-xl rounded-xl shadow-depth border border-warm-100 overflow-hidden"
           >
             {loading ? (
-              <div className="p-6 text-center">
+              <div className="empty-state-shell p-6 text-center">
                 <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                 <p className="text-xs text-warm-400">{t('common.loading')}</p>
               </div>
             ) : results.length === 0 ? (
-              <div className="p-6 text-center">
+              <div className="empty-state-shell p-6 text-center">
                 <Search className="w-8 h-8 text-warm-200 mx-auto mb-2" />
                 <p className="text-xs text-warm-500 font-medium">{t('common.noResults')}</p>
               </div>

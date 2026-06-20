@@ -567,11 +567,20 @@ function AssignModal({ isOpen, order, onClose, onAssign }) {
 
 function PanelObcCopy({ obc }) {
   const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    if (!obc) return
+    navigator.clipboard.writeText(obc)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      })
+      .catch(() => {})
+  }
   return (
     <button
       type="button"
       className="group flex items-center gap-1.5 min-w-0 text-left"
-      onClick={() => obc && navigator.clipboard.writeText(obc).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })}
+      onClick={handleCopy}
     >
       <span className="code-main truncate">{obc || '—'}</span>
       <span className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -810,12 +819,20 @@ function fmtDateTime(value) {
 
 function ObcCopyHeader({ obc, meta, t }) {
   const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(obc)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      })
+      .catch(() => {})
+  }
   return (
     <div className="flex items-center gap-3 min-w-0">
       <div className="flex items-center gap-2 min-w-0">
         <span className="font-mono font-black text-warm-900 text-xl leading-none truncate">{obc}</span>
         <button
-          onClick={() => navigator.clipboard.writeText(obc).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })}
+          onClick={handleCopy}
           className="shrink-0 p-1 rounded-md text-warm-300 hover:text-primary-600 transition-colors">
           {copied ? <Check size={14} className="text-success-600" /> : <Copy size={14} />}
         </button>
@@ -874,10 +891,12 @@ function CopyableObc({ obc }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = (e) => {
     e.stopPropagation()
-    navigator.clipboard.writeText(obc).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    })
+    navigator.clipboard.writeText(obc)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      })
+      .catch(() => {})
   }
   return (
     <div className="flex items-center gap-1 group/obc">
@@ -1114,11 +1133,11 @@ export default function Ordenes() {
   const surtidores    = getRecords(surtidoresData)
   const isPartial     = wmsData?.data?.partial ?? false
   const fromPersistentCache = wmsData?.data?.fromPersistentCache ?? false
-  const showInitialLoader = backendOnline && allWmsRecords.length === 0 && (wmsLoading || wmsFetching || isPartial)
+  const showInitialLoader = backendOnline && allWmsRecords.length === 0 && (!wmsData || wmsLoading || wmsFetching || isPartial)
 
   useEffect(() => {
     if (showInitialLoader && !initialPreloaderRef.current) {
-      initialPreloaderRef.current = beginPreloader('Cargando órdenes de surtido...', 0)
+      initialPreloaderRef.current = beginPreloader(t('surtido.ordenes.loading'), 0)
     }
     if (!showInitialLoader && initialPreloaderRef.current) {
       endPreloader(initialPreloaderRef.current)
@@ -1994,33 +2013,16 @@ export default function Ordenes() {
       {/* Table */}
       <div className="flex-1 min-h-0 overflow-hidden p-4">
         <AnimatePresence mode='wait'>
-          {isTransitioning || showInitialLoader ? (
+          {isTransitioning || showInitialLoader || (backendOnline && pagedRecords.length === 0 && (!wmsData || wmsLoading || wmsFetching || isPartial)) ? (
              <motion.div
                key="loader"
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
                exit={{ opacity: 0 }}
-               className="relative rounded-2xl overflow-hidden border border-warm-100"
+               className="relative h-full min-h-[360px] overflow-hidden rounded-2xl border border-warm-100 bg-white"
              >
-               {/* Skeleton rows */}
-               <div className="divide-y divide-warm-100">
-                 {Array.from({ length: 8 }).map((_, i) => (
-                   <div key={i} className="flex items-center gap-4 px-4 py-3 bg-white">
-                     <div className="h-3 w-3 rounded-full bg-warm-100 animate-pulse shrink-0" />
-                     <div className="h-3 rounded bg-warm-100 animate-pulse" style={{ width: `${40 + (i % 3) * 15}%` }} />
-                     <div className="ml-auto h-3 rounded bg-warm-100 animate-pulse w-16 shrink-0" />
-                     <div className="h-5 w-16 rounded-full bg-warm-100 animate-pulse shrink-0" />
-                     <div className="h-3 rounded bg-warm-100 animate-pulse w-20 shrink-0" />
-                   </div>
-                 ))}
-               </div>
-               {/* Spinner overlay */}
-               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-white/70 backdrop-blur-sm">
-                 <div className="relative flex h-14 w-14 items-center justify-center rounded-[1.5rem] bg-primary-50 shadow-glow animate-bounce-soft">
-                   <div className="absolute inset-1 rounded-[1.15rem] bg-white/90" />
-                   <Loader2 size={20} className="relative z-10 animate-spin text-primary-500" />
-                 </div>
-                 <p className="text-sm text-warm-500">Cargando órdenes de surtido...</p>
+               <div className="absolute inset-0 z-[18] flex items-center justify-center bg-white/82 backdrop-blur-sm">
+                 <LoadingSpinner size="lg" text={t('surtido.ordenes.loading')} />
                </div>
              </motion.div>
           ) : pagedRecords.length === 0 ? (
