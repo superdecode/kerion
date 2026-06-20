@@ -243,7 +243,7 @@ function SessionTypeModal({ isOpen, onStart, onClose }) {
         })}
 
         <p className="text-[11px] text-warm-400 text-center pt-1 leading-relaxed">
-          El tipo no puede cambiarse una vez iniciada la sesión
+          {t('inventario.escaneo.session_type_locked')}
         </p>
       </div>
     </Modal>

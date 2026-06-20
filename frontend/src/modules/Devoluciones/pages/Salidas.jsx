@@ -333,21 +333,21 @@ export default function Salidas() {
                 {someChecked && canExport && (
                   <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex-wrap">
                     <span className="font-semibold">
-                      {selectedIds.size} seleccionados
+                      {t('common.bulk.selected').replace('{n}', selectedIds.size)}
                       {allFilteredSelected && (
-                        <span className="ml-1 font-normal text-primary-500">(todos los {salidas.length} del filtro)</span>
+                        <span className="ml-1 font-normal text-primary-500">{t('common.bulk.allFiltered').replace('{n}', salidas.length)}</span>
                       )}
                     </span>
                     {canSelectAllFiltered && (
                       <button
                         className="text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
                         onClick={() => setSelectedIds(new Set(salidas.map(r => r.id)))}>
-                        Seleccionar todos ({salidas.length})
+                        {t('common.bulk.selectAllFiltered').replace('{n}', salidas.length)}
                       </button>
                     )}
                     <button onClick={handleExportSelected}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-success-600 text-white font-semibold hover:bg-success-700 transition-colors">
-                      <Download className="w-3 h-3" /> Exportar ({selectedIds.size})
+                      <Download className="w-3 h-3" /> {t('common.export')} ({selectedIds.size})
                     </button>
                     <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-primary-500 hover:text-primary-700 font-semibold">
                       <X className="w-3.5 h-3.5" />

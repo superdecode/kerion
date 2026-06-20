@@ -13,6 +13,7 @@ import {
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import TablePagination from '../../../core/components/common/TablePagination'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -560,6 +561,13 @@ function AssignModal({ isOpen, order, onClose, onAssign }) {
             {s.nombre}
           </button>
         ))}
+        {surtidores.length === 0 && (
+          <CatalogEmptyHint
+            item={t('surtido.ordenes.surtidor').toLowerCase()}
+            section={t('surtido.ordenes.title')}
+            action={t('surtido.ordenes.manage_surtidores')}
+          />
+        )}
       </div>
     </Modal>
   )
@@ -713,6 +721,13 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                   <option value="">{t('surtido.ordenes.no_surtidor')}</option>
                   {surtidores.map(s => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
                 </select>
+                {surtidores.length === 0 && (
+                  <CatalogEmptyHint
+                    item={t('surtido.ordenes.surtidor').toLowerCase()}
+                    section={t('surtido.ordenes.title')}
+                    action={t('surtido.ordenes.manage_surtidores')}
+                  />
+                )}
               </div>
 
               {/* Change status */}
@@ -2707,6 +2722,13 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
             <option value="">{t('surtido.ordenes.no_surtidor')}</option>
             {surtidores.map((s) => <option key={s.id} value={String(s.id)}>{s.nombre}</option>)}
           </select>
+          {surtidores.length === 0 && (
+            <CatalogEmptyHint
+              item={t('surtido.ordenes.surtidor').toLowerCase()}
+              section={t('surtido.ordenes.title')}
+              action={t('surtido.ordenes.manage_surtidores')}
+            />
+          )}
         </div>
       </Modal>
       <Modal

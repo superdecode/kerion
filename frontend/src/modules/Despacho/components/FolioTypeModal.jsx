@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { List, MapPin, ArrowRight, Loader2, ScanBarcode, CalendarDays, User, Truck, Search, X } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import { toDateKey } from '../../../core/utils/dateFormat'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getOutboundList } from '../services/despachoService'
@@ -329,6 +330,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                           <option key={c.id} value={c.id}>{c.nombre}{c.licencia ? ` · ${c.licencia}` : ''}</option>
                         ))}
                       </select>
+                      {conductores.length === 0 && <CatalogEmptyHint item={t('desp.validar.modal.conductor').toLowerCase()} section={t('desp.folios.title')} action={t('desp.btn.conductores')} />}
                       {showMissingFieldsError && missingConductor && (
                         <p className="mt-1 text-[11px] font-medium text-danger-700">Selecciona un conductor.</p>
                       )}
@@ -351,6 +353,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                           <option key={u.id} value={u.id}>{u.placa} ({u.tipo})</option>
                         ))}
                       </select>
+                      {unidades.length === 0 && <CatalogEmptyHint item={t('desp.validar.modal.unidad').toLowerCase()} section={t('desp.folios.title')} action={t('desp.btn.unidades')} />}
                       {showMissingFieldsError && missingUnidad && (
                         <p className="mt-1 text-[11px] font-medium text-danger-700">Selecciona una unidad.</p>
                       )}

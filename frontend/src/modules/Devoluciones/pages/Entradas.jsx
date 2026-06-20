@@ -324,16 +324,16 @@ export default function Entradas() {
                 {someChecked && canExport && (
                   <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100 flex-wrap">
                     <span className="text-xs text-primary-700 font-semibold tabular-nums">
-                      {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+                      {t('common.bulk.selected').replace('{n}', selectedIds.size)}
                       {allFilteredSelected && (
-                        <span className="ml-1 text-primary-500 font-normal">(todos los {sesiones.length} del filtro)</span>
+                        <span className="ml-1 text-primary-500 font-normal">{t('common.bulk.allFiltered').replace('{n}', sesiones.length)}</span>
                       )}
                     </span>
                     {canSelectAllFiltered && (
                       <button
                         className="text-xs text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
                         onClick={() => setSelectedIds(new Set(sesiones.map(r => r.id)))}>
-                        Seleccionar todos ({sesiones.length})
+                        {t('common.bulk.selectAllFiltered').replace('{n}', sesiones.length)}
                       </button>
                     )}
                     <button

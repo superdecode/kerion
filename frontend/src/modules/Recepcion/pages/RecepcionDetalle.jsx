@@ -9,6 +9,7 @@ import {
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import StatusPill from '../../../core/components/common/StatusPill'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -886,6 +887,7 @@ export default function RecepcionDetalle() {
                     <option key={tipo.id} value={tipo.nombre}>{tipo.nombre}</option>
                   ))}
                 </select>
+                {(tiposData?.tipos || []).length === 0 && <CatalogEmptyHint item={t('rec.otros.col.tipo').toLowerCase()} section={t('rec.recibir.title')} action={t('rec.tipos.btn_header')} />}
                 <input
                   type="text"
                   value={nuevoCodigo}

@@ -52,10 +52,10 @@ export default function Header({ title, subtitle, actions, showSearch = false })
             ) : (
               <button
                 onClick={() => setSearchOpen(true)}
-                className="interactive-lift p-2.5 rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50"
+                className="interactive-lift inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50"
                 title={t('common.search')}
               >
-                <Search className="w-[18px] h-[18px]" />
+                <Search className="w-4 h-4" />
               </button>
             )}
           </div>

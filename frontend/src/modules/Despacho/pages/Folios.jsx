@@ -2,10 +2,11 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
+import * as XLSX from 'xlsx'
 import {
   Plus, Search, X, PackageCheck, CheckCircle2, XCircle, Clock,
   Users, Truck, User, Eye, Filter, ChevronUp, ChevronDown, ChevronsUpDown,
-  AlertCircle, RefreshCw, Trash2, Loader2,
+  AlertCircle, RefreshCw, Trash2, Loader2, Download,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -75,6 +76,7 @@ export default function Folios() {
   const [showUnidades, setShowUnidades] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [cancelTarget, setCancelTarget] = useState(null)
+  const [selected, setSelected] = useState(new Set())
 
   const { data: foliosData, isLoading, isError, refetch } = useQuery({
     queryKey: ['despacho-folios'],
@@ -166,8 +168,11 @@ export default function Folios() {
     () => sorted.slice((safePage - 1) * pageSize, safePage * pageSize),
     [sorted, safePage, pageSize]
   )
+  const allFilteredIds = useMemo(() => sorted.map(f => f.id), [sorted])
+  const paginatedIds = useMemo(() => paginated.map(f => f.id), [paginated])
 
   useEffect(() => { setPage(1) }, [q, dateFrom, dateTo, estadoFilter, unidadFilter, conductorFilter])
+  useEffect(() => { setSelected(new Set()) }, [q, dateFrom, dateTo, estadoFilter, unidadFilter, conductorFilter, pageSize])
 
   function handleSort(field) {
     if (field === sortField) {
@@ -188,6 +193,69 @@ export default function Folios() {
     setEstadoFilter([])
     setUnidadFilter([])
     setConductorFilter([])
+  }
+
+  function toggleRow(folioId) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(folioId) ? next.delete(folioId) : next.add(folioId)
+      return next
+    })
+  }
+
+  function toggleAllPage() {
+    setSelected(prev => {
+      const next = new Set(prev)
+      const allPageSelected = paginatedIds.length > 0 && paginatedIds.every(id => next.has(id))
+      if (allPageSelected) paginatedIds.forEach(id => next.delete(id))
+      else paginatedIds.forEach(id => next.add(id))
+      return next
+    })
+  }
+
+  function exportFoliosSelected() {
+    const selectedFolios = sorted.filter(folio => selected.has(folio.id))
+    if (!selectedFolios.length) return
+    const rows = selectedFolios.map((folio, index) => ([
+      index + 1,
+      folio.folio_numero || '',
+      fmtDate(folio.created_at),
+      folio.estado || '',
+      folio.conductor_nombre || '',
+      folio.unidad_placa || '',
+      folio.unidad_tipo || '',
+      folio.total_ordenes ?? 0,
+      folio.total_cajas ?? 0,
+      folio.operador_nombre || '',
+      folio.fecha_salida ? fmtDate(folio.fecha_salida) : '',
+    ]))
+    const ws = XLSX.utils.aoa_to_sheet([
+      [t('desp.folios.title')],
+      [],
+      [
+        '#',
+        t('desp.folio.col.folio'),
+        t('desp.folio.col.fechaCreacion'),
+        t('desp.folio.col.estado'),
+        t('desp.folio.col.conductor'),
+        t('desp.folio.col.unidad'),
+        t('desp.folios.bulk.unidadTipo'),
+        t('desp.folio.col.ordenes'),
+        t('desp.folio.col.cajas'),
+        t('desp.folios.bulk.operador'),
+        t('desp.folios.bulk.fechaSalida'),
+      ],
+      ...rows,
+    ])
+    ws['!cols'] = [
+      { wch: 4 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 22 },
+      { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 14 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Folios')
+    XLSX.writeFile(wb, `folios_despacho_${getToday()}.xlsx`)
+    addToast(t('common.export') + ' OK', 'success')
+    setSelected(new Set())
   }
 
   function openDeleteModal(folio) {
@@ -236,6 +304,10 @@ export default function Folios() {
   }
 
   const sp = { sortField, sortDir, onSort: handleSort }
+  const selectedCount = selected.size
+  const allPageSelected = paginatedIds.length > 0 && paginatedIds.every(id => selected.has(id))
+  const allFilteredSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selected.has(id))
+  const canSelectAllFiltered = selectedCount > 0 && !allFilteredSelected && allFilteredIds.length > paginatedIds.length
 
   return (
     <div className="flex flex-col h-full">
@@ -364,9 +436,50 @@ export default function Folios() {
         ) : (
           <div className="px-5 py-4">
             <div className="rounded-2xl border border-warm-100 overflow-hidden shadow-sm bg-white">
+              {selectedCount > 0 && (
+                <div className="flex items-center gap-3 px-4 py-2.5 bg-primary-50 border-b border-primary-100 flex-wrap">
+                  <span className="text-xs text-primary-700 font-semibold tabular-nums">
+                    {t('desp.folios.bulk.selected').replace('{n}', selectedCount)}
+                    {allFilteredSelected && (
+                      <span className="ml-1 text-primary-500 font-normal">
+                        {t('desp.folios.bulk.allFiltered').replace('{n}', allFilteredIds.length)}
+                      </span>
+                    )}
+                  </span>
+                  {canSelectAllFiltered && (
+                    <button
+                      className="text-xs text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
+                      onClick={() => setSelected(new Set(allFilteredIds))}
+                    >
+                      {t('desp.folios.bulk.selectAllFiltered').replace('{n}', allFilteredIds.length)}
+                    </button>
+                  )}
+                  <button
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-colors"
+                    onClick={exportFoliosSelected}
+                  >
+                    <Download size={12} /> {t('common.export')} ({selectedCount})
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-1.5 text-xs text-warm-500 hover:text-warm-700 transition-colors ml-auto"
+                    onClick={() => setSelected(new Set())}
+                  >
+                    <X className="w-3 h-3" /> {t('common.clear')}
+                  </button>
+                </div>
+              )}
               <table className="w-full text-sm">
                 <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                   <tr>
+                    <th className="table-header w-8">
+                      <input
+                        type="checkbox"
+                        checked={allPageSelected}
+                        ref={el => { if (el) el.indeterminate = selectedCount > 0 && !allPageSelected }}
+                        onChange={toggleAllPage}
+                        className="cb"
+                      />
+                    </th>
                     <SortHeader label={t('desp.folio.col.folio')} field="folio_numero" {...sp} />
                     <SortHeader label={t('desp.folio.col.fechaCreacion')} field="created_at" {...sp} />
                     <SortHeader label={t('desp.folio.col.estado')} field="estado" {...sp} />
@@ -380,7 +493,7 @@ export default function Folios() {
                 <tbody className="divide-y divide-warm-50">
                   {paginated.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-14 text-center">
+                      <td colSpan={9} className="py-14 text-center">
                         <PackageCheck className="w-8 h-8 text-warm-200 mx-auto mb-2" />
                         <p className="text-sm text-warm-400 font-medium">{t('desp.folios.empty')}</p>
                       </td>
@@ -392,6 +505,14 @@ export default function Folios() {
                       className="hover:bg-primary-100 cursor-pointer transition-colors"
                       onClick={() => navigate(`/despacho/folios/${folio.id}`)}
                     >
+                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(folio.id)}
+                          onChange={() => toggleRow(folio.id)}
+                          className="cb"
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <span className="font-mono font-semibold text-primary-700 text-xs">{folio.folio_numero}</span>
                       </td>

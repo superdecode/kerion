@@ -312,7 +312,7 @@ export default function Sidebar() {
       {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed(v => !v)}
-        className="absolute -right-3.5 top-[4.5rem] z-[100002] w-7 h-7 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-colors shadow-md"
+        className="absolute -right-3.5 top-[4.5rem] z-[90] w-7 h-7 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-colors shadow-md"
         title={collapsed ? t('nav.expand') : t('nav.collapse')}
       >
         {collapsed

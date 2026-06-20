@@ -13,6 +13,7 @@ import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
 import MultiSelect from '../../../core/components/common/MultiSelect'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -1071,6 +1072,7 @@ function WizardContent({
             <option value="">{t('fep.wizard.selectEmpresa')}</option>
             {empresasOpts.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
           </select>
+          {empresasOpts.length === 0 && <CatalogEmptyHint item={t('fep.empresa').toLowerCase()} section={t('fep.title')} action={t('nav.configuration')} />}
         </div>
 
         {/* Canales — dynamic multi-select */}
@@ -1080,12 +1082,7 @@ function WizardContent({
               <Radio className="w-4 h-4 text-warm-400" /> {t('fep.canales')}
             </label>
             {canalesOpts.length === 0 ? (
-              <div className="p-3 rounded-xl bg-warning-50 border border-warning-200 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-warning-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-warning-700 font-medium">
-                  {t('fep.wizard.noTarimas')}
-                </p>
-              </div>
+              <CatalogEmptyHint item={t('fep.canales').toLowerCase()} section={t('fep.title')} action={t('nav.configuration')} className="w-full" />
             ) : (
               <MultiSelect
                 placeholder={t('fep.canales')}

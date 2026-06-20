@@ -248,26 +248,28 @@ export default function DashboardPage() {
                 </div>
               )
             })()}
-            <button
-              onClick={() => setRefreshKey(k => k + 1)}
-              className="p-1.5 rounded-lg border border-warm-200 bg-white hover:bg-warm-50 text-warm-400 transition-colors"
-              title="Actualizar"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-            {user && (
-              <div className="flex items-center gap-2 pl-2 border-l border-warm-100 ml-1">
-                <div className="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-                  <span className="text-[11px] font-bold text-primary-700">
-                    {user.nombre_completo?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                  </span>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => setRefreshKey(k => k + 1)}
+                className="p-1.5 rounded-lg border border-warm-200 bg-white hover:bg-warm-50 text-warm-400 transition-colors"
+                title="Actualizar"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+              {user && (
+                <div className="flex items-center gap-2 pl-2 border-l border-warm-100">
+                  <div className="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[11px] font-bold text-primary-700">
+                      {user.nombre_completo?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                    </span>
+                  </div>
+                  <div className="hidden sm:block">
+                    <p className="text-[11px] font-semibold text-warm-700 leading-tight">{user.nombre_completo?.split(' ')[0]}</p>
+                    <p className="text-[10px] text-warm-400 leading-tight">{user.rol_nombre}</p>
+                  </div>
                 </div>
-                <div className="hidden sm:block">
-                  <p className="text-[11px] font-semibold text-warm-700 leading-tight">{user.nombre_completo?.split(' ')[0]}</p>
-                  <p className="text-[10px] text-warm-400 leading-tight">{user.rol_nombre}</p>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 

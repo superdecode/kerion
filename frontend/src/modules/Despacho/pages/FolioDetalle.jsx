@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import StatusPill from '../../../core/components/common/StatusPill'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -411,6 +412,7 @@ export default function FolioDetalle() {
                       <option key={c.id} value={c.id}>{c.nombre}{c.licencia ? ` · ${c.licencia}` : ''}</option>
                     ))}
                   </select>
+                  {conductores.length === 0 && <CatalogEmptyHint item={t('desp.validar.modal.conductor').toLowerCase()} section={t('desp.folios.title')} action={t('desp.btn.conductores')} />}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-warm-600 mb-1.5">Unidad</label>
@@ -422,6 +424,7 @@ export default function FolioDetalle() {
                       <option key={u.id} value={u.id}>{u.placa} ({u.tipo})</option>
                     ))}
                   </select>
+                  {unidades.length === 0 && <CatalogEmptyHint item={t('desp.validar.modal.unidad').toLowerCase()} section={t('desp.folios.title')} action={t('desp.btn.unidades')} />}
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-warm-600 mb-1.5">Fecha de Salida</label>

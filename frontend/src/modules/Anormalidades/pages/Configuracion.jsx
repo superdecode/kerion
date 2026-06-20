@@ -9,6 +9,7 @@ import {
 import Modal from '../../../core/components/common/Modal'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -486,7 +487,8 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
           <div className="flex justify-center py-16"><LoadingSpinner /></div>
         ) : (
           <div className={`${SOFT_PANEL} overflow-hidden`}>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto table-scroll">
+            <table className="w-full min-w-[980px] text-sm">
               <thead>
                 <tr className="border-b border-warm-100 bg-warm-50/70">
                   <th className="table-header">
@@ -512,29 +514,29 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
                   <tr><td colSpan={6} className="py-14 text-center text-sm text-warm-400">{t('common.noData')}</td></tr>
                 ) : filteredCodigos.map(c => (
                   <tr key={c.id} className="hover:bg-primary-100 transition-colors">
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className="font-mono text-xs font-semibold text-primary-700">{c.codigo}</span>
                       {c.es_default && <span className="ml-2 rounded-md bg-warm-100 px-1.5 py-0.5 text-[10px] text-warm-500">{t('anorm.config.baseCode')}</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-sm text-warm-800">{c.nombre}</p>
+                      <p className="max-w-[260px] truncate whitespace-nowrap text-sm text-warm-800">{c.nombre}</p>
                     </td>
-                    <td className="px-4 py-3 text-xs text-warm-600">{c.proceso}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-warm-600">{c.proceso}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${
                         c.nivel_sugerido === 'L3' ? 'bg-danger-100 text-danger-700 border-danger-200'
                         : c.nivel_sugerido === 'L2' ? 'bg-warning-100 text-warning-700 border-warning-200'
                         : 'bg-success-100 text-success-700 border-success-200'
                       }`}>{c.nivel_sugerido}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                         c.activo ? 'border-success-200 bg-success-50 text-success-700' : 'border-warm-200 bg-warm-100 text-warm-500'
                       }`}>
                         {c.activo ? t('common.active') : t('common.inactive')}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-1">
                         {canUpdate && (
                           <button
@@ -565,6 +567,7 @@ function CodigosTab({ codigos, procesos, niveles, procesoFilter, setProcesoFilte
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
@@ -950,6 +953,7 @@ function CodigoFormModal({ isOpen, onClose, title, initialData, onSubmit, loadin
                 <option value="">{t('common.select')}</option>
                 {procesos.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
               </select>
+              {procesos.length === 0 && <CatalogEmptyHint item={t('anorm.field.proceso').toLowerCase()} section={t('anorm.config.title')} action={t('anorm.config.procesosTitle')} />}
             </div>
           </div>
         </div>
@@ -964,6 +968,7 @@ function CodigoFormModal({ isOpen, onClose, title, initialData, onSubmit, loadin
               <option value="">{t('common.select')}</option>
               {niveles.map(n => <option key={n.codigo} value={n.codigo}>{n.nombre}</option>)}
             </select>
+            {niveles.length === 0 && <CatalogEmptyHint item={t('anorm.field.nivel').toLowerCase()} section={t('anorm.config.title')} action={t('anorm.config.nivelesTitle')} />}
           </div>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('common.description')}</label>

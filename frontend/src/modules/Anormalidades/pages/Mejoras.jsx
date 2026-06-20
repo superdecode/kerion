@@ -402,7 +402,7 @@ export default function AnormMejoras() {
         ) : (
           <div className="card overflow-hidden shadow-sm table-shell">
             <div className="overflow-x-auto table-scroll">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[1240px] text-sm">
               <thead>
                 <tr className="bg-warm-50 border-b border-warm-100">
                   {[t('common.date'), t('anorm.field.proceso'), t('anorm.field.origen'), t('anorm.mejoras.problema'), t('anorm.mejoras.ocurrencias'), t('anorm.field.responsable'), t('anorm.mejoras.fechaLimite'), t('common.status'), t('common.actions')].map(h => (
@@ -417,19 +417,19 @@ export default function AnormMejoras() {
                   <tr><td colSpan={9} className="text-center py-16 text-warm-400 text-sm">{t('common.noData')}</td></tr>
                 ) : rows.map(row => (
                   <tr key={row.id} onClick={() => setDetailId(row.id)} className="table-row cursor-pointer transition-colors">
-                    <td className="table-cell text-xs text-warm-600">{fmtDate(row.created_at)}</td>
-                    <td className="table-cell text-xs text-warm-700">{row.proceso || '—'}</td>
-                    <td className="table-cell text-xs text-warm-600">{row.origen || '—'}</td>
+                    <td className="table-cell whitespace-nowrap text-xs text-warm-600">{fmtDate(row.created_at)}</td>
+                    <td className="table-cell whitespace-nowrap text-xs text-warm-700">{row.proceso || '—'}</td>
+                    <td className="table-cell whitespace-nowrap text-xs text-warm-600">{row.origen || '—'}</td>
                     <td className="table-cell">
-                      <p className="text-sm font-medium text-warm-800 line-clamp-2 max-w-[240px]">{row.descripcion_problema}</p>
+                      <p className="max-w-[320px] truncate text-sm font-medium text-warm-800 whitespace-nowrap">{row.descripcion_problema}</p>
                     </td>
-                    <td className="table-cell text-center">
+                    <td className="table-cell whitespace-nowrap text-center">
                       <span className="text-xs font-semibold text-accent-700">{row.ocurrencias}</span>
                     </td>
-                    <td className="table-cell text-xs text-warm-600">{row.responsable_nombre || '—'}</td>
-                    <td className="table-cell text-xs text-warm-600">{row.fecha_limite ? fmtDate(row.fecha_limite) : '—'}</td>
-                    <td className="table-cell"><EstadoChip estado={row.estado} /></td>
-                    <td className="table-cell" onClick={e => e.stopPropagation()}>
+                    <td className="table-cell whitespace-nowrap text-xs text-warm-600">{row.responsable_nombre || '—'}</td>
+                    <td className="table-cell whitespace-nowrap text-xs text-warm-600">{row.fecha_limite ? fmtDate(row.fecha_limite) : '—'}</td>
+                    <td className="table-cell whitespace-nowrap"><EstadoChip estado={row.estado} /></td>
+                    <td className="table-cell whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
                         <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors"><Eye className="w-4 h-4" /></button>
                         {canUpdate && <button onClick={() => setEditId(row.id)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors"><Edit3 className="w-4 h-4" /></button>}

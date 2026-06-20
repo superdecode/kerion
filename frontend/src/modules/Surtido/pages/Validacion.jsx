@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import StatusPill from '../../../core/components/common/StatusPill'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -44,6 +45,11 @@ function safeParseJson(raw) {
 
 function buildDefaultTab(label) {
   return { id: genId(), label }
+}
+
+function hasStoredSessionForTab(tabId) {
+  const stored = safeParseJson(sessionStorage.getItem(SESSION_KEY(tabId)))
+  return !!(stored?.obc && stored?.sessionId)
 }
 
 function normalizeStoredTabs(value, fallbackLabel) {
@@ -1937,6 +1943,13 @@ const { data: reasonsData } = useQuery({
               <option key={reason.id} value={String(reason.id)}>{reason.nombre}</option>
             ))}
           </select>
+          {getRecords(reasonsData).length === 0 && (
+            <CatalogEmptyHint
+              item={t('rastreo.causas.col.causa').toLowerCase()}
+              section={t('rastreo.causas.title')}
+              action={t('rastreo.causas.btnGestion')}
+            />
+          )}
           <textarea
             className="input-field min-h-24 w-full resize-none text-sm"
             placeholder="Ej: Registro manual por código ilegible..."
@@ -2242,6 +2255,14 @@ export default function SurtidoValidacion() {
   }, [activeTabId, newTabLabel, tabs])
 
   useEffect(() => {
+    setTabs((prev) => {
+      const cleanTabs = prev.filter((tab) => tab.label === newTabLabel || hasStoredSessionForTab(tab.id))
+      if (cleanTabs.length > 0) return cleanTabs
+      return [buildDefaultTab(newTabLabel)]
+    })
+  }, [newTabLabel])
+
+  useEffect(() => {
     try { localStorage.setItem(TABS_KEY, JSON.stringify(tabs)) } catch {}
   }, [tabs])
 
@@ -2273,11 +2294,22 @@ export default function SurtidoValidacion() {
   }
 
   function handleUpdateTab(tabId, { obc, step }) {
-    setTabs(prev => prev.map(tab => {
-      if (tab.id !== tabId) return tab
-      const label = obc || newTabLabel
-      return { ...tab, label }
-    }))
+    if (!obc || step === 'search') {
+      setTabs(prev => {
+        if (prev.length === 1) {
+          return prev.map(tab => tab.id === tabId ? { ...tab, label: newTabLabel } : tab)
+        }
+        const next = prev.filter(tab => tab.id !== tabId)
+        const fallback = next[next.length - 1] || buildDefaultTab(newTabLabel)
+        setActiveTabId(fallback.id)
+        return next.length > 0 ? next : [fallback]
+      })
+    } else {
+      setTabs(prev => prev.map(tab => {
+        if (tab.id !== tabId) return tab
+        return { ...tab, label: obc }
+      }))
+    }
     if (obc && pendingTabObcs[tabId]) {
       setPendingTabObcs(prev => {
         const next = { ...prev }

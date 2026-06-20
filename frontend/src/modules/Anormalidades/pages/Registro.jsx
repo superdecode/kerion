@@ -13,6 +13,7 @@ import Modal from '../../../core/components/common/Modal'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import TablePagination from '../../../core/components/common/TablePagination'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -529,7 +530,7 @@ export default function AnormalidadesRegistro() {
               </div>
             )}
             <div className="overflow-x-auto table-scroll">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[1180px] text-sm">
                 <thead>
                   <tr className="bg-warm-50 border-b border-warm-100">
                     <th className={`${TH} w-8`}>
@@ -571,27 +572,27 @@ export default function AnormalidadesRegistro() {
                           onClick={e => e.stopPropagation()}
                         />
                       </td>
-                      <td className="table-cell">
+                      <td className="table-cell whitespace-nowrap">
                         <span className="font-mono text-xs font-semibold text-primary-700">{row.folio}</span>
                       </td>
-                      <td className="table-cell text-xs text-warm-600">{fmtDateTime(row.fecha_ocurrencia)}</td>
-                      <td className="table-cell text-xs text-warm-700">{row.proceso}</td>
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-600">{fmtDateTime(row.fecha_ocurrencia)}</td>
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-700">{row.proceso}</td>
                       <td className="table-cell">
-                        <div className="text-xs font-medium text-warm-800">{row.codigo}</div>
+                        <div className="text-xs font-medium text-warm-800 whitespace-nowrap">{row.codigo}</div>
                         <div className="text-[10px] text-warm-400 truncate max-w-[120px]">{row.nombre}</div>
                       </td>
-                      <td className="table-cell"><NivelChip nivel={row.nivel} /></td>
-                      <td className="table-cell">
+                      <td className="table-cell whitespace-nowrap"><NivelChip nivel={row.nivel} /></td>
+                      <td className="table-cell whitespace-nowrap">
                         <EstadoChip estado={row.vencido && row.estado !== 'cerrado' ? 'vencido' : row.estado} />
                       </td>
-                      <td className="table-cell text-xs text-warm-600">{row.responsable_nombre || <span className="text-warm-300">—</span>}</td>
-                      <td className="table-cell">
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-600">{row.responsable_nombre || <span className="text-warm-300">—</span>}</td>
+                      <td className="table-cell whitespace-nowrap">
                         <span className={`text-xs font-medium ${row.vencido && row.estado !== 'cerrado' ? 'text-danger-600' : 'text-warm-600'}`}>
                           {row.dias_abierto ? `${Math.floor(row.dias_abierto)}d` : '0d'}
                           {row.vencido && row.estado !== 'cerrado' && ' ⚠'}
                         </span>
                       </td>
-                      <td className="table-cell" onClick={e => e.stopPropagation()}>
+                      <td className="table-cell whitespace-nowrap" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors" title={t('common.view')}>
                             <Eye className="w-4 h-4" />
@@ -805,6 +806,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
               <option value="">{t('common.select')}</option>
               {procesos.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
+            {procesos.length === 0 && <CatalogEmptyHint item={t('anorm.field.proceso').toLowerCase()} section={t('anorm.registro.title')} action={t('anorm.config.title')} />}
           </Field>
           <Field label={t('anorm.field.codigo')}>
             <select value={form.codigo_id} onChange={handleCodigoChange} disabled={!isEditing} className={disabledInput}>
@@ -815,6 +817,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
                 </optgroup>
               ))}
             </select>
+            {Object.keys(codigosPorProceso).length === 0 && <CatalogEmptyHint item={t('anorm.field.codigo').toLowerCase()} section={t('anorm.registro.title')} action={t('anorm.config.catalogoTitle')} />}
           </Field>
           <Field label={t('anorm.field.nombre')}>
             <input value={form.nombre} onChange={e => set('nombre', e.target.value)} disabled={!isEditing} className={disabledInput} required placeholder={t('anorm.field.nombrePlaceholder')} />
@@ -824,6 +827,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
               <option value="">{t('common.select')}</option>
               {niveles.map(n => <option key={n.codigo} value={n.codigo}>{n.nombre}</option>)}
             </select>
+            {niveles.length === 0 && <CatalogEmptyHint item={t('anorm.field.nivel').toLowerCase()} section={t('anorm.registro.title')} action={t('anorm.config.nivelesTitle')} />}
           </Field>
         </SectionBlock>
 
@@ -880,6 +884,7 @@ function AnormFormModal({ isOpen, onClose, codigos, usuarios, procesos, niveles,
               <option value="">{t('common.select')}</option>
               {origenes.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
+            {origenes.length === 0 && <CatalogEmptyHint item={t('anorm.field.origen').toLowerCase()} section={t('anorm.registro.title')} action={t('anorm.config.origenesTitle')} />}
           </Field>
           <Field label={t('anorm.field.responsableAsignado')} span={2}>
             <select value={form.responsable_id} onChange={e => set('responsable_id', e.target.value)} disabled={!isEditing} className={disabledInput}>
@@ -1017,19 +1022,6 @@ function AnormDetailModal({ isOpen, onClose, detail: d, loading, canUpdate, canC
         <div className="flex justify-center py-12"><LoadingSpinner /></div>
       ) : (
         <>
-          <div className={`${MODAL_PANEL_TINT} p-4 mb-5`}>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary-500 mb-1">Resumen ejecutivo</p>
-                <p className="text-sm text-warm-700">Vista concentrada para revisar el impacto, responsables y resolución de la incidencia.</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-full border border-primary-200 bg-white/85 px-3 py-1 text-xs font-semibold text-primary-700">{d.codigo}</span>
-                {d.proceso ? <span className="inline-flex items-center rounded-full border border-warm-200 bg-white/85 px-3 py-1 text-xs font-semibold text-warm-700">{d.proceso}</span> : null}
-              </div>
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
             <DetailStatCard icon={Workflow} label={t('anorm.field.proceso')} value={d.proceso || '—'} tone="accent" />
             <DetailStatCard icon={UserRound} label={t('anorm.field.responsable')} value={d.responsable_nombre || t('anorm.field.sinAsignar')} />
@@ -1232,6 +1224,7 @@ function MejoraDesdeAnormModal({ isOpen, onClose, prefill, usuarios, procesos, o
               <option value="">{t('common.select')}</option>
               {procesos.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
+            {procesos.length === 0 && <CatalogEmptyHint item={t('anorm.field.proceso').toLowerCase()} section={t('anorm.registro.title')} action={t('anorm.config.procesosTitle')} />}
           </div>
           <div>
             <label className="block text-xs font-medium text-warm-700 mb-1">{t('anorm.field.origen')}</label>
@@ -1239,6 +1232,7 @@ function MejoraDesdeAnormModal({ isOpen, onClose, prefill, usuarios, procesos, o
               <option value="">{t('common.select')}</option>
               {origenes.map(item => <option key={item.id} value={item.nombre}>{item.nombre}</option>)}
             </select>
+            {origenes.length === 0 && <CatalogEmptyHint item={t('anorm.field.origen').toLowerCase()} section={t('anorm.registro.title')} action={t('anorm.config.origenesTitle')} />}
           </div>
         </div>
         <div className={`${MODAL_PANEL} p-4`}>

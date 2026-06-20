@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Package, Truck, Plus, X, CheckCircle2, MapPin, Hash, Tag } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getFolios, createFolio, addOrder } from '../services/despachoService'
@@ -195,6 +196,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
                   <option key={c.id} value={c.id}>{c.nombre}</option>
                 ))}
               </select>
+              {conductores.length === 0 && <CatalogEmptyHint item={t('desp.validar.modal.conductor').toLowerCase()} section={t('desp.folios.title')} action={t('desp.btn.conductores')} />}
               <select
                 value={newUnidadId}
                 onChange={e => setNewUnidadId(e.target.value)}
@@ -205,6 +207,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
                   <option key={u.id} value={u.id}>{u.placa} ({u.tipo})</option>
                 ))}
               </select>
+              {unidades.length === 0 && <CatalogEmptyHint item={t('desp.validar.modal.unidad').toLowerCase()} section={t('desp.folios.title')} action={t('desp.btn.unidades')} />}
             </div>
           )}
 

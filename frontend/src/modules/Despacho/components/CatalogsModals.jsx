@@ -4,6 +4,7 @@ import {
   Plus, Truck, Users, Loader2, Edit3, Trash2, Check, FileText,
 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
+import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import {
@@ -302,6 +303,7 @@ export function FolioFormModal({ isOpen, onClose, onCreated, conductores = [], u
             <option value="">{t('desp.folio.form.sinConductor')}</option>
             {conductores.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.licencia ? ` · ${c.licencia}` : ''}</option>)}
           </select>
+          {conductores.length === 0 && <CatalogEmptyHint item={t('desp.folio.form.conductor').toLowerCase()} section={t('desp.folios.title')} action={t('desp.btn.conductores')} />}
         </div>
         <div>
           <label className="block font-medium text-warm-700 mb-1">{t('desp.folio.form.unidad')}</label>
@@ -309,6 +311,7 @@ export function FolioFormModal({ isOpen, onClose, onCreated, conductores = [], u
             <option value="">{t('desp.folio.form.sinUnidad')}</option>
             {unidades.map(u => <option key={u.id} value={u.id}>{u.placa} ({u.tipo})</option>)}
           </select>
+          {unidades.length === 0 && <CatalogEmptyHint item={t('desp.folio.form.unidad').toLowerCase()} section={t('desp.folios.title')} action={t('desp.btn.unidades')} />}
         </div>
         <div>
           <label className="block font-medium text-warm-700 mb-1">{t('desp.folio.form.fechaSalida')}</label>

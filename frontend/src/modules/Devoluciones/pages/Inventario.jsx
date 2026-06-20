@@ -336,7 +336,7 @@ export default function Inventario() {
               onClick={() => setShowUbicaciones(true)}
               className="btn-ghost text-xs flex items-center gap-1.5"
             >
-              <LayoutGrid className="w-3.5 h-3.5" /> Gestionar ubicaciones
+              <LayoutGrid className="w-3.5 h-3.5" /> {t('common.manage_locations')}
             </button>
           ) : null
         }

@@ -842,7 +842,7 @@ export default function InventarioRegistros() {
         onClick={() => setShowManageUbicaciones(true)}
         className="btn-ghost text-xs flex items-center gap-1.5"
       >
-        <LayoutGrid className="w-3.5 h-3.5" /> Gestionar ubicaciones
+        <LayoutGrid className="w-3.5 h-3.5" /> {t('common.manage_locations')}
       </button>
       <button
         data-tour="inv-btn-quicksearch"
@@ -1107,22 +1107,22 @@ export default function InventarioRegistros() {
               {selectedIds.size > 0 && canExport && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex-wrap">
                   <span className="font-semibold">
-                    {selectedIds.size} seleccionados
+                    {t('common.bulk.selected').replace('{n}', selectedIds.size)}
                     {selectedIds.size === filteredRecords.length && filteredRecords.length > 0 && (
-                      <span className="ml-1 font-normal text-primary-500">(todos del filtro)</span>
+                      <span className="ml-1 font-normal text-primary-500">{t('common.bulk.allFiltered').replace('{n}', filteredRecords.length)}</span>
                     )}
                   </span>
                   {selectedIds.size < filteredRecords.length && (
                     <button
                       className="text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
                       onClick={() => setSelectedIds(new Set(filteredRecords.map(r => r.id)))}>
-                      Seleccionar todos ({filteredRecords.length})
+                      {t('common.bulk.selectAllFiltered').replace('{n}', filteredRecords.length)}
                     </button>
                   )}
                   <button onClick={handleBulkExport} disabled={exportingBulk}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-success-600 text-white font-semibold hover:bg-success-700 transition-colors disabled:opacity-50">
                     {exportingBulk ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-3 h-3" />}
-                    Exportar ({selectedIds.size})
+                    {t('common.export')} ({selectedIds.size})
                   </button>
                   <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-primary-500 hover:text-primary-700 font-semibold">
                     <X className="w-3.5 h-3.5" />
