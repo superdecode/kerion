@@ -8,7 +8,7 @@ const router = Router()
 // GET /api/devoluciones/dashboard?fecha_inicio=&fecha_fin=
 router.get('/',
   authenticateToken, loadFullUser,
-  requirePermission('devoluciones.entradas', 'actualizar'),
+  requirePermission('devoluciones.dashboard', 'ver'),
   async (req, res) => {
     try {
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'

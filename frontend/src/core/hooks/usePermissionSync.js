@@ -1,8 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { PERM_TO_MODULE } from '../components/auth/ProtectedRoute'
 import { MODULE_ROUTES } from '../constants/moduleRoutes'
+
+const MIN_REFRESH_INTERVAL_MS = 30_000
 
 function findAllowedRoute(canView) {
   const allowed = MODULE_ROUTES.find(r => r.path !== '/' && canView(r.module))
@@ -13,27 +15,31 @@ export function usePermissionSync() {
   const navigate = useNavigate()
   const location = useLocation()
   const { refreshUser, canView, isAuthenticated } = useAuthStore()
-  const backendOnline = useAuthStore((s) => s.backendOnline)
+  const lastRefreshAt = useRef(0)
+
+  function maybeRefresh() {
+    const store = useAuthStore.getState()
+    if (!store.backendOnline) return
+    const now = Date.now()
+    if (now - lastRefreshAt.current < MIN_REFRESH_INTERVAL_MS) return
+    lastRefreshAt.current = now
+    refreshUser().catch(() => {})
+  }
 
   useEffect(() => {
     if (!isAuthenticated) return
 
-    // Refresh permissions every 45 seconds — skip if backend is unreachable
-    const interval = setInterval(() => {
-      if (!useAuthStore.getState().backendOnline) return
-      refreshUser().catch(() => {})
-    }, 45000)
+    // Refresh permissions every 60 seconds (was 45s — reduced call rate)
+    const interval = setInterval(maybeRefresh, 60_000)
 
-    // Refresh on window focus — skip if backend is unreachable
-    const handleFocus = () => {
-      if (!useAuthStore.getState().backendOnline) return
-      refreshUser().catch(() => {})
-    }
+    // Refresh on window focus — gated by MIN_REFRESH_INTERVAL_MS cooldown
+    const handleFocus = () => maybeRefresh()
 
-    // When browser reports connectivity restored, try once to reconnect
+    // When browser reports connectivity restored, force one refresh
     const handleOnline = () => {
       useAuthStore.setState({ backendOnline: true })
-      refreshUser().catch(() => {})
+      lastRefreshAt.current = 0
+      maybeRefresh()
     }
 
     window.addEventListener('focus', handleFocus)
@@ -43,6 +49,7 @@ export function usePermissionSync() {
       window.removeEventListener('focus', handleFocus)
       window.removeEventListener('online', handleOnline)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, refreshUser])
 
   // Check if user still has access to current page (permission + module enablement)

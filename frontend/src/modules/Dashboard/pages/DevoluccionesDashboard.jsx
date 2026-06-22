@@ -4,7 +4,7 @@ import {
   LineChart, Line, PieChart, Pie, Cell,
 } from 'recharts'
 import {
-  PackagePlus, PackageMinus, Boxes, TrendingUp, Clock,
+  PackagePlus, PackageMinus, Boxes, TrendingUp, Clock, AlertTriangle,
 } from 'lucide-react'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -25,13 +25,19 @@ export default function DevoluccionesDashboard({ dateRange }) {
   const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['dash-devoluciones', dateRange],
     queryFn: () => getDevoluccionesDashboard({ fecha_inicio: dateRange.from, fecha_fin: dateRange.to }),
     enabled: backendOnline,
   })
 
   if (isLoading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>
+  if (isError) return (
+    <div className="flex flex-col items-center gap-2 py-16 text-warm-400">
+      <AlertTriangle className="w-8 h-8 opacity-40" />
+      <p className="text-sm">No se pudieron cargar las métricas de devoluciones</p>
+    </div>
+  )
 
   const d = data?.data
   if (!d) return <NoData height={200} />

@@ -30,6 +30,8 @@ router.get('/',
         rastreoSemanaRes,
         tiempoRastreoRes,
         topResponsablesRes,
+        escaneoTendenciaRes,
+        sesionesStatsRes,
       ] = await Promise.all([
         // Cajas en sistema por estado (desde inv_scans)
         req.tQuery(
@@ -111,11 +113,37 @@ router.get('/',
            LIMIT 5`,
           [req.tenantId, dateStart, dateEnd]
         ),
+        // Daily escaneo trend in date range
+        req.tQuery(
+          `SELECT
+             ${instantDateInTZ('sc.scanned_at', tz)} AS fecha,
+             COUNT(*) AS escaneos
+           FROM inv_scans sc
+           JOIN inv_sessions sess ON sess.id = sc.session_id AND sess.tenant_id = $1
+           WHERE ${instantDateInTZ('sc.scanned_at', tz)} BETWEEN $2 AND $3
+           GROUP BY fecha
+           ORDER BY fecha`,
+          [req.tenantId, dateStart, dateEnd]
+        ),
+        // Session aggregate stats for the period
+        req.tQuery(
+          `SELECT
+             COUNT(*) AS total_sesiones,
+             COALESCE(SUM(total_scans), 0) AS total_escaneos,
+             COALESCE(SUM(total_ok), 0) AS total_ok,
+             COALESCE(SUM(total_blocked), 0) AS total_bloqueados,
+             COALESCE(SUM(total_nowms), 0) AS total_nowms
+           FROM inv_sessions
+           WHERE tenant_id = $1
+             AND ${instantDateInTZ('started_at', tz)} BETWEEN $2 AND $3`,
+          [req.tenantId, dateStart, dateEnd]
+        ),
       ])
 
       const cajas = cajasEstadoRes.rows[0] || {}
       const rastreoTasa = tasaRastreoRes.rows[0] || {}
       const semana = rastreoSemanaRes.rows[0] || {}
+      const sesiones = sesionesStatsRes.rows[0] || {}
       const total = parseInt(rastreoTasa.total || 0)
       const completados = parseInt(rastreoTasa.completados || 0)
       const tasaExito = total > 0 ? Math.round((completados / total) * 100) : 0
@@ -133,6 +161,11 @@ router.get('/',
             creados_semana: parseInt(semana.creados_semana || 0),
             cerrados_semana: parseInt(semana.cerrados_semana || 0),
             tiempo_promedio_horas: parseFloat(tiempoRastreoRes.rows[0]?.horas_promedio || 0),
+            sesiones_periodo: parseInt(sesiones.total_sesiones || 0),
+            escaneos_periodo: parseInt(sesiones.total_escaneos || 0),
+            escaneos_ok_periodo: parseInt(sesiones.total_ok || 0),
+            escaneos_bloqueados_periodo: parseInt(sesiones.total_bloqueados || 0),
+            escaneos_nowms_periodo: parseInt(sesiones.total_nowms || 0),
           },
           graficas: {
             cajas_por_estado: [
@@ -140,6 +173,7 @@ router.get('/',
               { estado: 'bloqueada', cantidad: parseInt(cajas.bloqueadas || 0) },
               { estado: 'no_wms', cantidad: parseInt(cajas.no_wms || 0) },
             ],
+            escaneo_diario: escaneoTendenciaRes.rows,
             rastreo_por_estado_cajas: rastreoEstadoCajasRes.rows,
             top_responsables: topResponsablesRes.rows,
           },

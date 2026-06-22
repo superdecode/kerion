@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { getPermissionLevel } from '../../../shared/middleware/permissions.js'
-import { generateRastreoFolio } from '../services/folioService.js'
+import { generateRastreoFolioForClient } from '../services/folioService.js'
 import { crearAnormalidadRastreo, crearAnormalidadRastreoConsolidada } from '../services/anormalidadHelper.js'
 
 const router = Router()
@@ -1143,7 +1143,6 @@ router.post('/',
 
       const hasRastreoBoxType = await hasTableColumn(req.tQuery, 'rastreo_cajas', 'box_type')
 
-      const folio = await generateRastreoFolio(req.tQuery, req.tenantId)
       const userId = req.fullUser.id
 
       let asignadoId = null
@@ -1194,8 +1193,10 @@ router.post('/',
 
       const { tenantTransaction } = await import('../../../config/database.js')
       let ordenId
+      let folio
 
       await tenantTransaction(req.tenantId, async (client) => {
+        folio = await generateRastreoFolioForClient(client, req.tenantId)
         const ordenRes = await client.query(
           `INSERT INTO rastreo_ordenes
              (tenant_id, folio, outbound_order_no, customer_code, asignado_a, creado_por, notas)
