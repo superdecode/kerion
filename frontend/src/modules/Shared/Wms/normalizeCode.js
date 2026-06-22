@@ -147,6 +147,8 @@ export function normalizeCodeFast(rawCode) {
   if (!rawCode) return ''
   let code = String(rawCode).trim()
   code = code.replace(/／/g, '/').replace(/[－‒–—―]/g, '-')
+  const jsonIdMatch = code.match(/"(?:id|reference_id)"\s*:\s*"(\d+[\/\-]\d+)"/i)
+  if (jsonIdMatch?.[1]) return jsonIdMatch[1].toUpperCase()
   return code.toUpperCase().replace(/[^A-Z0-9\-\/]/g, '')
 }
 

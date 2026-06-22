@@ -109,7 +109,14 @@ function ScanTable({ events, showType = false, showUbicacion = false, t, editabl
                     onKeyDown={(event) => event.key === 'Enter' && onSaveEdit(e)}
                   />
                 ) : (
-                  e.normalized_code || e.scanned_code
+                  <span className="inline-flex items-center gap-1.5 flex-wrap">
+                    {e.normalized_code || e.scanned_code}
+                    {e.input_method === 'manual' && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-warning-100 text-warning-700 border border-warning-200 leading-none normal-case tracking-normal">
+                        {t('surtido.validacion.manual_chip')}
+                      </span>
+                    )}
+                  </span>
                 )}
               </td>
               {showType && (

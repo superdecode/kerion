@@ -529,9 +529,14 @@ function ScanFeedTable({ items, t }) {
                   <span className="w-6 h-6 rounded-lg bg-success-100 text-success-700 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                 </td>
                 <td className="px-3 py-2.5 font-mono font-semibold text-success-700">
-                  <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1.5 flex-wrap">
                     <CheckCircle2 size={10} className="text-success-500 shrink-0" />
                     {e.code}
+                    {e.isManual && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-warning-100 text-warning-700 border border-warning-200 leading-none normal-case tracking-normal">
+                        {t('surtido.validacion.manual_chip')}
+                      </span>
+                    )}
                   </span>
                 </td>
                 <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{fmtDateTime(e.ts)}</td>
@@ -1251,7 +1256,7 @@ const { data: reasonsData } = useQuery({
       playSound('success')
       scannedOkCodesRef.current.add(norm)
       setLastScan({ code: norm, result: 'ok' })
-      setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
+      setHistory(h => [{ code: norm, result: 'ok', ts: Date.now(), isManual: true }, ...h].slice(0, 500))
       setCounts(c => ({ ...c, ok: c.ok + 1 }))
       if (matched) {
         setItemCounts(m => {
