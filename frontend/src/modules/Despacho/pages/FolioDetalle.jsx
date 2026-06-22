@@ -99,7 +99,7 @@ function GeneralInfoBlock({ icon: Icon, label, value, tone = 'warm', mono = fals
   )
 }
 
-function MetricCard({ icon: Icon, label, value, color = 'warm', progress = null }) {
+function MetricCard({ icon: Icon, label, value, color = 'warm', progress = null, textMode = false }) {
   const ring = {
     primary: 'border-primary-100 bg-primary-50/60',
     success: 'border-success-100 bg-success-50/60',
@@ -122,11 +122,19 @@ function MetricCard({ icon: Icon, label, value, color = 'warm', progress = null 
     accent:  'text-accent-400',
   }
   return (
-    <div className={`min-w-[90px] flex-1 rounded-xl border px-3.5 py-3 ${ring[color]}`}>
-      <Icon className={`w-3.5 h-3.5 mb-1.5 ${iconCls[color]}`} />
-      <p className={`text-xl font-black tabular-nums leading-none ${numCls[color]}`}>{value ?? '0'}</p>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-warm-400 mt-1 leading-tight">{label}</p>
-      {progress !== null && (
+    <div className={`min-w-[80px] flex-1 rounded-xl border px-3 py-2.5 ${ring[color]}`}>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <Icon className={`w-3 h-3 shrink-0 ${iconCls[color]}`} />
+        <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-warm-400 leading-none truncate">{label}</p>
+      </div>
+      {textMode ? (
+        <p className={`text-xs font-bold leading-tight truncate max-w-[120px] ${numCls[color]}`} title={typeof value === 'string' ? value : undefined}>
+          {value ?? '—'}
+        </p>
+      ) : (
+        <p className={`text-[18px] font-black tabular-nums leading-none ${numCls[color]}`}>{value ?? '0'}</p>
+      )}
+      {progress !== null && !textMode && (
         <div className="mt-1.5 h-1 rounded-full bg-sky-100 overflow-hidden">
           <div className="h-full bg-sky-400 rounded-full transition-all duration-700" style={{ width: `${progress}%` }} />
         </div>
@@ -485,44 +493,25 @@ export default function FolioDetalle() {
         </div>
       </div>
 
-      {/* ── SECONDARY META ROW — Operador / Destino / Notas ── */}
-      {!editMode && (
-        <div className="shrink-0 px-5 pb-2">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-warm-100/80 bg-warm-50/50 px-4 py-2.5">
-            <div className="flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-              <span className="text-[11px] text-warm-400">Operador:</span>
-              <span className="text-[11px] font-semibold text-warm-700">{folio.operador_nombre || '—'}</span>
-            </div>
-            <div className="h-3.5 w-px bg-warm-200 shrink-0" />
-            <div className="flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-accent-500 shrink-0" />
-              <span className="text-[11px] text-warm-400">Destino:</span>
-              <span className="text-[11px] font-semibold text-warm-700">{folio.destino || '—'}</span>
-            </div>
-            {folio.notas && (
-              <>
-                <div className="h-3.5 w-px bg-warm-200 shrink-0" />
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <StickyNote className="w-3.5 h-3.5 text-warm-300 shrink-0" />
-                  <span className="text-[11px] text-warm-500 italic truncate">{folio.notas}</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── KPI METRIC CARDS ── */}
       {!editMode && (
         <div className="shrink-0 px-5 pb-3">
-          <div className="flex gap-2.5 overflow-x-auto pb-0.5">
+          <div className="flex gap-2 overflow-x-auto pb-0.5">
+            <MetricCard icon={User}          label="Usuario"      value={folio.operador_nombre || '—'} color="warm"    textMode />
+            <MetricCard icon={MapPin}        label="Destino"      value={folio.destino || '—'}         color="accent"  textMode />
+            <div className="w-px shrink-0 self-stretch bg-warm-200/70 mx-0.5" />
             <MetricCard icon={Package}       label="Órdenes"      value={orders.length}   color="primary" />
-            <MetricCard icon={CheckCircle2}  label="Cajas Desp."  value={totalBultos}     color="success" />
-            <MetricCard icon={Clock}         label="Cajas Esp."   value={totalEsperadas}  color="warm"    />
+            <MetricCard icon={CheckCircle2}  label="Desp."        value={totalBultos}     color="success" />
+            <MetricCard icon={Clock}         label="Esperadas"    value={totalEsperadas}  color="warm"    />
             <MetricCard icon={Truck}         label="Progreso"     value={`${progresoPct}%`} color="sky" progress={progresoPct} />
             <MetricCard icon={ScanLine}      label="Escaneos"     value={scans.length}    color="accent"  />
           </div>
+          {folio.notas && (
+            <div className="flex items-center gap-1.5 mt-2 px-1">
+              <StickyNote className="w-3 h-3 text-warm-300 shrink-0" />
+              <span className="text-[11px] text-warm-500 italic truncate">{folio.notas}</span>
+            </div>
+          )}
         </div>
       )}
 
