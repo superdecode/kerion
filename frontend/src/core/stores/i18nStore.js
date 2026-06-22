@@ -3183,6 +3183,11 @@ const translations = {
     'desp.folios.bulk.unidadTipo': '车辆类型',
     'desp.folios.bulk.operador': '操作员',
     'desp.folios.bulk.fechaSalida': '出发日期',
+    'desp.ordenes.bulk.selected': '已选 {n} 个订单',
+    'desp.ordenes.bulk.allFiltered': '已选择全部 {n} 个筛选结果',
+    'desp.ordenes.bulk.selectAllFiltered': '选择全部 {n} 个筛选结果',
+    'desp.ordenes.bulk.moreCodes': '+{n} 个更多',
+    'desp.ordenes.export.sheet': '发货订单',
     // Validar module / 复核模块
     'desp.validar.title': '复核管理',
     'desp.validar.nuevaSesion': '新建会话',
@@ -6491,6 +6496,11 @@ const translations = {
     'desp.folios.bulk.unidadTipo': 'Tipo unidad',
     'desp.folios.bulk.operador': 'Operador',
     'desp.folios.bulk.fechaSalida': 'Fecha salida',
+    'desp.ordenes.bulk.selected': '{n} órdenes seleccionadas',
+    'desp.ordenes.bulk.allFiltered': 'todas las {n} órdenes filtradas seleccionadas',
+    'desp.ordenes.bulk.selectAllFiltered': 'Seleccionar las {n} órdenes filtradas',
+    'desp.ordenes.bulk.moreCodes': '+{n} más',
+    'desp.ordenes.export.sheet': 'Órdenes Despacho',
     // Validar module
     'desp.validar.title': 'Validar Despacho',
     'desp.validar.nuevaSesion': 'Nueva sesión',

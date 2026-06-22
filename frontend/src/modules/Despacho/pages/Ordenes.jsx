@@ -17,7 +17,6 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { usePreloaderStore } from '../../../core/stores/preloaderStore'
 import { fmtDate, fmtTimeShort, toDateKey, fmtDateString } from '../../../core/utils/dateFormat'
 import { getOutboundList, getOrdenesDispatch, getConductores, getUnidades, findAllOrdersByBarcode } from '../services/despachoService'
 import { normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
@@ -83,9 +82,6 @@ export default function Ordenes() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const { t } = useI18nStore()
-  const beginPreloader = usePreloaderStore(s => s.begin)
-  const endPreloader = usePreloaderStore(s => s.end)
-  const initialPreloaderRef = useRef(null)
 
   const SCAN_STATUS_META = {
     [SCAN_IDLE]:      { cls: '',                   text: '' },
@@ -282,8 +278,17 @@ export default function Ordenes() {
     () => sorted.slice((safePage - 1) * pageSize, safePage * pageSize),
     [sorted, safePage, pageSize]
   )
+  const allFilteredKeys = useMemo(
+    () => sorted.map(o => o.outboundOrderNo || o.order_no || '').filter(Boolean),
+    [sorted]
+  )
+  const paginatedKeys = useMemo(
+    () => paginated.map(o => o.outboundOrderNo || o.order_no || '').filter(Boolean),
+    [paginated]
+  )
 
   useEffect(() => { setPage(1) }, [search, dateFrom, dateTo, statusFilter, dispatchFilter, tab])
+  useEffect(() => { setSelectedIds(new Set()) }, [search, dateFrom, dateTo, statusFilter, dispatchFilter, tab, pageSize])
 
 
   const toggleSelect = (key) => setSelectedIds(prev => {
@@ -292,12 +297,25 @@ export default function Ordenes() {
     return next
   })
   const toggleSelectAll = () => {
-    const pageKeys = paginated.map(o => o.outboundOrderNo || o.order_no || '')
-    if (pageKeys.every(k => selectedIds.has(k))) setSelectedIds(new Set())
-    else setSelectedIds(prev => { const next = new Set(prev); pageKeys.forEach(k => next.add(k)); return next })
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      const allPageSelected = paginatedKeys.length > 0 && paginatedKeys.every(key => next.has(key))
+      if (allPageSelected) paginatedKeys.forEach(key => next.delete(key))
+      else paginatedKeys.forEach(key => next.add(key))
+      return next
+    })
   }
 
-  const EXPORT_HEADERS = ['Orden WMS', 'Fecha Entrega', 'Destino', 'Estado WMS', 'Folio', 'Estado Folio', 'Cajas', 'Códigos Caja']
+  const EXPORT_HEADERS = [
+    t('desp.col.orden'),
+    t('desp.col.fechaEntrega'),
+    t('desp.col.destino'),
+    t('desp.col.codigoCaja'),
+    t('desp.col.estadoWms'),
+    t('desp.col.folio'),
+    t('desp.col.estadoFolio'),
+    t('desp.col.cantidad'),
+  ]
 
   function buildExportRows(orders) {
     return orders.map(order => {
@@ -310,11 +328,11 @@ export default function Ordenes() {
         orderNo,
         dateVal ? fmtDate(dateVal) : '',
         destino,
+        getCodigosCaja(order).join(', '),
         t(STATUS_META[status]?.labelKey || '') || status,
         dispatch?.folio_numero || '',
         dispatch?.order_estado ? t(DISPATCH_ESTADO_META[dispatch.order_estado]?.labelKey || '') || dispatch.order_estado : '',
         order.outboundBoxCount ?? '',
-        getCodigosCaja(order).join(', '),
       ]
     })
   }
@@ -327,7 +345,7 @@ export default function Ordenes() {
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEADERS, ...buildExportRows(toExport)])
       ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 8 }, { wch: 30 }]
-      XLSX.utils.book_append_sheet(wb, ws, 'Ordenes Despacho')
+      XLSX.utils.book_append_sheet(wb, ws, t('desp.ordenes.export.sheet'))
       XLSX.writeFile(wb, `despacho_ordenes_${dateFrom || 'all'}_${dateTo || ''}.xlsx`)
       setSelectedIds(new Set())
     } catch { /* export error silently ignored — XLSX is best-effort */ }
@@ -488,28 +506,21 @@ export default function Ordenes() {
   const waitingForSheets = !sheetsData || loadingSheets || fetchingSheets || isPartial
   const waitingForDispatch = (loadingDispatch || fetchingDispatch) && !dispatchData
   const isBootstrapping = waitingForSheets || waitingForDispatch
-  const showInitialLoader = !isError && hasNoOrdersLoaded && isBootstrapping
   const showTableLoader = !isError && (
-    showInitialLoader ||
-    (paginated.length === 0 && (isBootstrapping || isPartial || loadingSheets || fetchingSheets || loadingDispatch || fetchingDispatch))
+    paginated.length === 0 && (
+      (hasNoOrdersLoaded && isBootstrapping) ||
+      isPartial ||
+      loadingSheets ||
+      fetchingSheets ||
+      loadingDispatch ||
+      fetchingDispatch
+    )
   )
   const sp = { sortField, sortDir, onSort: handleSort }
-
-  useEffect(() => {
-    if (showInitialLoader && !initialPreloaderRef.current) {
-      initialPreloaderRef.current = beginPreloader(t('desp.ordenes.loading'), 0)
-    }
-    if (!showInitialLoader && initialPreloaderRef.current) {
-      endPreloader(initialPreloaderRef.current)
-      initialPreloaderRef.current = null
-    }
-    return () => {
-      if (initialPreloaderRef.current) {
-        endPreloader(initialPreloaderRef.current)
-        initialPreloaderRef.current = null
-      }
-    }
-  }, [showInitialLoader, beginPreloader, endPreloader])
+  const selectedCount = selectedIds.size
+  const allPageSelected = paginatedKeys.length > 0 && paginatedKeys.every(key => selectedIds.has(key))
+  const allFilteredSelected = allFilteredKeys.length > 0 && allFilteredKeys.every(key => selectedIds.has(key))
+  const canSelectAllFiltered = selectedCount > 0 && !allFilteredSelected && allFilteredKeys.length > paginatedKeys.length
 
   const tabCounts = useMemo(() => {
     const counts = { all: filteredBase.length, pendiente: 0, cargado: 0, entregado: 0, cancelado: 0 }
@@ -728,15 +739,22 @@ export default function Ordenes() {
         ) : (
           <div className="px-5 py-4">
             <div className="rounded-2xl border border-warm-100 overflow-hidden shadow-sm bg-white">
-              {selectedIds.size > 0 && canExport && (
+              {selectedCount > 0 && canExport && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex-wrap">
-                  <span className="font-semibold">{selectedIds.size} seleccionadas</span>
-                  {selectedIds.size < paginated.length && (
+                  <span className="font-semibold">
+                    {t('desp.ordenes.bulk.selected').replace('{n}', selectedCount)}
+                    {allFilteredSelected && (
+                      <span className="ml-1 text-primary-500 font-normal">
+                        {t('desp.ordenes.bulk.allFiltered').replace('{n}', allFilteredKeys.length)}
+                      </span>
+                    )}
+                  </span>
+                  {canSelectAllFiltered && (
                     <button
                       className="text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
-                      onClick={toggleSelectAll}
+                      onClick={() => setSelectedIds(new Set(allFilteredKeys))}
                     >
-                      Seleccionar página ({paginated.length})
+                      {t('desp.ordenes.bulk.selectAllFiltered').replace('{n}', allFilteredKeys.length)}
                     </button>
                   )}
                   <button
@@ -747,11 +765,12 @@ export default function Ordenes() {
                     {exportingBulk
                       ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       : <Download className="w-3 h-3" />}
-                    Exportar ({selectedIds.size})
+                    {t('common.export')} ({selectedCount})
                   </button>
                   <button
                     onClick={() => setSelectedIds(new Set())}
                     className="ml-auto text-primary-500 hover:text-primary-700 font-semibold"
+                    title={t('common.clear')}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -764,7 +783,8 @@ export default function Ordenes() {
                       <th className="table-header w-10 text-center">
                         <input
                           type="checkbox"
-                          checked={paginated.length > 0 && paginated.every(o => selectedIds.has(o.outboundOrderNo || o.order_no || ''))}
+                          checked={allPageSelected}
+                          ref={el => { if (el) el.indeterminate = selectedCount > 0 && !allPageSelected }}
                           onChange={toggleSelectAll}
                           className="cb"
                         />
@@ -773,11 +793,11 @@ export default function Ordenes() {
                     <SortHeader label={t('desp.col.orden')}        field="outboundOrderNo" {...sp} />
                     <SortHeader label={t('desp.col.fechaEntrega')} field="date"            {...sp} />
                     <SortHeader label={t('desp.col.destino')}      field="receiverName"    {...sp} />
+                    <th className="table-header">{t('desp.col.codigoCaja')}</th>
                     <SortHeader label={t('desp.col.estadoWms')}    field="trackingStatus"  {...sp} />
                     <SortHeader label={t('desp.col.folio')}        field="folio"           {...sp} />
                     <SortHeader label={t('desp.col.estadoFolio')}  field="dispatchEstado"  {...sp} />
                     <SortHeader label={t('desp.col.cantidad')}     field="cantidad"        {...sp} />
-                    <th className="table-header">{t('desp.col.codigoCaja')}</th>
                     {canDispatch && <th className="table-header">{t('desp.col.acciones')}</th>}
                   </tr>
                 </thead>
@@ -830,7 +850,7 @@ export default function Ordenes() {
                                   setTimeout(() => setCopiedOrderNo(n => n === orderNo ? null : n), 1500)
                                 }}
                                 className="opacity-0 group-hover/copy:opacity-100 p-0.5 rounded text-warm-300 hover:text-primary-600 transition-all"
-                                title="Copiar"
+                                title={t('common.copy')}
                               >
                                 {copiedOrderNo === orderNo
                                   ? <Check className="w-3 h-3 text-success-500" />
@@ -855,6 +875,29 @@ export default function Ordenes() {
                             <MapPin className="w-3 h-3 text-warm-300 shrink-0" />
                             <span className="text-xs text-warm-700 font-medium">{destino}</span>
                           </div>
+                        </td>
+                        {/* Código de caja */}
+                        <td className="px-4 py-3 max-w-[160px]">
+                          {cajaCodes.length === 0 ? (
+                            <span className="text-warm-300 text-xs">—</span>
+                          ) : cajaCodes.length <= 3 ? (
+                            <div className="flex flex-col gap-0.5">
+                              {cajaCodes.map(c => (
+                                <span key={c} className="font-mono text-xs text-warm-600 leading-tight">{c}</span>
+                              ))}
+                            </div>
+                          ) : (
+                            <div title={cajaCodes.join('\n')} className="cursor-default">
+                              <div className="flex flex-col gap-0.5">
+                                {cajaCodes.slice(0, 2).map(c => (
+                                  <span key={c} className="font-mono text-xs text-warm-600 leading-tight">{c}</span>
+                                ))}
+                                <span className="text-[10px] text-warm-400 font-medium">
+                                  {t('desp.ordenes.bulk.moreCodes').replace('{n}', cajaCodes.length - 2)}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3">{statusBadge(status)}</td>
                         {/* Folio número */}
@@ -895,32 +938,11 @@ export default function Ordenes() {
                             </div>
                           ) : <span className="text-warm-300 text-xs">—</span>}
                         </td>
-                        {/* Código de caja */}
-                        <td className="px-4 py-3 max-w-[160px]">
-                          {cajaCodes.length === 0 ? (
-                            <span className="text-warm-300 text-xs">—</span>
-                          ) : cajaCodes.length <= 3 ? (
-                            <div className="flex flex-col gap-0.5">
-                              {cajaCodes.map(c => (
-                                <span key={c} className="font-mono text-xs text-warm-600 leading-tight">{c}</span>
-                              ))}
-                            </div>
-                          ) : (
-                            <div title={cajaCodes.join('\n')} className="cursor-default">
-                              <div className="flex flex-col gap-0.5">
-                                {cajaCodes.slice(0, 2).map(c => (
-                                  <span key={c} className="font-mono text-xs text-warm-600 leading-tight">{c}</span>
-                                ))}
-                                <span className="text-[10px] text-warm-400 font-medium">+{cajaCodes.length - 2} más</span>
-                              </div>
-                            </div>
-                          )}
-                        </td>
                         {canDispatch && (
                           <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                             <button
                               onClick={() => handleTruckClick(order)}
-                              title="Despachar orden"
+                              title={t('desp.btn.despacharOrden')}
                               className="p-1.5 rounded-xl hover:bg-primary-50 text-warm-300 hover:text-primary-600 transition-all"
                             >
                               <Truck className="w-4 h-4" />
