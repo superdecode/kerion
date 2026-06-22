@@ -7,6 +7,7 @@ import {
   ClipboardList, CheckCircle2, AlertTriangle, Users, TrendingUp, Activity,
 } from 'lucide-react'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { getSurtidoDashboard } from '../services/dashboardService'
 import { KpiCard } from '../components/KpiCard'
@@ -21,22 +22,22 @@ const ESTADO_COLORS = {
 }
 const PIE_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4']
 
-function estadoLabel(s) {
+function estadoLabel(s, t) {
   const map = {
-    complete: 'Completado', open: 'Abierto',
-    with_discrepancies: 'Con discrepancias', cancelled: 'Cancelado',
+    complete: t('dashboard.status.complete'), open: t('dashboard.status.open'),
+    with_discrepancies: t('dashboard.status.withDiscrepancies'), cancelled: t('dashboard.status.cancelled'),
   }
   return map[s] || s
 }
 
-function trendTitle(bucket) {
+function trendTitle(bucket, t) {
   const map = {
-    day: 'Tendencia diaria',
-    week: 'Tendencia semanal',
-    month: 'Tendencia mensual',
-    year: 'Tendencia anual',
+    day: t('dashboard.trend.daily'),
+    week: t('dashboard.trend.weekly'),
+    month: t('dashboard.trend.monthly'),
+    year: t('dashboard.trend.yearly'),
   }
-  return map[bucket] || 'Tendencia'
+  return map[bucket] || t('dashboard.trend.title')
 }
 
 function trendLabel(value, bucket) {
@@ -54,6 +55,7 @@ function trendLabel(value, bucket) {
 }
 
 export default function SurtidoDashboard({ dateRange }) {
+  const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
 
   const { data, isLoading } = useQuery({
@@ -69,27 +71,32 @@ export default function SurtidoDashboard({ dateRange }) {
 
   const { kpis, graficas } = d
   const tendencia = (graficas.tendencia || graficas.tendencia_semanal || [])
-    .map(item => ({ ...item, periodo: item.periodo || item.semana }))
+    .map(item => ({
+      ...item,
+      periodo: item.periodo || item.semana,
+      cajas: item.cajas ?? item.total ?? 0,
+      ordenes: item.ordenes ?? item.completadas ?? 0,
+    }))
   const tendenciaBucket = graficas.tendencia_bucket || 'week'
 
   return (
     <div className="space-y-4 p-4">
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Sesiones del día" value={kpis.sesiones_hoy} icon={ClipboardList} index={0} />
-        <KpiCard label="Sesiones completadas" value={kpis.sesiones_completadas} icon={CheckCircle2} index={1} />
-        <KpiCard label="Tasa de completado" value={`${kpis.tasa_completado}%`} icon={TrendingUp} index={2} />
-        <KpiCard label="Cajas escaneadas" value={kpis.cajas_escaneadas} icon={Activity} index={3} />
+        <KpiCard label={t('dashboard.surtido.kpi.ordenesPeriodo')} value={kpis.ordenes_total ?? kpis.sesiones_hoy} icon={ClipboardList} index={0} />
+        <KpiCard label={t('dashboard.surtido.kpi.ordenesCompletadas')} value={kpis.ordenes_completadas ?? kpis.sesiones_completadas} icon={CheckCircle2} index={1} />
+        <KpiCard label={t('dashboard.surtido.kpi.tasaCompletado')} value={`${kpis.tasa_completado}%`} icon={TrendingUp} index={2} />
+        <KpiCard label={t('dashboard.surtido.kpi.cajasEscaneadas')} value={kpis.cajas_escaneadas} icon={Activity} index={3} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <KpiCard label="Sesiones abiertas" value={kpis.sesiones_abiertas} icon={Activity} index={4} />
-        <KpiCard label="Órdenes con faltantes" value={kpis.ordenes_con_faltantes} icon={AlertTriangle} alert index={5} />
-        <KpiCard label="Órdenes con anormalidades" value={kpis.ordenes_con_anormalidades} icon={AlertTriangle} alert index={6} />
+        <KpiCard label={t('dashboard.surtido.kpi.ordenesAbiertas')} value={kpis.ordenes_abiertas ?? kpis.sesiones_abiertas} icon={Activity} index={4} />
+        <KpiCard label={t('dashboard.surtido.kpi.ordenesFaltantes')} value={kpis.ordenes_con_faltantes} icon={AlertTriangle} alert index={5} />
+        <KpiCard label={t('dashboard.surtido.kpi.ordenesAnormalidades')} value={kpis.ordenes_con_anormalidades} icon={AlertTriangle} alert index={6} />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Sesiones por estado" icon={ClipboardList}>
+        <ChartCard title={t('dashboard.surtido.chart.ordenesEstado')} icon={ClipboardList}>
           {graficas.ordenes_por_estado.length > 0 ? (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="50%" height={200}>
@@ -100,14 +107,14 @@ export default function SurtidoDashboard({ dateRange }) {
                       <Cell key={i} fill={ESTADO_COLORS[entry.status] || PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(val, name) => [val, estadoLabel(name)]} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(val, name) => [val, estadoLabel(name, t)]} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex-1 space-y-2">
                 {graficas.ordenes_por_estado.map((e, i) => (
                   <div key={e.status} className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: ESTADO_COLORS[e.status] || PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="text-xs text-warm-600 flex-1 truncate">{estadoLabel(e.status)}</span>
+                    <span className="text-xs text-warm-600 flex-1 truncate">{estadoLabel(e.status, t)}</span>
                     <span className="text-xs font-bold text-warm-700">{e.cantidad}</span>
                   </div>
                 ))}
@@ -116,7 +123,7 @@ export default function SurtidoDashboard({ dateRange }) {
           ) : <NoData height={200} />}
         </ChartCard>
 
-        <ChartCard title="Top operadores" icon={Users}>
+        <ChartCard title={t('dashboard.surtido.chart.topOperadores')} icon={Users}>
           {graficas.top_operadores.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={graficas.top_operadores} layout="vertical" margin={{ left: 4, right: 20 }}>
@@ -124,13 +131,13 @@ export default function SurtidoDashboard({ dateRange }) {
                 <XAxis type="number" tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="operador" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Bar dataKey="cajas" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Cajas" />
+                <Bar dataKey="cajas" fill="#8b5cf6" radius={[0, 4, 4, 0]} name={t('dashboard.metric.cajas')} />
               </BarChart>
             </ResponsiveContainer>
           ) : <NoData height={200} />}
         </ChartCard>
 
-        <ChartCard title={trendTitle(tendenciaBucket)} icon={TrendingUp} className="lg:col-span-2">
+        <ChartCard title={trendTitle(tendenciaBucket, t)} icon={TrendingUp} className="lg:col-span-2">
           {tendencia.length > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={tendencia} margin={{ left: 0, right: 20, top: 8 }}>
@@ -141,8 +148,8 @@ export default function SurtidoDashboard({ dateRange }) {
                   contentStyle={{ fontSize: 12, borderRadius: 8 }}
                   labelFormatter={v => trendLabel(v, tendenciaBucket)}
                 />
-                <Line type="monotone" dataKey="completadas" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} name="Completadas" />
-                <Line type="monotone" dataKey="total" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} name="Total" strokeDasharray="4 2" />
+                <Line type="monotone" dataKey="cajas" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.cajas')} />
+                <Line type="monotone" dataKey="ordenes" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.ordenes')} strokeDasharray="4 2" />
               </LineChart>
             </ResponsiveContainer>
           ) : <NoData height={200} />}

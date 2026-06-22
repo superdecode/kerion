@@ -1,3 +1,5 @@
+import { useI18nStore } from '../../../core/stores/i18nStore'
+
 export function ChartCard({ title, icon: Icon, children, className = '' }) {
   return (
     <div className={`card p-4 ${className}`}>
@@ -15,9 +17,10 @@ export function ChartCard({ title, icon: Icon, children, className = '' }) {
 }
 
 export function NoData({ height = 180 }) {
+  const { t } = useI18nStore()
   return (
     <div className="flex items-center justify-center text-warm-300 text-sm" style={{ height }}>
-      Sin datos en el período
+      {t('dashboard.noDataPeriod')}
     </div>
   )
 }

@@ -46,9 +46,9 @@ router.get('/',
         topOperadoresRes,
         tendenciaRes,
       ] = await Promise.all([
-        // Órdenes por estado (pick_sessions)
+        // Órdenes únicas por estado operativo.
         req.tQuery(
-          `SELECT status, COUNT(*) AS cantidad
+          `SELECT status, COUNT(DISTINCT outbound_order_no) AS cantidad
            FROM pick_sessions
            WHERE tenant_id = $1
              AND ${instantDateInTZ('created_at', tz)} BETWEEN $2 AND $3
@@ -59,6 +59,9 @@ router.get('/',
         // Sesiones del día
         req.tQuery(
           `SELECT
+             COUNT(DISTINCT outbound_order_no) AS total_ordenes,
+             COUNT(DISTINCT outbound_order_no) FILTER (WHERE status = 'open') AS ordenes_abiertas,
+             COUNT(DISTINCT outbound_order_no) FILTER (WHERE status = 'complete') AS ordenes_completadas,
              COUNT(*) AS total_sesiones,
              COUNT(*) FILTER (WHERE status = 'open') AS sesiones_abiertas,
              COUNT(*) FILTER (WHERE status = 'complete') AS sesiones_completadas,
@@ -111,8 +114,8 @@ router.get('/',
            aggregated AS (
              SELECT
                ${trendPeriodExpr} AS periodo,
-               COUNT(*) FILTER (WHERE status = 'complete') AS completadas,
-               COUNT(*) AS total
+               COUNT(DISTINCT outbound_order_no) AS ordenes,
+               COALESCE(SUM(total_scanned), 0) AS cajas
              FROM pick_sessions
              WHERE tenant_id = $1
                AND ${instantDateInTZ('created_at', tz)} BETWEEN $2::date AND $3::date
@@ -120,8 +123,8 @@ router.get('/',
            )
            SELECT
              p.periodo,
-             COALESCE(a.completadas, 0) AS completadas,
-             COALESCE(a.total, 0) AS total
+             COALESCE(a.ordenes, 0) AS ordenes,
+             COALESCE(a.cajas, 0) AS cajas
            FROM periods p
            LEFT JOIN aggregated a ON a.periodo = p.periodo
            ORDER BY p.periodo`,
@@ -140,10 +143,14 @@ router.get('/',
         success: true,
         data: {
           kpis: {
+            ordenes_total: parseInt(ses.total_ordenes || 0),
+            ordenes_abiertas: parseInt(ses.ordenes_abiertas || 0),
+            ordenes_completadas: parseInt(ses.ordenes_completadas || 0),
             sesiones_hoy: parseInt(ses.total_sesiones || 0),
             sesiones_abiertas: parseInt(ses.sesiones_abiertas || 0),
             sesiones_completadas: parseInt(ses.sesiones_completadas || 0),
             cajas_escaneadas: cajasEscaneadas,
+            cajas_esperadas: cajasTotales,
             tasa_completado: tasaCompletado,
             ordenes_con_faltantes: parseInt(faltantesRes.rows[0]?.ordenes_con_faltantes || 0),
             ordenes_con_anormalidades: parseInt(anormalidadesRes.rows[0]?.ordenes_con_anormalidades || 0),

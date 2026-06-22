@@ -16,8 +16,18 @@ import { fmtDate } from '../../../core/utils/dateFormat'
 
 const PIE_COLORS = ['#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#06b6d4']
 
-function estadoInventarioLabel(e) {
-  const map = { disponible: 'Disponible', sin_stock: 'Sin stock', bloqueado: 'Bloqueado', reservado: 'Reservado', procesando: 'Procesando' }
+function estadoInventarioLabel(e, t) {
+  const map = {
+    disponible: t('dashboard.status.available'),
+    sin_stock: t('dashboard.status.noStock'),
+    bloqueado: t('dashboard.status.blocked'),
+    reservado: t('dashboard.status.reserved'),
+    procesando: t('dashboard.status.processing'),
+    pendiente: t('dashboard.status.pending'),
+    completado: t('dashboard.status.complete'),
+    confirmado: t('dashboard.status.complete'),
+    cancelado: t('dashboard.status.cancelled'),
+  }
   return map[e] || e
 }
 
@@ -35,7 +45,7 @@ export default function DevoluccionesDashboard({ dateRange }) {
   if (isError) return (
     <div className="flex flex-col items-center gap-2 py-16 text-warm-400">
       <AlertTriangle className="w-8 h-8 opacity-40" />
-      <p className="text-sm">No se pudieron cargar las métricas de devoluciones</p>
+      <p className="text-sm">{t('dashboard.devoluciones.errorLoad')}</p>
     </div>
   )
 
@@ -48,20 +58,20 @@ export default function DevoluccionesDashboard({ dateRange }) {
     <div className="space-y-4 p-4">
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Entradas totales" value={kpis.entradas_total} icon={PackagePlus} index={0} />
-        <KpiCard label="Entradas confirmadas" value={kpis.entradas_confirmadas} icon={PackagePlus} index={1} />
-        <KpiCard label="Salidas totales" value={kpis.salidas_total} icon={PackageMinus} index={2} />
-        <KpiCard label="Salidas completadas" value={kpis.salidas_completadas} icon={PackageMinus} index={3} />
+        <KpiCard label={t('dashboard.devoluciones.kpi.entradasTotales')} value={kpis.entradas_total} icon={PackagePlus} index={0} />
+        <KpiCard label={t('dashboard.devoluciones.kpi.entradasConfirmadas')} value={kpis.entradas_confirmadas} icon={PackagePlus} index={1} />
+        <KpiCard label={t('dashboard.devoluciones.kpi.salidasTotales')} value={kpis.salidas_total} icon={PackageMinus} index={2} />
+        <KpiCard label={t('dashboard.devoluciones.kpi.salidasCompletadas')} value={kpis.salidas_completadas} icon={PackageMinus} index={3} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <KpiCard label="Inventario activo" value={kpis.inventario_activo} icon={Boxes} index={4} />
-        <KpiCard label="Peso total registrado" value={`${kpis.peso_total_kg} kg`} icon={Boxes} index={5} />
-        <KpiCard label="Tiempo prom. entrada→salida" value={`${kpis.tiempo_promedio_horas}h`} icon={Clock} index={6} />
+        <KpiCard label={t('dashboard.devoluciones.kpi.inventarioActivo')} value={kpis.inventario_activo} icon={Boxes} index={4} />
+        <KpiCard label={t('dashboard.devoluciones.kpi.pesoTotal')} value={`${kpis.peso_total_kg} kg`} icon={Boxes} index={5} />
+        <KpiCard label={t('dashboard.devoluciones.kpi.tiempoPromedio')} value={`${kpis.tiempo_promedio_horas}h`} icon={Clock} index={6} />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Inventario activo por estado" icon={Boxes}>
+        <ChartCard title={t('dashboard.devoluciones.chart.inventarioEstado')} icon={Boxes}>
           {graficas.inventario_por_estado.length > 0 ? (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="50%" height={200}>
@@ -70,14 +80,14 @@ export default function DevoluccionesDashboard({ dateRange }) {
                     cx="50%" cy="50%" outerRadius={80} innerRadius={45} strokeWidth={0}>
                     {graficas.inventario_por_estado.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(val, name) => [val, estadoInventarioLabel(name)]} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(val, name) => [val, estadoInventarioLabel(name, t)]} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex-1 space-y-2">
                 {graficas.inventario_por_estado.map((e, i) => (
                   <div key={e.estado} className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="text-xs text-warm-600 flex-1">{estadoInventarioLabel(e.estado)}</span>
+                    <span className="text-xs text-warm-600 flex-1">{estadoInventarioLabel(e.estado, t)}</span>
                     <span className="text-xs font-bold text-warm-700">{e.cantidad}</span>
                   </div>
                 ))}
@@ -86,7 +96,7 @@ export default function DevoluccionesDashboard({ dateRange }) {
           ) : <NoData height={200} />}
         </ChartCard>
 
-        <ChartCard title="Top SKUs con más devoluciones" icon={PackagePlus}>
+        <ChartCard title={t('dashboard.devoluciones.chart.topSkus')} icon={PackagePlus}>
           {graficas.top_skus.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={graficas.top_skus} layout="vertical" margin={{ left: 4, right: 20 }}>
@@ -100,7 +110,7 @@ export default function DevoluccionesDashboard({ dateRange }) {
           ) : <NoData height={200} />}
         </ChartCard>
 
-        <ChartCard title="Tendencia semanal de entradas" icon={TrendingUp}>
+        <ChartCard title={t('dashboard.devoluciones.chart.tendenciaEntradas')} icon={TrendingUp}>
           {graficas.tendencia_semanal.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={graficas.tendencia_semanal} margin={{ left: 0, right: 20 }}>
@@ -108,13 +118,13 @@ export default function DevoluccionesDashboard({ dateRange }) {
                 <XAxis dataKey="semana" tick={{ fontSize: 11 }} tickFormatter={v => fmtDate(v)} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} labelFormatter={v => fmtDate(v)} />
-                <Line type="monotone" dataKey="entradas" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="Entradas" />
+                <Line type="monotone" dataKey="entradas" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.entradas')} />
               </LineChart>
             </ResponsiveContainer>
           ) : <NoData height={200} />}
         </ChartCard>
 
-        <ChartCard title="Salidas por estado" icon={PackageMinus}>
+        <ChartCard title={t('dashboard.devoluciones.chart.salidasEstado')} icon={PackageMinus}>
           {graficas.salidas_por_estado.some(e => e.cantidad > 0) ? (
             <div className="space-y-3 mt-2">
               {graficas.salidas_por_estado.map((item, i) => {
@@ -122,7 +132,7 @@ export default function DevoluccionesDashboard({ dateRange }) {
                 return (
                   <div key={item.estado}>
                     <div className="flex items-center justify-between text-xs text-warm-600 mb-1">
-                      <span className="capitalize">{item.estado}</span>
+                      <span>{estadoInventarioLabel(item.estado, t)}</span>
                       <span className="font-semibold">{item.cantidad}</span>
                     </div>
                     <div className="h-2.5 rounded-full bg-warm-100 overflow-hidden">

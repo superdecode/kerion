@@ -87,7 +87,7 @@ export default function DropScanDashboard({ dateRange }) {
                 <XAxis dataKey="hora" tick={{ fontSize: 11, fill: '#78716c' }} tickFormatter={h => `${h}h`} />
                 <YAxis tick={{ fontSize: 11, fill: '#78716c' }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} labelFormatter={h => `${h}:00`} />
-                <Area type="monotone" dataKey="cantidad" stroke="#ec4899" strokeWidth={2} fill="url(#dsHourGrad)" name="Guías" />
+                <Area type="monotone" dataKey="cantidad" stroke="#ec4899" strokeWidth={2} fill="url(#dsHourGrad)" name={t('dashboard.guides')} />
               </AreaChart>
             </ResponsiveContainer>
           ) : <NoData height={260} />}

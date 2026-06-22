@@ -17,14 +17,6 @@ const ESTADO_COLORS = {
   cancelado:            '#ef4444',
 }
 
-const ESTADO_LABELS = {
-  pendiente_validacion: 'Pendiente',
-  en_validacion:        'En validación',
-  completo:             'Completo',
-  parcial:              'Parcial',
-  cancelado:            'Cancelado',
-}
-
 export default function RecepcionDashboard({ dateRange }) {
   const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
@@ -50,10 +42,16 @@ export default function RecepcionDashboard({ dateRange }) {
   }, [orders])
 
   const pieData = useMemo(() =>
-    Object.entries(ESTADO_LABELS)
+    Object.entries({
+      pendiente_validacion: t('dashboard.status.pending'),
+      en_validacion: t('dashboard.status.inValidation'),
+      completo: t('dashboard.status.complete'),
+      parcial: t('dashboard.status.partial'),
+      cancelado: t('dashboard.status.cancelled'),
+    })
       .map(([key, label]) => ({ name: label, value: kpis[key === 'pendiente_validacion' ? 'pendiente' : key] ?? 0, color: ESTADO_COLORS[key] }))
       .filter(d => d.value > 0),
-    [kpis]
+    [kpis, t]
   )
 
   if (isLoading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>
@@ -63,24 +61,24 @@ export default function RecepcionDashboard({ dateRange }) {
     <div className="space-y-4 p-4">
       {/* KPIs row 1 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Órdenes totales"  value={kpis.total}          icon={PackagePlus}  index={0} iconBg="bg-sky-50 border border-sky-100" />
-        <KpiCard label="Completas"         value={kpis.completo}       icon={CheckCircle2} index={1} iconBg="bg-success-50 border border-success-100" />
-        <KpiCard label="En validación"     value={kpis.en_validacion}  icon={Clock}        index={2} iconBg="bg-blue-50 border border-blue-100" />
-        <KpiCard label="Pendientes"        value={kpis.pendiente}      icon={PackageCheck} index={3} iconBg="bg-amber-50 border border-amber-100" />
+        <KpiCard label={t('dashboard.recepcion.kpi.ordenesTotales')} value={kpis.total} icon={PackagePlus} index={0} iconBg="bg-sky-50 border border-sky-100" />
+        <KpiCard label={t('dashboard.recepcion.kpi.completas')} value={kpis.completo} icon={CheckCircle2} index={1} iconBg="bg-success-50 border border-success-100" />
+        <KpiCard label={t('dashboard.recepcion.kpi.enValidacion')} value={kpis.en_validacion} icon={Clock} index={2} iconBg="bg-blue-50 border border-blue-100" />
+        <KpiCard label={t('dashboard.recepcion.kpi.pendientes')} value={kpis.pendiente} icon={PackageCheck} index={3} iconBg="bg-amber-50 border border-amber-100" />
       </div>
 
       {/* KPIs row 2 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Total cajas"       value={kpis.total_cajas}     icon={Layers}       index={4} />
-        <KpiCard label="Cajas validadas"   value={kpis.cajas_validadas} icon={CheckCircle2} index={5} />
-        <KpiCard label="Parciales"         value={kpis.parcial}         icon={AlertCircle}  index={6} />
-        <KpiCard label="Canceladas"        value={kpis.cancelado}       icon={AlertCircle}  index={7} alert />
+        <KpiCard label={t('dashboard.recepcion.kpi.totalCajas')} value={kpis.total_cajas} icon={Layers} index={4} />
+        <KpiCard label={t('dashboard.recepcion.kpi.cajasValidadas')} value={kpis.cajas_validadas} icon={CheckCircle2} index={5} />
+        <KpiCard label={t('dashboard.recepcion.kpi.parciales')} value={kpis.parcial} icon={AlertCircle} index={6} />
+        <KpiCard label={t('dashboard.recepcion.kpi.canceladas')} value={kpis.cancelado} icon={AlertCircle} index={7} alert />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Status pie */}
-        <ChartCard title="Órdenes por estado" icon={PackageCheck}>
+        <ChartCard title={t('dashboard.recepcion.chart.ordenesEstado')} icon={PackageCheck}>
           {pieData.length > 0 ? (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="50%" height={160}>
@@ -105,7 +103,7 @@ export default function RecepcionDashboard({ dateRange }) {
         </ChartCard>
 
         {/* Cajas progress */}
-        <ChartCard title="Avance de validación" icon={Layers}>
+        <ChartCard title={t('dashboard.recepcion.chart.avanceValidacion')} icon={Layers}>
           <div className="space-y-4 pt-2">
             {(() => {
               const pct = kpis.total_cajas > 0 ? Math.round((kpis.cajas_validadas / kpis.total_cajas) * 100) : 0
@@ -113,7 +111,7 @@ export default function RecepcionDashboard({ dateRange }) {
                 <>
                   <div className="flex items-end gap-3">
                     <span className="text-4xl font-black text-warm-900 tabular-nums">{pct}%</span>
-                    <span className="text-sm text-warm-400 pb-1">validado</span>
+                    <span className="text-sm text-warm-400 pb-1">{t('dashboard.recepcion.validado')}</span>
                   </div>
                   <div className="w-full h-3 bg-warm-100 rounded-full overflow-hidden">
                     <div
@@ -122,8 +120,8 @@ export default function RecepcionDashboard({ dateRange }) {
                     />
                   </div>
                   <div className="flex justify-between text-xs text-warm-500">
-                    <span>{kpis.cajas_validadas} validadas</span>
-                    <span>{kpis.total_cajas} total</span>
+                    <span>{kpis.cajas_validadas} {t('dashboard.recepcion.validadas')}</span>
+                    <span>{kpis.total_cajas} {t('common.total').toLowerCase()}</span>
                   </div>
                 </>
               )

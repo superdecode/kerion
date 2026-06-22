@@ -3,11 +3,24 @@ import { useSearchParams } from 'react-router-dom'
 import {
   ScanBarcode, RotateCcw, Boxes, BadgeCheck, Truck,
   AlertTriangle, RefreshCw, PackageCheck, Settings2,
+  Download,
 } from 'lucide-react'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { useToastStore } from '../../../core/stores/toastStore'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { getToday } from '../../../core/utils/dateFormat'
+import {
+  getSurtidoDashboard,
+  getInventarioDashboard,
+  getDevoluccionesDashboard,
+  getDespachoDashboard,
+  getRecepcionOrders,
+  getAdminStats,
+} from '../services/dashboardService'
+import * as ds from '../../DropScan/services/dropscanService'
+import { getDashboard as getAnormDashboard } from '../../Anormalidades/services/anormalidadesService'
+import { exportDashboardToExcel } from '../utils/dashboardExcelExport'
 
 import DropScanDashboard from './DropScanDashboard'
 import DevoluccionesDashboard from './DevoluccionesDashboard'
@@ -23,75 +36,83 @@ import AdminDashboard from './AdminDashboard'
 const ALL_MODULES = [
   {
     id: 'dropscan',
-    label: 'DropScan',
+    labelKey: 'dashboard.module.dropscan',
     icon: ScanBarcode,
     color: 'blue',
     permission: 'dropscan.dashboard',
     module: 'dropscan',
     component: DropScanDashboard,
+    exportFetcher: (range) => ds.getDashboard(range.from, range.to),
   },
   {
     id: 'devoluciones',
-    label: 'Devoluciones',
+    labelKey: 'dashboard.module.devoluciones',
     icon: RotateCcw,
     color: 'amber',
     permission: 'devoluciones.dashboard',
     module: 'devoluciones',
     component: DevoluccionesDashboard,
+    exportFetcher: (range) => getDevoluccionesDashboard({ fecha_inicio: range.from, fecha_fin: range.to }),
   },
   {
     id: 'recepcion',
-    label: 'Recepción',
+    labelKey: 'dashboard.module.recepcion',
     icon: PackageCheck,
     color: 'sky',
     permission: 'recepcion.dashboard',
     module: 'recepcion',
     component: RecepcionDashboard,
+    exportFetcher: (range) => getRecepcionOrders({ fecha_inicio: range.from, fecha_fin: range.to }),
   },
   {
     id: 'inventario',
-    label: 'Inventario',
+    labelKey: 'dashboard.module.inventario',
     icon: Boxes,
     color: 'teal',
     permission: 'inventario.dashboard',
     module: 'inventario',
     component: InventarioDashboard,
+    exportFetcher: (range) => getInventarioDashboard({ fecha_inicio: range.from, fecha_fin: range.to }),
   },
   {
     id: 'surtido',
-    label: 'Surtido',
+    labelKey: 'dashboard.module.surtido',
     icon: BadgeCheck,
     color: 'violet',
     permission: 'surtido.dashboard',
     module: 'surtido',
     component: SurtidoDashboard,
+    exportFetcher: (range) => getSurtidoDashboard({ fecha_inicio: range.from, fecha_fin: range.to }),
   },
   {
     id: 'despacho',
-    label: 'Despacho',
+    labelKey: 'dashboard.module.despacho',
     icon: Truck,
     color: 'emerald',
     permission: 'despacho.dashboard',
     module: 'despacho',
     component: DespachoDashboard,
+    exportFetcher: (range) => getDespachoDashboard({ fecha_inicio: range.from, fecha_fin: range.to }),
   },
   {
     id: 'anormalidades',
-    label: 'Anormalidades',
+    labelKey: 'dashboard.module.anormalidades',
     icon: AlertTriangle,
     color: 'rose',
     permission: 'anormalidades.dashboard',
     module: 'anormalidades',
     component: AnormDashboard,
+    exportFetcher: (range) => getAnormDashboard({ fecha_desde: range.from, fecha_hasta: range.to }),
   },
   {
     id: 'administracion',
-    label: 'Administración',
+    labelKey: 'dashboard.module.administracion',
     icon: Settings2,
     color: 'slate',
     permission: 'usuarios',
     module: 'administracion',
     component: AdminDashboard,
+    exportFetcher: getAdminStats,
   },
 ]
 
@@ -116,6 +137,7 @@ export default function DashboardPage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [collapsed, setCollapsed] = useState(false)
   const [hovered, setHovered] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const leaveTimer = useRef(null)
 
   const visibleModules = useMemo(() =>
@@ -158,14 +180,35 @@ export default function DashboardPage() {
     leaveTimer.current = setTimeout(() => setHovered(false), 120)
   }
 
+  const handleExport = async () => {
+    if (!activeModule?.exportFetcher || !hasPermission(activeModule.permission, 'actualizar')) return
+    setExporting(true)
+    try {
+      const XLSX = await import('xlsx')
+      const payload = await activeModule.exportFetcher(dateRange)
+      exportDashboardToExcel(XLSX, {
+        moduleLabel: t(activeModule.labelKey),
+        dateRange,
+        payload,
+        t,
+      })
+      useToastStore.getState().success(t('dashboard.export.success'))
+    } catch (error) {
+      console.error('[dashboard.export]', error)
+      useToastStore.getState().error(t('dashboard.export.error'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const showFull = !collapsed || hovered
 
   if (visibleModules.length === 0) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-3 text-warm-300">
         <AlertTriangle className="w-10 h-10 opacity-30" />
-        <p className="text-sm">Sin acceso a dashboards</p>
-        <p className="text-xs text-warm-400">Se requiere permiso de actualizar en al menos un módulo</p>
+        <p className="text-sm">{t('dashboard.noAccess')}</p>
+        <p className="text-xs text-warm-400">{t('dashboard.noAccessHint')}</p>
       </div>
     )
   }
@@ -183,7 +226,7 @@ export default function DashboardPage() {
         {/* Header */}
         <div className={`flex-shrink-0 h-11 flex items-center border-b border-warm-100 transition-all duration-200 ${showFull ? 'px-4' : 'px-0 justify-center'}`}>
           {showFull
-            ? <p className="text-[10px] font-bold uppercase tracking-widest text-warm-400 whitespace-nowrap">Módulos</p>
+            ? <p className="text-[10px] font-bold uppercase tracking-widest text-warm-400 whitespace-nowrap">{t('dashboard.modules')}</p>
             : <div className="w-1.5 h-6 rounded-full bg-warm-200" />
           }
         </div>
@@ -198,7 +241,7 @@ export default function DashboardPage() {
               <button
                 key={mod.id}
                 onClick={() => handleModuleSelect(mod.id)}
-                title={!showFull ? mod.label : undefined}
+                title={!showFull ? t(mod.labelKey) : undefined}
                 className={`w-full flex items-center transition-all duration-150 relative
                   ${showFull ? 'gap-2.5 px-3 py-2.5 mx-0' : 'justify-center py-3 px-0'}
                   ${isActive
@@ -219,7 +262,7 @@ export default function DashboardPage() {
                 {showFull && (
                   <span className={`flex-1 truncate text-left text-sm font-medium whitespace-nowrap
                     ${isActive ? `${styles.activeText}` : 'text-warm-600'}`}>
-                    {mod.label}
+                    {t(mod.labelKey)}
                   </span>
                 )}
               </button>
@@ -242,17 +285,28 @@ export default function DashboardPage() {
                     <Icon className={`w-4 h-4 ${styles.iconColor}`} />
                   </div>
                   <div>
-                    <h1 className="text-sm font-bold text-warm-800">{activeModule.label}</h1>
-                    <p className="text-[11px] text-warm-400">Dashboard</p>
+                    <h1 className="text-sm font-bold text-warm-800">{t(activeModule.labelKey)}</h1>
+                    <p className="text-[11px] text-warm-400">{t('nav.dashboard')}</p>
                   </div>
                 </div>
               )
             })()}
             <div className="ml-auto flex items-center gap-2">
+              {activeModule && hasPermission(activeModule.permission, 'actualizar') && (
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold transition-colors"
+                  title={t('dashboard.export.title')}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{exporting ? t('dashboard.export.exporting') : t('dashboard.export.button')}</span>
+                </button>
+              )}
               <button
                 onClick={() => setRefreshKey(k => k + 1)}
                 className="p-1.5 rounded-lg border border-warm-200 bg-white hover:bg-warm-50 text-warm-400 transition-colors"
-                title="Actualizar"
+                title={t('common.refresh')}
               >
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>

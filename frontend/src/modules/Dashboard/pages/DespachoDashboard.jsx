@@ -17,6 +17,15 @@ import { fmtDate } from '../../../core/utils/dateFormat'
 const ESTADO_COLORS = { borrador: '#94a3b8', en_proceso: '#3b82f6', cerrado: '#22c55e' }
 const PIE_COLORS = ['#22c55e', '#3b82f6', '#94a3b8', '#f59e0b', '#a855f7']
 
+function estadoDespachoLabel(estado, t) {
+  const map = {
+    borrador: t('dashboard.status.draft'),
+    en_proceso: t('dashboard.status.processing'),
+    cerrado: t('dashboard.status.closed'),
+  }
+  return map[estado] || String(estado || '').replace('_', ' ')
+}
+
 export default function DespachoDashboard({ dateRange }) {
   const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
@@ -40,20 +49,20 @@ export default function DespachoDashboard({ dateRange }) {
     <div className="space-y-4 p-4">
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Folios hoy" value={kpis.folios_hoy} icon={Truck} index={0} />
-        <KpiCard label="Cerrados hoy" value={kpis.cerrados_hoy} icon={CheckCircle2} index={1} />
-        <KpiCard label="En proceso" value={kpis.en_proceso_hoy} icon={Truck} index={2} />
-        <KpiCard label="Cajas despachadas" value={kpis.cajas_despachadas} icon={Package} index={3} />
+        <KpiCard label={t('dashboard.despacho.kpi.foliosHoy')} value={kpis.folios_hoy} icon={Truck} index={0} />
+        <KpiCard label={t('dashboard.despacho.kpi.cerradosHoy')} value={kpis.cerrados_hoy} icon={CheckCircle2} index={1} />
+        <KpiCard label={t('dashboard.despacho.kpi.enProceso')} value={kpis.en_proceso_hoy} icon={Truck} index={2} />
+        <KpiCard label={t('dashboard.despacho.kpi.cajasDespachadas')} value={kpis.cajas_despachadas} icon={Package} index={3} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <KpiCard label="Tasa despacho completado" value={`${kpis.tasa_despacho}%`} icon={TrendingUp} index={4} />
-        <KpiCard label="Órdenes con trazabilidad" value={conEscaneo} icon={CheckCircle2} index={5} />
-        <KpiCard label="Tiempo prom. cierre" value={`${kpis.tiempo_promedio_horas}h`} icon={Clock} index={6} />
+        <KpiCard label={t('dashboard.despacho.kpi.tasaDespacho')} value={`${kpis.tasa_despacho}%`} icon={TrendingUp} index={4} />
+        <KpiCard label={t('dashboard.despacho.kpi.ordenesTrazabilidad')} value={conEscaneo} icon={CheckCircle2} index={5} />
+        <KpiCard label={t('dashboard.despacho.kpi.tiempoCierre')} value={`${kpis.tiempo_promedio_horas}h`} icon={Clock} index={6} />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Folios por estado" icon={Truck}>
+        <ChartCard title={t('dashboard.despacho.chart.foliosEstado')} icon={Truck}>
           {graficas.por_estado.length > 0 ? (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="50%" height={180}>
@@ -71,7 +80,7 @@ export default function DespachoDashboard({ dateRange }) {
                 {graficas.por_estado.map((e, i) => (
                   <div key={e.estado} className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: ESTADO_COLORS[e.estado] || PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="text-xs text-warm-600 flex-1 capitalize">{e.estado.replace('_', ' ')}</span>
+                    <span className="text-xs text-warm-600 flex-1">{estadoDespachoLabel(e.estado, t)}</span>
                     <span className="text-xs font-bold text-warm-700">{e.cantidad}</span>
                   </div>
                 ))}
@@ -80,11 +89,11 @@ export default function DespachoDashboard({ dateRange }) {
           ) : <NoData height={180} />}
         </ChartCard>
 
-        <ChartCard title="Trazabilidad de órdenes" icon={CheckCircle2}>
+        <ChartCard title={t('dashboard.despacho.chart.trazabilidadOrdenes')} icon={CheckCircle2}>
           <div className="space-y-4 pt-2">
             <div>
               <div className="flex items-center justify-between text-xs text-warm-600 mb-1.5">
-                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-success-500" /><span>Con escaneo</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-success-500" /><span>{t('dashboard.despacho.conEscaneo')}</span></div>
                 <span className="font-semibold">{conEscaneo}</span>
               </div>
               <div className="h-3 rounded-full bg-warm-100 overflow-hidden">
@@ -94,7 +103,7 @@ export default function DespachoDashboard({ dateRange }) {
             </div>
             <div>
               <div className="flex items-center justify-between text-xs text-warm-600 mb-1.5">
-                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-warm-300" /><span>Sin escaneo</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-warm-300" /><span>{t('dashboard.despacho.sinEscaneo')}</span></div>
                 <span className="font-semibold">{sinEscaneo}</span>
               </div>
               <div className="h-3 rounded-full bg-warm-100 overflow-hidden">
@@ -105,13 +114,13 @@ export default function DespachoDashboard({ dateRange }) {
             <div className="flex items-center justify-center">
               <div className="text-center">
                 <p className="text-3xl font-bold text-warm-800">{kpis.tasa_despacho}%</p>
-                <p className="text-xs text-warm-400 mt-0.5">tasa de despacho completado</p>
+                <p className="text-xs text-warm-400 mt-0.5">{t('dashboard.despacho.tasaDespachoCompletado')}</p>
               </div>
             </div>
           </div>
         </ChartCard>
 
-        <ChartCard title="Top conductores" icon={Truck}>
+        <ChartCard title={t('dashboard.despacho.chart.topConductores')} icon={Truck}>
           {graficas.top_conductores.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={graficas.top_conductores} layout="vertical" margin={{ left: 4, right: 20 }}>
@@ -119,13 +128,13 @@ export default function DespachoDashboard({ dateRange }) {
                 <XAxis type="number" tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="conductor" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Bar dataKey="folios" fill="#10b981" radius={[0, 4, 4, 0]} name="Folios" />
+                <Bar dataKey="folios" fill="#10b981" radius={[0, 4, 4, 0]} name={t('dashboard.metric.folios')} />
               </BarChart>
             </ResponsiveContainer>
           ) : <NoData height={200} />}
         </ChartCard>
 
-        <ChartCard title="Tendencia semanal" icon={TrendingUp}>
+        <ChartCard title={t('dashboard.trend.weekly')} icon={TrendingUp}>
           {graficas.tendencia_semanal.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={graficas.tendencia_semanal} margin={{ left: 0, right: 20 }}>
@@ -133,7 +142,7 @@ export default function DespachoDashboard({ dateRange }) {
                 <XAxis dataKey="semana" tick={{ fontSize: 11 }} tickFormatter={v => fmtDate(v)} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} labelFormatter={v => fmtDate(v)} />
-                <Line type="monotone" dataKey="cantidad" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} name="Folios" />
+                <Line type="monotone" dataKey="cantidad" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.folios')} />
               </LineChart>
             </ResponsiveContainer>
           ) : <NoData height={200} />}

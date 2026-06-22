@@ -4,6 +4,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { Users, Shield, UserCheck, UserX, Settings2 } from 'lucide-react'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useAuthStore } from '../../../core/stores/authStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getAdminStats } from '../services/dashboardService'
 import { KpiCard } from '../components/KpiCard'
 import { ChartCard, NoData } from '../components/ChartCard'
@@ -11,6 +12,7 @@ import { ChartCard, NoData } from '../components/ChartCard'
 const ROLE_COLORS = ['#2e57fe', '#a855f7', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#8b5cf6']
 
 export default function AdminDashboard() {
+  const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
 
   const { data, isLoading } = useQuery({
@@ -32,13 +34,13 @@ export default function AdminDashboard() {
   const byRole = useMemo(() => {
     const map = new Map()
     for (const u of users) {
-      const rol = u.rol_nombre || 'Sin rol'
+      const rol = u.rol_nombre || t('dashboard.admin.sinRol')
       map.set(rol, (map.get(rol) ?? 0) + 1)
     }
     return Array.from(map.entries())
       .map(([name, value], i) => ({ name, value, color: ROLE_COLORS[i % ROLE_COLORS.length] }))
       .sort((a, b) => b.value - a.value)
-  }, [users])
+  }, [users, t])
 
   if (isLoading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>
 
@@ -46,16 +48,16 @@ export default function AdminDashboard() {
     <div className="space-y-4 p-4">
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KpiCard label="Usuarios totales" value={kpis.total}       icon={Users}     index={0} iconBg="bg-slate-50 border border-slate-200" />
-        <KpiCard label="Activos"          value={kpis.activos}     icon={UserCheck} index={1} iconBg="bg-success-50 border border-success-100" />
-        <KpiCard label="Inactivos"        value={kpis.inactivos}   icon={UserX}     index={2} alert={kpis.inactivos > 0} />
-        <KpiCard label="Roles definidos"  value={kpis.total_roles} icon={Shield}    index={3} iconBg="bg-violet-50 border border-violet-100" />
+        <KpiCard label={t('dashboard.admin.kpi.usuariosTotales')} value={kpis.total} icon={Users} index={0} iconBg="bg-slate-50 border border-slate-200" />
+        <KpiCard label={t('common.active')} value={kpis.activos} icon={UserCheck} index={1} iconBg="bg-success-50 border border-success-100" />
+        <KpiCard label={t('common.inactive')} value={kpis.inactivos} icon={UserX} index={2} alert={kpis.inactivos > 0} />
+        <KpiCard label={t('dashboard.admin.kpi.rolesDefinidos')} value={kpis.total_roles} icon={Shield} index={3} iconBg="bg-violet-50 border border-violet-100" />
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* By role pie */}
-        <ChartCard title="Usuarios por rol" icon={Shield}>
+        <ChartCard title={t('dashboard.admin.chart.usuariosRol')} icon={Shield}>
           {byRole.length > 0 ? (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="50%" height={160}>
@@ -80,12 +82,12 @@ export default function AdminDashboard() {
         </ChartCard>
 
         {/* Active vs Inactive */}
-        <ChartCard title="Estado de usuarios" icon={Users}>
+        <ChartCard title={t('dashboard.admin.chart.estadoUsuarios')} icon={Users}>
           {kpis.total > 0 ? (
             <div className="space-y-4 pt-2">
               {[
-                { label: 'Activos',   value: kpis.activos,   pct: kpis.total > 0 ? Math.round((kpis.activos / kpis.total) * 100) : 0,   color: 'bg-success-500' },
-                { label: 'Inactivos', value: kpis.inactivos, pct: kpis.total > 0 ? Math.round((kpis.inactivos / kpis.total) * 100) : 0, color: 'bg-warm-300' },
+                { label: t('common.active'), value: kpis.activos, pct: kpis.total > 0 ? Math.round((kpis.activos / kpis.total) * 100) : 0, color: 'bg-success-500' },
+                { label: t('common.inactive'), value: kpis.inactivos, pct: kpis.total > 0 ? Math.round((kpis.inactivos / kpis.total) * 100) : 0, color: 'bg-warm-300' },
               ].map(({ label, value, pct, color }) => (
                 <div key={label} className="space-y-1">
                   <div className="flex justify-between text-xs text-warm-600">
@@ -104,7 +106,7 @@ export default function AdminDashboard() {
 
       {/* Roles list */}
       {roles.length > 0 && (
-        <ChartCard title="Roles del sistema" icon={Settings2}>
+        <ChartCard title={t('dashboard.admin.chart.rolesSistema')} icon={Settings2}>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {roles.map((rol, i) => (
               <div key={rol.id || i} className="flex items-center gap-2 rounded-xl border border-warm-100 bg-warm-50 px-3 py-2.5">
