@@ -336,10 +336,13 @@ router.get('/buscar',
       const inboundWhere = mode === 'exact'
         ? buildExactOnlyWhere(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)
         : buildFlexibleMatchWhere(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)
+      const despOrdenesWhere = mode === 'exact'
+        ? buildExactOnlyWhere(['dfo.outbound_order_no', 'df.folio_numero'], matchParams)
+        : buildFlexibleMatchWhere(['dfo.outbound_order_no', 'df.folio_numero'], matchParams)
 
       const searchParams = [req.tenantId, tokens.exactVariants, tokens.compact, tokens.baseCompact, tokens.partialVariants]
       const flexibleSearchParams = [...searchParams, mode !== 'exact']
-      let invRes, invRegRes, pickRes, pickStatusRes, rastreoRes, inboundRes, anormRes, despRes
+      let invRes, invRegRes, pickRes, pickStatusRes, rastreoRes, inboundRes, anormRes, despRes, despOrdenesRes
       try {
         invRes = await client.query(
           `SELECT s.barcode, s.sku, s.product_name, s.cell_no, s.available_stock,
@@ -654,6 +657,26 @@ router.get('/buscar',
            LIMIT 50`,
           flexibleSearchParams
         )
+        despOrdenesRes = await client.query(
+          `SELECT dfo.id, dfo.outbound_order_no, dfo.cliente, dfo.bultos, dfo.peso_kg,
+                  dfo.estado AS orden_estado, dfo.notas, dfo.created_at,
+                  df.folio_numero, df.estado AS folio_estado, df.fecha_salida,
+                  ${buildMatchCase(['dfo.outbound_order_no', 'df.folio_numero'], matchParams)} AS match_type
+           FROM dispatch_folio_orders dfo
+           JOIN dispatch_folios df ON df.id = dfo.folio_id
+           WHERE dfo.tenant_id = $1
+             AND ${despOrdenesWhere}
+           ORDER BY
+             CASE ${buildMatchCase(['dfo.outbound_order_no', 'df.folio_numero'], matchParams)}
+               WHEN 'exact' THEN 1
+               WHEN 'normalized' THEN 2
+               WHEN 'base' THEN 3
+               ELSE 4
+             END,
+             dfo.created_at DESC
+           LIMIT 50`,
+          searchParams
+        )
         await client.query('COMMIT')
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {})
@@ -691,6 +714,7 @@ router.get('/buscar',
         ...inboundRes.rows,
         ...anormRes.rows,
         ...despRes.rows,
+        ...(despOrdenesRes?.rows || []),
       ]
       const usedBaseCode = datasets.some(row => row.match_type === 'base')
 
@@ -705,6 +729,7 @@ router.get('/buscar',
           recepcion: inboundRes.rows,
           anormalidades: anormRes.rows,
           despacho: despRes.rows,
+          despacho_ordenes: despOrdenesRes?.rows || [],
           meta: {
             query: q,
             mode,
@@ -1158,9 +1183,7 @@ router.post('/',
       }
 
       const cajasData = await Promise.all(cajas.map(async (c) => {
-        const normalized = normalizeCode(c.box_code)
-        const compact = stripCode(c.box_code)
-        const baseCompact = getSearchTokens(c.box_code).baseCompact
+        const tokens = getSearchTokens(c.box_code)
         let validada = false
 
         if (outbound_order_no) {
@@ -1175,14 +1198,14 @@ router.post('/',
                  baseParam: 5,
                })}
              LIMIT 1`,
-            [req.tenantId, outbound_order_no, normalized, compact, baseCompact]
+            [req.tenantId, outbound_order_no, tokens.exactVariants, tokens.compact, tokens.baseCompact]
           )
           validada = peRes.rows.length > 0
         }
 
         return {
           box_code: c.box_code,
-          box_code_normalized: normalized,
+          box_code_normalized: tokens.normalized,
           box_type: c.box_type || null,
           ubicacion: c.ubicacion || null,
           producto: c.producto || null,
@@ -1191,11 +1214,10 @@ router.post('/',
         }
       }))
 
-      const { tenantTransaction } = await import('../../../config/database.js')
       let ordenId
       let folio
 
-      await tenantTransaction(req.tenantId, async (client) => {
+      await req.tTransaction(async (client) => {
         folio = await generateRastreoFolioForClient(client, req.tenantId)
         const ordenRes = await client.query(
           `INSERT INTO rastreo_ordenes
@@ -1382,9 +1404,7 @@ router.post('/cajas/add',
       )
       if (dupRes.rows.length) return res.status(409).json({ error: 'La caja ya existe en esta orden' })
 
-      const normalized = normalizeCode(box_code)
-      const compact = stripCode(box_code)
-      const baseCompact = getSearchTokens(box_code).baseCompact
+      const tokens = getSearchTokens(box_code)
       let validada = false
       if (orden.outbound_order_no) {
         const peRes = await req.tQuery(
@@ -1398,7 +1418,7 @@ router.post('/cajas/add',
                baseParam: 5,
              })}
            LIMIT 1`,
-          [req.tenantId, orden.outbound_order_no, normalized, compact, baseCompact]
+          [req.tenantId, orden.outbound_order_no, tokens.exactVariants, tokens.compact, tokens.baseCompact]
         )
         validada = peRes.rows.length > 0
       }
@@ -1409,7 +1429,7 @@ router.post('/cajas/add',
              (tenant_id, rastreo_orden_id, box_code, box_code_normalized, box_type, ubicacion, producto, cantidad_disponible, validada_en_surtido)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
            RETURNING id`,
-          [req.tenantId, orden_id, box_code, normalized, box_type || null, ubicacion || null, producto || null,
+          [req.tenantId, orden_id, box_code, tokens.normalized, box_type || null, ubicacion || null, producto || null,
             cantidad_disponible != null ? cantidad_disponible : null, validada]
         )
         : await req.tQuery(
@@ -1417,7 +1437,7 @@ router.post('/cajas/add',
              (tenant_id, rastreo_orden_id, box_code, box_code_normalized, ubicacion, producto, cantidad_disponible, validada_en_surtido)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
            RETURNING id`,
-          [req.tenantId, orden_id, box_code, normalized, ubicacion || null, producto || null,
+          [req.tenantId, orden_id, box_code, tokens.normalized, ubicacion || null, producto || null,
             cantidad_disponible != null ? cantidad_disponible : null, validada]
         )
 
