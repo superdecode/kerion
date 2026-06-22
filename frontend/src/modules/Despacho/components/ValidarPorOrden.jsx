@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, Fragment } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -43,7 +43,7 @@ function buildLookupCodeSet(rawCodes = []) {
 }
 
 // ── Validation panel (per order) ─────────────────────────────────────────────
-function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onClose, validarPorTarimas }) {
+function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onClose, validarPorTarimas, detailCache }) {
   const { addToast } = useToastStore()
   const { t } = useI18nStore()
   const scanRef = useRef(null)
@@ -53,6 +53,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
   const [completed, setCompleted] = useState(false)
   const [currentTarimaNum, setCurrentTarimaNum] = useState(1)
   const [pendingOfflineScans, setPendingOfflineScans] = useState([])
+  const pendingOnlineRef = useRef(new Set())
   const isOffline = useOfflineStore((s) => s.status === 'offline')
 
   const scans = order.scans ?? []
@@ -71,19 +72,33 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     : null
 
   useEffect(() => {
-    setDetailLoading(true)
     setCompleted(false)
+    const cached = detailCache?.current?.get(order.outbound_order_no)
+    if (cached !== undefined) {
+      setOrderDetail(cached)
+      return
+    }
+    setDetailLoading(true)
     getOutboundDetail(order.outbound_order_no)
-      .then(r => setOrderDetail(r?.data ?? null))
-      .catch(() => setOrderDetail(null))
+      .then(r => {
+        const data = r?.data ?? null
+        detailCache?.current?.set(order.outbound_order_no, data)
+        setOrderDetail(data)
+      })
+      .catch(() => {
+        detailCache?.current?.set(order.outbound_order_no, null)
+        setOrderDetail(null)
+      })
       .finally(() => setDetailLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.outbound_order_no])
 
   useEffect(() => {
-    if (!detailLoading && canEdit && !completed) {
-      setTimeout(() => scanRef.current?.focus(), 100)
+    if (canEdit && !completed) {
+      setTimeout(() => scanRef.current?.focus(), 50)
     }
-  }, [detailLoading, canEdit, completed])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order.id, canEdit, completed])
 
   const validCodes = useCallback(() => {
     if (!orderDetail) return new Set()
@@ -107,10 +122,10 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
   const expected = order.bultos_esperados ?? orderDetail?.outboundBoxCount ?? null
 
   const { mutate: doAddScan, isPending: scanning } = useMutation({
-    mutationFn: (code) => addOrderScan(folioId, order.id, { codigo_caja: code, tarima_ref: currentTarimaRef }),
-    onSuccess: (data) => {
+    mutationFn: ({ code, tarimaRef }) => addOrderScan(folioId, order.id, { codigo_caja: code, tarima_ref: tarimaRef }),
+    onSuccess: (data, { code }) => {
+      pendingOnlineRef.current.delete(code)
       onUpdate(data)
-      setInput('')
       const updatedOrder = data?.orders?.find(o => o.id === order.id)
       const newScansCount = updatedOrder?.scans?.length ?? 0
       const expectedCount = Number(order.bultos_esperados ?? orderDetail?.outboundBoxCount)
@@ -123,7 +138,8 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
         scanRef.current?.focus()
       }
     },
-    onError: (err) => {
+    onError: (err, { code }) => {
+      pendingOnlineRef.current.delete(code)
       addToast(err?.response?.data?.error || 'Error registrando escaneo', 'error')
       scanRef.current?.focus()
     },
@@ -138,9 +154,8 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
   const handleScan = useCallback(() => {
     const code = normalizeScanCode(input.trim())
     if (!code) return
-    if (code !== input.trim()) setInput(code)
     const allScannedCodes = new Set([...Array.from(alreadyScanned), ...pendingOfflineScans])
-    if (allScannedCodes.has(code)) {
+    if (allScannedCodes.has(code) || pendingOnlineRef.current.has(code)) {
       addToast('Código ya escaneado en esta orden', 'warning')
       setInput('')
       scanRef.current?.focus()
@@ -153,6 +168,8 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       scanRef.current?.focus()
       return
     }
+    setInput('')
+    scanRef.current?.focus()
     if (isOffline) {
       useOfflineStore.getState().enqueueModule({
         type: 'despacho_order_scan',
@@ -160,11 +177,10 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       })
       setPendingOfflineScans(p => [...p, code])
       addToast(`Offline: ${code} — se enviará al recuperar conexión`, 'info')
-      setInput('')
-      scanRef.current?.focus()
       return
     }
-    doAddScan(code)
+    pendingOnlineRef.current.add(code)
+    doAddScan({ code, tarimaRef: currentTarimaRef })
   }, [input, validCodes, alreadyScanned, pendingOfflineScans, isOffline, doAddScan, addToast, folioId, order.id, currentTarimaRef])
 
   const pct = expected && expected > 0 ? Math.round((scans.length / expected) * 100) : null
@@ -229,12 +245,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
         </div>
       </div>
 
-      {detailLoading ? (
-        <div className="flex items-center gap-2 h-10 mb-3 px-3 bg-white/60 border border-primary-100 rounded-xl">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-400 shrink-0" />
-          <span className="text-xs text-primary-500">Cargando datos de la orden desde el sistema...</span>
-        </div>
-      ) : canEdit && (
+      {canEdit && (
         <div className="flex items-center gap-2 mb-3">
           <div className={`flex items-center gap-1.5 bg-white border-2 rounded-xl px-3 h-10 flex-1 transition-colors ${
             scanning ? 'border-primary-300' : 'border-primary-200 focus-within:border-primary-400'
@@ -251,12 +262,12 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
                   handleScan()
                 }
               }}
-              placeholder={t('desp.validar.orden.scanPlaceholderPanel')}
+              placeholder={detailLoading ? 'Cargando datos WMS...' : t('desp.validar.orden.scanPlaceholderPanel')}
               className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400"
               autoComplete="off"
-              disabled={scanning}
             />
-            {input && !scanning && (
+            {detailLoading && <Loader2 className="w-3 h-3 animate-spin text-primary-300 shrink-0" />}
+            {input && !detailLoading && (
               <button onClick={() => { setInput(''); scanRef.current?.focus() }} className="text-warm-400 hover:text-warm-600">
                 <X className="w-3 h-3" />
               </button>
@@ -356,6 +367,7 @@ export default function ValidarPorOrden({ folioId }) {
     return lvl === 'actualizar' || lvl === 'eliminar'
   })
   const qc = useQueryClient()
+  const detailCacheRef = useRef(new Map())
 
   // Add-order state
   const [showAddOrder, setShowAddOrder] = useState(false)
@@ -1066,6 +1078,7 @@ export default function ValidarPorOrden({ folioId }) {
                             onAutoConfirm={(body) => doUpdateOrder({ orderId: order.id, body })}
                             onClose={() => setValidatingOrderId(null)}
                             validarPorTarimas={true}
+                            detailCache={detailCacheRef}
                           />
                         </motion.div>
                       </AnimatePresence>

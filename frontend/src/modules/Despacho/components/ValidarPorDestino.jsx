@@ -126,6 +126,7 @@ export default function ValidarPorDestino({ folioId }) {
   const qc = useQueryClient()
 
   const scanRef = useRef(null)
+  const pendingOnlineRef = useRef(new Set())
   const [scanInput, setScanInput] = useState('')
   const [currentTarimaNum, setCurrentTarimaNum] = useState(1)
   const [errorModal, setErrorModal] = useState(null)
@@ -249,9 +250,10 @@ export default function ValidarPorDestino({ folioId }) {
     onError: (err) => addToast(err?.response?.data?.error || 'Error cancelando folio', 'error'),
   })
 
-  const { mutate: doAddScan, isPending: scanning } = useMutation({
+  const { mutate: doAddScan } = useMutation({
     mutationFn: (body) => addFolioScan(folioId, body),
     onSuccess: (data, body) => {
+      pendingOnlineRef.current.delete(body?.codigo_caja)
       qc.invalidateQueries({ queryKey: ['despacho-folio-scans', folioId] })
       qc.invalidateQueries({ queryKey: ['despacho-folio', folioId] })
       qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
@@ -274,10 +276,9 @@ export default function ValidarPorDestino({ folioId }) {
           }
         }
       }
-      setScanInput('')
-      setTimeout(() => scanRef.current?.focus(), 50)
     },
-    onError: (err) => {
+    onError: (err, body) => {
+      pendingOnlineRef.current.delete(body?.codigo_caja)
       const code = err?.response?.data?.code
       const msg = err?.response?.data?.error || 'Error registrando escaneo'
       if (code === 'DUPLICATE_IN_FOLIO') {
@@ -287,7 +288,6 @@ export default function ValidarPorDestino({ folioId }) {
       } else {
         addToast(msg, 'error')
       }
-      setScanInput('')
       setTimeout(() => scanRef.current?.focus(), 50)
     },
   })
@@ -330,8 +330,11 @@ export default function ValidarPorDestino({ folioId }) {
 
   const submitOverLimitScan = useCallback(() => {
     if (!overLimitModal.payload) return
+    const code = overLimitModal.payload.codigo_caja
+    if (code) pendingOnlineRef.current.add(code)
     doAddScan(overLimitModal.payload)
     setOverLimitModal({ open: false, payload: null, scanned: 0, expected: 0 })
+    setTimeout(() => scanRef.current?.focus(), 100)
   }, [doAddScan, overLimitModal.payload])
 
   const handleScan = useCallback(() => {
@@ -340,21 +343,18 @@ export default function ValidarPorDestino({ folioId }) {
     const variants = buildScanCodeVariants(raw)
     const code = variants[0] || ''
     setScanInput('')
-    if (!code) {
-      setTimeout(() => scanRef.current?.focus(), 50)
-      return
-    }
+    scanRef.current?.focus()
+    if (!code) return
 
-    // Duplicate check
+    // Duplicate check (server scans + locally pending)
     const scannedCodes = new Set()
     scans.forEach((scan) => {
       const normalized = normalizeCodeFast(scan.codigo_caja)
       if (!normalized) return
       generateCodeVariations(normalized, false).forEach((variant) => scannedCodes.add(variant))
     })
-    if (hasCodeVariant(scannedCodes, variants)) {
+    if (hasCodeVariant(scannedCodes, variants) || pendingOnlineRef.current.has(code)) {
       setErrorModal({ type: 'duplicate', code })
-      setTimeout(() => scanRef.current?.focus(), 100)
       return
     }
 
@@ -399,10 +399,10 @@ export default function ValidarPorDestino({ folioId }) {
       })
       setPendingOfflineScans(p => [...p, { code, matchedOrderNo }])
       addToast(`Offline: ${code} — se enviará al recuperar conexión`, 'info')
-      setTimeout(() => scanRef.current?.focus(), 50)
       return
     }
 
+    pendingOnlineRef.current.add(code)
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: matchedOrderNo })
   }, [scanInput, scans, orders, orderEnrichment, currentTarimaRef, isOffline, folioId, requestAddScan, addToast])
 
@@ -420,8 +420,10 @@ export default function ValidarPorDestino({ folioId }) {
     const code = normalizeScanCode(forceModal.code)
     const orderNo = normalizeCodeFast(forceModal.orderNo)
     if (!code || !orderNo) return
+    pendingOnlineRef.current.add(code)
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: orderNo })
     setForceModal({ open: false, code: '', orderNo: '' })
+    setTimeout(() => scanRef.current?.focus(), 100)
   }, [forceModal.code, forceModal.orderNo, currentTarimaRef, requestAddScan])
 
   const submitMoveScan = useCallback(() => {
@@ -643,7 +645,7 @@ export default function ValidarPorDestino({ folioId }) {
         {/* Row 3: scan input */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <div className={`flex items-center gap-2 bg-white border-2 rounded-2xl px-4 h-11 flex-1 transition-colors ${
-            scanning ? 'border-primary-300' : 'border-primary-200 focus-within:border-primary-400'
+            'border-primary-200 focus-within:border-primary-400'
           }`}>
             <ScanLine className="w-3.5 h-3.5 text-primary-400 shrink-0" />
             <input
@@ -660,7 +662,7 @@ export default function ValidarPorDestino({ folioId }) {
               placeholder={t('desp.validar.orden.scanPlaceholder')}
               className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400"
               autoComplete="off"
-              disabled={!editable || scanning}
+              disabled={!editable}
             />
             {scanInput && (
               <button onClick={() => { setScanInput(''); scanRef.current?.focus() }} className="text-warm-400 hover:text-warm-600">
@@ -670,10 +672,10 @@ export default function ValidarPorDestino({ folioId }) {
           </div>
           <button
             onClick={handleScan}
-            disabled={!scanInput.trim() || scanning || !editable}
+            disabled={!scanInput.trim() || !editable}
             className="btn-primary text-sm flex items-center justify-center gap-1.5 h-11 px-4 rounded-2xl disabled:opacity-50 w-full sm:w-auto"
           >
-            {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
+            <ScanLine className="w-3.5 h-3.5" />
             {t('desp.validar.orden.validarBtn')}
           </button>
         </div>
@@ -1108,10 +1110,8 @@ export default function ValidarPorDestino({ folioId }) {
             <button
               type="button"
               onClick={submitOverLimitScan}
-              disabled={scanning}
-              className="btn-danger text-sm flex items-center gap-1.5 disabled:opacity-50"
+              className="btn-danger text-sm"
             >
-              {scanning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {t('desp.validar.destino.overLimitConfirm')}
             </button>
           </div>
@@ -1153,10 +1153,9 @@ export default function ValidarPorDestino({ folioId }) {
             <button
               type="button"
               onClick={submitForceScan}
-              disabled={!forceModal.orderNo.trim() || scanning}
-              className="btn-danger text-sm flex items-center gap-1.5 disabled:opacity-50"
+              disabled={!forceModal.orderNo.trim()}
+              className="btn-danger text-sm disabled:opacity-50"
             >
-              {scanning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {t('desp.validar.destino.forceConfirm')}
             </button>
           </div>

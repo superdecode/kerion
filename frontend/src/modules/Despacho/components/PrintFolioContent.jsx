@@ -60,12 +60,24 @@ const TD = {
 
 const REJECTION_ROWS = 12
 
+function getUniqueDestinations(orders) {
+  const seen = new Set()
+  const result = []
+  for (const o of orders) {
+    const d = (o.destinatario || '').trim()
+    if (d && !seen.has(d)) { seen.add(d); result.push(d) }
+  }
+  return result
+}
+
 export default function PrintFolioContent({ folio, orders }) {
   if (!folio) return null
 
   const totalBultos = orders.reduce((s, o) => s + (Number(o.bultos) || 0), 0)
   const totalPeso   = orders.reduce((s, o) => s + (Number(o.peso_kg) || 0), 0)
   const showTarimas = !!folio.validar_por_tarimas
+  const destinations = getUniqueDestinations(orders)
+  const destinationsLabel = destinations.length > 0 ? destinations.join(' / ') : '—'
 
   return (
     <div id="print-folio-content" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '10px', color: '#1a1a1a' }}>
@@ -93,7 +105,7 @@ export default function PrintFolioContent({ folio, orders }) {
           {[
             { label: 'Fecha Salida', value: fmtDate(folio.fecha_salida) },
             { label: 'Operador',     value: folio.operador_nombre || '—' },
-            { label: 'Estado',       value: folio.estado || '—' },
+            { label: destinations.length > 1 ? 'Destinos' : 'Destino', value: destinationsLabel },
           ].map(({ label, value }, i, arr) => (
             <div key={label} style={{ flex: 1, padding: '5px 8px', borderRight: i < arr.length - 1 ? '1px solid #c7d2fe' : 'none' }}>
               <span style={{ fontWeight: '600', color: '#6366f1', fontSize: '8px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
@@ -113,7 +125,7 @@ export default function PrintFolioContent({ folio, orders }) {
             {showTarimas && <th style={{ ...TH, textAlign: 'center', width: '70px' }}># Tarima</th>}
             <th style={{ ...TH, textAlign: 'center' }}>Bultos</th>
             <th style={{ ...TH, textAlign: 'center' }}>Peso kg</th>
-            <th style={TH}>Estado</th>
+            <th style={TH}>Destinatario</th>
           </tr>
         </thead>
         <tbody>
@@ -151,7 +163,7 @@ export default function PrintFolioContent({ folio, orders }) {
                 <td style={{ ...TD, textAlign: 'center', color: '#475569' }}>
                   {o.peso_kg != null ? Number(o.peso_kg).toFixed(2) : '—'}
                 </td>
-                <td style={{ ...TD, color: '#334155' }}>{o.estado || 'pendiente'}</td>
+                <td style={{ ...TD, color: '#334155' }}>{o.destinatario || '—'}</td>
               </tr>
             )
           })}
