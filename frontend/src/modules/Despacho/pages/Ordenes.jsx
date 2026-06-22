@@ -2,11 +2,12 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
+import * as XLSX from 'xlsx'
 import {
   Search, X, Truck, PackageCheck, RefreshCw, Clock, Filter,
   Users, ChevronUp, ChevronDown, ChevronsUpDown, AlertCircle,
   ScanLine, CalendarDays, Copy, Check, MapPin, Package,
-  Loader2, CheckCircle2, Pencil, Box,
+  Loader2, CheckCircle2, Pencil, Box, Download,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -117,10 +118,12 @@ export default function Ordenes() {
     return folioId ? `/despacho/folios/${folioId}` : null
   }
 
+  const { hasPermission } = useAuthStore()
   const canManageCatalogs = useAuthStore(s => {
     const lvl = s.getPermissionLevel('despacho.ordenes')
     return lvl === 'actualizar' || lvl === 'eliminar'
   })
+  const canExport  = hasPermission('despacho.ordenes', 'actualizar')
   const canOpenFolios = useAuthStore(s => s.canView('despacho.folios'))
   const canDispatch = useAuthStore(s => {
     const lvl = s.getPermissionLevel('despacho.folios')
@@ -142,6 +145,8 @@ export default function Ordenes() {
   const [showConductores, setShowConductores] = useState(false)
   const [showUnidades, setShowUnidades]       = useState(false)
 
+  const [selectedIds, setSelectedIds]     = useState(new Set())
+  const [exportingBulk, setExportingBulk] = useState(false)
   const [copiedOrderNo, setCopiedOrderNo] = useState(null)
   const [scanInput, setScanInput]         = useState('')
   const [scanStatus, setScanStatus]       = useState(SCAN_IDLE)
@@ -280,6 +285,54 @@ export default function Ordenes() {
 
   useEffect(() => { setPage(1) }, [search, dateFrom, dateTo, statusFilter, dispatchFilter, tab])
 
+
+  const toggleSelect = (key) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    next.has(key) ? next.delete(key) : next.add(key)
+    return next
+  })
+  const toggleSelectAll = () => {
+    const pageKeys = paginated.map(o => o.outboundOrderNo || o.order_no || '')
+    if (pageKeys.every(k => selectedIds.has(k))) setSelectedIds(new Set())
+    else setSelectedIds(prev => { const next = new Set(prev); pageKeys.forEach(k => next.add(k)); return next })
+  }
+
+  const EXPORT_HEADERS = ['Orden WMS', 'Fecha Entrega', 'Destino', 'Estado WMS', 'Folio', 'Estado Folio', 'Cajas', 'Códigos Caja']
+
+  function buildExportRows(orders) {
+    return orders.map(order => {
+      const orderNo  = order.outboundOrderNo || order.order_no || ''
+      const dateVal  = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
+      const destino  = order.receiverName || order.customerName || order.cliente || ''
+      const status   = order.trackingStatus || order.status || ''
+      const dispatch = dispatchMap.get(orderNo)
+      return [
+        orderNo,
+        dateVal ? fmtDate(dateVal) : '',
+        destino,
+        t(STATUS_META[status]?.labelKey || '') || status,
+        dispatch?.folio_numero || '',
+        dispatch?.order_estado ? t(DISPATCH_ESTADO_META[dispatch.order_estado]?.labelKey || '') || dispatch.order_estado : '',
+        order.outboundBoxCount ?? '',
+        getCodigosCaja(order).join(', '),
+      ]
+    })
+  }
+
+  const handleBulkExport = () => {
+    const toExport = sorted.filter(o => selectedIds.has(o.outboundOrderNo || o.order_no || ''))
+    if (!toExport.length) return
+    setExportingBulk(true)
+    try {
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([EXPORT_HEADERS, ...buildExportRows(toExport)])
+      ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 8 }, { wch: 30 }]
+      XLSX.utils.book_append_sheet(wb, ws, 'Ordenes Despacho')
+      XLSX.writeFile(wb, `despacho_ordenes_${dateFrom || 'all'}_${dateTo || ''}.xlsx`)
+      setSelectedIds(new Set())
+    } catch { /* export error silently ignored — XLSX is best-effort */ }
+    setExportingBulk(false)
+  }
 
   function handleSort(field) {
     if (field === sortField) {
@@ -675,9 +728,48 @@ export default function Ordenes() {
         ) : (
           <div className="px-5 py-4">
             <div className="rounded-2xl border border-warm-100 overflow-hidden shadow-sm bg-white">
+              {selectedIds.size > 0 && canExport && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex-wrap">
+                  <span className="font-semibold">{selectedIds.size} seleccionadas</span>
+                  {selectedIds.size < paginated.length && (
+                    <button
+                      className="text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
+                      onClick={toggleSelectAll}
+                    >
+                      Seleccionar página ({paginated.length})
+                    </button>
+                  )}
+                  <button
+                    onClick={handleBulkExport}
+                    disabled={exportingBulk}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-success-600 text-white font-semibold hover:bg-success-700 transition-colors disabled:opacity-50"
+                  >
+                    {exportingBulk
+                      ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      : <Download className="w-3 h-3" />}
+                    Exportar ({selectedIds.size})
+                  </button>
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="ml-auto text-primary-500 hover:text-primary-700 font-semibold"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
               <table className="w-full text-sm">
                 <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                   <tr>
+                    {canExport && (
+                      <th className="table-header w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={paginated.length > 0 && paginated.every(o => selectedIds.has(o.outboundOrderNo || o.order_no || ''))}
+                          onChange={toggleSelectAll}
+                          className="cb"
+                        />
+                      </th>
+                    )}
                     <SortHeader label={t('desp.col.orden')}        field="outboundOrderNo" {...sp} />
                     <SortHeader label={t('desp.col.fechaEntrega')} field="date"            {...sp} />
                     <SortHeader label={t('desp.col.destino')}      field="receiverName"    {...sp} />
@@ -692,7 +784,7 @@ export default function Ordenes() {
                 <tbody className="divide-y divide-warm-50">
                   {paginated.length === 0 ? (
                     <tr>
-                      <td colSpan={canDispatch ? 9 : 8} className="py-14 text-center">
+                      <td colSpan={(canDispatch ? 9 : 8) + (canExport ? 1 : 0)} className="py-14 text-center">
                         <PackageCheck className="w-8 h-8 text-warm-200 mx-auto mb-2" />
                         <p className="text-sm text-warm-400 font-medium">{t('desp.ordenes.empty')}</p>
                         {allOrders.length === 0 && (
@@ -716,6 +808,16 @@ export default function Ordenes() {
                         transition={{ delay: Math.min(i * 0.02, 0.3) }}
                         className="hover:bg-primary-100 transition-colors"
                       >
+                        {canExport && (
+                          <td className="px-3 py-3 text-center" onClick={e => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(orderNo)}
+                              onChange={() => toggleSelect(orderNo)}
+                              className="cb"
+                            />
+                          </td>
+                        )}
                         {/* Orden — copy on hover */}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 group/copy">

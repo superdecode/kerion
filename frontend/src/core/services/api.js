@@ -43,6 +43,10 @@ let isHandling401 = false
 let backendUnavailableUntil = 0
 const BACKEND_COOLDOWN_MS = 15000
 
+// Per-endpoint 429 cooldown: key = url prefix, value = timestamp when cooldown expires
+const rateLimitCooldowns = new Map()
+const RATE_LIMIT_COOLDOWN_MS = 30000
+
 // Callback registered by authStore to sync backendOnline Zustand state.
 // Using a callback avoids circular imports (authStore imports api.js).
 let _onBackendStatus = null
@@ -53,6 +57,13 @@ export function setBackendStatusCallback(cb) {
 let _onUnauthorized = null
 export function setUnauthorizedCallback(cb) {
   _onUnauthorized = cb
+}
+
+// Returns the current auth token without importing authStore (would be circular).
+// Registered by authStore at startup.
+let _getToken = null
+export function setGetTokenCallback(cb) {
+  _getToken = cb
 }
 
 function isProtectedAuthRequest(config) {
@@ -66,7 +77,7 @@ function shouldSkipBackendCooldown(config) {
   return isProtectedAuthRequest(config)
 }
 
-// Request interceptor - attach token
+// Request interceptor - attach token and check cooldowns
 api.interceptors.request.use((config) => {
   if (!shouldSkipBackendCooldown(config) && Date.now() < backendUnavailableUntil) {
     const error = new Error('Backend temporarily unavailable')
@@ -75,20 +86,26 @@ api.interceptors.request.use((config) => {
     return Promise.reject(error)
   }
 
+  // Block GET requests to rate-limited endpoints during cooldown
+  const method = String(config?.method || 'get').toLowerCase()
+  if (method === 'get' && config.url) {
+    const urlKey = String(config.url).split('?')[0]
+    const cooldownUntil = rateLimitCooldowns.get(urlKey)
+    if (cooldownUntil && Date.now() < cooldownUntil) {
+      const error = new Error('Rate limit cooldown active')
+      error.code = 'ERR_RATE_LIMITED'
+      error.config = config
+      return Promise.reject(error)
+    }
+  }
+
   // If url is absolute, don't touch it. 
   // If it's relative, ensure it DOES NOT start with / to avoid Axios overriding baseURL path
   if (typeof config.url === 'string' && config.url && !/^https?:\/\//i.test(config.url)) {
     config.url = config.url.startsWith('/') ? config.url.slice(1) : config.url
   }
-  const stored = localStorage.getItem('wms-auth')
-  if (stored) {
-    try {
-      const { state } = JSON.parse(stored)
-      if (state?.token) {
-        config.headers.Authorization = `Bearer ${state.token}`
-      }
-    } catch (e) { /* ignore */ }
-  }
+  const token = _getToken?.()
+  if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
@@ -110,11 +127,21 @@ api.interceptors.response.use(
       _onBackendStatus?.(false)
     }
 
+    // 429: set a per-endpoint cooldown so subsequent GET requests are blocked immediately
+    if (error.response?.status === 429 && error.config?.url) {
+      const urlKey = String(error.config.url).split('?')[0]
+      rateLimitCooldowns.set(urlKey, Date.now() + RATE_LIMIT_COOLDOWN_MS)
+      // Auto-clear after cooldown so the endpoint becomes usable again
+      setTimeout(() => rateLimitCooldowns.delete(urlKey), RATE_LIMIT_COOLDOWN_MS)
+    }
+
     if (error.response?.status === 401) {
       const isLoginRequest = error.config?.url?.includes('/auth/login')
+      // /auth/me 401 means the session expired during a background poll — logout but don't
+      // redirect to login if the user is already navigating away (handled by isHandling401).
       const isAuthMeRequest = error.config?.url?.includes('/auth/me')
 
-      if (!isLoginRequest && !isHandling401) {
+      if (!isLoginRequest && !isAuthMeRequest && !isHandling401) {
         isHandling401 = true
 
         _onUnauthorized?.()

@@ -2,29 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { PERM_TO_MODULE } from '../components/auth/ProtectedRoute'
-
-const MODULE_ROUTES = [
-  { module: 'global.inicio', path: '/' },
-  { module: 'dropscan.dashboard', path: '/dropscan' },
-  { module: 'dropscan.escaneo', path: '/DropScan/escaneo' },
-  { module: 'dropscan.tarimas', path: '/DropScan/tarimas' },
-  { module: 'dropscan.reportes', path: '/DropScan/reportes' },
-  { module: 'dropscan.configuracion', path: '/DropScan/configuracion' },
-  { module: 'fep.folios', path: '/DropScan/folios' },
-  { module: 'inventario.escaneo', path: '/Inventario/escaneo' },
-  { module: 'inventario.registros', path: '/Inventario/registros' },
-  { module: 'devoluciones.entradas', path: '/Devoluciones/entradas' },
-  { module: 'devoluciones.inventario', path: '/Devoluciones/inventario' },
-  { module: 'devoluciones.salidas', path: '/Devoluciones/salidas' },
-  { module: 'surtido.ordenes', path: '/surtido' },
-  { module: 'surtido.validacion', path: '/Surtido/validacion' },
-  { module: 'surtido.registros', path: '/Surtido/registros' },
-  { module: 'anormalidades.registro', path: '/Anormalidades/registro' },
-  { module: 'anormalidades.dashboard', path: '/Anormalidades/dashboard' },
-  { module: 'anormalidades.mejoras', path: '/Anormalidades/mejoras' },
-  { module: 'sistema.wms', path: '/wmshub' },
-  { module: 'global.administracion', path: '/admin' },
-]
+import { MODULE_ROUTES } from '../constants/moduleRoutes'
 
 function findAllowedRoute(canView) {
   const allowed = MODULE_ROUTES.find(r => r.path !== '/' && canView(r.module))

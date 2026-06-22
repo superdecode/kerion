@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ScanLine, Loader2, X, Check, CheckCircle2, XCircle, AlertCircle,
   Layers, MapPin, Trash2, Radio, Clock3, Search, MoveRight,
-  PanelRightClose, PanelRightOpen, PartyPopper, ExternalLink, Plus, Copy,
+  PanelRightClose, PanelRightOpen, PartyPopper, ExternalLink, Plus, Copy, WifiOff,
 } from 'lucide-react'
+import { useOfflineStore } from '../../../core/stores/offlineStore'
 import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -19,6 +20,7 @@ import {
   getFolio, getFolioScans, addFolioScan, deleteFolioScan,
   moveFolioScanTarima, cerrarFolio, cancelarFolio,
 } from '../services/despachoService'
+import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
 function genTarimaRef(num) {
   return 'T' + String(num).padStart(2, '0')
@@ -138,6 +140,8 @@ export default function ValidarPorDestino({ folioId }) {
   const [forceModal, setForceModal] = useState({ open: false, code: '', orderNo: '' })
   const [overLimitModal, setOverLimitModal] = useState({ open: false, payload: null, scanned: 0, expected: 0 })
   const [moveModal, setMoveModal] = useState({ open: false, scan: null, target: '' })
+  const [pendingOfflineScans, setPendingOfflineScans] = useState([])
+  const isOffline = useOfflineStore((s) => s.status === 'offline')
 
   const { data: folioData, isLoading: loadingFolio } = useQuery({
     queryKey: ['despacho-folio', folioId],
@@ -387,8 +391,20 @@ export default function ValidarPorDestino({ folioId }) {
       return
     }
 
+    if (isOffline) {
+      const offlineBody = { codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: matchedOrderNo }
+      useOfflineStore.getState().enqueueModule({
+        type: 'despacho_folio_scan',
+        payload: { folioId, body: offlineBody },
+      })
+      setPendingOfflineScans(p => [...p, { code, matchedOrderNo }])
+      addToast(`Offline: ${code} — se enviará al recuperar conexión`, 'info')
+      setTimeout(() => scanRef.current?.focus(), 50)
+      return
+    }
+
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: matchedOrderNo })
-  }, [scanInput, scans, orders, orderEnrichment, currentTarimaRef, requestAddScan])
+  }, [scanInput, scans, orders, orderEnrichment, currentTarimaRef, isOffline, folioId, requestAddScan, addToast])
 
   const openForceModal = useCallback((code) => {
     setErrorModal(null)
@@ -475,8 +491,12 @@ export default function ValidarPorDestino({ folioId }) {
     return searchedOrders
   }, [searchedOrders, statusFilter, validatedCountByOrderNo])
 
-  if (loadingFolio) {
+  if (loadingFolio && !isOffline) {
     return <div className="flex justify-center py-16"><LoadingSpinner /></div>
+  }
+
+  if (isOffline && !folioData) {
+    return <OfflineBlockedModal isBlocked message="Los datos del folio no han sido cargados. Restablece la conexión para continuar." />
   }
 
   if (folioCerradoNum) {
@@ -519,6 +539,13 @@ export default function ValidarPorDestino({ folioId }) {
 
       {/* ── LEFT COLUMN (header + scan stream) ───────────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      {isOffline && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 border-b border-amber-300 text-amber-800 text-xs font-semibold shrink-0">
+          <WifiOff className="w-3.5 h-3.5 shrink-0" />
+          Modo offline — escaneos guardados localmente
+          {pendingOfflineScans.length > 0 && <span className="ml-auto bg-amber-200 px-1.5 py-0.5 rounded-full">{pendingOfflineScans.length} pendientes</span>}
+        </div>
+      )}
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div className="shrink-0 bg-white border-b border-warm-100 px-4 sm:px-5 pt-4 pb-3 space-y-3">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft, RefreshCw, CheckCircle2, XCircle, PauseCircle, PlayCircle,
@@ -8,6 +8,7 @@ import {
   ChevronUp, ChevronDown, Puzzle, ToggleLeft, ToggleRight
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
+import { useToastStore } from '../../../core/stores/toastStore'
 import { fmtDate, fmtDateTime, fmtTime } from '../../../core/utils/dateFormat'
 import { MODULE_CATALOG, ALL_MODULE_CODES } from '../../../core/constants/moduleCatalog'
 
@@ -19,15 +20,6 @@ const STATUS_CFG = {
   suspended:     { label: 'Suspendido',     bg: 'bg-red-500/15',     text: 'text-red-300',     border: 'border-red-500/25' },
 }
 
-function Toast({ msg }) {
-  if (!msg) return null
-  return (
-    <div className="fixed top-5 right-5 z-50 flex items-center gap-2 bg-gray-800 border border-gray-600 text-white text-sm px-4 py-3 rounded-xl shadow-2xl">
-      <Check className="w-4 h-4 text-emerald-400" />
-      {msg}
-    </div>
-  )
-}
 
 function Field({ label, children }) {
   return (
@@ -1067,16 +1059,14 @@ export default function AdminTenantDetalle() {
   const [statsLoading, setStatsLoading] = useState(true)
   const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(true)
-  const [toast, setToast] = useState('')
   const [confirming, setConfirming] = useState(null)
   const [showDelete, setShowDelete] = useState(false)
   const [showResetPwd, setShowResetPwd] = useState(false)
   const [provPage, setProvPage] = useState(1)
 
-  function showToast(msg) {
-    setToast(msg)
-    setTimeout(() => setToast(''), 3000)
-  }
+  const showToast = useCallback((msg) => {
+    useToastStore.getState().success(msg)
+  }, [])
 
   async function load() {
     try {
@@ -1086,8 +1076,8 @@ export default function AdminTenantDetalle() {
       ])
       setData(detailRes.data)
       setPlans(plansRes.data.data)
-    } catch (err) {
-      console.error('[admin/tenants/:id load error]', err)
+    } catch {
+      // load error — silently ignore, UI stays empty
     } finally {
       setLoading(false)
     }
@@ -1096,11 +1086,8 @@ export default function AdminTenantDetalle() {
     setStatsLoading(true)
     try {
       const statsRes = await adminApi.get(`/tenants/${id}/stats`)
-      const statsData = statsRes.data.data
-      console.log('[stats loaded]', statsData)
-      setStats(statsData)
-    } catch (err) {
-      console.error('[stats load error]', err.response?.data || err.message)
+      setStats(statsRes.data.data)
+    } catch {
       setStats(null)
     } finally {
       setStatsLoading(false)
@@ -1116,7 +1103,7 @@ export default function AdminTenantDetalle() {
       setConfirming(null)
       load()
     } catch (err) {
-      showToast(err.response?.data?.error || 'Error al ejecutar accion')
+      useToastStore.getState().error(err.response?.data?.error || 'Error al ejecutar accion')
     }
   }
 
@@ -1141,8 +1128,6 @@ export default function AdminTenantDetalle() {
 
   return (
     <div className="space-y-5">
-      <Toast msg={toast} />
-
       {showDelete && (
         <DeleteTenantModal
           tenant={tenant}

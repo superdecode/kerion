@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '../services/api'
+import { STALE } from '../constants/queryConfig'
 
 async function fetchUsageSummary() {
   const res = await api.get('/usage/summary')
@@ -16,7 +17,7 @@ export function useModuleUsage() {
   return useQuery({
     queryKey: ['module-usage-summary'],
     queryFn: fetchUsageSummary,
-    staleTime: 2 * 60 * 1000,
+    staleTime: STALE.CATALOG,
     gcTime: 10 * 60 * 1000,
     retry: 1,
   })

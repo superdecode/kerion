@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { STALE } from '../../../core/constants/queryConfig'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -27,6 +28,9 @@ import {
 } from '../services/surtidoService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
 import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
+import { useSurtidoStore } from '../stores/surtidoStore'
+import { useOfflineStore } from '../../../core/stores/offlineStore'
+import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
 const SCANNER_THRESHOLD_MS = 100
 const TABS_KEY = 'kirion_surtido_tabs'
@@ -908,7 +912,8 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const [history, setHistory] = useState([])
   const [counts, setCounts] = useState({ ok: 0, rejected: 0 })
   const [itemCounts, setItemCounts] = useState(new Map())
-  const [pendingSync, setPendingSync] = useState([])
+  const surtidoPendingCount = useSurtidoStore((s) => s.pendingSync.length)
+  const isOffline = useOfflineStore((s) => s.status === 'offline')
   const [isSyncing, setIsSyncing] = useState(false)
   const [showRecount, setShowRecount] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
@@ -932,7 +937,6 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const autoFinalizeLockRef = useRef(false)
   const sessionCreateFiredRef = useRef(false)
   const scannedOkCodesRef = useRef(new Set())
-  const pendingSyncRef = useRef([])
   const isSyncingRef = useRef(false)
   const sidebarStorageKey = `kirion_surtido_validation_sidebar_${user?.id || 'guest'}`
   const sessionCompleteLocked = showCompletionModal || !!completionSnapshot
@@ -981,7 +985,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
 const { data: reasonsData } = useQuery({
     queryKey: ['wms-manual-entry-reasons'],
     queryFn: getManualEntryReasons,
-    staleTime: 120000,
+    staleTime: STALE.CATALOG,
   })
   const { data: trackingData, status: trackingStatus } = useQuery({
     queryKey: ['wms-order-tracking'],
@@ -1134,29 +1138,28 @@ const { data: reasonsData } = useQuery({
     if (!onSessionChange) return
     if (step !== 'session' || !isActive) { onSessionChange(null); return }
     onSessionChange({
-      pendingCount: pendingSync.length,
+      pendingCount: surtidoPendingCount,
       isSyncing,
       onRecount:  canDelete && !sessionCompleteLocked ? () => setShowRecount(true) : null,
       onMissing:  () => setShowMissing(true),
       onCancel:   canDelete && !sessionCompleteLocked ? handleCancel : null,
       onFinalize: canUpdate && !sessionCompleteLocked && totalExpected > 0 && counts.ok < totalExpected ? () => setShowFinalize(true) : null,
     })
-  }, [step, isActive, pendingSync.length, isSyncing, sessionCompleteLocked, totalExpected, counts.ok, counts.rejected, canDelete, canUpdate]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, isActive, surtidoPendingCount, isSyncing, sessionCompleteLocked, totalExpected, counts.ok, counts.rejected, canDelete, canUpdate]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep refs in sync so the stable interval can always read current values
-  useEffect(() => { pendingSyncRef.current = pendingSync }, [pendingSync])
   useEffect(() => { isSyncingRef.current = isSyncing }, [isSyncing])
 
   useEffect(() => {
     const interval = setInterval(async () => {
-      if (pendingSyncRef.current.length === 0 || isSyncingRef.current) return
+      const { pendingSync: queue } = useSurtidoStore.getState()
+      if (queue.length === 0 || isSyncingRef.current) return
       isSyncingRef.current = true
       setIsSyncing(true)
-      const batch = [...pendingSyncRef.current]
+      const batch = [...queue]
       try {
         const results = await Promise.allSettled(batch.map(e => addScanEvent(e.payload)))
         const synced = batch.filter((_, i) => results[i].status === 'fulfilled').map(e => e.key)
-        setPendingSync(p => p.filter(e => !synced.includes(e.key)))
+        useSurtidoStore.getState().markSynced(synced)
       } finally {
         isSyncingRef.current = false
         setIsSyncing(false)
@@ -1177,7 +1180,7 @@ const { data: reasonsData } = useQuery({
     scannedOkCodesRef.current = new Set()
     setStep('search'); setObc(null); setSessionId(null); setSessionStart(null)
     setLastScan(null); setHistory([]); setCounts({ ok: 0, rejected: 0 })
-    setItemCounts(new Map()); setPendingSync([]); setSelectedUbicacion(null)
+    setItemCounts(new Map()); setSelectedUbicacion(null)
     setUbicacionConfirmed(false); setLocationInputValue('')
     setShowFinalize(false)
     setShowCompletionModal(false)
@@ -1229,7 +1232,7 @@ const { data: reasonsData } = useQuery({
 
   const addEventMut = useMutation({
     mutationFn: addScanEvent,
-    onError: (_, vars) => setPendingSync(p => [...p, { key: vars._dedupeKey, payload: vars }]),
+    onError: (_, vars) => useSurtidoStore.getState().enqueueSync({ key: vars._dedupeKey, payload: vars }),
   })
 
   const addManualEventMut = useMutation({
@@ -1420,6 +1423,16 @@ const { data: reasonsData } = useQuery({
       })
   }, [sessionList, obc, sessionSearch, sessionStatusFilter])
 
+  /* ─── OFFLINE BLOCK: no session loaded and device is offline ── */
+  if (isOffline && step === 'search') {
+    return (
+      <>
+        <SearchStep onFound={() => {}} />
+        <OfflineBlockedModal isBlocked message="No hay conexión. Restablece Internet para buscar y cargar una orden de surtido." />
+      </>
+    )
+  }
+
   /* ─── SEARCH / PREVIEW STEPS ────────────────────────────── */
   if (step === 'search') {
     return <SearchStep onFound={foundObc => {
@@ -1434,6 +1447,13 @@ const { data: reasonsData } = useQuery({
   /* ─── ACTIVE SESSION ─────────────────────────────────── */
   return (
     <div className="flex-1 flex overflow-hidden relative">
+      {isOffline && (
+        <div className="absolute top-0 inset-x-0 z-50 flex items-center gap-2 px-4 py-2 bg-amber-100 border-b border-amber-300 text-amber-800 text-xs font-semibold">
+          <WifiOff className="w-3.5 h-3.5 shrink-0" />
+          Modo offline — los escaneos se guardarán al recuperar conexión
+          {surtidoPendingCount > 0 && <span className="ml-auto bg-amber-200 px-1.5 py-0.5 rounded-full">{surtidoPendingCount} pendientes</span>}
+        </div>
+      )}
       {/* Pending overlay: blocks content until sessionId is established */}
       {!sessionId && (
         <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-white">

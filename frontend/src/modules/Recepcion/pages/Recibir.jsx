@@ -17,6 +17,7 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { listOrders, listClientes, deleteOrder, getNovedadTipos, createNovedadTipo, updateNovedadTipo, deleteNovedadTipo } from '../services/recepcionService'
+import { STALE } from '../../../core/constants/queryConfig'
 import { fmtDate } from '../../../core/utils/dateFormat'
 import ImportarOrdenModal from '../components/ImportarOrdenModal'
 import ListaRecepcionSelectorModal from '../components/ListaRecepcionSelectorModal'
@@ -243,7 +244,7 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
 export default function Recibir() {
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const { hasPermission, getPermissionLevel, isAuthenticated, token } = useAuthStore()
+  const { hasPermission, getPermissionLevel, isAuthenticated } = useAuthStore()
   const toast = useToastStore()
   const { t } = useI18nStore()
 
@@ -275,7 +276,7 @@ export default function Recibir() {
     limit: pageSize,
   }), [qFilter, estados, clienteFilter, fechaDesde, fechaHasta, page, pageSize])
 
-  const canQueryRecepcion = isAuthenticated && Boolean(token)
+  const canQueryRecepcion = isAuthenticated
 
   const { data, isLoading } = useQuery({
     queryKey: ['recepcion-orders', params],
@@ -289,7 +290,7 @@ export default function Recibir() {
     queryFn: listClientes,
     enabled: canQueryRecepcion,
     retry: false,
-    staleTime: 60_000,
+    staleTime: STALE.MEDIUM,
   })
 
   const { data: activeData, isLoading: activeLoading } = useQuery({
@@ -297,7 +298,7 @@ export default function Recibir() {
     queryFn: () => listOrders({ limit: 200 }),
     enabled: canQueryRecepcion,
     retry: false,
-    staleTime: 30_000,
+    staleTime: STALE.SHORT,
     refetchInterval: canQueryRecepcion ? 60_000 : false,
   })
   const activeOrders = useMemo(() =>
@@ -335,7 +336,7 @@ export default function Recibir() {
     queryFn: getNovedadTipos,
     enabled: canQueryRecepcion,
     retry: false,
-    staleTime: 60_000,
+    staleTime: STALE.MEDIUM,
   })
 
   const createTipoMut = useMutation({

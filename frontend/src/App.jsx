@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './core/stores/authStore'
+import { MODULE_ROUTES } from './core/constants/moduleRoutes'
 
 // Layout
 import MainLayout from './core/components/layout/MainLayout'
@@ -86,7 +87,12 @@ import ValidacionRecepcion from './modules/Recepcion/pages/ValidacionRecepcion'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      // Never retry 429 (rate-limit) or 4xx client errors — they won't resolve on retry.
+      retry: (failureCount, error) => {
+        const status = error?.response?.status
+        if (status === 429 || (status >= 400 && status < 500)) return false
+        return failureCount < 1
+      },
       staleTime: 5 * 60 * 1000,
       gcTime: 10 * 60 * 1000,
       refetchOnWindowFocus: false,
@@ -94,33 +100,6 @@ const queryClient = new QueryClient({
   },
 })
 
-// Smart redirect: if user can't view global dashboard, redirect to first allowed module
-const MODULE_ROUTES = [
-  { module: 'global.inicio', path: '/' },
-  { module: 'dropscan.dashboard', path: '/dashboard?module=dropscan' },
-  { module: 'dropscan.escaneo', path: '/DropScan/escaneo' },
-  { module: 'dropscan.tarimas', path: '/DropScan/tarimas' },
-  { module: 'dropscan.reportes', path: '/DropScan/reportes' },
-  { module: 'dropscan.configuracion', path: '/DropScan/configuracion' },
-  { module: 'fep.folios', path: '/DropScan/folios' },
-  { module: 'devoluciones.entradas', path: '/Devoluciones/entradas' },
-  { module: 'devoluciones.inventario', path: '/Devoluciones/inventario' },
-  { module: 'devoluciones.salidas', path: '/Devoluciones/salidas' },
-  { module: 'global.administracion', path: '/admin' },
-  { module: 'inventario.escaneo', path: '/Inventario/escaneo' },
-  { module: 'inventario.registros', path: '/Inventario/registros' },
-  { module: 'surtido.ordenes', path: '/surtido' },
-  { module: 'surtido.validacion', path: '/Surtido/validacion' },
-  { module: 'surtido.registros', path: '/Surtido/registros' },
-  { module: 'sistema.wms', path: '/wmshub' },
-  { module: 'anormalidades.registro', path: '/Anormalidades/registro' },
-  { module: 'anormalidades.dashboard', path: '/dashboard?module=anormalidades' },
-  { module: 'anormalidades.mejoras', path: '/Anormalidades/mejoras' },
-  { module: 'despacho.validar', path: '/despacho/validar' },
-  { module: 'despacho.ordenes', path: '/despacho/ordenes' },
-  { module: 'despacho.folios', path: '/despacho/folios' },
-  { module: 'recepcion.recibir', path: '/recepcion/recibir' },
-]
 
 function SmartRedirect() {
   const { canView } = useAuthStore()
@@ -207,7 +186,7 @@ function AppRoutes() {
           <PermissionRoute module="dropscan.tarimas"><ErrorBoundary><Tarimas /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="dropscan/historial" element={
-          <Navigate to="/DropScan/tarimas" replace />
+          <Navigate to="/dropscan/tarimas" replace />
         } />
         <Route path="dropscan/reportes" element={
           <PermissionRoute module="dropscan.reportes"><ErrorBoundary><Reportes /></ErrorBoundary></PermissionRoute>
@@ -250,15 +229,15 @@ function AppRoutes() {
         } />
 
         {/* Inventario Module */}
-        <Route path="inventario" element={<Navigate to="/Inventario/registros" replace />} />
+        <Route path="inventario" element={<Navigate to="/inventario/registros" replace />} />
         <Route path="inventario/registros" element={
           <PermissionRoute module="inventario.registros"><ErrorBoundary><InventarioRegistros /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="inventario/escaneo" element={
           <PermissionRoute module="inventario.escaneo"><ErrorBoundary><InventarioEscaneo /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="inventario/stock" element={<Navigate to="/Inventario/registros" replace />} />
-        <Route path="inventario/historial" element={<Navigate to="/Inventario/registros" replace />} />
+        <Route path="inventario/stock" element={<Navigate to="/inventario/registros" replace />} />
+        <Route path="inventario/historial" element={<Navigate to="/inventario/registros" replace />} />
         <Route path="inventario/rastreo" element={
           <PermissionRoute module="inventario.rastreo"><ErrorBoundary><InventarioRastreo /></ErrorBoundary></PermissionRoute>
         } />
@@ -279,8 +258,8 @@ function AppRoutes() {
         <Route path="surtido/registros" element={
           <PermissionRoute module="surtido.registros"><ErrorBoundary><SurtidoRegistros /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="surtido/escaneo" element={<Navigate to="/Surtido/validacion" replace />} />
-        <Route path="surtido/historial" element={<Navigate to="/Surtido/registros" replace />} />
+        <Route path="surtido/escaneo" element={<Navigate to="/surtido/validacion" replace />} />
+        <Route path="surtido/historial" element={<Navigate to="/surtido/registros" replace />} />
 
         {/* Anormalidades Module */}
         <Route path="anormalidades/registro" element={

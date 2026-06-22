@@ -6,13 +6,16 @@ import {
   ArrowLeft, ScanBarcode, CheckCircle2, XCircle, AlertCircle, AlertTriangle,
   Layers, PackageCheck, X, Square, ArrowUp, ArrowDown, ArrowUpDown, Trash2,
   ChevronDown, PanelRightClose, PanelRightOpen, Search, LayoutList, MapPin, Check, Edit3,
-  ToggleLeft, ToggleRight, ArrowRightLeft,
+  ToggleLeft, ToggleRight, ArrowRightLeft, WifiOff,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
+import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
+import { useOfflineStore } from '../../../core/stores/offlineStore'
+import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, getScanEvents } from '../services/recepcionService'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
@@ -105,7 +108,7 @@ export default function ValidacionRecepcion() {
   const { t } = useI18nStore()
   const toast = useToastStore()
   const qc = useQueryClient()
-  const { hasPermission, isAuthenticated, token } = useAuthStore()
+  const { hasPermission, isAuthenticated } = useAuthStore()
   const canDeleteScan = hasPermission('recepcion.recibir', 'actualizar')
 
   const scanRefDesktop = useRef(null)
@@ -163,14 +166,15 @@ export default function ValidacionRecepcion() {
   // Force close
   const [forceCloseOpen, setForceCloseOpen] = useState(false)
 
-  const canQueryRecepcion = isAuthenticated && Boolean(token)
+  const canQueryRecepcion = isAuthenticated
+  const isOffline = useOfflineStore((s) => s.status === 'offline')
 
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['recepcion-order', id],
     queryFn: () => getOrder(id),
     enabled: canQueryRecepcion,
     retry: false,
-    refetchInterval: canQueryRecepcion && scanning ? 4000 : false,
+    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 4000 : false,
   })
 
   const { data: eventsData } = useQuery({
@@ -178,7 +182,7 @@ export default function ValidacionRecepcion() {
     queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1 }),
     enabled: canQueryRecepcion,
     retry: false,
-    refetchInterval: canQueryRecepcion && scanning ? 6000 : false,
+    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 6000 : false,
   })
   const serverEvents = eventsData?.events ?? []
 
@@ -402,6 +406,16 @@ export default function ValidacionRecepcion() {
   useEffect(() => { if (scanning) refocus() }, [scanning, refocus])
 
   useEffect(() => {
+    const handler = () => initAudio()
+    window.addEventListener('keydown', handler, { once: true })
+    window.addEventListener('click', handler, { once: true })
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('click', handler)
+    }
+  }, [])
+
+  useEffect(() => {
     const cfg = order?.validation_config
     if (!cfg || typeof cfg !== 'object') {
       setWithTarimas(false)
@@ -427,6 +441,15 @@ export default function ValidacionRecepcion() {
     async function boot() {
       if (!order || sessionBootOrderRef.current === id) return
       sessionBootOrderRef.current = id
+      if (useOfflineStore.getState().status === 'offline') {
+        if (!cancelled) {
+          setSessionId('local')
+          setScanning(true)
+          setBootingSession(false)
+          refocus()
+        }
+        return
+      }
       try {
         const res = await createSession(id, { tarimas_enabled: order.validation_config?.mode === 'tarimas' })
         if (cancelled) return
@@ -472,7 +495,7 @@ export default function ValidacionRecepcion() {
           setRejectModal({ open: true, code: ev.codigo_escaneado })
         }
         if (ev.resultado === 'duplicado') {
-          playDupAudio()
+          playSound('duplicate')
           setDupModal({
             open: true,
             code: ev.codigo_escaneado,
@@ -511,14 +534,9 @@ export default function ValidacionRecepcion() {
           }
         }
       })
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)()
-        const osc = ctx.createOscillator(); const gain = ctx.createGain()
-        osc.connect(gain); gain.connect(ctx.destination)
-        osc.frequency.value = ev.resultado === 'correcto' ? 880 : ev.resultado === 'duplicado' ? 440 : 220
-        gain.gain.value = ev.resultado === 'no_encontrado' ? 0.2 : 0.15
-        osc.start(); osc.stop(ctx.currentTime + 0.12)
-      } catch { /* audio not available */ }
+      if (ev.resultado === 'correcto') playSound('success')
+      else if (ev.resultado === 'duplicado') playSound('duplicate')
+      else playSound('error')
     },
     onError: () => {
       if (import.meta.env.DEV && scanStartRef.current != null) {
@@ -583,16 +601,6 @@ export default function ValidacionRecepcion() {
     refocus()
   }
 
-  const playDupAudio = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)()
-      const osc = ctx.createOscillator(); const gain = ctx.createGain()
-      osc.connect(gain); gain.connect(ctx.destination)
-      osc.frequency.value = 330
-      gain.gain.value = 0.2
-      osc.start(); osc.stop(ctx.currentTime + 0.25)
-    } catch { /* audio not available */ }
-  }, [])
 
   const handleKeyDown = (e) => {
     if (!withTarimas && !ubicacionConfirmed) return
@@ -601,7 +609,7 @@ export default function ValidacionRecepcion() {
       e.target.value = ''
       const existing = history.find(h => codesMatch(h.code, code))
       if (existing) {
-        playDupAudio()
+        playSound('duplicate')
         setDupModal({ open: true, code, entry: existing })
         refocus()
         return
@@ -617,6 +625,59 @@ export default function ValidacionRecepcion() {
       }
       const tarimaNum = withTarimas ? effectiveTarimaMap.get(extractBaseCode(code)) : null
       const ubicacion = withTarimas ? formatTarimaLocation(tarimaNum) : selectedUbicacion
+      if (isOffline) {
+        const matchedLine = lines.find(l => l.custom_box_barcode && codesMatch(l.custom_box_barcode, code))
+        const offlineResult = !matchedLine
+          ? 'no_encontrado'
+          : matchedLine.estado_validacion === 'validada'
+            ? 'duplicado'
+            : 'correcto'
+        useOfflineStore.getState().enqueueModule({
+          type: 'recepcion_scan',
+          payload: {
+            orderId: id,
+            codigo_escaneado: code,
+            session_id: sessionId !== 'local' ? sessionId : null,
+            tarimas_enabled: withTarimas,
+            ubicacion: ubicacion || null,
+          },
+        })
+        startTransition(() => {
+          setLastResult({ result: offlineResult, code, sku: null })
+          if (offlineResult === 'no_encontrado') {
+            setRejectModal({ open: true, code })
+          } else if (offlineResult === 'duplicado') {
+            playSound('duplicate')
+            setDupModal({ open: true, code, entry: { scannedAt: null, scannedBy: '—' } })
+          } else {
+            const base = extractBaseCode(code)
+            if (base && tarimaNum) {
+              setTarimaOverrides(prev => { const next = new Map(prev); next.set(base, tarimaNum); return next })
+            }
+            const offlineId = `offline-${Date.now()}`
+            setHistory(prev => [{
+              id: offlineId, result: 'correcto', code, sku: null,
+              scannedAt: new Date().toISOString(), scannedBy: '—', ubicacion: ubicacion || null,
+            }, ...prev.slice(0, 49)])
+            if (matchedLine) {
+              qc.setQueryData(['recepcion-order', id], (cur) => {
+                if (!cur) return cur
+                return {
+                  ...cur,
+                  order: { ...cur.order, cajas_validadas: (cur.order?.cajas_validadas || 0) + 1 },
+                  lines: (cur.lines || []).map(l =>
+                    l.id === matchedLine.id
+                      ? { ...l, estado_validacion: 'validada', validated_at: new Date().toISOString(), validated_by_nombre: '—' }
+                      : l
+                  ),
+                }
+              })
+            }
+          }
+        })
+        refocus()
+        return
+      }
       if (import.meta.env.DEV) scanStartRef.current = performance.now()
       scanMut.mutate({ codigo: code, ubicacion })
     }
@@ -1063,6 +1124,7 @@ export default function ValidacionRecepcion() {
     <div className="flex flex-col h-full">
       <Header title={t('rec.scan.title')} icon={PackageCheck} />
       <div className="flex-1 flex items-center justify-center text-warm-400 text-sm">{t('common.loading')}</div>
+      <OfflineBlockedModal isBlocked={isOffline && !order} />
     </div>
   )
 
@@ -1176,6 +1238,14 @@ export default function ValidacionRecepcion() {
           </div>
         }
       />
+
+      {/* ── Offline banner ── */}
+      {isOffline && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs font-medium shrink-0">
+          <WifiOff className="w-3.5 h-3.5 shrink-0" />
+          <span>Modo offline — los escaneos se guardarán y sincronizarán al reconectar</span>
+        </div>
+      )}
 
       {/* ── Body: flex row (main content + sidebar) ── */}
       <div className="flex-1 min-h-0 flex overflow-hidden relative">

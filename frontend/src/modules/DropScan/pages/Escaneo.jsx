@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { scoreTrackingCode } from '../utils/trackingValidator'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
+import { playSound, initAudio } from '../../Shared/Wms/playSound'
 
 /* ─── session timer hook ─────────────────────────────── */
 function useSessionTimer(sessionStartTime) {
@@ -47,36 +48,6 @@ const fmtElapsed = (secs) => {
     : `${m}:${String(s).padStart(2, '0')}`
 }
 
-/* ─── helpers ─────────────────────────────────────────── */
-const playSound = (type) => {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain); gain.connect(ctx.destination); gain.gain.value = 0.15
-    if (type === 'success') { osc.frequency.value = 880; osc.type = 'sine'; osc.start(); osc.stop(ctx.currentTime + 0.1) }
-    else if (type === 'error') { osc.frequency.value = 220; osc.type = 'square'; osc.start(); osc.stop(ctx.currentTime + 0.3) }
-    else if (type === 'complete') { osc.frequency.value = 1200; osc.type = 'sine'; osc.start(); setTimeout(() => { osc.frequency.value = 1500 }, 100); osc.stop(ctx.currentTime + 0.25) }
-    else if (type === 'warning') { osc.frequency.value = 600; osc.type = 'triangle'; osc.start(); osc.stop(ctx.currentTime + 0.2) }
-    else if (type === 'peso') {
-      // two ascending notes: 660Hz → 880Hz — distinct "weight confirmed" vs single-note scan ding
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(660, ctx.currentTime)
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.09)
-      osc.start(); osc.stop(ctx.currentTime + 0.18)
-    }
-    else if (type === 'suspicious') {
-      // double-beep: two short pulses at 440Hz sawtooth — distinct "wait, check this" alert
-      osc.frequency.value = 440; osc.type = 'sawtooth'
-      gain.gain.setValueAtTime(0, ctx.currentTime)
-      gain.gain.setValueAtTime(0.12, ctx.currentTime + 0.01)
-      gain.gain.setValueAtTime(0, ctx.currentTime + 0.16)
-      gain.gain.setValueAtTime(0.12, ctx.currentTime + 0.26)
-      gain.gain.setValueAtTime(0, ctx.currentTime + 0.42)
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.45)
-    }
-  } catch (e) { /* silent */ }
-}
 
 const getTodayDateStr = getToday
 
@@ -260,6 +231,17 @@ export default function Escaneo() {
   const configLoaded = empresasLoaded && canalesLoaded
   const hasNoConfig = configLoaded && (empresas.length === 0 || allCanales.filter(c => c.activo !== false).length === 0)
   const planLimitReached = guideUsage?.at_limit === true
+
+  // Initialize shared AudioContext on first user interaction
+  useEffect(() => {
+    const handler = () => initAudio()
+    window.addEventListener('keydown', handler, { once: true })
+    window.addEventListener('click', handler, { once: true })
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('click', handler)
+    }
+  }, [])
 
   // Today's lists must roll over even when the scanner screen remains open.
   const [todayStr, setTodayStr] = useState(getTodayDateStr)

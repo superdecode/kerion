@@ -3,23 +3,27 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CloudOff, RefreshCw, Upload, AlertCircle, PlugZap } from 'lucide-react'
 import { useOfflineStore } from '../../stores/offlineStore'
 import { useToastStore } from '../../stores/toastStore'
-import { syncOfflineQueue } from '../../services/offlineSync'
+import { syncOfflineQueue, syncModuleQueue } from '../../services/offlineSync'
 import { useI18nStore } from '../../stores/i18nStore'
 
 export default function ConnectionBanner() {
   const { t } = useI18nStore()
   const status = useOfflineStore((s) => s.status)
-  const queueLen = useOfflineStore((s) => s.queue.length)
+  const dropScanLen = useOfflineStore((s) => s.queue.length)
+  const moduleLen = useOfflineStore((s) => s.moduleQueue.length)
+  const queueLen = dropScanLen + moduleLen
   const syncing = useOfflineStore((s) => s.syncing)
   const syncError = useOfflineStore((s) => s.lastSyncError)
 
   const handleSync = useCallback(async () => {
-    const result = await syncOfflineQueue()
-    if (result.synced > 0) {
-      useToastStore.getState().success(`${result.synced} ${t('inventario.escaneo.scans_label')}`)
+    const [r1, r2] = await Promise.all([syncOfflineQueue(), syncModuleQueue()])
+    const totalSynced = r1.synced + r2.synced
+    const totalFailed = r1.failed + r2.failed
+    if (totalSynced > 0) {
+      useToastStore.getState().success(`${totalSynced} ${t('inventario.escaneo.scans_label')}`)
     }
-    if (result.failed > 0) {
-      useToastStore.getState().error(`${result.failed} ${t('inventario.escaneo.scans_label')} - ${t('toast.error')}`)
+    if (totalFailed > 0) {
+      useToastStore.getState().error(`${totalFailed} ${t('inventario.escaneo.scans_label')} - ${t('toast.error')}`)
     }
   }, [t])
 
@@ -28,8 +32,8 @@ export default function ConnectionBanner() {
   // active sync, which would create an immediate-retry loop when sync ends with failures.
   useEffect(() => {
     if (status !== 'online') return
-    const { queue, syncing: isSyncing } = useOfflineStore.getState()
-    if (queue.length > 0 && !isSyncing) {
+    const { queue, moduleQueue, syncing: isSyncing } = useOfflineStore.getState()
+    if ((queue.length > 0 || moduleQueue.length > 0) && !isSyncing) {
       handleSync()
     }
   }, [status, handleSync])

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { STALE } from '../../../core/constants/queryConfig'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -237,7 +238,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
     queryKey: ['wms-inventory-session', session?.id],
     queryFn: () => getInventorySession(session.id),
     enabled: isOpen && !!session?.id,
-    staleTime: 30000,
+    staleTime: STALE.SHORT,
   })
 
   const sessionData = data?.data?.session ?? {}
@@ -800,7 +801,7 @@ export default function InventarioRegistros() {
   const { data, isLoading } = useQuery({
     queryKey: ['wms-inventory-sessions', { page, pageSize, ...filters }],
     queryFn: () => getInventorySessions({ page, pageSize, ...filters }),
-    staleTime: 30000,
+    staleTime: STALE.SHORT,
     enabled: backendOnline,
   })
 
@@ -818,7 +819,7 @@ export default function InventarioRegistros() {
   const { data: ubicacionesAdminData } = useQuery({
     queryKey: ['wms-ubicaciones-admin', 'inventario'],
     queryFn: () => getUbicacionesAdmin('inventario'),
-    staleTime: 120000,
+    staleTime: STALE.CATALOG,
     enabled: showManageUbicaciones,
   })
 

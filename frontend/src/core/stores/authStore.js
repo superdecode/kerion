@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import api, { setBackendStatusCallback, setUnauthorizedCallback } from '../services/api.js'
+import api, { setBackendStatusCallback, setUnauthorizedCallback, setGetTokenCallback } from '../services/api.js'
 import { mockLogin, mockAuthMe } from '../services/mockAuth.js'
 import { setTimezone } from '../utils/dateFormat.js'
 
@@ -137,8 +137,8 @@ export const useAuthStore = create(
       login: async (email, password) => {
         set({ isLoading: true })
         try {
-          // Usar mock data en desarrollo
-          if (import.meta.env.VITE_USE_MOCK_DATA === 'true') {
+          // Mock data — only active in dev builds
+          if (import.meta.env.DEV && import.meta.env.VITE_USE_MOCK_DATA === 'true') {
             const result = await mockLogin(email, password)
             if (result.success) {
               set({
@@ -362,3 +362,6 @@ setUnauthorizedCallback(() => {
   })
   clearPersistedAuth()
 })
+
+// Provide token to api.js without creating a circular import
+setGetTokenCallback(() => useAuthStore.getState().token)

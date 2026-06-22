@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
+import { STALE } from '../../../core/constants/queryConfig'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -33,6 +34,7 @@ import { refreshSheet, getCacheTimestamp, getCacheStatus, getSheetUrls } from '.
 import { fmtDateTime, toDateKey } from '../../../core/utils/dateFormat'
 import QuickCodeSearchModal from '../components/QuickCodeSearchModal'
 import { getTimeBounds } from '../utils/timeBounds'
+import { useOfflineStore } from '../../../core/stores/offlineStore'
 
 const STATUS_META = {
   ok: {
@@ -1426,6 +1428,7 @@ export default function Escaneo() {
     inventorySnapshot,
   } = useInventarioStore()
 
+  const isOffline = useOfflineStore((s) => s.status === 'offline')
   const boxStockQuery = useBoxStock()
   const { isPending: isSyncing, pendingCount } = useAutoSync()
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('inventory'))
@@ -1499,12 +1502,15 @@ export default function Escaneo() {
     const sessionConflicts = buildSessionDuplicateConflicts(codes)
     let dbConflicts = []
 
-    try {
-      const response = await checkInventoryDuplicates({ codes: [...buildCodeVariantSet(...codes)] })
-      dbConflicts = response?.data?.matches || []
-    } catch {
-      toast.error(t('toast.error'))
-      return
+    // Skip DB duplicate check when offline — session-level check is still applied
+    if (useOfflineStore.getState().status === 'online') {
+      try {
+        const response = await checkInventoryDuplicates({ codes: [...buildCodeVariantSet(...codes)] })
+        dbConflicts = response?.data?.matches || []
+      } catch {
+        toast.error(t('toast.error'))
+        return
+      }
     }
 
     const conflicts = [...sessionConflicts, ...dbConflicts]
@@ -1524,7 +1530,7 @@ export default function Escaneo() {
   const { data: ubicacionesData } = useQuery({
     queryKey: ['wms-ubicaciones', 'inventario'],
     queryFn: () => getUbicaciones('inventario'),
-    staleTime: 120000,
+    staleTime: STALE.CATALOG,
   })
   useEffect(() => {
     if (sheetUrls !== undefined) setWmsConfigured(!!sheetUrls?.inventory)
@@ -1595,8 +1601,12 @@ export default function Escaneo() {
       setTimeout(() => scanRef.current?.focus(), 80)
     },
     onError: (error) => {
-      const message = error?.response?.data?.error || error?.message || t('toast.error')
-      toast.error(message)
+      if (useOfflineStore.getState().status === 'offline') {
+        toast.error('Sin conexión — conecta a Internet para guardar la sesión')
+      } else {
+        const message = error?.response?.data?.error || error?.message || t('toast.error')
+        toast.error(message)
+      }
     },
   })
 
@@ -1864,6 +1874,12 @@ export default function Escaneo() {
   return (
     <ModuleLimitBanner module="inventario" usage={moduleUsage?.inventario}>
     <div className="flex flex-col h-full">
+      {isOffline && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 border-b border-amber-300 text-amber-800 text-xs font-semibold">
+          <WifiOff className="w-3.5 h-3.5 shrink-0" />
+          Modo offline — los escaneos se guardan localmente; guarda la sesión cuando recuperes conexión
+        </div>
+      )}
       <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')}
         actions={
             <div className="flex items-center gap-1.5 flex-wrap justify-end">

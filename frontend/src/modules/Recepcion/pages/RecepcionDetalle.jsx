@@ -16,6 +16,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
 import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos } from '../services/recepcionService'
+import { STALE } from '../../../core/constants/queryConfig'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
 import { normalizeCode } from '../../Shared/Wms/normalizeCode'
@@ -132,7 +133,7 @@ export default function RecepcionDetalle() {
   const qc = useQueryClient()
   const { t } = useI18nStore()
   const toast = useToastStore()
-  const { hasPermission, isAuthenticated, token } = useAuthStore()
+  const { hasPermission, isAuthenticated } = useAuthStore()
 
   const [activeTab, setActiveTab] = useState('detalle')
   const [lineSearch, setLineSearch] = useState('')
@@ -162,14 +163,14 @@ export default function RecepcionDetalle() {
     setNuevaUbicacion('')
   }, [id])
 
-  const canQueryRecepcion = isAuthenticated && Boolean(token)
+  const canQueryRecepcion = isAuthenticated
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['recepcion-order', id],
     queryFn: () => getOrder(id),
     enabled: canQueryRecepcion,
     retry: false,
-    staleTime: 30_000,
+    staleTime: STALE.SHORT,
   })
 
   const { data: eventsData } = useQuery({
@@ -177,7 +178,7 @@ export default function RecepcionDetalle() {
     queryFn: () => getScanEvents(id),
     enabled: canQueryRecepcion,
     retry: false,
-    staleTime: 30_000,
+    staleTime: STALE.SHORT,
   })
 
   const { data: novedadesData } = useQuery({
@@ -185,7 +186,7 @@ export default function RecepcionDetalle() {
     queryFn: () => getNovedades(id),
     enabled: canQueryRecepcion,
     retry: false,
-    staleTime: 30_000,
+    staleTime: STALE.SHORT,
   })
 
   const { data: tiposData } = useQuery({
@@ -193,7 +194,7 @@ export default function RecepcionDetalle() {
     queryFn: getNovedadTipos,
     enabled: canQueryRecepcion,
     retry: false,
-    staleTime: 60_000,
+    staleTime: STALE.MEDIUM,
   })
 
   const updateLineMutation = useMutation({

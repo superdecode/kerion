@@ -39,10 +39,25 @@ export const useOfflineStore = create(
 
       setSyncing: (v) => set({ syncing: v }),
       setSyncError: (err) => set({ lastSyncError: err }),
+
+      /** Generic module queue — surtido/inventario/despacho offline scans */
+      /** @type {{ id: number, type: string, payload: object, ts: string }[]} */
+      moduleQueue: [],
+
+      enqueueModule: (item) =>
+        set((s) => ({
+          moduleQueue: [
+            ...s.moduleQueue,
+            { id: Date.now() + Math.random(), ts: new Date().toISOString(), ...item },
+          ],
+        })),
+
+      dequeueModule: (id) =>
+        set((s) => ({ moduleQueue: s.moduleQueue.filter((i) => i.id !== id) })),
     }),
     {
       name: 'wms-offline-queue',
-      partialize: (s) => ({ queue: s.queue }),
+      partialize: (s) => ({ queue: s.queue, moduleQueue: s.moduleQueue }),
     }
   )
 )

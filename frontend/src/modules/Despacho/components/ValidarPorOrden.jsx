@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Loader2, Plus, Trash2, CheckCircle2, XCircle, ScanLine, X,
   Check, PackageCheck, AlertCircle, ShieldCheck, ChevronDown, ChevronUp,
-  Layers, MapPin, PartyPopper, ExternalLink,
+  Layers, MapPin, PartyPopper, ExternalLink, WifiOff,
 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import StatusPill from '../../../core/components/common/StatusPill'
@@ -21,6 +21,8 @@ import {
   addOrderScan, deleteLastOrderScan,
 } from '../services/despachoService'
 import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
+import { useOfflineStore } from '../../../core/stores/offlineStore'
+import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
 const ORDER_ESTADO_META = {
   pendiente:  { label: 'Pendiente',  cls: 'bg-warm-100 text-warm-600' },
@@ -50,6 +52,8 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
   const [detailLoading, setDetailLoading] = useState(false)
   const [completed, setCompleted] = useState(false)
   const [currentTarimaNum, setCurrentTarimaNum] = useState(1)
+  const [pendingOfflineScans, setPendingOfflineScans] = useState([])
+  const isOffline = useOfflineStore((s) => s.status === 'offline')
 
   const scans = order.scans ?? []
 
@@ -135,7 +139,8 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     const code = normalizeScanCode(input.trim())
     if (!code) return
     if (code !== input.trim()) setInput(code)
-    if (alreadyScanned.has(code)) {
+    const allScannedCodes = new Set([...Array.from(alreadyScanned), ...pendingOfflineScans])
+    if (allScannedCodes.has(code)) {
       addToast('Código ya escaneado en esta orden', 'warning')
       setInput('')
       scanRef.current?.focus()
@@ -148,8 +153,19 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       scanRef.current?.focus()
       return
     }
+    if (isOffline) {
+      useOfflineStore.getState().enqueueModule({
+        type: 'despacho_order_scan',
+        payload: { folioId, orderId: order.id, codigo_caja: code, tarima_ref: currentTarimaRef },
+      })
+      setPendingOfflineScans(p => [...p, code])
+      addToast(`Offline: ${code} — se enviará al recuperar conexión`, 'info')
+      setInput('')
+      scanRef.current?.focus()
+      return
+    }
     doAddScan(code)
-  }, [input, validCodes, alreadyScanned, doAddScan, addToast])
+  }, [input, validCodes, alreadyScanned, pendingOfflineScans, isOffline, doAddScan, addToast, folioId, order.id, currentTarimaRef])
 
   const pct = expected && expected > 0 ? Math.round((scans.length / expected) * 100) : null
 
@@ -261,8 +277,28 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
         </div>
       )}
 
+      {isOffline && (
+        <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold">
+          <WifiOff className="w-3.5 h-3.5 shrink-0" />
+          Offline — escaneos guardados localmente
+          {pendingOfflineScans.length > 0 && <span className="ml-auto font-bold">{pendingOfflineScans.length} pendientes</span>}
+        </div>
+      )}
+
       {!detailLoading && orderDetail && !orderDetail.packageList?.length && (
         <p className="text-[11px] text-warm-400 mb-2">{t('desp.validar.orden.sinDetalle')}</p>
+      )}
+
+      {pendingOfflineScans.length > 0 && (
+        <div className="mb-2 space-y-0.5">
+          {pendingOfflineScans.map((code, i) => (
+            <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs bg-amber-50 border border-amber-200">
+              <WifiOff className="w-3 h-3 text-amber-500 shrink-0" />
+              <span className="font-mono text-amber-700 font-medium">{code}</span>
+              <span className="ml-auto text-amber-500 text-[10px]">pendiente</span>
+            </div>
+          ))}
+        </div>
       )}
 
       {scans.length > 0 ? (
@@ -340,6 +376,7 @@ export default function ValidarPorOrden({ folioId }) {
   const [showConfirmCancel, setShowConfirmCancel] = useState(false)
   const [showConfirmCerrar, setShowConfirmCerrar] = useState(false)
   const [folioCerradoNum, setFolioCerradoNum] = useState(null)
+  const isOfflineMain = useOfflineStore((s) => s.status === 'offline')
 
   const { data, isLoading } = useQuery({
     queryKey: ['despacho-folio', folioId],
@@ -528,8 +565,12 @@ export default function ValidarPorOrden({ folioId }) {
     }
   }
 
-  if (isLoading) {
+  if (isLoading && !isOfflineMain) {
     return <div className="flex justify-center py-16"><LoadingSpinner /></div>
+  }
+
+  if (isOfflineMain && !data) {
+    return <OfflineBlockedModal isBlocked message="Los datos del folio no han sido cargados. Restablece la conexión para continuar." />
   }
 
   if (folioCerradoNum) {
