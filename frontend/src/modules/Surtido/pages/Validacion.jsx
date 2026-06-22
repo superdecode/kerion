@@ -1232,7 +1232,14 @@ const { data: reasonsData } = useQuery({
 
   const addEventMut = useMutation({
     mutationFn: addScanEvent,
-    onError: (_, vars) => useSurtidoStore.getState().enqueueSync({ key: vars._dedupeKey, payload: vars }),
+    onError: (err, vars) => {
+      if (err.response?.status === 404) {
+        clearSession()
+        useToastStore.getState().error(t('surtido.validacion.session_expired') || 'Sesión expirada. Inicia una nueva sesión.')
+        return
+      }
+      useSurtidoStore.getState().enqueueSync({ key: vars._dedupeKey, payload: vars })
+    },
   })
 
   const addManualEventMut = useMutation({
@@ -1280,6 +1287,7 @@ const { data: reasonsData } = useQuery({
   const doScan = useCallback((rawCode) => {
     if (!canCreate || !rawCode.trim() || !sessionId) return
     const norm = normalizeScanCode(rawCode)
+    if (!norm) return
     const isDup = scannedOkCodesRef.current.has(norm)
     if (isDup) {
       playSound('warning')

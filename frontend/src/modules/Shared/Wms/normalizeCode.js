@@ -131,7 +131,11 @@ export function normalizeScanCode(rawCode) {
   const idMatch = upper.match(/^ID(\d+[-\/]\d+)/i)
   if (idMatch) return idMatch[1]
 
-  return upper.replace(/[^A-Z0-9\-\/]/g, '')
+  const fallback = upper.replace(/[^A-Z0-9\-\/]/g, '')
+  // Purely-alphabetic strings (no digits) are label field names, not product codes.
+  // e.g. SELLERCONTAINERTYPEBOX from Amazon FBA labels.
+  if (fallback.length > 4 && !/\d/.test(fallback)) return ''
+  return fallback
 }
 
 /**
