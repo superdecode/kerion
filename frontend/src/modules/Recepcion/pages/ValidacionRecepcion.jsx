@@ -28,7 +28,43 @@ function parseTarimaNumber(value) {
 
 function formatTarimaLocation(value) {
   const num = parseTarimaNumber(value)
-  return num ? `T${num}` : null
+  return num ? String(num) : null
+}
+
+function normalizeTarimaAssignments(input) {
+  const map = new Map()
+  if (Array.isArray(input)) {
+    for (const entry of input) {
+      const base = String(entry?.base || '').trim()
+      const num = parseTarimaNumber(entry?.num)
+      if (base && num) map.set(base, num)
+    }
+    return map
+  }
+  if (input && typeof input === 'object') {
+    for (const [rawBase, rawNum] of Object.entries(input)) {
+      const base = String(rawBase || '').trim()
+      const num = parseTarimaNumber(rawNum)
+      if (base && num) map.set(base, num)
+    }
+  }
+  return map
+}
+
+function serializeTarimaAssignments(map) {
+  return Array.from(map.entries())
+    .filter(([base, num]) => base && parseTarimaNumber(num))
+    .map(([base, num]) => ({ base, num: parseTarimaNumber(num) }))
+    .sort((a, b) => a.num - b.num || a.base.localeCompare(b.base, 'es'))
+}
+
+function normalizeTarimaNumberList(input) {
+  const values = Array.isArray(input)
+    ? input
+    : input == null
+      ? []
+      : [input]
+  return Array.from(new Set(values.map((value) => parseTarimaNumber(value)).filter(Boolean))).sort((a, b) => a - b)
 }
 
 function buildTarimaMap(lines, pinnedTarimas = new Map(), groupOptions = null) {
@@ -148,9 +184,7 @@ export default function ValidacionRecepcion() {
   // Sections mode (tarimas split by section)
   const [sectionMode, setSectionMode] = useState(false)
   const [maxTarimasPerSection, setMaxTarimasPerSection] = useState(20)
-  const [heldCodes, setHeldCodes] = useState([])
   const [fueraSectionModal, setFueraSectionModal] = useState({ open: false, code: null, base: null, tarimaNum: null })
-  const [prioritizedTarimas, setPrioritizedTarimas] = useState(() => new Set())
 
   // Grouping small codes
   const [groupSmallCodes, setGroupSmallCodes] = useState(false)
@@ -191,6 +225,14 @@ export default function ValidacionRecepcion() {
   const savedValidationConfig = order?.validation_config ?? null
   const tarimaConfigLocked = savedValidationConfig?.mode === 'tarimas' && savedValidationConfig?.locked === true
   const isTarimaMode = withTarimas
+  const savedTarimaMap = useMemo(
+    () => normalizeTarimaAssignments(savedValidationConfig?.tarimaAssignments),
+    [savedValidationConfig?.tarimaAssignments]
+  )
+  const savedEmptyTarimas = useMemo(
+    () => normalizeTarimaNumberList(savedValidationConfig?.emptyTarimas),
+    [savedValidationConfig?.emptyTarimas]
+  )
   const correctHistory = useMemo(() => history.filter((h) => h.result === 'correcto'), [history])
   const correctHistoryCount = correctHistory.length
   const total    = Math.max(Number(order?.total_cajas || 0), lines.length)
@@ -215,13 +257,16 @@ export default function ValidacionRecepcion() {
       if (base && tarimaNum) map.set(base, tarimaNum)
     }
     return map
-  }, [serverEvents, history, isTarimaMode, tarimaOverrides])
+  }, [serverEvents, history, isTarimaMode])
   const lockedTarimaMap = useMemo(() => {
     if (!isTarimaMode) return new Map()
-    const map = new Map(tarimaOverrides)
-    for (const [base, num] of persistedTarimaMap) map.set(base, num)
+    const map = new Map(savedTarimaMap)
+    for (const [base, num] of tarimaOverrides) map.set(base, num)
+    for (const [base, num] of persistedTarimaMap) {
+      if (!map.has(base)) map.set(base, num)
+    }
     return map
-  }, [tarimaOverrides, persistedTarimaMap, isTarimaMode])
+  }, [savedTarimaMap, tarimaOverrides, persistedTarimaMap, isTarimaMode])
   const hasLockedTarimaAssignments = lockedTarimaMap.size > 0
 
   const baseTarimaMap = useMemo(
@@ -238,10 +283,14 @@ export default function ValidacionRecepcion() {
     [lines, lockedTarimaMap, groupSmallCodes, minCajasParaAgrupar, maxCajasEnGrupo, isTarimaMode, hasLockedTarimaAssignments, sectionMode]
   )
   const effectiveTarimaMap = baseTarimaMap
-  const totalTarimas = useMemo(() => new Set(effectiveTarimaMap.values()).size, [effectiveTarimaMap])
+  const totalTarimas = useMemo(
+    () => new Set([...effectiveTarimaMap.values(), ...savedEmptyTarimas]).size,
+    [effectiveTarimaMap, savedEmptyTarimas]
+  )
 
   const lastTarimaNum = useMemo(() => {
     if (!withTarimas || !lastResult?.code) return null
+    if (lastResult?.tarimaNum) return lastResult.tarimaNum
     const base = extractBaseCode(lastResult.code)
     return base ? (effectiveTarimaMap.get(base) ?? null) : null
   }, [withTarimas, lastResult, effectiveTarimaMap])
@@ -267,10 +316,14 @@ export default function ValidacionRecepcion() {
       entry.bases.push(base)
       for (const l of (linesByBase.get(base) || [])) entry.tarLines.push(l)
     }
+    for (const num of savedEmptyTarimas) {
+      if (!byNum.has(num)) byNum.set(num, { num, bases: [], tarLines: [], color: getTarimaColor(num), empty: true })
+    }
     return Array.from(byNum.values()).map(ts => ({
       ...ts,
       total: ts.tarLines.length,
       validated: ts.tarLines.filter(l => l.estado_validacion === 'validada').length,
+      empty: ts.tarLines.length === 0 && ts.bases.length === 0,
     })).sort((a, b) => {
       if (sortTarimasByCountDesc) {
         const totalCmp = b.total - a.total
@@ -278,7 +331,7 @@ export default function ValidacionRecepcion() {
       }
       return a.num - b.num
     })
-  }, [isTarimaMode, effectiveTarimaMap, lines, sortTarimasByCountDesc])
+  }, [isTarimaMode, effectiveTarimaMap, lines, sortTarimasByCountDesc, savedEmptyTarimas])
 
   const tarimaCounts = useMemo(() => ({
     completo:   tarimaStats.filter(ts => ts.validated === ts.total && ts.total > 0).length,
@@ -286,14 +339,12 @@ export default function ValidacionRecepcion() {
     en_proceso: tarimaStats.filter(ts => ts.validated > 0 && ts.validated < ts.total).length,
   }), [tarimaStats])
 
-  // Dynamic active set: first N incomplete tarimas + any prioritized ones
+  // Dynamic active set: first N incomplete tarimas in the current visual order
   const activeTarimaSet = useMemo(() => {
     if (!sectionMode) return null
     const incomplete = tarimaStats.filter(ts => ts.validated < ts.total).map(ts => ts.num)
-    const s = new Set(incomplete.slice(0, maxTarimasPerSection))
-    for (const num of prioritizedTarimas) s.add(num)
-    return s
-  }, [sectionMode, tarimaStats, maxTarimasPerSection, prioritizedTarimas])
+    return new Set(incomplete.slice(0, maxTarimasPerSection))
+  }, [sectionMode, tarimaStats, maxTarimasPerSection])
 
   const buildValidationConfig = useCallback(() => ({
     mode: withTarimas ? 'tarimas' : 'ubicacion',
@@ -490,7 +541,7 @@ export default function ValidacionRecepcion() {
         scanStartRef.current = null
       }
       startTransition(() => {
-        setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado })
+        setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado, tarimaNum: parseTarimaNumber(ev.ubicacion || variables.ubicacion) })
         if (ev.resultado === 'no_encontrado') {
           setRejectModal({ open: true, code: ev.codigo_escaneado })
         }
@@ -506,7 +557,7 @@ export default function ValidacionRecepcion() {
           })
         }
         if (ev.resultado === 'correcto') {
-          const tarimaNum = parseTarimaNumber(variables.ubicacion)
+          const tarimaNum = parseTarimaNumber(ev.ubicacion || variables.ubicacion)
           const base = extractBaseCode(ev.codigo_escaneado)
           if (base && tarimaNum) {
             setTarimaOverrides(prev => {
@@ -518,7 +569,7 @@ export default function ValidacionRecepcion() {
           setHistory(prev => [{
             id: ev.id, result: ev.resultado, code: ev.codigo_escaneado,
             sku: ev.sku_asociado, scannedAt: ev.scanned_at, scannedBy: ev.scanned_by_nombre || '—',
-            ubicacion: variables.ubicacion || null,
+            ubicacion: ev.ubicacion || variables.ubicacion || null,
           }, ...prev.slice(0, 49)])
           if (data.line) {
             qc.setQueryData(['recepcion-order', id], (cur) => {
@@ -589,14 +640,33 @@ export default function ValidacionRecepcion() {
     onError: () => toast.error(t('toast.error')),
   })
 
-  async function activateTarimaMode() {
+  async function persistTarimaAssignments(nextMap, nextEmptyTarimas = savedEmptyTarimas) {
     const nextConfig = {
       ...buildValidationConfig(),
       mode: 'tarimas',
       locked: true,
+      tarimaAssignments: serializeTarimaAssignments(nextMap),
+      emptyTarimas: normalizeTarimaNumberList(nextEmptyTarimas),
+    }
+    await saveValidationConfigMut.mutateAsync(nextConfig)
+  }
+
+  async function activateTarimaMode() {
+    const frozenTarimaMap = buildTarimaMap(
+      lines,
+      new Map(),
+      groupSmallCodes ? { enabled: true, minCajas: minCajasParaAgrupar, maxCajas: maxCajasEnGrupo } : null
+    )
+    const nextConfig = {
+      ...buildValidationConfig(),
+      mode: 'tarimas',
+      locked: true,
+      tarimaAssignments: serializeTarimaAssignments(frozenTarimaMap),
+      emptyTarimas: [],
     }
     await saveValidationConfigMut.mutateAsync(nextConfig)
     setWithTarimas(true)
+    setTarimaOverrides(new Map(frozenTarimaMap))
     setShowTarimaConfirm(false)
     refocus()
   }
@@ -643,7 +713,7 @@ export default function ValidacionRecepcion() {
           },
         })
         startTransition(() => {
-          setLastResult({ result: offlineResult, code, sku: null })
+          setLastResult({ result: offlineResult, code, sku: null, tarimaNum })
           if (offlineResult === 'no_encontrado') {
             setRejectModal({ open: true, code })
           } else if (offlineResult === 'duplicado') {
@@ -956,9 +1026,6 @@ export default function ValidacionRecepcion() {
           <div className="rounded-xl border border-sky-100 bg-sky-50/70 px-3 py-2 space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold text-sky-700">{t('rec.tarimas.sections.activas')} ({activeTarimaSet.size})</span>
-              {heldCodes.length > 0 && (
-                <span className="badge bg-warning-100 text-warning-700 border-0 text-[9px]">{heldCodes.length} {t('rec.tarimas.sections.held')}</span>
-              )}
             </div>
             <div className="flex gap-1 flex-wrap">
               {Array.from(activeTarimaSet).sort((a, b) => a - b).map(num => {
@@ -1051,12 +1118,14 @@ export default function ValidacionRecepcion() {
                   }`}>{ts.num}</span>
                   <div className="flex-1 min-w-0">
                     <p className={`font-mono text-xs font-semibold truncate ${isActive ? 'text-white' : 'text-warm-800'}`}>
-                      {ts.bases[0]}
+                      {ts.bases[0] || t('rec.tarimas.empty.title')}
                       {ts.bases.length > 1 && (
                         <span className={`ml-1 text-[9px] font-bold ${isActive ? 'text-white/60' : 'text-warm-400'}`}>+{ts.bases.length - 1}</span>
                       )}
                     </p>
-                    <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : 'text-warm-400'}`}>{ts.validated}/{ts.total}</p>
+                    <p className={`text-[10px] mt-0.5 ${isActive ? 'text-white/70' : 'text-warm-400'}`}>
+                      {ts.empty ? t('rec.tarimas.empty.desc') : `${ts.validated}/${ts.total}`}
+                    </p>
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-0.5">
                     <span className={`text-xs font-bold tabular-nums ${isActive ? 'text-white' : 'text-warm-600'}`}>{pct}%</span>
@@ -1069,14 +1138,34 @@ export default function ValidacionRecepcion() {
                   </div>
                   <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-white/60' : 'text-warm-300'}`} />
                 </button>
-                {!hasLockedTarimaAssignments && (
+                {withTarimas && (
                   <button
                     type="button"
                     onClick={() => { setTarimaTransferModal({ open: true, fromNum: ts.num, fromBases: ts.bases }); setTransferToTarima('') }}
+                    disabled={ts.empty}
                     className={`p-2 mr-2 rounded-lg transition-colors shrink-0 ${isActive ? 'text-white/60 hover:bg-white/20 hover:text-white' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
                     title={t('rec.tarimas.transfer.btn')}
                   >
                     <ArrowRightLeft size={11} />
+                  </button>
+                )}
+                {ts.empty && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const nextEmptyTarimas = savedEmptyTarimas.filter(num => num !== ts.num)
+                      try {
+                        await persistTarimaAssignments(new Map(lockedTarimaMap), nextEmptyTarimas)
+                        toast.success(t('common.deleted'))
+                      } catch {
+                        // handled by mutation toast
+                      }
+                    }}
+                    disabled={saveValidationConfigMut.isPending}
+                    className={`p-2 mr-2 rounded-lg transition-colors shrink-0 ${isActive ? 'text-white/60 hover:bg-white/20 hover:text-white' : 'text-danger-400 hover:text-danger-600 hover:bg-danger-50'}`}
+                    title={t('common.delete')}
+                  >
+                    <Trash2 size={11} />
                   </button>
                 )}
               </div>
@@ -1180,7 +1269,7 @@ export default function ValidacionRecepcion() {
                     setWithTarimas(true)
                     refocus()
                   } else if (totalTarimas > 0) setShowTarimaConfirm(true)
-                  else setWithTarimas(true)
+                  else activateTarimaMode()
                 }
               }}
               className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
@@ -1550,7 +1639,7 @@ export default function ValidacionRecepcion() {
                     <tbody className="divide-y divide-warm-50">
                       {sortedHistory.map((h, i) => {
                         const base = withTarimas ? extractBaseCode(h.code) : null
-                        const tarimaNum = withTarimas && base ? (effectiveTarimaMap.get(base) ?? null) : null
+                        const tarimaNum = withTarimas ? (parseTarimaNumber(h.ubicacion) || (base ? (effectiveTarimaMap.get(base) ?? null) : null)) : null
                         const tc = tarimaNum ? getTarimaColor(tarimaNum) : null
                         return (
                           <tr key={h.id || i} className="hover:bg-primary-100 transition-colors">
@@ -1999,24 +2088,22 @@ export default function ValidacionRecepcion() {
           <div className="flex gap-2 justify-end w-full">
             <button
               onClick={() => {
-                setHeldCodes(prev => [...prev.filter(h => h.code !== fueraSectionModal.code), { code: fueraSectionModal.code, base: fueraSectionModal.base, tarimaNum: fueraSectionModal.tarimaNum }])
                 setFueraSectionModal({ open: false, code: null, base: null, tarimaNum: null })
                 refocus()
               }}
               className="btn-ghost"
             >
-              {t('rec.tarimas.sections.bloqueado.retener')}
+              {t('common.cancel')}
             </button>
             <button
               onClick={() => {
                 const { code, tarimaNum } = fueraSectionModal
-                setPrioritizedTarimas(prev => { const next = new Set(prev); next.add(tarimaNum); return next })
                 setFueraSectionModal({ open: false, code: null, base: null, tarimaNum: null })
                 scanMut.mutate({ codigo: code, ubicacion: formatTarimaLocation(tarimaNum) })
               }}
               className="btn-primary"
             >
-              {t('rec.tarimas.sections.bloqueado.priorizar')}
+              {t('common.confirm')}
             </button>
           </div>
         }
@@ -2066,21 +2153,29 @@ export default function ValidacionRecepcion() {
               {t('common.cancel')}
             </button>
             <button
-              onClick={() => {
+              onClick={async () => {
                 const toNum = parseInt(transferToTarima)
                 if (!toNum || toNum === tarimaTransferModal.fromNum) return
-                setTarimaOverrides(prev => {
-                  const next = new Map(prev)
-                  for (const base of tarimaTransferModal.fromBases) next.set(base, toNum)
-                  return next
-                })
-                setTarimaTransferModal({ open: false, fromNum: null, fromBases: [] })
-                setTransferToTarima('')
+                const nextMap = new Map(lockedTarimaMap)
+                for (const base of tarimaTransferModal.fromBases) nextMap.set(base, toNum)
+                const nextEmptyTarimas = new Set(savedEmptyTarimas)
+                const fromNum = tarimaTransferModal.fromNum
+                if (![...nextMap.values()].some(num => num === fromNum)) nextEmptyTarimas.add(fromNum)
+                else nextEmptyTarimas.delete(fromNum)
+                nextEmptyTarimas.delete(toNum)
+                try {
+                  await persistTarimaAssignments(nextMap, [...nextEmptyTarimas])
+                  setTarimaOverrides(new Map(nextMap))
+                  setTarimaTransferModal({ open: false, fromNum: null, fromBases: [] })
+                  setTransferToTarima('')
+                } catch {
+                  // handled by mutation toast
+                }
               }}
-              disabled={!transferToTarima || parseInt(transferToTarima) === tarimaTransferModal.fromNum}
+              disabled={!transferToTarima || parseInt(transferToTarima) === tarimaTransferModal.fromNum || saveValidationConfigMut.isPending}
               className="btn-primary disabled:opacity-50"
             >
-              {t('rec.tarimas.transfer.confirm')}
+              {saveValidationConfigMut.isPending ? t('common.loading') : t('rec.tarimas.transfer.confirm')}
             </button>
           </div>
         }

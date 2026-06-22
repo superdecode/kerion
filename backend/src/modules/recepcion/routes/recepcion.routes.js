@@ -9,6 +9,29 @@ function sanitizeValidationConfig(input = {}) {
     const parsed = parseInt(value, 10)
     return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
   }
+  const sanitizeTarimaAssignments = (value) => {
+    const entries = Array.isArray(value)
+      ? value
+      : value && typeof value === 'object'
+        ? Object.entries(value).map(([base, num]) => ({ base, num }))
+        : []
+    return entries
+      .map((entry) => {
+        const base = String(entry?.base || '').trim()
+        const num = parseInt(entry?.num, 10)
+        return base && Number.isInteger(num) && num > 0 ? { base, num } : null
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.num - b.num || a.base.localeCompare(b.base, 'es'))
+  }
+  const sanitizeEmptyTarimas = (value) => {
+    const values = Array.isArray(value) ? value : value == null ? [] : [value]
+    return Array.from(new Set(
+      values
+        .map((entry) => parseInt(entry, 10))
+        .filter((num) => Number.isInteger(num) && num > 0)
+    )).sort((a, b) => a - b)
+  }
 
   const mode = input?.mode === 'tarimas' ? 'tarimas' : 'ubicacion'
 
@@ -21,6 +44,8 @@ function sanitizeValidationConfig(input = {}) {
     minCajasParaAgrupar: toPositiveInt(input?.minCajasParaAgrupar, 3),
     maxCajasEnGrupo: toPositiveInt(input?.maxCajasEnGrupo, 10),
     sortTarimasByCountDesc: Boolean(input?.sortTarimasByCountDesc),
+    tarimaAssignments: mode === 'tarimas' ? sanitizeTarimaAssignments(input?.tarimaAssignments) : [],
+    emptyTarimas: mode === 'tarimas' ? sanitizeEmptyTarimas(input?.emptyTarimas) : [],
   }
 }
 
@@ -320,7 +345,29 @@ router.patch('/orders/:id',
       }
 
       if (validation_config !== undefined) {
-        params.push(JSON.stringify(sanitizeValidationConfig(validation_config)))
+        const currentRes = await req.tQuery(
+          `SELECT validation_config FROM inbound_orders WHERE id=$1 AND tenant_id=$2 LIMIT 1`,
+          [req.params.id, req.tenantId]
+        )
+        if (currentRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
+        const currentConfig = currentRes.rows[0]?.validation_config || null
+        const nextConfig = sanitizeValidationConfig(validation_config)
+        if (currentConfig?.mode === 'tarimas' && currentConfig?.locked === true) {
+          const sameLockedConfig =
+            nextConfig.mode === 'tarimas' &&
+            nextConfig.locked === true &&
+            Boolean(currentConfig.sectionMode) === nextConfig.sectionMode &&
+            parseInt(currentConfig.maxTarimasPerSection || 20, 10) === nextConfig.maxTarimasPerSection &&
+            Boolean(currentConfig.groupSmallCodes) === nextConfig.groupSmallCodes &&
+            parseInt(currentConfig.minCajasParaAgrupar || 3, 10) === nextConfig.minCajasParaAgrupar &&
+            parseInt(currentConfig.maxCajasEnGrupo || 10, 10) === nextConfig.maxCajasEnGrupo &&
+            Boolean(currentConfig.sortTarimasByCountDesc) === nextConfig.sortTarimasByCountDesc
+
+          if (!sameLockedConfig) {
+            return res.status(409).json({ error: 'La configuración de tarimas ya está bloqueada para esta orden' })
+          }
+        }
+        params.push(JSON.stringify(nextConfig))
         updates.push(`validation_config=$${params.length}::jsonb`)
       }
 
