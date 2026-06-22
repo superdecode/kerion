@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Search, Loader2, Package, CheckCircle2, XCircle,
-  ChevronDown, ChevronRight, BarChart2, ShoppingCart, AlertCircle, ClipboardList, Crosshair, Truck,
+  ChevronDown, ChevronRight, BarChart2, ShoppingCart, AlertCircle, ClipboardList, Crosshair, Truck, Send,
 } from 'lucide-react'
 import CopyableCell from '../../../core/components/common/CopyableCell'
 import { buscarCaja } from '../../../core/services/rastreoService'
@@ -533,6 +533,99 @@ function DespachoSection({ records, open, onToggle }) {
   )
 }
 
+const DESP_ORDEN_ESTADO_LABELS = {
+  pendiente: 'Pendiente',
+  cargado: 'Cargado',
+  entregado: 'Entregado',
+  devolucion: 'Devolucion',
+}
+
+const DESP_FOLIO_ESTADO_LABELS = {
+  borrador: 'Borrador',
+  en_proceso: 'En proceso',
+  cerrado: 'Cerrado',
+  cancelado: 'Cancelado',
+}
+
+function DespachoOrdenesSection({ records, open, onToggle }) {
+  const { t } = useI18nStore()
+  return (
+    <div>
+      <SectionHeader
+        icon={Send}
+        title="Ordenes en Despacho"
+        count={records?.length}
+        color={{ border: 'border-teal-200', bg: 'bg-teal-50/50', icon: 'bg-teal-100 text-teal-600', badge: 'bg-teal-100 text-teal-700' }}
+        open={open}
+        onToggle={onToggle}
+      />
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 rounded-xl border border-teal-100 overflow-x-auto">
+              {!records?.length ? (
+                <p className="px-4 py-3 text-xs text-warm-400">Sin resultados en ordenes de despacho</p>
+              ) : (
+                <table className="min-w-max w-full text-xs whitespace-nowrap">
+                  <thead className="bg-teal-50/70 border-b border-teal-100">
+                    <tr>
+                      {['OBC / Orden', 'Folio despacho', 'Cliente', 'Bultos', 'Estado orden', 'Estado folio', t('common.date')].map(h => (
+                        <th key={h} className="text-left px-3 py-2 font-semibold text-teal-700 uppercase tracking-wide text-[10px]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-teal-50">
+                    {records.map((r, i) => (
+                      <tr key={r.id || i} className="hover:bg-teal-50 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.outbound_order_no || '—'} className="font-mono font-semibold text-teal-700" />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <CopyableCell text={r.folio_numero || '—'} className="font-mono text-warm-600" />
+                        </td>
+                        <td className="px-3 py-2.5 text-warm-600 max-w-[120px] truncate">{r.cliente || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-600">{r.bultos ?? '—'}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
+                            r.orden_estado === 'entregado' ? 'bg-success-100 text-success-700'
+                              : r.orden_estado === 'cargado' ? 'bg-primary-100 text-primary-700'
+                                : r.orden_estado === 'devolucion' ? 'bg-danger-100 text-danger-600'
+                                  : 'bg-warm-100 text-warm-600'
+                          }`}>
+                            {DESP_ORDEN_ESTADO_LABELS[r.orden_estado] || r.orden_estado || '—'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
+                            r.folio_estado === 'cerrado' ? 'bg-success-100 text-success-700'
+                              : r.folio_estado === 'en_proceso' ? 'bg-warning-100 text-warning-700'
+                                : r.folio_estado === 'cancelado' ? 'bg-danger-100 text-danger-600'
+                                  : 'bg-warm-100 text-warm-600'
+                          }`}>
+                            {DESP_FOLIO_ESTADO_LABELS[r.folio_estado] || r.folio_estado || '—'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-warm-400">
+                          {r.created_at ? new Date(r.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function AnormalidadesSection({ records, open, onToggle }) {
   const { t } = useI18nStore()
   return (
@@ -681,7 +774,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
   const [results, setResults] = useState(null)
   const [gsInv, setGsInv] = useState(null)
   const [gsSurtido, setGsSurtido] = useState(null)
-  const [openSections, setOpenSections] = useState({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true })
+  const [openSections, setOpenSections] = useState({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true })
   const inputRef = useRef(null)
 
   function toggleSection(key) {
@@ -728,12 +821,30 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
       )
       setGsInv(invRecords)
 
-      // Filter GS outbound
+      // getOutboundList returns order-level records with allCustomizeCodes (array),
+      // NOT packageList. Match by order number or individual box code.
       const surtRecords = []
       ;(outRes?.data?.records || []).forEach(order => {
-        ;(order.packageList || []).forEach(box => {
-          if (codeMatches(box.customizeCode) || codeMatches(box.boxType)) {
-            surtRecords.push({ ...box, ...order, customizeCode: box.customizeCode, boxType: box.boxType })
+        const boxCodes = order.allCustomizeCodes || []
+
+        if (
+          codeMatches(order.outboundOrderNo) ||
+          codeMatches(order.thirdOrderNo) ||
+          codeMatches(order.logisticsTrackNo)
+        ) {
+          if (boxCodes.length > 0) {
+            boxCodes.forEach(code => {
+              surtRecords.push({ ...order, customizeCode: code, boxType: null })
+            })
+          } else {
+            surtRecords.push({ ...order, customizeCode: order.customizeCode || null, boxType: null })
+          }
+          return
+        }
+
+        boxCodes.forEach(code => {
+          if (codeMatches(code)) {
+            surtRecords.push({ ...order, customizeCode: code, boxType: null })
           }
         })
       })
@@ -743,7 +854,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
       )
       setGsSurtido(dedupedSurtRecords)
 
-      const dbData = dbRes?.data || { inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], surtido_validacion_estado: [], rastreo: [], recepcion: [], anormalidades: [], despacho: [], meta: null }
+      const dbData = dbRes?.data || { inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], surtido_validacion_estado: [], rastreo: [], recepcion: [], anormalidades: [], despacho: [], despacho_ordenes: [], meta: null }
       const dedupedDbData = {
         ...dbData,
         inventario_escaneo: dedupeRecords(dbData.inventario_escaneo, r => [compactCode(r.barcode), normalizeCodeFast(r.cell_no), r.status || ''].join('|')),
@@ -754,6 +865,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
         recepcion: dedupeRecords(dbData.recepcion, r => [compactCode(r.custom_box_barcode || r.box_type), normalizeCodeFast(r.folio || r.inbound_order_no), normalizeCodeFast(r.sku)].join('|')),
         anormalidades: dedupeRecords(dbData.anormalidades, r => [normalizeCodeFast(r.folio), compactCode(r.codigo || r.sku || r.contenedor_orden), normalizeCodeFast(r.estado)].join('|')),
         despacho: dedupeRecords(dbData.despacho, r => [compactCode(r.codigo_caja), normalizeCodeFast(r.folio_numero), normalizeCodeFast(r.outbound_order_no || r.matched_order_no)].join('|')),
+        despacho_ordenes: dedupeRecords(dbData.despacho_ordenes, r => [normalizeCodeFast(r.outbound_order_no), normalizeCodeFast(r.folio_numero)].join('|')),
       }
       const validationKeys = new Set(dedupedDbData.surtido_validacion.map(r => [
         compactCode(r.normalized_code || r.scanned_code || r.matched_box_type),
@@ -775,9 +887,11 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
       const recepcionLen = dedupedDbData.recepcion?.length || 0
       const anormLen = dedupedDbData.anormalidades?.length || 0
       const despLen = dedupedDbData.despacho?.length || 0
+      const despOrdenesLen = dedupedDbData.despacho_ordenes?.length || 0
       const firstKey =
         invRecords.length ? 'inv' :
         dedupedSurtRecords.length ? 'surtido' :
+        despOrdenesLen ? 'despachoOrdenes' :
         recepcionLen ? 'recepcion' :
         escaneoLen ? 'escaneo' :
         registrosLen ? 'registros' :
@@ -785,9 +899,9 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
         rastreoLen ? 'rastreo' :
         despLen ? 'despacho' :
         anormLen ? 'anormalidades' : null
-      setOpenSections({ inv: false, surtido: false, escaneo: false, registros: false, validacion: false, rastreo: false, recepcion: false, anormalidades: false, despacho: false, ...(firstKey ? { [firstKey]: true } : {}) })
+      setOpenSections({ inv: false, surtido: false, escaneo: false, registros: false, validacion: false, rastreo: false, recepcion: false, anormalidades: false, despacho: false, despachoOrdenes: false, ...(firstKey ? { [firstKey]: true } : {}) })
     } catch (err) {
-      setResults({ inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], surtido_validacion_estado: [], rastreo: [], recepcion: [], anormalidades: [], despacho: [], meta: null })
+      setResults({ inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], surtido_validacion_estado: [], rastreo: [], recepcion: [], anormalidades: [], despacho: [], despacho_ordenes: [], meta: null })
     } finally {
       setLoading(false)
     }
@@ -799,13 +913,15 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
     setResults(null)
     setGsInv(null)
     setGsSurtido(null)
+    setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true })
     onClose()
   }
 
   const totalResults = (gsInv?.length || 0) + (gsSurtido?.length || 0) +
     (results?.inventario_escaneo?.length || 0) + (results?.inventario_registros?.length || 0) +
     (results?.surtido_validacion?.length || 0) + (results?.surtido_validacion_estado?.length || 0) + (results?.rastreo?.length || 0) +
-    (results?.recepcion?.length || 0) + (results?.anormalidades?.length || 0) + (results?.despacho?.length || 0)
+    (results?.recepcion?.length || 0) + (results?.anormalidades?.length || 0) + (results?.despacho?.length || 0) +
+    (results?.despacho_ordenes?.length || 0)
 
   if (!isOpen) return null
 
@@ -890,7 +1006,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                 {t('common.search')}
               </button>
               {results && (
-                <button onClick={() => { setQuery(''); setResults(null); setGsInv(null); setGsSurtido(null); setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true }) }} className="btn btn-secondary h-11 px-4">
+                <button onClick={() => { setQuery(''); setResults(null); setGsInv(null); setGsSurtido(null); setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true }) }} className="btn btn-secondary h-11 px-4">
                   {t('common.clear')}
                 </button>
               )}
@@ -939,6 +1055,13 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                     records={gsSurtido}
                     open={openSections.surtido}
                     onToggle={() => toggleSection('surtido')}
+                  />
+                )}
+                {results.despacho_ordenes?.length > 0 && (
+                  <DespachoOrdenesSection
+                    records={results.despacho_ordenes}
+                    open={openSections.despachoOrdenes}
+                    onToggle={() => toggleSection('despachoOrdenes')}
                   />
                 )}
                 {results.inventario_escaneo?.length > 0 && (
