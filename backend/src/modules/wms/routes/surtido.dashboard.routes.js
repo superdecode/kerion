@@ -5,6 +5,24 @@ import { instantDateInTZ } from '../../../shared/utils/dateUtils.js'
 
 const router = Router()
 
+function parseDateKey(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const date = new Date(`${value}T12:00:00Z`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function getTrendBucket(fechaInicio, fechaFin) {
+  const start = parseDateKey(fechaInicio)
+  const end = parseDateKey(fechaFin)
+  if (!start || !end) return { bucket: 'day', interval: '1 day', label: 'día' }
+
+  const days = Math.max(1, Math.floor((end - start) / 86400000) + 1)
+  if (days <= 7) return { bucket: 'day', interval: '1 day', label: 'día' }
+  if (days <= 31) return { bucket: 'week', interval: '1 week', label: 'semana' }
+  if (days <= 366) return { bucket: 'month', interval: '1 month', label: 'mes' }
+  return { bucket: 'year', interval: '1 year', label: 'año' }
+}
+
 // GET /api/wmshub/dashboard?fecha_inicio=&fecha_fin=
 router.get('/',
   authenticateToken, loadFullUser,
@@ -17,6 +35,8 @@ router.get('/',
 
       const dateStart = `${fecha_inicio}T00:00:00`
       const dateEnd = `${fecha_fin}T23:59:59`
+      const trend = getTrendBucket(fecha_inicio, fecha_fin)
+      const trendPeriodExpr = `DATE_TRUNC('${trend.bucket}', ${instantDateInTZ('created_at', tz)}::timestamp)::date`
 
       const [
         ordenesEstadoRes,
@@ -77,18 +97,35 @@ router.get('/',
            LIMIT 8`,
           [req.tenantId, dateStart, dateEnd]
         ),
-        // Tendencia semanal de órdenes completadas
+        // Tendencia compactada por rango: día, semana, mes o año.
         req.tQuery(
-          `SELECT
-             DATE_TRUNC('week', ${instantDateInTZ('created_at', tz)}::timestamp) AS semana,
-             COUNT(*) FILTER (WHERE status = 'complete') AS completadas,
-             COUNT(*) AS total
-           FROM pick_sessions
-           WHERE tenant_id = $1
-             AND ${instantDateInTZ('created_at', tz)} BETWEEN $2 AND $3
-           GROUP BY semana
-           ORDER BY semana`,
-          [req.tenantId, dateStart, dateEnd]
+          `WITH bounds AS (
+             SELECT
+               DATE_TRUNC('${trend.bucket}', $2::date::timestamp)::date AS start_period,
+               DATE_TRUNC('${trend.bucket}', $3::date::timestamp)::date AS end_period
+           ),
+           periods AS (
+             SELECT GENERATE_SERIES(start_period, end_period, INTERVAL '${trend.interval}')::date AS periodo
+             FROM bounds
+           ),
+           aggregated AS (
+             SELECT
+               ${trendPeriodExpr} AS periodo,
+               COUNT(*) FILTER (WHERE status = 'complete') AS completadas,
+               COUNT(*) AS total
+             FROM pick_sessions
+             WHERE tenant_id = $1
+               AND ${instantDateInTZ('created_at', tz)} BETWEEN $2::date AND $3::date
+             GROUP BY periodo
+           )
+           SELECT
+             p.periodo,
+             COALESCE(a.completadas, 0) AS completadas,
+             COALESCE(a.total, 0) AS total
+           FROM periods p
+           LEFT JOIN aggregated a ON a.periodo = p.periodo
+           ORDER BY p.periodo`,
+          [req.tenantId, fecha_inicio, fecha_fin]
         ),
       ])
 
@@ -114,6 +151,9 @@ router.get('/',
           graficas: {
             ordenes_por_estado: ordenesEstadoRes.rows,
             top_operadores: topOperadoresRes.rows,
+            tendencia: tendenciaRes.rows,
+            tendencia_periodo: trend.label,
+            tendencia_bucket: trend.bucket,
             tendencia_semanal: tendenciaRes.rows,
           },
         },

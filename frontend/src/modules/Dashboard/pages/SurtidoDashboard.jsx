@@ -7,12 +7,11 @@ import {
   ClipboardList, CheckCircle2, AlertTriangle, Users, TrendingUp, Activity,
 } from 'lucide-react'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
-import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { getSurtidoDashboard } from '../services/dashboardService'
 import { KpiCard } from '../components/KpiCard'
 import { ChartCard, NoData } from '../components/ChartCard'
-import { fmtDate } from '../../../core/utils/dateFormat'
+import { fmtDateString } from '../../../core/utils/dateFormat'
 
 const ESTADO_COLORS = {
   complete: '#22c55e',
@@ -30,8 +29,31 @@ function estadoLabel(s) {
   return map[s] || s
 }
 
+function trendTitle(bucket) {
+  const map = {
+    day: 'Tendencia diaria',
+    week: 'Tendencia semanal',
+    month: 'Tendencia mensual',
+    year: 'Tendencia anual',
+  }
+  return map[bucket] || 'Tendencia'
+}
+
+function trendLabel(value, bucket) {
+  if (!value) return ''
+  const [year, month] = String(value).split('T')[0].split('-')
+
+  if (bucket === 'year') return year
+  if (bucket === 'month') {
+    const monthName = new Date(`${year}-${month}-15T12:00:00Z`)
+      .toLocaleDateString('es-MX', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+    return monthName.replace('.', '')
+  }
+  if (bucket === 'week') return `Sem. ${fmtDateString(value)}`
+  return fmtDateString(value)
+}
+
 export default function SurtidoDashboard({ dateRange }) {
-  const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
 
   const { data, isLoading } = useQuery({
@@ -46,6 +68,9 @@ export default function SurtidoDashboard({ dateRange }) {
   if (!d) return <NoData height={200} />
 
   const { kpis, graficas } = d
+  const tendencia = (graficas.tendencia || graficas.tendencia_semanal || [])
+    .map(item => ({ ...item, periodo: item.periodo || item.semana }))
+  const tendenciaBucket = graficas.tendencia_bucket || 'week'
 
   return (
     <div className="space-y-4 p-4">
@@ -105,14 +130,17 @@ export default function SurtidoDashboard({ dateRange }) {
           ) : <NoData height={200} />}
         </ChartCard>
 
-        <ChartCard title="Tendencia semanal" icon={TrendingUp}>
-          {graficas.tendencia_semanal.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={graficas.tendencia_semanal} margin={{ left: 0, right: 20 }}>
+        <ChartCard title={trendTitle(tendenciaBucket)} icon={TrendingUp} className="lg:col-span-2">
+          {tendencia.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={tendencia} margin={{ left: 0, right: 20, top: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0ece8" />
-                <XAxis dataKey="semana" tick={{ fontSize: 11 }} tickFormatter={v => fmtDate(v)} />
+                <XAxis dataKey="periodo" tick={{ fontSize: 11 }} tickFormatter={v => trendLabel(v, tendenciaBucket)} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} labelFormatter={v => fmtDate(v)} />
+                <Tooltip
+                  contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                  labelFormatter={v => trendLabel(v, tendenciaBucket)}
+                />
                 <Line type="monotone" dataKey="completadas" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} name="Completadas" />
                 <Line type="monotone" dataKey="total" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} name="Total" strokeDasharray="4 2" />
               </LineChart>
