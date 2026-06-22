@@ -100,6 +100,153 @@ function getSearchTokens(raw) {
   }
 }
 
+function normalizeOptionalText(raw) {
+  if (raw === undefined || raw === null) return null
+  const value = String(raw).trim()
+  return value || null
+}
+
+function normalizeOptionalNumber(raw) {
+  if (raw === undefined || raw === null || raw === '') return null
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
+}
+
+function buildAnyCodeMatch(columns, { exactParam, compactParam, baseParam }) {
+  if (!columns.length) return 'FALSE'
+  const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = ANY($${exactParam}::text[])`).join(' OR ')
+  const compactCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') = ANY($${compactParam}::text[])`).join(' OR ')
+  const baseCols = columns.map(col => `EXISTS (
+    SELECT 1 FROM unnest($${baseParam}::text[]) AS base_code
+    WHERE base_code <> ''
+      AND REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') LIKE base_code || '%'
+  )`).join(' OR ')
+  return `(${upperCols} OR ${compactCols} OR ${baseCols})`
+}
+
+function buildCajaData(raw) {
+  const boxCode = normalizeOptionalText(raw?.box_code || raw?.customizeCode || raw?.customize_code || raw?.boxType || raw?.box_type)
+  const boxType = normalizeOptionalText(raw?.box_type || raw?.boxType)
+  if (!boxCode) return null
+
+  const tokens = getSearchTokens(boxCode)
+  return {
+    box_code: boxCode,
+    box_code_normalized: tokens.normalized,
+    box_type: boxType,
+    ubicacion: normalizeOptionalText(raw?.ubicacion || raw?.cellNo || raw?.cell_no),
+    producto: normalizeOptionalText(raw?.producto || raw?.productName || raw?.product_name),
+    cantidad_disponible: normalizeOptionalNumber(raw?.cantidad_disponible ?? raw?.availableAmount ?? raw?.available_stock),
+    validada_en_surtido: false,
+  }
+}
+
+async function isCajaValidadaEnSurtido(queryable, tenantId, outboundOrderNo, caja) {
+  if (!outboundOrderNo || !caja?.box_code) return false
+
+  const candidates = [caja.box_code, caja.box_type].filter(Boolean)
+  const tokenList = candidates.map(getSearchTokens)
+  const exactVariants = [...new Set(tokenList.flatMap(t => t.exactVariants))]
+  const compactVariants = [...new Set(tokenList.map(t => t.compact).filter(Boolean))]
+  const baseVariants = [...new Set(tokenList.map(t => t.baseCompact).filter(Boolean))]
+  if (!exactVariants.length && !compactVariants.length && !baseVariants.length) return false
+
+  try {
+    const cols = await getTableColumns(queryable, 'pick_events')
+    const matchColumns = ['scanned_code', 'normalized_code', 'matched_box_type']
+      .filter(col => cols.has(col))
+      .map(col => `pe.${col}`)
+    if (!matchColumns.length) return false
+
+    const peRes = await runDbQuery(
+      queryable,
+      `SELECT 1
+         FROM pick_events pe
+         JOIN pick_sessions ps ON ps.id = pe.session_id
+        WHERE ps.tenant_id = $1
+          AND ps.outbound_order_no = $2
+          AND pe.scan_result = 'ok'
+          AND ${buildAnyCodeMatch(matchColumns, { exactParam: 3, compactParam: 4, baseParam: 5 })}
+        LIMIT 1`,
+      [tenantId, outboundOrderNo, exactVariants, compactVariants, baseVariants]
+    )
+    return peRes.rows.length > 0
+  } catch (peErr) {
+    console.error('[rastreo.validacionSurtido] non-fatal:', peErr.message, peErr.code || '')
+    return false
+  }
+}
+
+async function findRastreoDuplicates(queryable, tenantId, { outboundOrderNo, cajasData }) {
+  const duplicates = []
+  const normalizedBoxes = [...new Set((cajasData || []).map(c => c.box_code_normalized).filter(Boolean))]
+
+  if (outboundOrderNo) {
+    const orderRes = await runDbQuery(
+      queryable,
+      `SELECT ro.id, ro.folio, ro.outbound_order_no, ro.created_at, ro.estado,
+              u.nombre_completo AS asignado_nombre
+         FROM rastreo_ordenes ro
+         LEFT JOIN usuarios u ON u.id = ro.asignado_a AND u.tenant_id = ro.tenant_id
+        WHERE ro.tenant_id = $1
+          AND UPPER(COALESCE(ro.outbound_order_no, '')) = UPPER($2)
+        ORDER BY ro.created_at DESC
+        LIMIT 5`,
+      [tenantId, outboundOrderNo]
+    )
+    for (const row of orderRes.rows) {
+      duplicates.push({
+        type: 'orden',
+        folio: row.folio,
+        rastreo_orden_id: row.id,
+        outbound_order_no: row.outbound_order_no,
+        created_at: row.created_at,
+        estado: normalizeEstado(row.estado),
+        asignado_nombre: row.asignado_nombre,
+      })
+    }
+  }
+
+  if (normalizedBoxes.length) {
+    const boxRes = await runDbQuery(
+      queryable,
+      `SELECT rc.box_code, rc.box_code_normalized, rc.estado_caja,
+              ro.id AS rastreo_orden_id, ro.folio, ro.outbound_order_no, ro.created_at, ro.estado,
+              u.nombre_completo AS asignado_nombre
+         FROM rastreo_cajas rc
+         JOIN rastreo_ordenes ro ON ro.id = rc.rastreo_orden_id AND ro.tenant_id = rc.tenant_id
+         LEFT JOIN usuarios u ON u.id = ro.asignado_a AND u.tenant_id = ro.tenant_id
+        WHERE rc.tenant_id = $1
+          AND rc.box_code_normalized = ANY($2::text[])
+        ORDER BY ro.created_at DESC
+        LIMIT 20`,
+      [tenantId, normalizedBoxes]
+    )
+    for (const row of boxRes.rows) {
+      duplicates.push({
+        type: 'caja',
+        folio: row.folio,
+        rastreo_orden_id: row.rastreo_orden_id,
+        outbound_order_no: row.outbound_order_no,
+        box_code: row.box_code,
+        box_code_normalized: row.box_code_normalized,
+        estado_caja: row.estado_caja,
+        created_at: row.created_at,
+        estado: normalizeEstado(row.estado),
+        asignado_nombre: row.asignado_nombre,
+      })
+    }
+  }
+
+  const seen = new Set()
+  return duplicates.filter(item => {
+    const key = [item.type, item.folio, item.box_code_normalized || item.outbound_order_no || ''].join('|')
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 function buildMatchCase(columns, { exactParam, compactParam, baseParam, partialParam }) {
   const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = ANY($${exactParam}::text[])`).join(' OR ')
   const compactCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') = $${compactParam}`).join(' OR ')
@@ -967,7 +1114,10 @@ router.post('/bulk/responsable',
     try {
       const { ids, asignado_a } = req.body
       if (!ids?.length) return res.status(400).json({ error: 'IDs requeridos' })
-      const userId = req.fullUser.id
+      const userId = req.fullUser?.id || req.user?.id
+      if (!userId) {
+        return res.status(401).json({ error: 'Usuario no válido para crear rastreo' })
+      }
       const newVal = asignado_a ? parseInt(asignado_a) : null
       const placeholders = ids.map((_, i) => `$${i + 3}`).join(',')
       await req.tQuery(
@@ -1157,9 +1307,10 @@ router.post('/',
         asignado_a,
         notas,
         cajas = [],
+        force = false,
       } = req.body
 
-      if (!cajas.length) {
+      if (!Array.isArray(cajas) || !cajas.length) {
         return res.status(400).json({ error: 'Debe incluir al menos una caja' })
       }
       if (!asignado_a) {
@@ -1168,7 +1319,10 @@ router.post('/',
 
       const hasRastreoBoxType = await hasTableColumn(req.tQuery, 'rastreo_cajas', 'box_type')
 
-      const userId = req.fullUser.id
+      const userId = req.fullUser?.id || req.user?.id
+      if (!userId) {
+        return res.status(401).json({ error: 'Usuario no válido para crear rastreo' })
+      }
 
       let asignadoId = null
       if (asignado_a) {
@@ -1182,37 +1336,29 @@ router.post('/',
         return res.status(400).json({ error: 'Responsable inválido o inactivo' })
       }
 
-      const cajasData = await Promise.all(cajas.map(async (c) => {
-        const tokens = getSearchTokens(c.box_code)
-        let validada = false
+      const cajasData = []
+      for (const c of cajas) {
+        const cajaData = buildCajaData(c)
+        if (!cajaData) continue
+        cajaData.validada_en_surtido = await isCajaValidadaEnSurtido(req.tQuery, req.tenantId, outbound_order_no, cajaData)
+        cajasData.push(cajaData)
+      }
 
-        if (outbound_order_no) {
-          const peRes = await req.tQuery(
-            `SELECT 1 FROM pick_events pe
-             JOIN pick_sessions ps ON ps.id = pe.session_id
-             WHERE ps.tenant_id = $1 AND ps.outbound_order_no = $2
-               AND pe.scan_result = 'ok'
-               AND ${buildStrictCodeMatch(['pe.scanned_code', 'pe.normalized_code'], {
-                 exactParam: 3,
-                 compactParam: 4,
-                 baseParam: 5,
-               })}
-             LIMIT 1`,
-            [req.tenantId, outbound_order_no, tokens.exactVariants, tokens.compact, tokens.baseCompact]
-          )
-          validada = peRes.rows.length > 0
-        }
+      if (!cajasData.length) {
+        return res.status(400).json({ error: 'Debe incluir al menos una caja con código válido' })
+      }
 
-        return {
-          box_code: c.box_code,
-          box_code_normalized: tokens.normalized,
-          box_type: c.box_type || null,
-          ubicacion: c.ubicacion || null,
-          producto: c.producto || null,
-          cantidad_disponible: c.cantidad_disponible != null ? c.cantidad_disponible : null,
-          validada_en_surtido: validada,
-        }
-      }))
+      const duplicates = await findRastreoDuplicates(req.tQuery, req.tenantId, {
+        outboundOrderNo: outbound_order_no || null,
+        cajasData,
+      })
+      if (duplicates.length && !force) {
+        return res.status(409).json({
+          error: 'La orden o una caja ya existe en rastreo',
+          code: 'RASTREO_DUPLICADO',
+          duplicates,
+        })
+      }
 
       let ordenId
       let folio
@@ -1261,7 +1407,10 @@ router.post('/',
       res.status(201).json({ success: true, data: { folio, id: ordenId } })
     } catch (err) {
       console.error('[rastreo.create]', err.message, err.code || '', err.detail || '')
-      res.status(500).json({ error: 'Error al crear orden de rastreo' })
+      const debug = process.env.NODE_ENV !== 'production'
+        ? { message: err.message, code: err.code, detail: err.detail }
+        : {}
+      res.status(500).json({ error: 'Error al crear orden de rastreo', ...debug })
     }
   }
 )
@@ -1382,6 +1531,8 @@ router.post('/cajas/add',
       const { orden_id, box_code, box_type, ubicacion, producto, cantidad_disponible } = req.body
       if (!orden_id || !box_code) return res.status(400).json({ error: 'orden_id y box_code requeridos' })
       const hasRastreoBoxType = await hasTableColumn(req.tQuery, 'rastreo_cajas', 'box_type')
+      const cajaData = buildCajaData({ box_code, box_type, ubicacion, producto, cantidad_disponible })
+      if (!cajaData) return res.status(400).json({ error: 'box_code requerido' })
 
       const ordenRes = await req.tQuery(
         'SELECT id, outbound_order_no FROM rastreo_ordenes WHERE id = $1 AND tenant_id = $2',
@@ -1400,28 +1551,11 @@ router.post('/cajas/add',
               UPPER(box_code) = UPPER($2)
               ${hasRastreoBoxType ? "OR UPPER(COALESCE(box_type, '')) = UPPER($2) OR ($4 IS NOT NULL AND UPPER(COALESCE(box_type, '')) = UPPER($4))" : ''}
             )`,
-        [orden_id, box_code, req.tenantId, box_type || null]
+        [orden_id, cajaData.box_code, req.tenantId, cajaData.box_type]
       )
       if (dupRes.rows.length) return res.status(409).json({ error: 'La caja ya existe en esta orden' })
 
-      const tokens = getSearchTokens(box_code)
-      let validada = false
-      if (orden.outbound_order_no) {
-        const peRes = await req.tQuery(
-          `SELECT 1 FROM pick_events pe
-           JOIN pick_sessions ps ON ps.id = pe.session_id
-           WHERE ps.tenant_id = $1 AND ps.outbound_order_no = $2
-             AND pe.scan_result = 'ok'
-             AND ${buildStrictCodeMatch(['pe.scanned_code', 'pe.normalized_code'], {
-               exactParam: 3,
-               compactParam: 4,
-               baseParam: 5,
-             })}
-           LIMIT 1`,
-          [req.tenantId, orden.outbound_order_no, tokens.exactVariants, tokens.compact, tokens.baseCompact]
-        )
-        validada = peRes.rows.length > 0
-      }
+      const validada = await isCajaValidadaEnSurtido(req.tQuery, req.tenantId, orden.outbound_order_no, cajaData)
 
       const cajaRes = hasRastreoBoxType
         ? await req.tQuery(
@@ -1429,22 +1563,22 @@ router.post('/cajas/add',
              (tenant_id, rastreo_orden_id, box_code, box_code_normalized, box_type, ubicacion, producto, cantidad_disponible, validada_en_surtido)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
            RETURNING id`,
-          [req.tenantId, orden_id, box_code, tokens.normalized, box_type || null, ubicacion || null, producto || null,
-            cantidad_disponible != null ? cantidad_disponible : null, validada]
+          [req.tenantId, orden_id, cajaData.box_code, cajaData.box_code_normalized, cajaData.box_type, cajaData.ubicacion, cajaData.producto,
+            cajaData.cantidad_disponible, validada]
         )
         : await req.tQuery(
           `INSERT INTO rastreo_cajas
              (tenant_id, rastreo_orden_id, box_code, box_code_normalized, ubicacion, producto, cantidad_disponible, validada_en_surtido)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
            RETURNING id`,
-          [req.tenantId, orden_id, box_code, tokens.normalized, ubicacion || null, producto || null,
-            cantidad_disponible != null ? cantidad_disponible : null, validada]
+          [req.tenantId, orden_id, cajaData.box_code, cajaData.box_code_normalized, cajaData.ubicacion, cajaData.producto,
+            cajaData.cantidad_disponible, validada]
         )
 
       await req.tQuery(
         `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, rastreo_caja_id, accion, descripcion, actor_id)
          VALUES ($1,$2,$3,'creada',$4,$5)`,
-        [req.tenantId, orden_id, cajaRes.rows[0].id, `Registro agregado: ${box_code}`, req.fullUser.id]
+        [req.tenantId, orden_id, cajaRes.rows[0].id, `Registro agregado: ${cajaData.box_code}`, req.fullUser.id]
       )
 
       res.status(201).json({ success: true, data: { id: cajaRes.rows[0].id } })

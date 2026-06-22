@@ -598,13 +598,40 @@ export async function findAllOrdersByBarcode(barcode) {
 }
 
 export async function getOutboundDetail(orderNo) {
-  const rows = await loadSheet('outbound')
-  const [headerRow, ...dataRows] = rows
-  const map = buildHeaderMap(headerRow, OUTBOUND_ALIASES)
+  async function findRows(forceRefresh = false) {
+    const rows = await loadSheet('outbound', forceRefresh)
+    const [headerRow, ...dataRows] = rows
+    const map = buildHeaderMap(headerRow, OUTBOUND_ALIASES)
+    const normOrderNo = normalizeCodeFast(orderNo || '')
 
-  const orderRows = dataRows
-    .map(row => mapRowToOutbound(row, map))
-    .filter(r => r.outboundOrderNo === orderNo)
+    const mappedRows = dataRows
+      .map(row => mapRowToOutbound(row, map))
+      .filter(r => r.outboundOrderNo)
+
+    let orderRows = mappedRows
+      .filter(r => normalizeCodeFast(r.outboundOrderNo || '') === normOrderNo)
+
+    if (orderRows.length === 0 && normOrderNo) {
+      const matched = mappedRows.find(r =>
+        normalizeCodeFast(r.logisticsTrackNo || '') === normOrderNo ||
+        normalizeCodeFast(r.thirdOrderNo || '') === normOrderNo ||
+        normalizeCodeFast(r.customizeCode || '') === normOrderNo
+      )
+      if (matched?.outboundOrderNo) {
+        const matchedOrderNo = normalizeCodeFast(matched.outboundOrderNo)
+        orderRows = mappedRows.filter(r => normalizeCodeFast(r.outboundOrderNo || '') === matchedOrderNo)
+      }
+    }
+
+    return orderRows
+  }
+
+  let orderRows = await findRows(false)
+  const normOrderNo = normalizeCodeFast(orderNo || '')
+  const looksLikeOutboundOrder = /^OBC[A-Z0-9-]+$/.test(normOrderNo)
+  if (orderRows.length === 0 && getCacheStatus('outbound').partial && !looksLikeOutboundOrder) {
+    orderRows = await findRows(true)
+  }
 
   if (orderRows.length === 0) return { success: true, data: null }
 

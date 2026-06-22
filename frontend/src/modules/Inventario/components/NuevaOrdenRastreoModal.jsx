@@ -2,12 +2,36 @@ import React, { useState, useRef, useEffect, useMemo } from 'react'
 import Modal from '../../../core/components/common/Modal'
 import {
   Crosshair, Search, X, ScanBarcode, Loader2, CheckSquare, Square,
-  FileSearch, Truck, User, FileText, Package,
+  FileSearch, Truck, User, FileText, Package, AlertTriangle,
 } from 'lucide-react'
 import { getOutboundDetail, getInventoryList } from '../../WmsHub/services/googleSheetsService'
 import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import { createRastreoOrden } from '../../../core/services/rastreoService'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+
+function getOrderBoxCode(box) {
+  return String(box?.customizeCode || box?.boxType || '').trim()
+}
+
+function getOrderBoxKey(box) {
+  const code = normalizeCodeFast(getOrderBoxCode(box))
+  return `${code || 'row'}:${box?._rowIndex ?? ''}`
+}
+
+function formatDuplicateDate(value) {
+  if (!value) return '—'
+  try {
+    return new Date(value).toLocaleString('es-MX', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return String(value)
+  }
+}
 
 export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [], onCreated }) {
   const { t } = useI18nStore()
@@ -25,6 +49,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
   const [loadingInv, setLoadingInv] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [duplicateWarning, setDuplicateWarning] = useState(null)
   const scanRef = useRef(null)
 
   useEffect(() => {
@@ -45,8 +70,13 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
       .finally(() => setLoadingInv(false))
   }, [isOpen])
 
+  const orderBoxes = useMemo(
+    () => (outboundDetail?.packageList || []).map((box, index) => ({ ...box, _rowIndex: index })),
+    [outboundDetail]
+  )
+
   const visibleBoxes = useMemo(() => {
-    const list = outboundDetail?.packageList || []
+    const list = orderBoxes
     const q = boxSearch.trim().toLowerCase()
     if (!q) return list
     return list.filter(b =>
@@ -55,7 +85,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
       invMap?.[normalizeCodeFast(b.customizeCode || '')]?.cellNo?.toLowerCase().includes(q) ||
       invMap?.[normalizeCodeFast(b.boxType || '')]?.cellNo?.toLowerCase().includes(q)
     )
-  }, [outboundDetail, boxSearch, invMap])
+  }, [orderBoxes, boxSearch, invMap])
 
   const outboundBoxTotal = outboundDetail?.outboundBoxCount ?? outboundDetail?.packageList?.length ?? outboundDetail?.outboundBoxList?.length ?? 0
 
@@ -70,6 +100,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     setNotas('')
     setError('')
     setBoxSearch('')
+    setDuplicateWarning(null)
   }
 
   async function handleLoadObc() {
@@ -82,7 +113,11 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
       const res = await getOutboundDetail(obc.trim().toUpperCase())
       if (!res?.data) { setError('Orden no encontrada en el sistema'); return }
       setOutboundDetail(res.data)
-      const allCodes = new Set((res.data.packageList || []).map(b => b.customizeCode || b.boxType).filter(Boolean))
+      const allCodes = new Set((res.data.packageList || [])
+        .map((box, index) => ({ ...box, _rowIndex: index }))
+        .filter(getOrderBoxCode)
+        .map(getOrderBoxKey)
+        .filter(Boolean))
       setSelectedBoxes(allCodes)
     } catch {
       setError('Error al cargar la orden')
@@ -100,7 +135,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
   }
 
   function selectAllBoxes() {
-    const allCodes = new Set((outboundDetail?.packageList || []).map(b => b.customizeCode || b.boxType).filter(Boolean))
+    const allCodes = new Set(orderBoxes.filter(getOrderBoxCode).map(getOrderBoxKey))
     setSelectedBoxes(allCodes)
   }
 
@@ -131,14 +166,14 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
 
   function buildCajasPayload() {
     if (tab === 'con_orden') {
-      return (outboundDetail?.packageList || [])
-        .filter(b => selectedBoxes.has(b.customizeCode || b.boxType))
+      return orderBoxes
+        .filter(b => selectedBoxes.has(getOrderBoxKey(b)) && getOrderBoxCode(b))
         .map(b => {
           const normalized = normalizeCodeFast(b.customizeCode || '')
           const normalizedBoxType = normalizeCodeFast(b.boxType || '')
           const gsItem = invMap?.[normalized] || invMap?.[normalizedBoxType]
           return {
-            box_code: b.customizeCode || b.boxType,
+            box_code: getOrderBoxCode(b),
             box_type: b.boxType || null,
             ubicacion: gsItem?.cellNo || null,
             producto: gsItem?.productName || null,
@@ -149,25 +184,36 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     return manualCajas
   }
 
-  async function handleSubmit() {
+  function buildCreateBody(force = false) {
+    const cajas = buildCajasPayload()
+    return {
+      outbound_order_no: tab === 'con_orden' ? obc.trim().toUpperCase() : undefined,
+      customer_code: tab === 'con_orden' ? outboundDetail?.customerCode || undefined : undefined,
+      asignado_a: asignadoA || undefined,
+      notas: notas || undefined,
+      cajas,
+      force,
+    }
+  }
+
+  async function handleSubmit(force = false) {
     setError('')
+    if (!force) setDuplicateWarning(null)
     if (!asignadoA) { setError(t('rastreo.nuevaOrden.responsableRequired')); return }
     const cajas = buildCajasPayload()
     if (!cajas.length) { setError('Selecciona al menos una caja'); return }
     setSubmitting(true)
     try {
-      const body = {
-        outbound_order_no: tab === 'con_orden' ? obc.trim().toUpperCase() : undefined,
-        customer_code: tab === 'con_orden' ? outboundDetail?.customerCode || undefined : undefined,
-        asignado_a: asignadoA || undefined,
-        notas: notas || undefined,
-        cajas,
-      }
+      const body = buildCreateBody(force)
       const res = await createRastreoOrden(body)
       onCreated?.(res.data?.folio)
       reset()
       onClose()
     } catch (err) {
+      if (err?.response?.status === 409 && err?.response?.data?.code === 'RASTREO_DUPLICADO') {
+        setDuplicateWarning(err.response.data)
+        return
+      }
       setError(err?.response?.data?.error || 'Error al crear la orden')
     } finally {
       setSubmitting(false)
@@ -198,7 +244,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
           <div className="flex gap-2 ml-auto">
             <button onClick={() => { reset(); onClose() }} className="btn btn-secondary">{t('common.cancel')}</button>
             <button
-              onClick={handleSubmit}
+              onClick={() => handleSubmit(false)}
               disabled={!canSubmit || submitting}
               className="btn btn-primary flex items-center gap-2"
             >
@@ -227,6 +273,67 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
       </div>
 
       <div className="space-y-4">
+        {duplicateWarning && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-warm-900/35 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-warning-200/80">
+              <div className="flex items-start gap-3 border-b border-warm-100 px-5 py-4">
+                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning-100 text-warning-700">
+                  <AlertTriangle size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-bold text-warm-900">{t('rastreo.nuevaOrden.duplicateTitle')}</h3>
+                  <p className="mt-1 text-xs text-warm-500">
+                    {t('rastreo.nuevaOrden.duplicateBody')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateWarning(null)}
+                  className="rounded-lg p-1.5 text-warm-400 transition-colors hover:bg-warm-100 hover:text-warm-700"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              <div className="max-h-[320px] overflow-y-auto px-5 py-4 space-y-2">
+                {(duplicateWarning.duplicates || []).map((item, index) => (
+                  <div key={`${item.type}-${item.folio}-${item.box_code || index}`} className="rounded-xl border border-warm-200 bg-warm-50 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        item.type === 'orden' ? 'bg-primary-100 text-primary-700' : 'bg-warning-100 text-warning-700'
+                      }`}>
+                        {item.type === 'orden' ? t('rastreo.nuevaOrden.duplicateOrder') : t('rastreo.nuevaOrden.duplicateBox')}
+                      </span>
+                      <span className="font-mono text-xs font-bold text-warm-800">{item.folio || '—'}</span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-warm-600">
+                      <span>{t('rastreo.nuevaOrden.duplicateObc')}: <b className="font-mono text-warm-800">{item.outbound_order_no || '—'}</b></span>
+                      <span>{t('rastreo.nuevaOrden.duplicateCaja')}: <b className="font-mono text-warm-800">{item.box_code || '—'}</b></span>
+                      <span>{t('rastreo.nuevaOrden.duplicateFecha')}: <b className="text-warm-800">{formatDuplicateDate(item.created_at)}</b></span>
+                      <span>{t('rastreo.nuevaOrden.duplicateResponsable')}: <b className="text-warm-800">{item.asignado_nombre || '—'}</b></span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-warm-100 px-5 py-4">
+                <button type="button" className="btn btn-secondary" onClick={() => setDuplicateWarning(null)}>
+                  {t('rastreo.nuevaOrden.reviewDuplicate')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary flex items-center gap-2"
+                  disabled={submitting}
+                  onClick={() => handleSubmit(true)}
+                >
+                  {submitting && <Loader2 size={14} className="animate-spin" />}
+                  {t('rastreo.nuevaOrden.forceCreate')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {tab === 'con_orden' && (
           <>
             <div>
@@ -234,9 +341,9 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                   <Truck size={12} className="text-warm-400" />
                 {t('rastreo.nuevaOrden.obcLabel')}
               </label>
-              <div className="flex gap-2">
+              <div className="flex overflow-hidden rounded-full border border-warm-200 bg-white shadow-sm focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
                 <input
-                  className="input flex-1"
+                  className="min-w-0 flex-1 border-0 bg-transparent px-4 py-2.5 text-sm text-warm-700 outline-none placeholder-warm-300"
                   placeholder={t('rastreo.nuevaOrden.obcPlaceholder')}
                   value={obc}
                   onChange={e => setObc(e.target.value)}
@@ -245,7 +352,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                 <button
                   onClick={handleLoadObc}
                   disabled={loadingDetail || !obc.trim()}
-                  className="btn btn-secondary flex items-center gap-1.5"
+                  className="flex items-center gap-1.5 border-l border-warm-200 bg-warm-100 px-4 py-2.5 text-sm font-semibold text-warm-700 transition-colors hover:bg-warm-200 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loadingDetail ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
                   {t('rastreo.nuevaOrden.load')}
@@ -269,7 +376,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                       <button
                         type="button"
                         onClick={() => {
-                          const visibleCodes = new Set(visibleBoxes.map(b => b.customizeCode || b.boxType).filter(Boolean))
+                          const visibleCodes = new Set(visibleBoxes.filter(getOrderBoxCode).map(getOrderBoxKey))
                           setSelectedBoxes(prev => {
                             const next = new Set(prev)
                             visibleCodes.forEach(c => next.add(c))
@@ -284,7 +391,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                       <button
                         type="button"
                         onClick={() => {
-                          const visibleCodes = new Set(visibleBoxes.map(b => b.customizeCode || b.boxType).filter(Boolean))
+                          const visibleCodes = new Set(visibleBoxes.filter(getOrderBoxCode).map(getOrderBoxKey))
                           setSelectedBoxes(prev => {
                             const next = new Set(prev)
                             visibleCodes.forEach(c => next.delete(c))
@@ -319,24 +426,26 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
                   {visibleBoxes.length === 0 ? (
                     <div className="py-4 text-center text-xs text-warm-400">{t('rastreo.nuevaOrden.noBoxResults')}</div>
                   ) : visibleBoxes.map((b, i) => {
-                    const boxKey = b.customizeCode || b.boxType
+                    const boxKey = getOrderBoxKey(b)
+                    const boxCode = getOrderBoxCode(b)
                     const gsItem = invMap?.[normalizeCodeFast(b.customizeCode || '')] || invMap?.[normalizeCodeFast(b.boxType || '')]
                     return (
                       <button
-                        key={i}
+                        key={boxKey}
                         onClick={() => toggleBox(boxKey)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-warm-50 transition-colors"
+                        disabled={!boxCode}
+                        className="grid w-full grid-cols-[18px_minmax(0,1fr)_minmax(96px,140px)_minmax(70px,92px)] items-center gap-3 px-3 py-2.5 text-left hover:bg-warm-50 transition-colors"
                       >
                         {selectedBoxes.has(boxKey)
                           ? <CheckSquare size={15} className="text-primary-600 flex-shrink-0" />
                           : <Square size={15} className="text-warm-300 flex-shrink-0" />}
-                        <span className="font-mono text-xs text-warm-700 flex-1">{boxKey}</span>
-                        {b.boxType && b.boxType !== boxKey && (
-                          <span className="text-[10px] text-warm-400">{b.boxType}</span>
-                        )}
-                        {gsItem?.cellNo && (
-                          <span className="text-xs text-warm-400">{gsItem.cellNo}</span>
-                        )}
+                        <span className="min-w-0 truncate font-mono text-xs text-warm-700">{boxCode || '—'}</span>
+                        <span className="min-w-0 truncate text-center font-mono text-[10px] text-warm-500">
+                          {b.boxType && b.boxType !== boxCode ? b.boxType : '—'}
+                        </span>
+                        <span className="min-w-0 truncate text-right font-mono text-xs text-warm-400">
+                          {gsItem?.cellNo || '—'}
+                        </span>
                       </button>
                     )
                   })}

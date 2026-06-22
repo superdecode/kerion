@@ -985,26 +985,28 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
           {/* Search input */}
           <div className="px-5 py-4 border-b border-warm-100 shrink-0">
             <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-warm-400" />
-                <input
-                  ref={inputRef}
-                  autoFocus
-                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-warm-300 text-sm bg-warm-50 focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:bg-white transition-all"
-                  placeholder={t('rastreo.searchModal.placeholder')}
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                />
+              <div className="flex min-w-0 flex-1 overflow-hidden rounded-full border border-warm-200 bg-white shadow-sm focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
+                <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
+                  <Search size={15} className="shrink-0 text-warm-400" />
+                  <input
+                    ref={inputRef}
+                    autoFocus
+                    className="min-w-0 flex-1 border-0 bg-transparent py-2.5 text-sm text-warm-700 outline-none placeholder-warm-300"
+                    placeholder={t('rastreo.searchModal.placeholder')}
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  />
+                </div>
+                <button
+                  onClick={handleSearch}
+                  disabled={loading || !query.trim()}
+                  className="flex items-center gap-1.5 border-l border-warm-200 bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                  {t('common.search')}
+                </button>
               </div>
-              <button
-                onClick={handleSearch}
-                disabled={loading || !query.trim()}
-                className="btn btn-primary h-11 px-5 flex items-center gap-2"
-              >
-                {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                {t('common.search')}
-              </button>
               {results && (
                 <button onClick={() => { setQuery(''); setResults(null); setGsInv(null); setGsSurtido(null); setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true }) }} className="btn btn-secondary h-11 px-4">
                   {t('common.clear')}
@@ -1057,13 +1059,6 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                     onToggle={() => toggleSection('surtido')}
                   />
                 )}
-                {results.despacho_ordenes?.length > 0 && (
-                  <DespachoOrdenesSection
-                    records={results.despacho_ordenes}
-                    open={openSections.despachoOrdenes}
-                    onToggle={() => toggleSection('despachoOrdenes')}
-                  />
-                )}
                 {results.inventario_escaneo?.length > 0 && (
                   <EscaneoSection
                     records={results.inventario_escaneo}
@@ -1111,6 +1106,13 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                     records={results.despacho}
                     open={openSections.despacho}
                     onToggle={() => toggleSection('despacho')}
+                  />
+                )}
+                {results.despacho_ordenes?.length > 0 && (
+                  <DespachoOrdenesSection
+                    records={results.despacho_ordenes}
+                    open={openSections.despachoOrdenes}
+                    onToggle={() => toggleSection('despachoOrdenes')}
                   />
                 )}
                 {searchMode === 'flexible' && results.meta?.used_base_code && (
