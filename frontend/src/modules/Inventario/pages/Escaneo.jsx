@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { STALE } from '../../../core/constants/queryConfig'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -787,8 +787,9 @@ function GroupDetailModal({
 }) {
   const { t } = useI18nStore()
   const [search, setSearch] = useState('')
-  const [markedOnly, setMarkedOnly] = useState(false)
+  const [detailFilter, setDetailFilter] = useState('all')
   const [copiedField, setCopiedField] = useState(null)
+  const [sortConfig, setSortConfig] = useState({ field: 'ts', dir: 'desc' })
 
   const copyToClipboard = (text, key) => {
     if (!text || text === '—') return
@@ -801,8 +802,9 @@ function GroupDetailModal({
   useEffect(() => {
     if (!isOpen) {
       setSearch('')
-      setMarkedOnly(false)
+      setDetailFilter('all')
       setCopiedField(null)
+      setSortConfig({ field: 'ts', dir: 'desc' })
     }
   }, [isOpen])
 
@@ -812,7 +814,8 @@ function GroupDetailModal({
   const normalizedSearch = search.trim().toLowerCase()
   const baseItems = items.filter(item => getItemGroup(item) === group)
   const filtered = baseItems.filter(item => {
-    if (markedOnly && !item.marked) return false
+    if (detailFilter === 'marked' && !item.marked) return false
+    if (detailFilter === 'unmarked' && item.marked) return false
     if (!normalizedSearch) return true
     return [
       item.code,
@@ -823,7 +826,69 @@ function GroupDetailModal({
     ].some(value => (value || '').toLowerCase().includes(normalizedSearch))
   })
   const markedCount = baseItems.filter(item => item.marked).length
+  const unmarkedCount = Math.max(0, baseItems.length - markedCount)
   const visibleMarkedCount = filtered.filter(item => item.marked).length
+  const visibleIndices = filtered.map(item => item._idx)
+  const sortedItems = useMemo(() => {
+    const list = [...filtered]
+    const { field, dir } = sortConfig
+    const factor = dir === 'asc' ? 1 : -1
+    list.sort((a, b) => {
+      let av
+      let bv
+      switch (field) {
+        case 'code':
+          av = a.code || ''
+          bv = b.code || ''
+          break
+        case 'code2':
+          av = a.code2 || ''
+          bv = b.code2 || ''
+          break
+        case 'location':
+          av = a.location || ''
+          bv = b.location || ''
+          break
+        default:
+          av = Number(a.ts || 0)
+          bv = Number(b.ts || 0)
+          break
+      }
+      if (typeof av === 'number' && typeof bv === 'number') {
+        if (av === bv) return 0
+        return av > bv ? factor : -factor
+      }
+      const cmp = String(av).localeCompare(String(bv), 'es', { sensitivity: 'base' })
+      return cmp === 0 ? 0 : cmp * factor
+    })
+    return list
+  }, [filtered, sortConfig])
+
+  function toggleSort(field) {
+    setSortConfig((current) => (
+      current.field === field
+        ? { field, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+        : { field, dir: field === 'ts' ? 'desc' : 'asc' }
+    ))
+  }
+
+  function HeaderSortButton({ field, label }) {
+    const active = sortConfig.field === field
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(field)}
+        className={`inline-flex items-center gap-1 transition-colors ${active ? 'text-primary-700' : 'text-warm-500 hover:text-warm-700'}`}
+      >
+        <span>{label}</span>
+        {active ? (
+          sortConfig.dir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />
+        ) : (
+          <ChevronDown size={11} className="opacity-40" />
+        )}
+      </button>
+    )
+  }
 
   return (
     <Modal
@@ -856,32 +921,56 @@ function GroupDetailModal({
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-warm-200 bg-white text-sm outline-none focus:border-primary-400"
             />
           </div>
-          <button
-            className={`px-4 py-3 rounded-xl border text-sm font-semibold transition-colors ${
-              markedOnly
-                ? 'border-primary-300 bg-primary-50 text-primary-700'
-                : 'border-warm-200 bg-white text-warm-600 hover:bg-warm-50'
-            }`}
-            onClick={() => setMarkedOnly(value => !value)}
-          >
-            {markedOnly ? t('inventario.escaneo.show_all_items') : t('inventario.escaneo.show_marked_only')}
-          </button>
+          <div className="flex items-center gap-2 justify-end flex-wrap">
+            <button
+              type="button"
+              onClick={() => onMarkVisible(visibleIndices)}
+              disabled={visibleIndices.length === 0}
+              className="px-3 py-3 rounded-xl border border-primary-200 bg-primary-50 text-primary-700 text-sm font-semibold hover:bg-primary-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {t('inventario.escaneo.mark_visible')}
+            </button>
+            <button
+              type="button"
+              onClick={() => onClearVisible(visibleIndices)}
+              disabled={visibleIndices.length === 0}
+              className="px-3 py-3 rounded-xl border border-warm-200 bg-white text-warm-600 text-sm font-semibold hover:bg-warm-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {t('inventario.escaneo.clear_visible_marks')}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className={`rounded-2xl px-4 py-3 border border-current/10 ${meta.bg}`}>
+          <button
+            type="button"
+            onClick={() => setDetailFilter('all')}
+            className={`rounded-2xl px-4 py-3 border text-left transition-colors ${detailFilter === 'all' ? `${meta.bg} ring-2 ring-primary-200` : 'border-warm-200 bg-white text-warm-700 hover:bg-warm-50'}`}
+          >
             <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.total')}</p>
             <p className="text-xl font-bold leading-none mt-1">{baseItems.length}</p>
-          </div>
-          <div className="rounded-2xl px-4 py-3 border border-primary-100 bg-primary-50 text-primary-700">
+          </button>
+          <button
+            type="button"
+            onClick={() => setDetailFilter('marked')}
+            className={`rounded-2xl px-4 py-3 border text-left transition-colors ${detailFilter === 'marked' ? 'border-primary-300 bg-primary-50 text-primary-700 ring-2 ring-primary-200' : 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70'}`}
+          >
+            <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.marked_count')}</p>
+            <p className="text-xl font-bold leading-none mt-1">{markedCount}</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setDetailFilter('unmarked')}
+            className={`rounded-2xl px-4 py-3 border text-left transition-colors ${detailFilter === 'unmarked' ? 'border-warning-300 bg-warning-50 text-warning-700 ring-2 ring-warning-200' : 'border-warning-100 bg-warning-50 text-warning-700 hover:bg-warning-100/70'}`}
+          >
+            <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.unmarked_count')}</p>
+            <p className="text-xl font-bold leading-none mt-1">{unmarkedCount}</p>
+          </button>
+          <div className="rounded-2xl px-4 py-3 border border-warm-200 bg-warm-50 text-warm-700">
             <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.filtered_count')}</p>
             <p className="text-xl font-bold leading-none mt-1">{filtered.length}</p>
           </div>
-          <div className="rounded-2xl px-4 py-3 border border-emerald-100 bg-emerald-50 text-emerald-700">
-            <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.marked_count')}</p>
-            <p className="text-xl font-bold leading-none mt-1">{markedCount}</p>
-          </div>
-          <div className="rounded-2xl px-4 py-3 border border-warm-200 bg-warm-50 text-warm-700">
+          <div className="rounded-2xl px-4 py-3 border border-primary-100 bg-primary-50 text-primary-700 md:col-span-4">
             <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.marked_visible')}</p>
             <p className="text-xl font-bold leading-none mt-1">{visibleMarkedCount}</p>
           </div>
@@ -890,17 +979,17 @@ function GroupDetailModal({
         <div className="rounded-2xl border border-warm-200 overflow-hidden">
           <div className="grid grid-cols-[auto_minmax(0,0.95fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 px-4 py-3 bg-warm-50/80 text-[11px] font-semibold uppercase tracking-[0.12em] text-warm-500">
             <span>#</span>
-            <span>{t('inventario.escaneo.scan_datetime')}</span>
-            <span>{t('inventario.escaneo.code_1')}</span>
-            <span>{t('inventario.escaneo.code_2')}</span>
-            <span>{t('inventario.escaneo.location')}</span>
+            <HeaderSortButton field="ts" label={t('inventario.escaneo.scan_datetime')} />
+            <HeaderSortButton field="code" label={t('inventario.escaneo.code_1')} />
+            <HeaderSortButton field="code2" label={t('inventario.escaneo.code_2')} />
+            <HeaderSortButton field="location" label={t('inventario.escaneo.location')} />
             <span>{t('common.actions')}</span>
           </div>
           <div className="max-h-[58vh] overflow-y-auto divide-y divide-warm-100">
-            {filtered.length === 0 ? (
+            {sortedItems.length === 0 ? (
               <div className="py-12 text-center text-sm text-warm-400">{t('common.noData')}</div>
             ) : (
-              [...filtered].reverse().map((item, index) => (
+              sortedItems.map((item, index) => (
                 <div key={item._idx} className={`grid grid-cols-[auto_minmax(0,0.95fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 px-4 py-3 items-center text-sm ${item.marked ? 'bg-primary-100/60 border-l-2 border-primary-400' : 'bg-white'}`}>
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold ${item.marked ? 'bg-primary-200 text-primary-700' : 'bg-warm-100 text-warm-500'}`}>
                     {index + 1}
@@ -1122,6 +1211,8 @@ function ClasificacionPanel({
         const meta = STATUS_META[g]
         const groupItems = grouped[g]
         const hasItems = groupItems.length > 0
+        const markedCount = groupItems.filter((item) => item.marked).length
+        const allMarked = hasItems && markedCount === groupItems.length
         const ub = groupUbicacion[g]
         const isInputActive = activeInputGroup === g
         return (
@@ -1180,6 +1271,12 @@ function ClasificacionPanel({
             </div>
             {/* Footer: inline ubicación input or action button — no marked count */}
             <div ref={footerRef} className={`relative shrink-0 border-t ${meta.footerBg}`}>
+              <div className="px-2 pt-2">
+                <div className="flex items-center justify-between rounded-lg border border-current/10 bg-white/60 px-2.5 py-1.5 text-[10px]">
+                  <span className="font-semibold text-warm-600">{t('inventario.escaneo.marked_count')}</span>
+                  <span className="font-mono font-bold text-warm-800">{markedCount}/{groupItems.length}</span>
+                </div>
+              </div>
               {isInputActive ? (
                 <div className="px-2 py-2 space-y-1">
                   <div className="flex items-center gap-1">
@@ -1262,7 +1359,7 @@ function ClasificacionPanel({
                   </div>
                   <button
                     type="button"
-                    disabled={!hasItems}
+                    disabled={!hasItems || !allMarked}
                     onClick={() => onSend(g, ub)}
                     className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary-600 text-white text-[11px] font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
@@ -1273,7 +1370,7 @@ function ClasificacionPanel({
                 <div className="px-2 py-2 flex items-center justify-end">
                   <button
                     type="button"
-                    disabled={!hasItems}
+                    disabled={!hasItems || !allMarked}
                     onClick={() => openInput(g)}
                     className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-50 text-primary-700 text-xs font-semibold hover:bg-primary-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
@@ -1424,6 +1521,7 @@ export default function Escaneo() {
     tabs, activeTabId, pendingCode1,
     openTab, closeTab, setActiveTab,
     addScanItem, removeItem, removeItems, moveItemGroup, toggleItemMarked, setItemsMarkedByGroup,
+    restartTab,
     setPendingCode1, clearPendingCode1,
     inventorySnapshot,
   } = useInventarioStore()
@@ -1592,7 +1690,8 @@ export default function Escaneo() {
           const indices = tab.items
             .map((item, i) => (getItemGroup(item) === clasifGroup ? i : -1))
             .filter(i => i !== -1)
-          removeItems(activeTabId, indices)
+          if (indices.length === tab.items.length) restartTab(activeTabId)
+          else removeItems(activeTabId, indices)
         }
       } else {
         closeTab(activeTabId)

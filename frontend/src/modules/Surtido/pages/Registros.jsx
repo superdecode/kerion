@@ -905,9 +905,16 @@ export default function SurtidoRegistros() {
     next.has(id) ? next.delete(id) : next.add(id)
     return next
   })
+  const visibleRecordIds = useMemo(() => records.map((record) => record.id), [records])
+  const allVisibleSelected = visibleRecordIds.length > 0 && visibleRecordIds.every((id) => selectedIds.has(id))
+  const someVisibleSelected = visibleRecordIds.some((id) => selectedIds.has(id))
   const toggleSelectAll = () => {
-    if (selectedIds.size === records.length) setSelectedIds(new Set())
-    else setSelectedIds(new Set(records.map(r => r.id)))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) visibleRecordIds.forEach((id) => next.delete(id))
+      else visibleRecordIds.forEach((id) => next.add(id))
+      return next
+    })
   }
   function buildRegistrosRows(rows) {
     return rows.map(r => {
@@ -1189,15 +1196,15 @@ export default function SurtidoRegistros() {
               <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex-wrap">
                 <span className="font-semibold">
                   {t('common.bulk.selected').replace('{n}', selectedIds.size)}
-                  {selectedIds.size === records.length && records.length > 0 && (
-                    <span className="ml-1 font-normal text-primary-500">{t('common.bulk.allPage').replace('{n}', records.length)}</span>
+                  {allVisibleSelected && visibleRecordIds.length > 0 && (
+                    <span className="ml-1 font-normal text-primary-500">{t('common.bulk.allPage').replace('{n}', visibleRecordIds.length)}</span>
                   )}
                 </span>
-                {selectedIds.size < records.length && (
+                {!allVisibleSelected && visibleRecordIds.length > 0 && (
                   <button
                     className="text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
                     onClick={toggleSelectAll}>
-                    {t('common.bulk.selectAllPage').replace('{n}', records.length)}
+                    {t('common.bulk.selectAllPage').replace('{n}', visibleRecordIds.length)}
                   </button>
                 )}
                 <button onClick={handleBulkExport} disabled={exportingBulk}
@@ -1216,7 +1223,8 @@ export default function SurtidoRegistros() {
                   <tr className="bg-warm-50 border-b border-warm-100">
                     <th className="table-header w-10 text-center">
                       <input type="checkbox"
-                        checked={selectedIds.size === records.length && records.length > 0}
+                        checked={allVisibleSelected}
+                        ref={el => { if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected }}
                         onChange={toggleSelectAll}
                         className="cb" />
                     </th>
@@ -1243,6 +1251,7 @@ export default function SurtidoRegistros() {
                         className={`table-row group cursor-pointer ${isSelected ? 'bg-primary-50/40' : ''}`}>
                         <td className="table-cell text-center" onClick={e => { e.stopPropagation(); toggleSelect(r.id) }}>
                           <input type="checkbox" checked={isSelected}
+                            onClick={e => e.stopPropagation()}
                             onChange={() => toggleSelect(r.id)}
                             className="cb" />
                         </td>

@@ -221,12 +221,12 @@ function MultiSelect({ value, onChange, options, placeholder }) {
   )
 }
 
-function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initialReadOnly = true }) {
+function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initialReadOnly = true }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const { hasPermission } = useAuthStore()
-  const [detailTab, setDetailTab] = useState('tarimas')
+  const [detailTab, setDetailTab] = useState('detallado')
   const [isReadOnly, setIsReadOnly] = useState(initialReadOnly)
   const [expandedTarimaCode, setExpandedTarimaCode] = useState(null)
   const [editingScanId, setEditingScanId] = useState(null)
@@ -478,16 +478,16 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'tarimas', initial
               <div className="flex flex-wrap items-end justify-between gap-3 border-b border-warm-100">
                 <div className="flex flex-wrap gap-1">
                   <button
-                    onClick={() => setDetailTab('tarimas')}
-                    className={`${DETAIL_TAB_CLASS} whitespace-nowrap ${detailTab === 'tarimas' ? 'border-primary-500 text-primary-600' : 'border-transparent text-warm-400 hover:text-warm-600'}`}
-                  >
-                    <Boxes className="w-3.5 h-3.5" /> Tarimas
-                  </button>
-                  <button
                     onClick={() => setDetailTab('detallado')}
                     className={`${DETAIL_TAB_CLASS} whitespace-nowrap ${detailTab === 'detallado' ? 'border-primary-500 text-primary-600' : 'border-transparent text-warm-400 hover:text-warm-600'}`}
                   >
                     <ScanBarcode className="w-3.5 h-3.5" /> Detallado
+                  </button>
+                  <button
+                    onClick={() => setDetailTab('tarimas')}
+                    className={`${DETAIL_TAB_CLASS} whitespace-nowrap ${detailTab === 'tarimas' ? 'border-primary-500 text-primary-600' : 'border-transparent text-warm-400 hover:text-warm-600'}`}
+                  >
+                    <Boxes className="w-3.5 h-3.5" /> Tarimas
                   </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 pb-2 shrink-0">
@@ -776,7 +776,7 @@ export default function InventarioRegistros() {
   const [pageSize, setPageSize] = useState(50)
   const [copiedCode, setCopiedCode] = useState('')
   const [detailSession, setDetailSession] = useState(null)
-  const [detailInitialTab, setDetailInitialTab] = useState('tarimas')
+  const [detailInitialTab, setDetailInitialTab] = useState('detallado')
   const [detailReadOnly, setDetailReadOnly] = useState(true)
   const [deleteConfirmSession, setDeleteConfirmSession] = useState(null)
   const [scanTypeFilter, setScanTypeFilter] = useState('')
@@ -900,9 +900,16 @@ export default function InventarioRegistros() {
     next.has(id) ? next.delete(id) : next.add(id)
     return next
   })
+  const visibleRecordIds = useMemo(() => filteredRecords.map((record) => record.id), [filteredRecords])
+  const allVisibleSelected = visibleRecordIds.length > 0 && visibleRecordIds.every((id) => selectedIds.has(id))
+  const someVisibleSelected = visibleRecordIds.some((id) => selectedIds.has(id))
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredRecords.length) setSelectedIds(new Set())
-    else setSelectedIds(new Set(filteredRecords.map(r => r.id)))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) visibleRecordIds.forEach((id) => next.delete(id))
+      else visibleRecordIds.forEach((id) => next.add(id))
+      return next
+    })
   }
   const INV_HEADERS = ['Sección', 'Tipo', 'Fecha', 'Operador', 'Disponible', 'Bloqueado', 'No WMS', 'Total']
   const INV_COLS = [{ wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }]
@@ -949,7 +956,7 @@ export default function InventarioRegistros() {
     }
   }
 
-  const openDetail = (session, initialTab = 'tarimas', readOnly = true) => {
+  const openDetail = (session, initialTab = 'detallado', readOnly = true) => {
     setDetailInitialTab(initialTab)
     setDetailReadOnly(readOnly)
     setDetailSession(session)
@@ -1109,15 +1116,15 @@ export default function InventarioRegistros() {
                 <div className="flex items-center gap-2 px-4 py-2 bg-primary-50 border-b border-primary-100 text-xs text-primary-700 flex-wrap">
                   <span className="font-semibold">
                     {t('common.bulk.selected').replace('{n}', selectedIds.size)}
-                    {selectedIds.size === filteredRecords.length && filteredRecords.length > 0 && (
-                      <span className="ml-1 font-normal text-primary-500">{t('common.bulk.allFiltered').replace('{n}', filteredRecords.length)}</span>
+                    {allVisibleSelected && visibleRecordIds.length > 0 && (
+                      <span className="ml-1 font-normal text-primary-500">{t('common.bulk.allPage').replace('{n}', visibleRecordIds.length)}</span>
                     )}
                   </span>
-                  {selectedIds.size < filteredRecords.length && (
+                  {!allVisibleSelected && visibleRecordIds.length > 0 && (
                     <button
                       className="text-primary-600 hover:text-primary-800 underline font-semibold transition-colors"
-                      onClick={() => setSelectedIds(new Set(filteredRecords.map(r => r.id)))}>
-                      {t('common.bulk.selectAllFiltered').replace('{n}', filteredRecords.length)}
+                      onClick={toggleSelectAll}>
+                      {t('common.bulk.selectAllPage').replace('{n}', visibleRecordIds.length)}
                     </button>
                   )}
                   <button onClick={handleBulkExport} disabled={exportingBulk}
@@ -1136,7 +1143,8 @@ export default function InventarioRegistros() {
                     <tr className="bg-warm-50 border-b border-warm-100">
                       <th className="table-header w-10 text-center">
                         <input type="checkbox"
-                          checked={selectedIds.size === filteredRecords.length && filteredRecords.length > 0}
+                          checked={allVisibleSelected}
+                          ref={el => { if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected }}
                           onChange={toggleSelectAll}
                           className="cb" />
                       </th>
@@ -1160,6 +1168,7 @@ export default function InventarioRegistros() {
                           className={`table-row group cursor-pointer ${isSelected ? 'bg-primary-50/40' : ''}`}>
                           <td className="table-cell text-center" onClick={e => { e.stopPropagation(); toggleSelect(r.id) }}>
                             <input type="checkbox" checked={isSelected}
+                              onClick={e => e.stopPropagation()}
                               onChange={() => toggleSelect(r.id)}
                               className="cb" />
                           </td>
@@ -1211,7 +1220,7 @@ export default function InventarioRegistros() {
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-colors"
-                                onClick={e => { e.stopPropagation(); openDetail(r, 'tarimas', true) }}
+                                onClick={e => { e.stopPropagation(); openDetail(r, 'detallado', true) }}
                                 title={t('inventario.registros.detail')}>
                                 <Eye size={13} />
                               </button>
@@ -1257,7 +1266,7 @@ export default function InventarioRegistros() {
       <DetailModal
         session={detailSession}
         isOpen={!!detailSession}
-        onClose={() => { setDetailSession(null); setDetailInitialTab('tarimas'); setDetailReadOnly(true) }}
+        onClose={() => { setDetailSession(null); setDetailInitialTab('detallado'); setDetailReadOnly(true) }}
         initialTab={detailInitialTab}
         initialReadOnly={detailReadOnly}
       />

@@ -151,6 +151,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
 
   async function handleSubmit() {
     setError('')
+    if (!asignadoA) { setError(t('rastreo.nuevaOrden.responsableRequired')); return }
     const cajas = buildCajasPayload()
     if (!cajas.length) { setError('Selecciona al menos una caja'); return }
     setSubmitting(true)
@@ -173,9 +174,11 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     }
   }
 
-  const canSubmit = tab === 'con_orden'
-    ? selectedBoxes.size > 0 && outboundDetail
-    : manualCajas.length > 0
+  const canSubmit = Boolean(asignadoA) && (
+    tab === 'con_orden'
+      ? selectedBoxes.size > 0 && outboundDetail
+      : manualCajas.length > 0
+  )
 
   const TABS = [
     { key: 'con_orden', label: t('rastreo.nuevaOrden.tabConOrden'), icon: FileSearch },
@@ -404,7 +407,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
               {t('rastreo.nuevaOrden.assignTo')}
             </label>
             <select className="input" value={asignadoA} onChange={e => setAsignadoA(e.target.value)}>
-              <option value="">{t('rastreo.nuevaOrden.unassigned')}</option>
+              <option value="" disabled>{t('rastreo.nuevaOrden.assignToPlaceholder')}</option>
               {usuarios.map(u => (
                 <option key={u.id} value={u.id}>{u.nombre_completo}</option>
               ))}

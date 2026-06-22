@@ -28,6 +28,8 @@ const ESTADO_TRANSITIONS = {
   cancelada: new Set(['completada']),
 }
 
+const tableColumnCache = new Map()
+
 function normalizeEstado(raw) {
   if (!raw) return raw
   return STATUS_ALIASES[raw] || raw
@@ -131,6 +133,36 @@ function buildExactOnlyWhere(columns, { exactParam, compactParam }) {
   const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = ANY($${exactParam}::text[])`).join(' OR ')
   const compactCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') = $${compactParam}`).join(' OR ')
   return `(${upperCols} OR ${compactCols})`
+}
+
+async function runDbQuery(queryable, text, params = []) {
+  if (typeof queryable === 'function') return queryable(text, params)
+  return queryable.query(text, params)
+}
+
+async function getTableColumns(queryable, tableName) {
+  if (tableColumnCache.has(tableName)) return tableColumnCache.get(tableName)
+  let cols
+  try {
+    const probe = await runDbQuery(queryable, `SELECT * FROM ${tableName} LIMIT 0`, [])
+    cols = new Set((probe.fields || []).map((field) => field.name))
+  } catch {
+    const result = await runDbQuery(
+      queryable,
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1`,
+      [tableName]
+    )
+    cols = new Set(result.rows.map((row) => row.column_name))
+  }
+  tableColumnCache.set(tableName, cols)
+  return cols
+}
+
+async function hasTableColumn(queryable, tableName, columnName) {
+  const cols = await getTableColumns(queryable, tableName)
+  return cols.has(columnName)
 }
 
 function dedupeRows(rows, keyFn) {
@@ -277,6 +309,11 @@ router.get('/buscar',
       const mode = req.query.mode === 'exact' ? 'exact' : 'flexible'
       if (!q) return res.status(400).json({ error: 'Parámetro q requerido' })
       const tokens = getSearchTokens(q)
+      const client = await req.tGetClient()
+      const hasRastreoBoxType = await hasTableColumn(client, 'rastreo_cajas', 'box_type')
+      const rastreoMatchColumns = hasRastreoBoxType
+        ? ['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no']
+        : ['rc.box_code', 'rc.box_code_normalized', 'ro.outbound_order_no']
       const matchParams = {
         exactParam: 2,
         compactParam: 3,
@@ -294,15 +331,14 @@ router.get('/buscar',
         ? buildExactOnlyWhere(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type', 'ps.outbound_order_no'], matchParams)
         : buildFlexibleMatchWhere(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type', 'ps.outbound_order_no'], matchParams)
       const rastreoWhere = mode === 'exact'
-        ? buildExactOnlyWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no'], matchParams)
-        : buildFlexibleMatchWhere(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no'], matchParams)
+        ? buildExactOnlyWhere(rastreoMatchColumns, matchParams)
+        : buildFlexibleMatchWhere(rastreoMatchColumns, matchParams)
       const inboundWhere = mode === 'exact'
         ? buildExactOnlyWhere(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)
         : buildFlexibleMatchWhere(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)
 
       const searchParams = [req.tenantId, tokens.exactVariants, tokens.compact, tokens.baseCompact, tokens.partialVariants]
       const flexibleSearchParams = [...searchParams, mode !== 'exact']
-      const client = await req.tGetClient()
       let invRes, invRegRes, pickRes, pickStatusRes, rastreoRes, inboundRes, anormRes, despRes
       try {
         invRes = await client.query(
@@ -428,11 +464,11 @@ router.get('/buscar',
                )
                AND il.custom_box_barcode IS NOT NULL
            )
-           SELECT rc.id, rc.box_code, rc.box_code_normalized, rc.box_type, rc.estado_caja, rc.ubicacion,
+           SELECT rc.id, rc.box_code, rc.box_code_normalized, ${hasRastreoBoxType ? 'rc.box_type' : 'NULL::text AS box_type'}, rc.estado_caja, rc.ubicacion,
                   rc.producto, rc.validada_en_surtido, rc.created_at, rc.updated_at,
                   ro.folio, ro.outbound_order_no, ro.estado AS orden_estado,
                   COALESCE(
-                    ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no'], matchParams)},
+                    ${buildMatchCase(rastreoMatchColumns, matchParams)},
                     'triangulated'
              ) AS match_type
            FROM rastreo_cajas rc
@@ -445,7 +481,7 @@ router.get('/buscar',
              )
            ORDER BY
              CASE COALESCE(
-               ${buildMatchCase(['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no'], matchParams)},
+               ${buildMatchCase(rastreoMatchColumns, matchParams)},
                'triangulated'
              )
                WHEN 'exact' THEN 1
@@ -1101,6 +1137,11 @@ router.post('/',
       if (!cajas.length) {
         return res.status(400).json({ error: 'Debe incluir al menos una caja' })
       }
+      if (!asignado_a) {
+        return res.status(400).json({ error: 'Debe asignar un responsable' })
+      }
+
+      const hasRastreoBoxType = await hasTableColumn(req.tQuery, 'rastreo_cajas', 'box_type')
 
       const folio = await generateRastreoFolio(req.tQuery, req.tenantId)
       const userId = req.fullUser.id
@@ -1112,6 +1153,9 @@ router.post('/',
           [asignado_a, req.tenantId]
         )
         if (uRes.rows.length) asignadoId = parseInt(asignado_a)
+      }
+      if (!asignadoId) {
+        return res.status(400).json({ error: 'Responsable inválido o inactivo' })
       }
 
       const cajasData = await Promise.all(cajas.map(async (c) => {
@@ -1163,14 +1207,25 @@ router.post('/',
         ordenId = ordenRes.rows[0].id
 
         for (const c of cajasData) {
-          await client.query(
-            `INSERT INTO rastreo_cajas
-               (tenant_id, rastreo_orden_id, box_code, box_code_normalized, box_type,
-                ubicacion, producto, cantidad_disponible, validada_en_surtido)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-            [req.tenantId, ordenId, c.box_code, c.box_code_normalized,
-             c.box_type, c.ubicacion, c.producto, c.cantidad_disponible, c.validada_en_surtido]
-          )
+          if (hasRastreoBoxType) {
+            await client.query(
+              `INSERT INTO rastreo_cajas
+                 (tenant_id, rastreo_orden_id, box_code, box_code_normalized, box_type,
+                  ubicacion, producto, cantidad_disponible, validada_en_surtido)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+              [req.tenantId, ordenId, c.box_code, c.box_code_normalized,
+                c.box_type, c.ubicacion, c.producto, c.cantidad_disponible, c.validada_en_surtido]
+            )
+          } else {
+            await client.query(
+              `INSERT INTO rastreo_cajas
+                 (tenant_id, rastreo_orden_id, box_code, box_code_normalized,
+                  ubicacion, producto, cantidad_disponible, validada_en_surtido)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+              [req.tenantId, ordenId, c.box_code, c.box_code_normalized,
+                c.ubicacion, c.producto, c.cantidad_disponible, c.validada_en_surtido]
+            )
+          }
         }
 
         await client.query(
@@ -1182,7 +1237,7 @@ router.post('/',
 
       res.status(201).json({ success: true, data: { folio, id: ordenId } })
     } catch (err) {
-      console.error('[rastreo.create]', err.message)
+      console.error('[rastreo.create]', err.message, err.code || '', err.detail || '')
       res.status(500).json({ error: 'Error al crear orden de rastreo' })
     }
   }
@@ -1303,6 +1358,7 @@ router.post('/cajas/add',
     try {
       const { orden_id, box_code, box_type, ubicacion, producto, cantidad_disponible } = req.body
       if (!orden_id || !box_code) return res.status(400).json({ error: 'orden_id y box_code requeridos' })
+      const hasRastreoBoxType = await hasTableColumn(req.tQuery, 'rastreo_cajas', 'box_type')
 
       const ordenRes = await req.tQuery(
         'SELECT id, outbound_order_no FROM rastreo_ordenes WHERE id = $1 AND tenant_id = $2',
@@ -1319,8 +1375,7 @@ router.post('/cajas/add',
             AND tenant_id = $3
             AND (
               UPPER(box_code) = UPPER($2)
-              OR UPPER(COALESCE(box_type, '')) = UPPER($2)
-              OR ($4 IS NOT NULL AND UPPER(COALESCE(box_type, '')) = UPPER($4))
+              ${hasRastreoBoxType ? "OR UPPER(COALESCE(box_type, '')) = UPPER($2) OR ($4 IS NOT NULL AND UPPER(COALESCE(box_type, '')) = UPPER($4))" : ''}
             )`,
         [orden_id, box_code, req.tenantId, box_type || null]
       )
@@ -1347,14 +1402,23 @@ router.post('/cajas/add',
         validada = peRes.rows.length > 0
       }
 
-      const cajaRes = await req.tQuery(
-        `INSERT INTO rastreo_cajas
-           (tenant_id, rastreo_orden_id, box_code, box_code_normalized, box_type, ubicacion, producto, cantidad_disponible, validada_en_surtido)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         RETURNING id`,
-        [req.tenantId, orden_id, box_code, normalized, box_type || null, ubicacion || null, producto || null,
-         cantidad_disponible != null ? cantidad_disponible : null, validada]
-      )
+      const cajaRes = hasRastreoBoxType
+        ? await req.tQuery(
+          `INSERT INTO rastreo_cajas
+             (tenant_id, rastreo_orden_id, box_code, box_code_normalized, box_type, ubicacion, producto, cantidad_disponible, validada_en_surtido)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           RETURNING id`,
+          [req.tenantId, orden_id, box_code, normalized, box_type || null, ubicacion || null, producto || null,
+            cantidad_disponible != null ? cantidad_disponible : null, validada]
+        )
+        : await req.tQuery(
+          `INSERT INTO rastreo_cajas
+             (tenant_id, rastreo_orden_id, box_code, box_code_normalized, ubicacion, producto, cantidad_disponible, validada_en_surtido)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+           RETURNING id`,
+          [req.tenantId, orden_id, box_code, normalized, ubicacion || null, producto || null,
+            cantidad_disponible != null ? cantidad_disponible : null, validada]
+        )
 
       await req.tQuery(
         `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, rastreo_caja_id, accion, descripcion, actor_id)

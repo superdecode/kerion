@@ -132,6 +132,21 @@ export const useInventarioStore = create(
         set({ tabs: nextTabs, activeTabId: nextActive })
       },
 
+      restartTab: (tabId) => {
+        const { tabs } = get()
+        const updated = tabs.map((t) => (
+          t.id === tabId
+            ? {
+                ...t,
+                createdAt: new Date().toISOString(),
+                items: [],
+                sessionId: null,
+              }
+            : t
+        ))
+        set({ tabs: updated, pendingCode1: null })
+      },
+
       updateTabLocation: (tabId, field, value) => {
         const { tabs } = get()
         const updated = tabs.map(t => t.id === tabId ? { ...t, [field]: value } : t)
