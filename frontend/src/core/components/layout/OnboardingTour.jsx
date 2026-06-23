@@ -29,6 +29,11 @@ const buildBlocks = (t) => [
         popover: { title: t('tour.block.dropscan.folios.title'), description: t('tour.block.dropscan.folios.desc'), side: 'right', align: 'center' },
         path: null, groupToExpand: 'dropscan', navHighlight: 'nav-folios',
       },
+      {
+        element: '[data-tour="nav-configuracion"]',
+        popover: { title: t('tour.block.dropscan.canales.title'), description: t('tour.block.dropscan.canales.desc'), side: 'right', align: 'center' },
+        path: null, groupToExpand: 'dropscan', navHighlight: 'nav-configuracion',
+      },
     ],
   },
   {
@@ -72,13 +77,30 @@ const buildBlocks = (t) => [
     labelKey: 'tour.block.inventario.label',
     steps: [
       {
-        popover: { title: t('tour.block.inventario.intro.title'), description: t('tour.block.inventario.intro.desc'), side: 'over', align: 'center' },
+        popover: { title: t('tour.block.inventario.wmscfg.title'), description: t('tour.block.inventario.wmscfg.desc'), side: 'over', align: 'center' },
         path: '/Inventario/registros', groupToExpand: 'inventario', navHighlight: 'nav-inv-registros',
+      },
+      {
+        popover: { title: t('tour.block.inventario.intro.title'), description: t('tour.block.inventario.intro.desc'), side: 'over', align: 'center' },
+        path: null, groupToExpand: null, navHighlight: null,
+      },
+      {
+        element: '[data-tour="nav-inv-escaneo"]',
+        popover: { title: t('tour.block.inventario.clasificacion.title'), description: t('tour.block.inventario.clasificacion.desc'), side: 'right', align: 'center' },
+        path: null, groupToExpand: 'inventario', navHighlight: 'nav-inv-escaneo',
+      },
+      {
+        popover: { title: t('tour.block.inventario.ubicaciones.title'), description: t('tour.block.inventario.ubicaciones.desc'), side: 'over', align: 'center' },
+        path: null, groupToExpand: null, navHighlight: null,
       },
       {
         element: '[data-tour="nav-inv-rastreo"]',
         popover: { title: t('tour.block.inventario.rastreo.title'), description: t('tour.block.inventario.rastreo.desc'), side: 'right', align: 'center' },
         path: null, groupToExpand: 'inventario', navHighlight: 'nav-inv-rastreo',
+      },
+      {
+        popover: { title: t('tour.block.inventario.rastreo_cfg.title'), description: t('tour.block.inventario.rastreo_cfg.desc'), side: 'over', align: 'center' },
+        path: null, groupToExpand: null, navHighlight: null,
       },
       {
         element: '[data-tour="inv-btn-quicksearch"]',
@@ -94,8 +116,12 @@ const buildBlocks = (t) => [
     labelKey: 'tour.block.surtido.label',
     steps: [
       {
-        popover: { title: t('tour.block.surtido.intro.title'), description: t('tour.block.surtido.intro.desc'), side: 'over', align: 'center' },
+        popover: { title: t('tour.block.surtido.wmscfg.title'), description: t('tour.block.surtido.wmscfg.desc'), side: 'over', align: 'center' },
         path: '/surtido', groupToExpand: 'surtido', navHighlight: 'nav-sur-ordenes',
+      },
+      {
+        popover: { title: t('tour.block.surtido.intro.title'), description: t('tour.block.surtido.intro.desc'), side: 'over', align: 'center' },
+        path: null, groupToExpand: null, navHighlight: null,
       },
       {
         element: '[data-tour="sur-btn-surtidores"]',
@@ -103,9 +129,17 @@ const buildBlocks = (t) => [
         path: '/surtido', groupToExpand: 'surtido', navHighlight: 'nav-sur-ordenes',
       },
       {
+        popover: { title: t('tour.block.surtido.surtidores_cfg.title'), description: t('tour.block.surtido.surtidores_cfg.desc'), side: 'over', align: 'center' },
+        path: null, groupToExpand: null, navHighlight: null,
+      },
+      {
         element: '[data-tour="nav-sur-validacion"]',
         popover: { title: t('tour.block.surtido.validacion.title'), description: t('tour.block.surtido.validacion.desc'), side: 'right', align: 'center' },
         path: null, groupToExpand: 'surtido', navHighlight: 'nav-sur-validacion',
+      },
+      {
+        popover: { title: t('tour.block.surtido.print.title'), description: t('tour.block.surtido.print.desc'), side: 'over', align: 'center' },
+        path: null, groupToExpand: null, navHighlight: null,
       },
     ],
   },
@@ -116,13 +150,25 @@ const buildBlocks = (t) => [
     labelKey: 'tour.block.despacho.label',
     steps: [
       {
-        popover: { title: t('tour.block.despacho.intro.title'), description: t('tour.block.despacho.intro.desc'), side: 'over', align: 'center' },
+        popover: { title: t('tour.block.despacho.wmscfg.title'), description: t('tour.block.despacho.wmscfg.desc'), side: 'over', align: 'center' },
         path: '/despacho/ordenes', groupToExpand: 'despacho', navHighlight: 'nav-desp-ordenes',
+      },
+      {
+        popover: { title: t('tour.block.despacho.intro.title'), description: t('tour.block.despacho.intro.desc'), side: 'over', align: 'center' },
+        path: null, groupToExpand: null, navHighlight: null,
       },
       {
         element: '[data-tour="desp-catalog-actions"]',
         popover: { title: t('tour.block.despacho.catalogs.title'), description: t('tour.block.despacho.catalogs.desc'), side: 'bottom', align: 'start' },
         path: '/despacho/ordenes', groupToExpand: 'despacho', navHighlight: 'nav-desp-ordenes',
+      },
+      {
+        popover: { title: t('tour.block.despacho.catalogs_cfg.title'), description: t('tour.block.despacho.catalogs_cfg.desc'), side: 'over', align: 'center' },
+        path: null, groupToExpand: null, navHighlight: null,
+      },
+      {
+        popover: { title: t('tour.block.despacho.print.title'), description: t('tour.block.despacho.print.desc'), side: 'over', align: 'center' },
+        path: null, groupToExpand: null, navHighlight: null,
       },
     ],
   },
@@ -329,7 +375,8 @@ export default function OnboardingTour() {
       const blockBoundaries = []
       blocks.forEach((block, blockIdx) => {
         blockBoundaries.push(flatSteps.length)
-        block.steps.forEach(step => flatSteps.push({ ...step, blockIdx, blockId: block.id }))
+        const blockLabel = tFn(block.labelKey)
+        block.steps.forEach(step => flatSteps.push({ ...step, blockIdx, blockId: block.id, blockLabel }))
       })
 
       // Finish step
@@ -365,6 +412,17 @@ export default function OnboardingTour() {
         return s
       })
 
+      const safeMove = (moveFn) => {
+        try {
+          moveFn()
+        } catch {
+          // Element not found in DOM — retry once after a paint
+          setTimeout(() => {
+            try { moveFn() } catch { /* give up silently */ }
+          }, 400)
+        }
+      }
+
       try {
         const inst = driver({
           animate: true,
@@ -387,6 +445,15 @@ export default function OnboardingTour() {
             const description = popover.description
             if (!(description instanceof HTMLElement)) return
 
+            // Module chip
+            const step = flatSteps[idx]
+            if (step && step.blockIdx >= 0 && step.blockLabel) {
+              const chip = document.createElement('div')
+              chip.className = 'driver-module-chip'
+              chip.textContent = `${step.blockIdx + 1} / ${blocks.length} · ${step.blockLabel}`
+              description.prepend(chip)
+            }
+
             // Don't-show-again on finish step
             if (idx === flatSteps.length - 1) {
               const dontShow = document.createElement('button')
@@ -397,7 +464,6 @@ export default function OnboardingTour() {
             }
 
             // Skip-this-module on non-finish steps that have a next block
-            const step = flatSteps[idx]
             if (step && step.blockIdx >= 0) {
               const nextBlockStart = blockBoundaries[step.blockIdx + 1]
               if (nextBlockStart !== undefined) {
@@ -407,7 +473,7 @@ export default function OnboardingTour() {
                 skipBtn.addEventListener('click', () => {
                   const nextStep = flatSteps[nextBlockStart]
                   setHighlightedItem(nextStep.navHighlight ?? null)
-                  navigateAndExpand(nextStep, () => inst.moveTo(nextBlockStart))
+                  navigateAndExpand(nextStep, () => safeMove(() => inst.moveTo(nextBlockStart)))
                 })
                 description.appendChild(skipBtn)
               }
@@ -419,7 +485,7 @@ export default function OnboardingTour() {
             if (nextIdx >= flatSteps.length) { finishTour(); return }
             const nextStep = flatSteps[nextIdx]
             setHighlightedItem(nextStep.navHighlight ?? null)
-            navigateAndExpand(nextStep, () => inst.moveNext())
+            navigateAndExpand(nextStep, () => safeMove(() => inst.moveNext()))
           },
           onPrevClick: () => {
             const cur = inst.getActiveIndex() ?? 1
@@ -427,7 +493,7 @@ export default function OnboardingTour() {
             if (prevIdx < 0) return
             const prevStep = flatSteps[prevIdx]
             setHighlightedItem(prevStep.navHighlight ?? null)
-            navigateAndExpand(prevStep, () => inst.movePrevious())
+            navigateAndExpand(prevStep, () => safeMove(() => inst.movePrevious()))
           },
           onHighlightStarted: () => {
             const idx = inst.getActiveIndex() ?? 0
