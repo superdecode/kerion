@@ -109,7 +109,8 @@ router.post('/unidades',
   requirePermission('despacho.folios', 'crear'),
   async (req, res) => {
     try {
-      const { placa, tipo = 'camion', capacidad_kg = null } = req.body
+      const { placa, tipo = 'camion' } = req.body
+      const capacidad_kg = req.body.capacidad_kg !== '' && req.body.capacidad_kg != null ? req.body.capacidad_kg : null
       if (!placa?.trim()) return res.status(400).json({ error: 'placa es requerida' })
       const result = await req.tQuery(
         `INSERT INTO dispatch_unidades (tenant_id, placa, tipo, capacidad_kg)
@@ -129,7 +130,8 @@ router.put('/unidades/:id',
   requirePermission('despacho.folios', 'actualizar'),
   async (req, res) => {
     try {
-      const { placa, tipo, capacidad_kg = null, activo = true } = req.body
+      const { placa, tipo, activo = true } = req.body
+      const capacidad_kg = req.body.capacidad_kg !== '' && req.body.capacidad_kg != null ? req.body.capacidad_kg : null
       const result = await req.tQuery(
         `UPDATE dispatch_unidades
          SET placa = COALESCE($1, placa), tipo = COALESCE($2, tipo), capacidad_kg = $3, activo = $4, updated_at = now()
