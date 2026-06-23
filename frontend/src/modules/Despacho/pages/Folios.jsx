@@ -468,7 +468,8 @@ export default function Folios() {
                   </button>
                 </div>
               )}
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[780px] text-sm">
                 <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                   <tr>
                     <th className="table-header w-8">
@@ -513,7 +514,7 @@ export default function Folios() {
                           className="cb"
                         />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className="font-mono font-semibold text-primary-700 text-xs">{folio.folio_numero}</span>
                       </td>
                       <td className="px-4 py-3">
@@ -576,6 +577,7 @@ export default function Folios() {
                   ))}
                 </tbody>
               </table>
+              </div>
               <TablePagination
                 page={safePage}
                 totalPages={totalPages}

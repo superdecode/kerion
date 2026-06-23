@@ -5,6 +5,11 @@ function fmtDate(dt) {
   return new Date(dt).toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
+function fmtDateTime(dt) {
+  if (!dt) return '—'
+  return new Date(dt).toLocaleString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 export function getOrderCodes(order) {
   const scans = order.scans ?? []
   if (scans.length === 0) return []
@@ -74,7 +79,6 @@ export default function PrintFolioContent({ folio, orders }) {
   if (!folio) return null
 
   const totalBultos = orders.reduce((s, o) => s + (Number(o.bultos) || 0), 0)
-  const totalPeso   = orders.reduce((s, o) => s + (Number(o.peso_kg) || 0), 0)
   const showTarimas = !!folio.validar_por_tarimas
   const destinations = getUniqueDestinations(orders)
   const destinationsLabel = destinations.length > 0 ? destinations.join(' / ') : '—'
@@ -121,11 +125,11 @@ export default function PrintFolioContent({ folio, orders }) {
           <tr>
             <th style={{ ...TH, width: '30px', textAlign: 'center' }}>#</th>
             <th style={TH}>Orden</th>
+            <th style={{ ...TH, whiteSpace: 'nowrap' }}>Fecha / Hora</th>
             <th style={TH}>Código</th>
             {showTarimas && <th style={{ ...TH, textAlign: 'center', width: '70px' }}># Tarima</th>}
-            <th style={{ ...TH, textAlign: 'center' }}>Bultos</th>
-            <th style={{ ...TH, textAlign: 'center' }}>Peso kg</th>
             <th style={TH}>Destinatario</th>
+            <th style={{ ...TH, textAlign: 'center' }}>Bultos</th>
           </tr>
         </thead>
         <tbody>
@@ -138,6 +142,7 @@ export default function PrintFolioContent({ folio, orders }) {
                 <td style={{ ...TD, fontFamily: 'monospace', fontWeight: '700', color: '#1e3a5f', whiteSpace: 'nowrap' }}>
                   {o.outbound_order_no || '—'}
                 </td>
+                <td style={{ ...TD, whiteSpace: 'nowrap', color: '#475569', fontSize: '9px' }}>{fmtDateTime(o.created_at)}</td>
                 <td style={TD}>
                   {codes.length > 0
                     ? codes.map(([base, count]) => (
@@ -159,28 +164,22 @@ export default function PrintFolioContent({ folio, orders }) {
                     }
                   </td>
                 )}
-                <td style={{ ...TD, textAlign: 'center', fontWeight: '600' }}>{o.bultos ?? '—'}</td>
-                <td style={{ ...TD, textAlign: 'center', color: '#475569' }}>
-                  {o.peso_kg != null ? Number(o.peso_kg).toFixed(2) : '—'}
-                </td>
                 <td style={{ ...TD, color: '#334155' }}>{o.destinatario || '—'}</td>
+                <td style={{ ...TD, textAlign: 'center', fontWeight: '600' }}>{o.bultos ?? '—'}</td>
               </tr>
             )
           })}
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={showTarimas ? 4 : 3} style={{ ...TD, background: '#eef2ff', fontWeight: '800', color: '#3730a3', borderBottom: 'none' }}>
+            <td colSpan={showTarimas ? 5 : 4} style={{ ...TD, background: '#eef2ff', fontWeight: '800', color: '#3730a3', borderBottom: 'none' }}>
               TOTALES
-            </td>
-            <td style={{ ...TD, background: '#eef2ff', fontWeight: '800', color: '#3730a3', textAlign: 'center', borderBottom: 'none' }}>
-              {totalBultos}
-            </td>
-            <td style={{ ...TD, background: '#eef2ff', fontWeight: '700', color: '#3730a3', textAlign: 'center', borderBottom: 'none' }}>
-              {totalPeso > 0 ? totalPeso.toFixed(2) : '—'}
             </td>
             <td style={{ ...TD, background: '#eef2ff', fontWeight: '600', color: '#3730a3', borderBottom: 'none' }}>
               {orders.length} orden{orders.length !== 1 ? 'es' : ''}
+            </td>
+            <td style={{ ...TD, background: '#eef2ff', fontWeight: '800', color: '#3730a3', textAlign: 'center', borderBottom: 'none' }}>
+              {totalBultos}
             </td>
           </tr>
         </tfoot>
