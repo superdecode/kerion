@@ -71,7 +71,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
               const bases    = [...new Set(codes.map(c => extractBaseCode(c)).filter(Boolean))]
               const dispatch = dispatchMap?.get(orderNo)
               const estado   = dispatch ? DISPATCH_LABEL[dispatch.order_estado] ?? escapeHtml(dispatch.order_estado) : 'Sin folio'
-              const time     = o.outboundTime || o.expectedTime || ''
+              const time     = o.outboundTime || o.expectedTime || o.orderCreateTime || ''
               return `<tr>
                 <td>${time ? new Date(time).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                 <td class="mono">${escapeHtml(orderNo)}</td>
@@ -195,7 +195,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
                   const bases    = [...new Set(codes.map(c => extractBaseCode(c)).filter(Boolean))]
                   const dispatch = dispatchMap?.get(orderNo)
                   const estado   = dispatch?.order_estado
-                  const time     = order.outboundTime || order.expectedTime || ''
+                  const time     = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
                   return (
                     <tr key={orderNo} className="hover:bg-primary-100 transition-colors">
                       <td className="px-4 py-2.5 text-xs text-warm-500">

@@ -793,6 +793,9 @@ function GroupDetailModal({
   onMarkVisible,
   onClearVisible,
   originLocation,
+  onSend,
+  groupUbicacion,
+  onChangeUbicacion,
 }) {
   const { t } = useI18nStore()
   const [search, setSearch] = useState('')
@@ -1052,6 +1055,53 @@ function GroupDetailModal({
             )}
           </div>
         </div>
+
+        {/* Send/confirm footer — same logic as outer panel */}
+        {onSend && (
+          <div className={`flex items-center gap-3 rounded-2xl border p-3 ${meta.soft ?? 'border-warm-200 bg-warm-50'}`}>
+            {groupUbicacion?.[group] ? (
+              <>
+                <div className="flex items-center gap-1.5 flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-accent-50 border border-accent-100">
+                  <MapPin size={11} className="text-accent-500 shrink-0" />
+                  <span className="font-mono text-xs font-semibold text-accent-700 truncate">{groupUbicacion[group].codigo}</span>
+                  {onChangeUbicacion && (
+                    <button onClick={onChangeUbicacion} className="ml-auto p-0.5 rounded hover:bg-accent-200 text-accent-400 transition-colors">
+                      <Edit3 size={9} />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={baseItems.length === 0}
+                  onClick={() => onSend(group, groupUbicacion[group])}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary-600 text-white text-sm font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Square size={12} /> {t('inventario.escaneo.clasificacion_send')}
+                </button>
+              </>
+            ) : (
+              <>
+                {onChangeUbicacion && (
+                  <button
+                    type="button"
+                    onClick={onChangeUbicacion}
+                    className="flex-1 text-left px-3 py-2 rounded-xl border border-dashed border-warm-300 text-xs text-warm-400 hover:border-accent-300 hover:text-accent-600 transition-colors flex items-center gap-2"
+                  >
+                    <MapPin size={11} /> {t('inventario.escaneo.ubicacion_scan_title')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={baseItems.length === 0}
+                  onClick={() => onSend(group, null)}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary-50 text-primary-700 text-sm font-semibold hover:bg-primary-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <CheckCircle2 size={12} /> {t('inventario.escaneo.clasificacion_confirm')}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   )
@@ -1371,7 +1421,7 @@ function ClasificacionPanel({
                   </div>
                   <button
                     type="button"
-                    disabled={!hasItems || !allMarked}
+                    disabled={!hasItems}
                     onClick={() => onSend(g, ub)}
                     className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary-600 text-white text-[11px] font-semibold hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
@@ -1382,7 +1432,7 @@ function ClasificacionPanel({
                 <div className="px-2 py-2 flex items-center justify-end">
                   <button
                     type="button"
-                    disabled={!hasItems || !allMarked}
+                    disabled={!hasItems}
                     onClick={() => openInput(g)}
                     className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-50 text-primary-700 text-xs font-semibold hover:bg-primary-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
@@ -2353,6 +2403,9 @@ export default function Escaneo() {
         onMarkVisible={indices => activeTabId && groupDetail && setItemsMarkedByGroup(activeTabId, groupDetail, true, indices)}
         onClearVisible={indices => activeTabId && groupDetail && setItemsMarkedByGroup(activeTabId, groupDetail, false, indices)}
         originLocation={originLocation}
+        onSend={(g, ub) => { setGroupDetail(null); handleClasificacionSend(g, ub) }}
+        groupUbicacion={groupUbicacion}
+        onChangeUbicacion={() => { setGroupDetail(null); setShowUbicacionModal(true) }}
       />
       <QuickCodeSearchModal
         isOpen={showQuickSearch}
