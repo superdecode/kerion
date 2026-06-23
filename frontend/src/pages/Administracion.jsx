@@ -754,6 +754,7 @@ function RolesTab({ canEdit, canDel }) {
   const [editRole, setEditRole] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [search, setSearch] = useState('')
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const { t } = useI18nStore()
@@ -763,6 +764,10 @@ function RolesTab({ canEdit, canDel }) {
   const { data: usersData } = useQuery({ queryKey: ['admin-users'], queryFn: getUsers, retry: 0, enabled: backendOnline })
   const roles = data?.roles || data || []
   const users = usersData?.usuarios || usersData?.users || []
+
+  const filtered = search
+    ? roles.filter(r => r.nombre?.toLowerCase().includes(search.toLowerCase()) || r.descripcion?.toLowerCase().includes(search.toLowerCase()))
+    : roles
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/roles/${id}`),
@@ -779,7 +784,12 @@ function RolesTab({ canEdit, canDel }) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-5">
-        <span className="badge bg-warm-100 text-warm-500">{roles.length} {t('admin.rolesLabel')}</span>
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('admin.searchRoles')}
+            className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-warm-200 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100" />
+        </div>
+        <span className="badge bg-warm-100 text-warm-500">{filtered.length} {t('admin.rolesLabel')}</span>
         {canEdit && (
           <button onClick={() => setShowCreate(true)} className="btn-primary inline-flex items-center gap-2 ml-auto">
             <Plus className="w-4 h-4" /> {t('admin.newRole')}
@@ -803,7 +813,7 @@ function RolesTab({ canEdit, canDel }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-warm-100">
-                {roles.map(r => {
+                {filtered.map(r => {
                   const userCount = users.filter(u => u.rol_id === r.id).length
                   const permCount = (() => {
                     let count = 0
