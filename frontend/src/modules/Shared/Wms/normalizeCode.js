@@ -1,3 +1,32 @@
+// Box code pattern: 6+ digits, dash or slash, 1-4 digits (e.g. 62503559-3)
+const BOX_CODE_RE = /^\d{6,}[\/\-]\d{1,4}$/
+
+/**
+ * Tries to extract a box code from a JSON-encoded barcode string.
+ * Handles any key name — searches all string values for a box-code pattern.
+ */
+function extractFromJson(raw) {
+  const trimmed = raw.trim()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null
+  try {
+    const parsed = JSON.parse(trimmed)
+    const candidates = typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : []
+    for (const val of candidates) {
+      if (typeof val === 'string') {
+        const norm = val.trim().replace(/／/g, '/').replace(/[－‒–—―]/g, '-').toUpperCase()
+        if (BOX_CODE_RE.test(norm)) return norm
+      }
+    }
+    // No strict box-code match — return first non-empty string value as fallback
+    for (const val of candidates) {
+      if (typeof val === 'string' && val.trim()) {
+        return val.trim().toUpperCase().replace(/[^A-Z0-9\-\/]/g, '')
+      }
+    }
+  } catch { /* not valid JSON */ }
+  return null
+}
+
 /**
  * Normalizes a raw scanner code for WMS lookup.
  * Full normalization for scan events (not bulk data loading).
@@ -17,7 +46,11 @@ export function normalizeCode(rawCode) {
   code = code.replace(/／/g, '/')  // ／ full-width solidus
   code = code.replace(/[－‒–—―]/g, '-') // －‒–—― dashes
 
-  // Top priority: extract ID from JSON blob first (before char normalization)
+  // Top priority: try full JSON parse for any box-code value (handles "BOX", "ID", etc.)
+  const jsonExtracted = extractFromJson(code)
+  if (jsonExtracted) return jsonExtracted
+
+  // Legacy JSON regex match for "ID" key
   const jsonMatch = code.match(/"ID"\s*:\s*"(\d+[\/\-]\d+)"/i)
   if (jsonMatch?.[1]) return jsonMatch[1]
 
@@ -86,6 +119,10 @@ export function normalizeScanCode(rawCode) {
   code = code.replace(/／/g, '/')
   code = code.replace(/[－‒–—―]/g, '-')
 
+  // Try full JSON parse first — handles "BOX", "ID", "CODE" and any future key names
+  const jsonExtracted = extractFromJson(code)
+  if (jsonExtracted) return jsonExtracted
+
   const jsonMatch = code.match(/"ID"\s*:\s*"(\d+[\/\-]\d+)"/i)
   if (jsonMatch?.[1]) return jsonMatch[1]
 
@@ -147,8 +184,8 @@ export function normalizeCodeFast(rawCode) {
   if (!rawCode) return ''
   let code = String(rawCode).trim()
   code = code.replace(/／/g, '/').replace(/[－‒–—―]/g, '-')
-  const jsonIdMatch = code.match(/"(?:id|reference_id)"\s*:\s*"(\d+[\/\-]\d+)"/i)
-  if (jsonIdMatch?.[1]) return jsonIdMatch[1].toUpperCase()
+  const jsonExtracted = extractFromJson(code)
+  if (jsonExtracted) return jsonExtracted
   return code.toUpperCase().replace(/[^A-Z0-9\-\/]/g, '')
 }
 
