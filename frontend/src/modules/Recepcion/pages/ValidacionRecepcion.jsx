@@ -16,7 +16,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
-import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, getScanEvents } from '../services/recepcionService'
+import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, getScanEvents, relocateScanEvents } from '../services/recepcionService'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 
@@ -180,6 +180,10 @@ export default function ValidacionRecepcion() {
   const [mobileUbicacionPanelOpen, setMobileUbicacionPanelOpen] = useState(false)
   const [ubicacionFilter, setUbicacionFilter] = useState(null)
   const [expandedUbicaciones, setExpandedUbicaciones] = useState(new Set())
+
+  // Edit ubicacion
+  const [editUbicacionModal, setEditUbicacionModal] = useState(null) // { from: string }
+  const [editUbicacionValue, setEditUbicacionValue] = useState('')
 
   // Sections mode (tarimas split by section)
   const [sectionMode, setSectionMode] = useState(false)
@@ -640,6 +644,20 @@ export default function ValidacionRecepcion() {
     onError: () => toast.error(t('toast.error')),
   })
 
+  const relocateUbicacionMut = useMutation({
+    mutationFn: ({ from, to }) => relocateScanEvents(id, from, to),
+    onSuccess: (data, { to }) => {
+      if (selectedUbicacion === editUbicacionModal?.from) {
+        setSelectedUbicacion(to.toUpperCase())
+      }
+      setEditUbicacionModal(null)
+      setEditUbicacionValue('')
+      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
+      toast.success(`Ubicación renombrada (${data.updated} escaneos)`)
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
   async function persistTarimaAssignments(nextMap, nextEmptyTarimas = savedEmptyTarimas) {
     const nextConfig = {
       ...buildValidationConfig(),
@@ -938,23 +956,35 @@ export default function ValidacionRecepcion() {
               }`}
             >
               {/* Card header — clickable to expand/collapse */}
-              <button
-                type="button"
-                onClick={() => toggleUbicacion(cardKey)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-              >
-                <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-primary-100' : 'bg-warm-100'}`}>
-                  <MapPin className={`w-3 h-3 ${isActive ? 'text-primary-600' : 'text-warm-400'}`} />
-                </div>
-                <span className={`text-xs font-bold font-mono truncate flex-1 ${isActive ? 'text-primary-800' : 'text-warm-800'}`}>
-                  {g.ubicacion || t('rec.val.ubicacion.panel.sin_ub')}
-                </span>
-                {isActive
-                  ? <span className="badge bg-primary-100 text-primary-700 text-[9px] border-0 shrink-0">{t('rec.val.ubicacion.badge')}</span>
-                  : <span className="badge bg-warm-50 text-warm-600 border border-warm-100 text-[9px] shrink-0">{g.codes.length}</span>
-                }
-                <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-primary-400' : 'text-warm-300'}`} />
-              </button>
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => toggleUbicacion(cardKey)}
+                  className="flex-1 flex items-center gap-2 px-3 py-2.5 text-left min-w-0"
+                >
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-primary-100' : 'bg-warm-100'}`}>
+                    <MapPin className={`w-3 h-3 ${isActive ? 'text-primary-600' : 'text-warm-400'}`} />
+                  </div>
+                  <span className={`text-xs font-bold font-mono truncate flex-1 ${isActive ? 'text-primary-800' : 'text-warm-800'}`}>
+                    {g.ubicacion || t('rec.val.ubicacion.panel.sin_ub')}
+                  </span>
+                  {isActive
+                    ? <span className="badge bg-primary-100 text-primary-700 text-[9px] border-0 shrink-0">{t('rec.val.ubicacion.badge')}</span>
+                    : <span className="badge bg-warm-50 text-warm-600 border border-warm-100 text-[9px] shrink-0">{g.codes.length}</span>
+                  }
+                  <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-primary-400' : 'text-warm-300'}`} />
+                </button>
+                {g.ubicacion && (
+                  <button
+                    type="button"
+                    onClick={() => { setEditUbicacionModal({ from: g.ubicacion }); setEditUbicacionValue(g.ubicacion) }}
+                    className={`p-2 mr-1.5 rounded-lg transition-colors shrink-0 ${isActive ? 'text-primary-400 hover:bg-primary-100 hover:text-primary-700' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
+                    title={t('rec.val.ubicacion.edit')}
+                  >
+                    <Edit3 size={11} />
+                  </button>
+                )}
+              </div>
 
               {/* Progress bar — always visible */}
               <div className="px-3 pb-2.5">
@@ -2204,6 +2234,49 @@ export default function ValidacionRecepcion() {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Edit ubicacion modal ── */}
+      <Modal
+        isOpen={!!editUbicacionModal}
+        onClose={() => { setEditUbicacionModal(null); setEditUbicacionValue('') }}
+        title={t('rec.val.ubicacion.edit')}
+        icon={Edit3}
+        size="sm"
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button onClick={() => { setEditUbicacionModal(null); setEditUbicacionValue('') }} className="btn-ghost">{t('common.cancel')}</button>
+            <button
+              onClick={() => relocateUbicacionMut.mutate({ from: editUbicacionModal.from, to: editUbicacionValue.trim().toUpperCase() })}
+              disabled={!editUbicacionValue.trim() || editUbicacionValue.trim().toUpperCase() === editUbicacionModal?.from || relocateUbicacionMut.isPending}
+              className="btn-primary"
+            >
+              {relocateUbicacionMut.isPending ? t('admin.saving') : t('common.save')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs text-warm-500 mb-1">{t('rec.val.ubicacion.badge')}</p>
+            <p className="font-mono text-sm font-bold text-warm-700 bg-warm-50 rounded-lg px-3 py-2">{editUbicacionModal?.from}</p>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-warm-700 mb-1.5">{t('rec.val.ubicacion.edit')}</label>
+            <input
+              autoFocus
+              value={editUbicacionValue}
+              onChange={e => setEditUbicacionValue(e.target.value.toUpperCase())}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && editUbicacionValue.trim() && editUbicacionValue.trim().toUpperCase() !== editUbicacionModal?.from) {
+                  relocateUbicacionMut.mutate({ from: editUbicacionModal.from, to: editUbicacionValue.trim().toUpperCase() })
+                }
+              }}
+              className="input-field font-mono"
+              placeholder="Ej: A28-03-01-02"
+            />
           </div>
         </div>
       </Modal>

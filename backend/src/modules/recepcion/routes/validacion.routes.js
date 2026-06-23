@@ -336,6 +336,30 @@ router.get('/orders/:id/scan-events',
 )
 
 // DELETE /orders/:id/scan-events/last-validation — undo latest successful validation
+// PATCH /orders/:id/scan-events/relocate — rename all scan events from one ubicacion to another
+router.patch('/orders/:id/scan-events/relocate',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'actualizar'),
+  async (req, res) => {
+    try {
+      const { from_ubicacion, to_ubicacion } = req.body
+      if (!from_ubicacion || !to_ubicacion) {
+        return res.status(400).json({ error: 'from_ubicacion y to_ubicacion requeridos' })
+      }
+      const toNorm = String(to_ubicacion).trim().toUpperCase()
+      const result = await req.tQuery(
+        `UPDATE inbound_scan_events SET ubicacion = $1
+         WHERE order_id = $2 AND tenant_id = $3 AND ubicacion = $4`,
+        [toNorm, req.params.id, req.tenantId, from_ubicacion]
+      )
+      res.json({ success: true, updated: result.rowCount, new_ubicacion: toNorm })
+    } catch (err) {
+      console.error('PATCH scan-events/relocate error:', err.message)
+      res.status(500).json({ error: 'Error actualizando ubicación' })
+    }
+  }
+)
+
 router.delete('/orders/:id/scan-events/last-validation',
   authenticateToken, loadFullUser,
   requirePermission('recepcion.validacion', 'actualizar'),
