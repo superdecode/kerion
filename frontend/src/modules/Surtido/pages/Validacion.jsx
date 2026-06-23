@@ -24,7 +24,7 @@ import {
   getOutboundList, getOutboundDetail,
   createScanSession, updateScanSession, addScanEvent, addManualScanEvent, clearSessionEvents,
   getManualEntryReasons,
-  upsertOrderTracking, getScanSessions, getRecords,
+  upsertOrderTracking, getScanSessions, getScanSession, getRecords,
 } from '../services/surtidoService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
 import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
@@ -967,13 +967,31 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       try {
         const s = JSON.parse(saved)
         if (s.obc && s.sessionId) {
-          setObc(s.obc); setSessionId(s.sessionId); setSessionStart(new Date(s.sessionStart))
-          setCounts(s.counts || { ok: 0, rejected: 0 })
-          setItemCounts(new Map(s.itemCountsArr || []))
-          setSelectedUbicacion(s.ubicacion || null)
-          setUbicacionConfirmed(s.ubicacionConfirmed || !!s.ubicacion)
-          setStep('session')
-          onUpdateTab({ obc: s.obc, step: 'session' })
+          // Verify the stored session is still open before trusting it
+          getScanSession(s.sessionId)
+            .then(res => {
+              const session = res?.data?.session ?? res?.data ?? res
+              if (session?.status === 'open') {
+                setObc(s.obc); setSessionId(s.sessionId); setSessionStart(new Date(s.sessionStart))
+                setCounts(s.counts || { ok: 0, rejected: 0 })
+                setItemCounts(new Map(s.itemCountsArr || []))
+                setSelectedUbicacion(s.ubicacion || null)
+                setUbicacionConfirmed(s.ubicacionConfirmed || !!s.ubicacion)
+                setStep('session')
+                onUpdateTab({ obc: s.obc, step: 'session' })
+              } else {
+                // Session closed/completed — clear storage and restart
+                sessionStorage.removeItem(storageKey)
+                setObc(s.obc); setStep('session'); setAutoStartPending(true)
+                onUpdateTab({ obc: s.obc, step: 'session' })
+              }
+            })
+            .catch(() => {
+              // Session not found in DB — clear and restart
+              sessionStorage.removeItem(storageKey)
+              setObc(s.obc); setStep('session'); setAutoStartPending(true)
+              onUpdateTab({ obc: s.obc, step: 'session' })
+            })
           return
         }
       } catch {}
@@ -1067,7 +1085,19 @@ const { data: reasonsData } = useQuery({
     onError: (err) => {
       autoFinalizeLockRef.current = false
       if (err.response?.status === 409) {
-        setConflictDetails(err.response.data?.details)
+        const details = err.response.data?.details
+        const existingSid = details?.session_id
+        // Same operator reconnect: reuse the existing open session
+        if (existingSid && details?.operator === user?.nombre_completo) {
+          const now = new Date()
+          setConflictDetails(null)
+          setSessionId(existingSid); setSessionStart(now); setStep('session')
+          setSelectedUbicacion(null); setUbicacionConfirmed(false)
+          persistSession(obc, existingSid, now, null)
+          onUpdateTab({ obc, step: 'session' })
+        } else {
+          setConflictDetails(details)
+        }
       } else {
         toast.error(t('toast.error'))
       }
