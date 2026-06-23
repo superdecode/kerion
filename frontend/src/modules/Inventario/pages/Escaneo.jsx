@@ -476,7 +476,7 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
   )
 }
 
-function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClose, isSaving, ubicacionValidated, originLocation }) {
+function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClose, isSaving, ubicacionValidated, onChangeUbicacion, originLocation }) {
   const { t } = useI18nStore()
   const [blindCount, setBlindCount] = useState('')
   useEffect(() => { if (isOpen) setBlindCount('') }, [isOpen])
@@ -565,18 +565,20 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
         </div>
 
         {/* Ubicaciones: destino + origen */}
-        {(ubicacionValidated || originLocation) && (
+        {ubicacionValidated ? (
           <div className="rounded-xl border border-accent-100 bg-accent-50/40 p-3 space-y-2">
-            {ubicacionValidated && (
-              <div className="flex items-center gap-2">
-                <MapPin size={12} className="text-accent-600 shrink-0" />
-                <span className="text-[10px] text-accent-500 uppercase tracking-wide shrink-0">Destino:</span>
-                <span className="font-mono font-semibold text-accent-700 text-xs truncate">{ubicacionValidated.codigo}</span>
-                {ubicacionValidated.nombre && ubicacionValidated.nombre !== ubicacionValidated.codigo && (
-                  <span className="text-accent-400 text-xs truncate">{ubicacionValidated.nombre}</span>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <MapPin size={12} className="text-accent-600 shrink-0" />
+              <span className="text-[10px] text-accent-500 uppercase tracking-wide shrink-0">Destino:</span>
+              <span className="font-mono font-semibold text-accent-700 text-xs truncate">{ubicacionValidated.codigo}</span>
+              {ubicacionValidated.nombre && ubicacionValidated.nombre !== ubicacionValidated.codigo && (
+                <span className="text-accent-400 text-xs truncate">{ubicacionValidated.nombre}</span>
+              )}
+              <button className="ml-auto p-1 rounded-lg hover:bg-accent-200 text-accent-400 hover:text-accent-700 transition-colors"
+                onClick={onChangeUbicacion} title={t('inventario.escaneo.ubicacion_edit')}>
+                <Edit3 size={10} />
+              </button>
+            </div>
             {originLocation && (
               <div className="flex items-center gap-2">
                 <MapPin size={12} className="text-warm-400 shrink-0" />
@@ -585,6 +587,13 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
               </div>
             )}
           </div>
+        ) : (
+          <button
+            className="w-full text-left px-3 py-2.5 rounded-xl border border-dashed border-warm-300 text-xs text-warm-400 hover:border-accent-300 hover:text-accent-600 transition-colors flex items-center gap-2"
+            onClick={onChangeUbicacion}>
+            <MapPin size={11} />
+            {t('inventario.escaneo.ubicacion_scan_title')}
+          </button>
         )}
 
         <div className="rounded-2xl border border-warning-200 bg-warning-50/70 p-3 space-y-2">
@@ -2311,6 +2320,7 @@ export default function Escaneo() {
         onClose={() => { setShowClasifSummaryModal(false); setPendingClasifGroup(null) }}
         isSaving={saveSessionMut.isPending}
         ubicacionValidated={ubicacionValidated}
+        onChangeUbicacion={() => { setShowClasifSummaryModal(false); setShowUbicacionModal(true) }}
         originLocation={originLocation}
       />
       <DuplicateModal isOpen={!!duplicatePending} code={duplicatePending?.code} conflicts={duplicatePending?.conflicts || []}
