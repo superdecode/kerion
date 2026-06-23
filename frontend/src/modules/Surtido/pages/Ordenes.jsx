@@ -19,7 +19,6 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
-import { usePreloaderStore } from '../../../core/stores/preloaderStore'
 import {
   getOutboundList, getOutboundDetail,
   getSurtidores, createSurtidor, deleteSurtidor,
@@ -962,9 +961,6 @@ export default function Ordenes() {
   const toast = useToastStore.getState()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const beginPreloader = usePreloaderStore(s => s.begin)
-  const endPreloader = usePreloaderStore(s => s.end)
-  const initialPreloaderRef = useRef(null)
   const { hasPermission, user } = useAuthStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
   const { data: moduleUsage } = useModuleUsage()
@@ -1149,22 +1145,6 @@ export default function Ordenes() {
   const isPartial     = wmsData?.data?.partial ?? false
   const fromPersistentCache = wmsData?.data?.fromPersistentCache ?? false
   const showInitialLoader = backendOnline && allWmsRecords.length === 0 && (!wmsData || wmsLoading || wmsFetching || isPartial)
-
-  useEffect(() => {
-    if (showInitialLoader && !initialPreloaderRef.current) {
-      initialPreloaderRef.current = beginPreloader(t('surtido.ordenes.loading'), 0)
-    }
-    if (!showInitialLoader && initialPreloaderRef.current) {
-      endPreloader(initialPreloaderRef.current)
-      initialPreloaderRef.current = null
-    }
-    return () => {
-      if (initialPreloaderRef.current) {
-        endPreloader(initialPreloaderRef.current)
-        initialPreloaderRef.current = null
-      }
-    }
-  }, [showInitialLoader, beginPreloader, endPreloader])
 
   useEffect(() => {
     if (!isPartial) return undefined

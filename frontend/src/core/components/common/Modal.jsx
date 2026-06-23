@@ -1,8 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 
 export default function Modal({ isOpen, onClose, title, icon: Icon, children, size = 'md', footer, preventBackdropClose = false, headerAction }) {
+  const mouseDownOnBackdrop = useRef(false)
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -35,7 +37,8 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
       {isOpen && (
         <motion.div
           className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
-          onClick={(e) => { if (e.target === e.currentTarget && !preventBackdropClose) onClose() }}
+          onMouseDown={(e) => { mouseDownOnBackdrop.current = e.target === e.currentTarget }}
+          onClick={(e) => { if (e.target === e.currentTarget && mouseDownOnBackdrop.current && !preventBackdropClose) onClose() }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

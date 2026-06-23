@@ -12,7 +12,7 @@ import api from '../core/services/api'
 import {
   Users, Shield, Plus, Search, Edit3, Trash2, ToggleLeft, ToggleRight,
   Key, Copy, ChevronDown, CheckCircle, XCircle, Settings2, Check,
-  CreditCard, Clock, AlertTriangle, RefreshCw, ChevronRight, Zap
+  CreditCard, Clock, AlertTriangle, RefreshCw, ChevronRight, Zap, Eye, EyeOff
 } from 'lucide-react'
 
 // Module definitions for scalable permission system
@@ -450,6 +450,7 @@ export default function Administracion() {
 // ═══════════ PASSWORD RESET MODAL ═══════════
 function PasswordResetModal({ isOpen, onClose, user }) {
   const [password, setPassword] = useState('')
+  const [showPwd, setShowPwd] = useState(false)
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const { t } = useI18nStore()
@@ -483,8 +484,14 @@ function PasswordResetModal({ isOpen, onClose, user }) {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-semibold text-warm-700 mb-1.5">{t('admin.newPassword')}</label>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-            className="input-field" required autoFocus />
+          <div className="relative">
+            <input type={showPwd ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+              className="input-field pr-10" required autoFocus />
+            <button type="button" onClick={() => setShowPwd(v => !v)}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-warm-400 hover:text-warm-600">
+              {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
         </div>
       </form>
     </Modal>
@@ -497,6 +504,7 @@ function UsersTab({ canEdit, canDel }) {
   const [editUser, setEditUser] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [resetUser, setResetUser] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const { t } = useI18nStore()
@@ -568,43 +576,43 @@ function UsersTab({ canEdit, canDel }) {
                   const role = roles.find(r => r.id === u.rol_id)
                   return (
                     <tr key={u.id} className="hover:bg-purple-50/30 transition-colors group">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-400 to-primary-600 text-white flex items-center justify-center text-xs font-bold shadow-sm shrink-0">
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-400 to-primary-600 text-white flex items-center justify-center text-[11px] font-bold shadow-sm shrink-0">
                             {initials}
                           </div>
-                          <span className="font-semibold text-warm-800">{u.nombre_completo}</span>
+                          <span className="font-semibold text-warm-800 text-sm">{u.nombre_completo}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-warm-600">
+                      <td className="px-3 py-2 text-warm-600 text-sm">
                         <CopyHoverText value={u.email} />
                       </td>
-                      <td className="px-4 py-3 font-mono text-warm-500">{u.codigo}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2 font-mono text-xs text-warm-500">{u.codigo}</td>
+                      <td className="px-3 py-2">
                         <span className="badge bg-primary-100 text-primary-700">{role?.nombre || u.rol_nombre || t('admin.sinRol')}</span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2">
                         <span className={`badge ${isActive(u) ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-700'}`}>
                           {isActive(u) ? t('common.active') : t('common.inactive')}
                         </span>
                       </td>
                       {canEdit && (
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => setEditUser(u)} className="p-2 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-all" title={t('common.edit')}>
-                              <Edit3 className="w-4 h-4" />
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => setEditUser(u)} className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-all" title={t('common.edit')}>
+                              <Edit3 className="w-3.5 h-3.5" />
                             </button>
                             <button onClick={() => toggleMutation.mutate(u)}
-                              className="p-2 rounded-lg hover:bg-warm-100 text-warm-400 hover:text-warm-600 transition-all" title={isActive(u) ? t('admin.deactivate') : t('admin.activate')}>
-                              {isActive(u) ? <ToggleRight className="w-4 h-4 text-success-500" /> : <ToggleLeft className="w-4 h-4 text-warm-400" />}
+                              className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 hover:text-warm-600 transition-all" title={isActive(u) ? t('admin.deactivate') : t('admin.activate')}>
+                              {isActive(u) ? <ToggleRight className="w-3.5 h-3.5 text-success-500" /> : <ToggleLeft className="w-3.5 h-3.5 text-warm-400" />}
                             </button>
-                            <button onClick={() => setResetUser(u)} className="p-2 rounded-lg hover:bg-warning-50 text-warm-400 hover:text-warning-600 transition-all" title={t('admin.resetPassword')}>
-                              <Key className="w-4 h-4" />
+                            <button onClick={() => setResetUser(u)} className="p-1.5 rounded-lg hover:bg-warning-50 text-warm-400 hover:text-warning-600 transition-all" title={t('admin.resetPassword')}>
+                              <Key className="w-3.5 h-3.5" />
                             </button>
                             {canDel && !u.is_default && (
-                              <button onClick={() => { if (confirm(`${t('admin.confirmDeleteUser')}`)) deleteMutation.mutate(u.id) }}
-                                className="p-2 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all" title={t('common.delete')}>
-                                <Trash2 className="w-4 h-4" />
+                              <button onClick={() => setDeleteTarget(u)}
+                                className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all" title={t('common.delete')}>
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
@@ -625,12 +633,22 @@ function UsersTab({ canEdit, canDel }) {
 
       {/* Password Reset Modal */}
       <PasswordResetModal isOpen={!!resetUser} onClose={() => setResetUser(null)} user={resetUser} />
+
+      {/* Delete User Confirm */}
+      <DeleteConfirmModal
+        item={deleteTarget}
+        label={deleteTarget?.nombre_completo}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => { deleteMutation.mutate(deleteTarget.id); setDeleteTarget(null) }}
+        loading={deleteMutation.isPending}
+      />
     </div>
   )
 }
 
 function UserFormModal({ isOpen, onClose, user, roles }) {
   const [form, setForm] = useState({ nombre_completo: '', email: '', codigo: '', password: '', rol_id: '', estado: 'ACTIVO' })
+  const [showPwd, setShowPwd] = useState(false)
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const { t } = useI18nStore()
@@ -694,8 +712,14 @@ function UserFormModal({ isOpen, onClose, user, roles }) {
           <label className="block text-sm font-semibold text-warm-700 mb-1.5">
             {user ? t('admin.passwordNew') : t('admin.passwordCreate')}
           </label>
-          <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-            className="input-field" {...(!user ? { required: true } : {})} />
+          <div className="relative">
+            <input type={showPwd ? 'text' : 'password'} value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+              className="input-field pr-10" {...(!user ? { required: true } : {})} />
+            <button type="button" onClick={() => setShowPwd(v => !v)}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-warm-400 hover:text-warm-600">
+              {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
         </div>
         <div>
           <label className="block text-sm font-semibold text-warm-700 mb-1.5">{t('admin.role')}</label>
@@ -729,6 +753,7 @@ function UserFormModal({ isOpen, onClose, user, roles }) {
 function RolesTab({ canEdit, canDel }) {
   const [editRole, setEditRole] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const { t } = useI18nStore()
@@ -780,64 +805,53 @@ function RolesTab({ canEdit, canDel }) {
               <tbody className="divide-y divide-warm-100">
                 {roles.map(r => {
                   const userCount = users.filter(u => u.rol_id === r.id).length
+                  const permCount = (() => {
+                    let count = 0
+                    if (r.permisos && typeof r.permisos === 'object') {
+                      MODULE_GROUPS.forEach(g => {
+                        g.modules.forEach(m => {
+                          const parts = m.key.split('.')
+                          const level = parts.length === 2 ? r.permisos[parts[0]]?.[parts[1]] : r.permisos[parts[0]]
+                          if (level && level !== 'sin_acceso') count++
+                        })
+                      })
+                    }
+                    return count
+                  })()
+                  const totalModules = MODULE_GROUPS.reduce((acc, g) => acc + g.modules.length, 0)
                   return (
                     <tr key={r.id} className="hover:bg-purple-50/30 transition-colors group">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-accent-400 to-accent-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                            <Shield className="w-4 h-4" />
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-400 to-accent-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                            <Shield className="w-3.5 h-3.5" />
                           </div>
-                          <span className="font-semibold text-warm-800">{r.nombre}</span>
+                          <span className="font-semibold text-warm-800 text-sm">{r.nombre}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-warm-600">{r.descripcion || t('admin.sinDescripcion')}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2 text-warm-600 text-sm">{r.descripcion || t('admin.sinDescripcion')}</td>
+                      <td className="px-3 py-2">
                         <span className="badge bg-warm-100 text-warm-500">{userCount}</span>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1 max-w-sm">
-                          {(() => {
-                            const accessible = []
-                            if (r.permisos && typeof r.permisos === 'object') {
-                              MODULE_GROUPS.forEach(g => {
-                                g.modules.forEach(m => {
-                                  const parts = m.key.split('.')
-                                  const level = parts.length === 2
-                                    ? r.permisos[parts[0]]?.[parts[1]]
-                                    : r.permisos[parts[0]]
-                                  if (level && level !== 'sin_acceso') accessible.push(t(m.labelKey) || m.label)
-                                })
-                              })
-                            }
-                            if (accessible.length === 0) {
-                              return <span className="text-[11px] text-warm-400">{t('admin.noAccess')}</span>
-                            }
-                            return (
-                              <>
-                                {accessible.slice(0, 6).map((label, i) => (
-                                  <span key={i} className="badge bg-primary-100 text-primary-700 text-[10px]">{label}</span>
-                                ))}
-                                {accessible.length > 6 && (
-                                  <span className="badge bg-warm-100 text-warm-400 text-[10px]">+{accessible.length - 6}</span>
-                                )}
-                              </>
-                            )
-                          })()}
-                        </div>
+                      <td className="px-3 py-2">
+                        {permCount === 0
+                          ? <span className="text-[11px] text-warm-400">{t('admin.noAccess')}</span>
+                          : <span className="badge bg-primary-100 text-primary-700 text-[11px]">{permCount} / {totalModules}</span>
+                        }
                       </td>
                       {canEdit && (
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => setEditRole(r)} className="p-2 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-all" title={t('admin.editPerms')}>
-                              <Edit3 className="w-4 h-4" />
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => setEditRole(r)} className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-all" title={t('admin.editPerms')}>
+                              <Edit3 className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => duplicateMutation.mutate(r)} className="p-2 rounded-lg hover:bg-warm-100 text-warm-400 hover:text-warm-600 transition-all" title={t('admin.duplicateRole')}>
-                              <Copy className="w-4 h-4" />
+                            <button onClick={() => duplicateMutation.mutate(r)} className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 hover:text-warm-600 transition-all" title={t('admin.duplicateRole')}>
+                              <Copy className="w-3.5 h-3.5" />
                             </button>
                             {canDel && !r.is_default && userCount === 0 && (
-                              <button onClick={() => { if (confirm(`${t('admin.confirmDeleteRole')}`)) deleteMutation.mutate(r.id) }}
-                                className="p-2 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all" title={t('common.delete')}>
-                                <Trash2 className="w-4 h-4" />
+                              <button onClick={() => setDeleteTarget(r)}
+                                className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all" title={t('common.delete')}>
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
                           </div>
@@ -853,7 +867,37 @@ function RolesTab({ canEdit, canDel }) {
       )}
 
       <RoleFormModal isOpen={showCreate || !!editRole} onClose={() => { setShowCreate(false); setEditRole(null) }} role={editRole} />
+
+      {/* Delete Role Confirm */}
+      <DeleteConfirmModal
+        item={deleteTarget}
+        label={deleteTarget?.nombre}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => { deleteMutation.mutate(deleteTarget.id); setDeleteTarget(null) }}
+        loading={deleteMutation.isPending}
+      />
     </div>
+  )
+}
+
+function DeleteConfirmModal({ item, label, onClose, onConfirm, loading }) {
+  const { t } = useI18nStore()
+  return (
+    <Modal isOpen={!!item} onClose={onClose} title={t('common.delete')} icon={Trash2} size="sm">
+      <div className="flex items-start gap-3 rounded-xl border border-danger-200 bg-danger-50 p-3 mb-4">
+        <AlertTriangle className="w-4 h-4 text-danger-600 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-danger-700">
+          {t('admin.confirmDelete')} <span className="font-semibold">{label}</span>?
+        </p>
+      </div>
+      <div className="flex justify-end gap-3">
+        <button onClick={onClose} className="btn-ghost text-sm">{t('common.cancel')}</button>
+        <button onClick={onConfirm} disabled={loading} className="btn-danger text-sm inline-flex items-center gap-2">
+          {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+          {t('common.delete')}
+        </button>
+      </div>
+    </Modal>
   )
 }
 
