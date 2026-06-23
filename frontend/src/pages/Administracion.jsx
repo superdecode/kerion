@@ -7,6 +7,7 @@ import LoadingSpinner from '../core/components/common/LoadingSpinner'
 import { useAuthStore } from '../core/stores/authStore'
 import { useToastStore } from '../core/stores/toastStore'
 import { useI18nStore } from '../core/stores/i18nStore'
+import { useModuleUsage } from '../core/hooks/useModuleUsage'
 import { getToday, fmtDate } from '../core/utils/dateFormat'
 import api from '../core/services/api'
 import {
@@ -165,12 +166,45 @@ const isActive = (u) => u.estado !== 'INACTIVO' && u.activo !== false
 // ═══════════ PLAN TAB ═══════════
 const RENEWAL_LS_KEY = 'kirion_renewal_last_sent'
 
+const ALL_MODULE_USAGE = [
+  { key: 'dropscan',     labelKey: 'plan.usage.dropscan' },
+  { key: 'surtido',      labelKey: 'plan.usage.surtido' },
+  { key: 'inventario',   labelKey: 'plan.usage.inventario' },
+  { key: 'devoluciones', labelKey: 'plan.usage.devoluciones' },
+  { key: 'recepcion',    labelKey: 'plan.usage.recepcion' },
+  { key: 'despacho',     labelKey: 'plan.usage.despacho' },
+]
+
+function UsageBar({ used, limit, label, t }) {
+  const pct = limit != null && limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : null
+  const barColor = pct == null ? 'bg-warm-200' : pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'
+  return (
+    <div>
+      <div className="flex items-center justify-between text-sm mb-1.5">
+        <span className="text-warm-600 text-xs font-medium">{label}</span>
+        <span className="font-semibold text-warm-800 text-xs tabular-nums">
+          {used.toLocaleString()} / {limit != null ? limit.toLocaleString() : t('plan.usage.unlimited')}
+        </span>
+      </div>
+      <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct ?? 0}%` }} />
+      </div>
+      {pct != null && pct >= 90 && (
+        <div className="flex items-center gap-1 mt-1 text-xs text-red-600">
+          <AlertTriangle className="w-3 h-3" />
+          {pct >= 100 ? 'Límite alcanzado' : 'Cerca del límite'}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PlanTab() {
   const { user } = useAuthStore()
   const { t } = useI18nStore()
+  const { data: usageData, isLoading: usageLoading } = useModuleUsage()
   const [info, setInfo] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [showRenew, setShowRenew] = useState(false)
   const [renewSent, setRenewSent] = useState(false)
   const [renewLoading, setRenewLoading] = useState(false)
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
@@ -192,22 +226,13 @@ function PlanTab() {
   const days = daysLeft(expiresAt)
   const daysColor = days === null ? 'text-gray-400' : days < 0 ? 'text-red-500' : days <= 7 ? 'text-red-400' : days <= 30 ? 'text-amber-400' : 'text-emerald-500'
 
-  const guideLimit = info?.guide_limit
-  const guidesUsed = info?.guides_this_month ?? 0
-  const guidePercent = guideLimit ? Math.min((guidesUsed / guideLimit) * 100, 100) : 0
-  const guideBarColor = guidePercent > 90 ? 'bg-red-500' : guidePercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'
-
-  function getTodayStr() {
-    return getToday()
-  }
-
   async function handleRenewSubmit(e) {
     if (e && e.preventDefault) e.preventDefault()
     const stored = localStorage.getItem(RENEWAL_LS_KEY)
     if (stored) {
       try {
         const { date, data } = JSON.parse(stored)
-        if (date === getTodayStr()) {
+        if (date === getToday()) {
           setPreviousRequest(data)
           setShowDuplicateModal(true)
           return
@@ -228,7 +253,7 @@ function PlanTab() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData),
       })
-      localStorage.setItem(RENEWAL_LS_KEY, JSON.stringify({ date: getTodayStr(), data: requestData }))
+      localStorage.setItem(RENEWAL_LS_KEY, JSON.stringify({ date: getToday(), data: requestData }))
       setRenewSent(true)
     } catch {
       setRenewSent(true)
@@ -245,52 +270,65 @@ function PlanTab() {
     )
   }
 
+  const activeModules = usageData
+    ? ALL_MODULE_USAGE.filter(m => usageData[m.key]?.limit != null)
+    : []
+
   return (
     <div className="pt-2 w-full">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left column: plan info */}
-        <div className="card p-5 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-primary-600" />
+        {/* Left column: plan info + module usage */}
+        <div className="space-y-4">
+          <div className="card p-5 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center">
+                <CreditCard className="w-5 h-5 text-primary-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-warm-400 font-medium uppercase tracking-wider">{t('plan.current_plan')}</p>
+                <p className="text-warm-800 font-bold text-lg leading-none mt-0.5 truncate">
+                  {info?.plan_name || (info?.tenant_status === 'trial' ? t('plan.trial') : t('plan.no_plan'))}
+                </p>
+              </div>
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border flex-shrink-0 ${
+                info?.tenant_status === 'active' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                info?.tenant_status === 'trial' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                'bg-orange-100 text-orange-700 border-orange-200'
+              }`}>
+                {info?.tenant_status === 'active' ? t('plan.status_active') : info?.tenant_status === 'trial' ? t('plan.status_trial') : t('plan.status_expired')}
+              </span>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs text-warm-400 font-medium uppercase tracking-wider">{t('plan.current_plan')}</p>
-              <p className="text-warm-800 font-bold text-lg leading-none mt-0.5 truncate">
-                {info?.plan_name || (info?.tenant_status === 'trial' ? t('plan.trial') : t('plan.no_plan'))}
-              </p>
-            </div>
-            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border flex-shrink-0 ${
-              info?.tenant_status === 'active' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-              info?.tenant_status === 'trial' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-              'bg-orange-100 text-orange-700 border-orange-200'
-            }`}>
-              {info?.tenant_status === 'active' ? t('plan.status_active') : info?.tenant_status === 'trial' ? t('plan.status_trial') : t('plan.status_expired')}
-            </span>
           </div>
 
-          <div className="border-t border-warm-100 pt-4 space-y-2.5">
-            {guideLimit != null && (
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-warm-600 flex items-center gap-1.5">
-                  <Zap className="w-4 h-4 text-warm-400" />
-                  {t('plan.guides_this_month')}
-                </span>
-                <span className="font-semibold text-warm-800">
-                  {guideLimit.toLocaleString()}
-                </span>
+          {/* Module usage bars — only show modules that have a limit set */}
+          <div className="card p-5">
+            <p className="text-xs text-warm-400 font-bold uppercase tracking-wider mb-4 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5" />
+              {t('plan.usage.this_month')}
+            </p>
+            {usageLoading ? (
+              <div className="flex items-center gap-2 text-warm-400 text-sm py-2">
+                <RefreshCw className="w-4 h-4 animate-spin" />
               </div>
-            )}
-            {info?.plan_name && (
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-warm-600">{t('plan.current_plan')}</span>
-                <span className="font-semibold text-warm-800">{info.plan_name}</span>
+            ) : activeModules.length === 0 ? (
+              <p className="text-warm-400 text-sm">{t('plan.usage.unlimited')}</p>
+            ) : (
+              <div className="space-y-4">
+                {activeModules.map(m => (
+                  <UsageBar
+                    key={m.key}
+                    label={t(m.labelKey)}
+                    used={usageData[m.key]?.used ?? 0}
+                    limit={usageData[m.key]?.limit ?? null}
+                    t={t}
+                  />
+                ))}
               </div>
             )}
           </div>
         </div>
 
-        {/* Right column: dates, usage, renewal */}
+        {/* Right column: dates + renewal */}
         <div className="space-y-4">
           <div className="card p-5 space-y-3">
             {/* Expiry */}
@@ -302,9 +340,7 @@ function PlanTab() {
               <div className="text-right">
                 {expiresAt ? (
                   <>
-                    <p className="text-warm-800 text-sm font-medium">
-                      {fmtDate(expiresAt)}
-                    </p>
+                    <p className="text-warm-800 text-sm font-medium">{fmtDate(expiresAt)}</p>
                     <p className={`text-xs font-bold ${daysColor}`}>
                       {days === null ? '' : days < 0 ? t('plan.expired') : days === 0 ? t('plan.expires_today') : `${days} ${t('plan.days_remaining')}`}
                     </p>
@@ -314,38 +350,12 @@ function PlanTab() {
                 )}
               </div>
             </div>
-
-            {/* Guide usage bar */}
-            {guideLimit != null && (
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1.5">
-                  <span className="text-warm-600">{t('plan.guides_this_month')}</span>
-                  <span className="font-semibold text-warm-800">
-                    {guidesUsed.toLocaleString()} / {guideLimit.toLocaleString()}
-                  </span>
-                </div>
-                <div className="w-full h-2 bg-warm-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${guideBarColor}`}
-                    style={{ width: `${guidePercent}%` }}
-                  />
-                </div>
-                {guidePercent > 90 && (
-                  <div className="flex items-center gap-1.5 mt-2 text-xs text-red-600">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    {t('plan.near_guide_limit')}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Renewal card */}
           <div className="card p-5">
             <h3 className="text-warm-800 font-semibold text-sm mb-2">{t('plan.renew_title')}</h3>
-            <p className="text-warm-500 text-sm mb-4">
-              {t('plan.renew_description')}
-            </p>
+            <p className="text-warm-500 text-sm mb-4">{t('plan.renew_description')}</p>
             {renewSent ? (
               <div className="flex items-center gap-2 text-emerald-600 text-sm">
                 <CheckCircle className="w-4 h-4" />

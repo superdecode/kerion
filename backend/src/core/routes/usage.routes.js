@@ -12,7 +12,8 @@ router.get('/summary',
     try {
       // Get all plan limits in one query
       const planRes = await query(
-        `SELECT p.guide_limit, p.surtido_limit, p.inventario_limit, p.devoluciones_limit, p.name AS plan_name
+        `SELECT p.guide_limit, p.surtido_limit, p.inventario_limit, p.devoluciones_limit,
+                p.recepcion_limit, p.despacho_limit, p.name AS plan_name
          FROM tenants t
          LEFT JOIN plans p ON t.current_plan_id = p.id
          WHERE t.id = $1`,
@@ -22,7 +23,7 @@ router.get('/summary',
 
       // Query usage for each module in parallel
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
-      const [dsRes, surtidoRes, invRes, devRes] = await Promise.all([
+      const [dsRes, surtidoRes, invRes, devRes, recRes, despRes] = await Promise.all([
         // DropScan: guías this calendar month (tenant tz-aware)
         query(
           `SELECT COUNT(*) AS count FROM guias
@@ -52,6 +53,21 @@ router.get('/summary',
            AND confirmado_at >= date_trunc('month', now())`,
           [req.tenantId]
         ).catch(() => ({ rows: [{ count: '0' }] })),
+
+        // Recepción: inbound_orders created this month
+        query(
+          `SELECT COUNT(*) AS count FROM inbound_orders
+           WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`,
+          [req.tenantId]
+        ).catch(() => ({ rows: [{ count: '0' }] })),
+
+        // Despacho: dispatch_folios created this month (excludes cancelados)
+        query(
+          `SELECT COUNT(*) AS count FROM dispatch_folios
+           WHERE tenant_id = $1 AND deleted_at IS NULL
+           AND created_at >= date_trunc('month', now())`,
+          [req.tenantId]
+        ).catch(() => ({ rows: [{ count: '0' }] })),
       ])
 
       function buildStat(usedRaw, limit) {
@@ -68,11 +84,13 @@ router.get('/summary',
       }
 
       res.json({
-        plan_name: plan.plan_name || null,
-        dropscan:     buildStat(dsRes.rows[0]?.count,      plan.guide_limit),
+        plan_name:    plan.plan_name || null,
+        dropscan:     buildStat(dsRes.rows[0]?.count,     plan.guide_limit),
         surtido:      buildStat(surtidoRes.rows[0]?.count, plan.surtido_limit),
         inventario:   buildStat(invRes.rows[0]?.count,     plan.inventario_limit),
         devoluciones: buildStat(devRes.rows[0]?.count,     plan.devoluciones_limit),
+        recepcion:    buildStat(recRes.rows[0]?.count,     plan.recepcion_limit),
+        despacho:     buildStat(despRes.rows[0]?.count,    plan.despacho_limit),
       })
     } catch (err) {
       console.error('[usage/summary]', err.message)

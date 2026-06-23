@@ -17,6 +17,8 @@ import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
+import ModuleLimitBanner from '../../../core/components/common/ModuleLimitBanner'
+import { useModuleUsage } from '../../../core/hooks/useModuleUsage'
 import { fmtDate, fmtTimeShort, getToday, subtractDays } from '../../../core/utils/dateFormat'
 import { getFolios, getConductores, getUnidades, deleteFolio, cancelarFolio } from '../services/despachoService'
 import { ConductoresModal, UnidadesModal, FolioFormModal } from '../components/CatalogsModals'
@@ -59,6 +61,7 @@ export default function Folios() {
     return lvl === 'actualizar' || lvl === 'eliminar'
   })
   const canDeleteFolios = useAuthStore(s => s.canDelete('despacho.folios'))
+  const { data: moduleUsage } = useModuleUsage()
 
   const [searchInput, setSearchInput] = useState('')
   const [q, setQ] = useState('')
@@ -310,6 +313,7 @@ export default function Folios() {
   const canSelectAllFiltered = selectedCount > 0 && !allFilteredSelected && allFilteredIds.length > paginatedIds.length
 
   return (
+    <ModuleLimitBanner module="despacho" usage={moduleUsage?.despacho}>
     <div className="flex flex-col h-full">
       <Header
         title={t('desp.folios.title')}
@@ -659,5 +663,6 @@ export default function Folios() {
         </p>
       </Modal>
     </div>
+    </ModuleLimitBanner>
   )
 }

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { requireAnyPermission, requirePermission } from '../../../shared/middleware/permissions.js'
 import { instantDateInTZ } from '../../../shared/utils/dateUtils.js'
+import { checkModuleLimit } from '../../middleware/usageGuard.js'
 
 const router = Router()
 const requireDespachoValidar = (action) => requireAnyPermission([
@@ -207,6 +208,20 @@ router.post('/',
   requireDespachoValidar('crear'),
   async (req, res) => {
     try {
+      const limitCheck = await checkModuleLimit(
+        req.tenantId,
+        'despacho_limit',
+        `SELECT COUNT(*) AS count FROM dispatch_folios WHERE tenant_id = $1 AND deleted_at IS NULL AND created_at >= date_trunc('month', now())`
+      )
+      if (limitCheck.limited) {
+        return res.status(402).json({
+          error: 'Límite mensual del plan alcanzado para Despacho.',
+          code: 'PLAN_LIMIT_REACHED',
+          used: limitCheck.used,
+          limit: limitCheck.limit,
+        })
+      }
+
       const { conductor_id = null, unidad_id = null, notas = '', tipo = 'por_orden', destino = null } = req.body
       const fecha_salida = req.body.fecha_salida === '' ? null : (req.body.fecha_salida ?? null)
       if (!conductor_id || !unidad_id || !fecha_salida) {

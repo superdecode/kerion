@@ -10,8 +10,8 @@ async function fetchUsageSummary() {
 /**
  * Fetches monthly usage summary for all modules.
  * Cached for 2 minutes; background refetch every 5 minutes.
- * Returns { dropscan, surtido, inventario, devoluciones, plan_name } where each module has:
- *   { used, limit, at_limit, warning, pct }
+ * Returns { dropscan, surtido, inventario, devoluciones, recepcion, despacho, plan_name }
+ * where each module has: { used, limit, at_limit, warning, pct }
  */
 export function useModuleUsage() {
   return useQuery({

@@ -3,10 +3,12 @@ import { AlertTriangle, TrendingUp, X, ChevronRight, RefreshCw, CheckCircle2 } f
 import { useAuthStore } from '../../stores/authStore'
 
 const MODULE_META = {
-  dropscan:     { label: 'DropScan',     unit: 'guías',    color: 'blue' },
-  surtido:      { label: 'Surtido',      unit: 'órdenes',  color: 'purple' },
-  inventario:   { label: 'Inventario',   unit: 'escaneos', color: 'emerald' },
-  devoluciones: { label: 'Devoluciones', unit: 'entradas', color: 'amber' },
+  dropscan:     { label: 'DropScan',     unit: 'guías',       color: 'blue' },
+  surtido:      { label: 'Surtido',      unit: 'validaciones', color: 'purple' },
+  inventario:   { label: 'Inventario',   unit: 'escaneos',    color: 'emerald' },
+  devoluciones: { label: 'Devoluciones', unit: 'entradas',    color: 'amber' },
+  recepcion:    { label: 'Recepción',    unit: 'entradas',    color: 'sky' },
+  despacho:     { label: 'Despacho',     unit: 'folios',      color: 'orange' },
 }
 
 function UpgradeModal({ module, usage, onClose }) {

@@ -776,16 +776,17 @@ router.get('/plans', authenticateAdmin, async (req, res) => {
 // POST /api/admin/plans — create plan
 router.post('/plans', authenticateAdmin, async (req, res) => {
   try {
-    const { code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order, surtido_limit, inventario_limit, devoluciones_limit } = req.body
+    const { code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order, surtido_limit, inventario_limit, devoluciones_limit, recepcion_limit, despacho_limit } = req.body
     if (!name || price_amount === undefined) return res.status(400).json({ error: 'name y price_amount son requeridos' })
     const safeCode = code || name.toLowerCase().replace(/[^a-z0-9]/g, '_')
     const result = await query(
-      `INSERT INTO plans (code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order, surtido_limit, inventario_limit, devoluciones_limit)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      `INSERT INTO plans (code, name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order, surtido_limit, inventario_limit, devoluciones_limit, recepcion_limit, despacho_limit)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
       [safeCode, name, description || null, guide_limit ?? null, warehouse_count || 1,
        price_amount, price_annual ?? null, price_currency || 'USD',
        JSON.stringify(Array.isArray(modules) && modules.length > 0 ? modules : ALL_MODULE_CODES), is_active !== false, is_visible !== false, display_order || 0,
-       surtido_limit ?? null, inventario_limit ?? null, devoluciones_limit ?? null]
+       surtido_limit ?? null, inventario_limit ?? null, devoluciones_limit ?? null,
+       recepcion_limit ?? null, despacho_limit ?? null]
     )
     adminAudit(req.admin.id, 'CREATE_PLAN', 'plan', result.rows[0].id, { name })
     res.status(201).json({ success: true, data: result.rows[0] })
@@ -799,7 +800,7 @@ router.post('/plans', authenticateAdmin, async (req, res) => {
 router.put('/plans/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params
-    const { name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order, surtido_limit, inventario_limit, devoluciones_limit } = req.body
+    const { name, description, guide_limit, warehouse_count, price_amount, price_annual, price_currency, modules, is_active, is_visible, display_order, surtido_limit, inventario_limit, devoluciones_limit, recepcion_limit, despacho_limit } = req.body
     await query(
       `UPDATE plans SET
          name = COALESCE($1, name),
@@ -816,11 +817,14 @@ router.put('/plans/:id', authenticateAdmin, async (req, res) => {
          surtido_limit = $13,
          inventario_limit = $14,
          devoluciones_limit = $15,
+         recepcion_limit = $16,
+         despacho_limit = $17,
          updated_at = now()
        WHERE id = $12`,
       [name, description ?? null, guide_limit ?? null, warehouse_count, price_amount, price_annual ?? null,
        price_currency, modules ? JSON.stringify(modules) : null, is_active, is_visible, display_order, id,
-       surtido_limit ?? null, inventario_limit ?? null, devoluciones_limit ?? null]
+       surtido_limit ?? null, inventario_limit ?? null, devoluciones_limit ?? null,
+       recepcion_limit ?? null, despacho_limit ?? null]
     )
     adminAudit(req.admin.id, 'UPDATE_PLAN', 'plan', id, { name })
     res.json({ success: true })

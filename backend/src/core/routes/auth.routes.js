@@ -469,7 +469,9 @@ router.get('/plan-info', authenticateToken, async (req, res) => {
   try {
     const [subRes, guideRes, tenantRes] = await Promise.all([
       query(
-        `SELECT p.name, p.code, p.guide_limit, s.expires_at, s.started_at
+        `SELECT p.name, p.code, p.guide_limit, p.surtido_limit, p.inventario_limit,
+                p.devoluciones_limit, p.recepcion_limit, p.despacho_limit,
+                s.expires_at, s.started_at
          FROM subscriptions s JOIN plans p ON s.plan_id = p.id
          WHERE s.tenant_id = $1 AND s.status = 'active'
          ORDER BY s.started_at DESC LIMIT 1`,
@@ -492,8 +494,13 @@ router.get('/plan-info', authenticateToken, async (req, res) => {
     res.json({
       plan_name: plan?.name || null,
       plan_code: plan?.code || null,
-      guide_limit: plan?.guide_limit || null,
+      guide_limit: plan?.guide_limit ?? null,
       guides_this_month: guidesThisMonth,
+      surtido_limit: plan?.surtido_limit ?? null,
+      inventario_limit: plan?.inventario_limit ?? null,
+      devoluciones_limit: plan?.devoluciones_limit ?? null,
+      recepcion_limit: plan?.recepcion_limit ?? null,
+      despacho_limit: plan?.despacho_limit ?? null,
       expires_at: plan?.expires_at || tenant.subscription_expires_at || null,
       trial_expires_at: tenant.trial_expires_at || req.user.trial_expires_at || null,
       tenant_status: tenant.status || req.user.tenant_status,

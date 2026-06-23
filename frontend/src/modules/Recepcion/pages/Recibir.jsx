@@ -16,6 +16,8 @@ import StatusPill from '../../../core/components/common/StatusPill'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import ModuleLimitBanner from '../../../core/components/common/ModuleLimitBanner'
+import { useModuleUsage } from '../../../core/hooks/useModuleUsage'
 import { listOrders, listClientes, deleteOrder, getNovedadTipos, createNovedadTipo, updateNovedadTipo, deleteNovedadTipo } from '../services/recepcionService'
 import { STALE } from '../../../core/constants/queryConfig'
 import { fmtDate } from '../../../core/utils/dateFormat'
@@ -247,6 +249,7 @@ export default function Recibir() {
   const { hasPermission, getPermissionLevel, isAuthenticated } = useAuthStore()
   const toast = useToastStore()
   const { t } = useI18nStore()
+  const { data: moduleUsage } = useModuleUsage()
 
   const [q, setQ] = useState('')
   const [qFilter, setQFilter] = useState('')
@@ -419,6 +422,7 @@ export default function Recibir() {
   }, [orders, selected, t])
 
   return (
+    <ModuleLimitBanner module="recepcion" usage={moduleUsage?.recepcion}>
     <div className="flex flex-col h-full">
       <Header
         title={t('rec.recibir.title')}
@@ -724,5 +728,6 @@ export default function Recibir() {
         onClose={() => setShowListaSelector(false)}
       />
     </div>
+    </ModuleLimitBanner>
   )
 }

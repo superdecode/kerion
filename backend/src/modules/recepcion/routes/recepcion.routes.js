@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { getPermissionLevel, requirePermission } from '../../../shared/middleware/permissions.js'
+import { checkModuleLimit } from '../../middleware/usageGuard.js'
 
 const router = Router()
 
@@ -140,6 +141,20 @@ router.post('/orders',
   requirePermission('recepcion.recibir', 'crear'),
   async (req, res) => {
     try {
+      const limitCheck = await checkModuleLimit(
+        req.tenantId,
+        'recepcion_limit',
+        `SELECT COUNT(*) AS count FROM inbound_orders WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`
+      )
+      if (limitCheck.limited) {
+        return res.status(402).json({
+          error: 'Límite mensual del plan alcanzado para Recepción.',
+          code: 'PLAN_LIMIT_REACHED',
+          used: limitCheck.used,
+          limit: limitCheck.limit,
+        })
+      }
+
       const { cliente, inbound_order_no, tracking_no, reference_no, lines } = req.body
       if (!Array.isArray(lines) || lines.length === 0) {
         return res.status(400).json({ error: 'Se requieren líneas de recepción' })

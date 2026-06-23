@@ -18,6 +18,7 @@ function PlanModal({ plan, onClose, onSaved }) {
     is_visible: true, display_order: '0',
     price_annual: '',
     surtido_limit: '', inventario_limit: '', devoluciones_limit: '',
+    recepcion_limit: '', despacho_limit: '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -38,6 +39,8 @@ function PlanModal({ plan, onClose, onSaved }) {
         surtido_limit: plan.surtido_limit ?? '',
         inventario_limit: plan.inventario_limit ?? '',
         devoluciones_limit: plan.devoluciones_limit ?? '',
+        recepcion_limit: plan.recepcion_limit ?? '',
+        despacho_limit: plan.despacho_limit ?? '',
       })
     }
   }, [plan])
@@ -61,6 +64,8 @@ function PlanModal({ plan, onClose, onSaved }) {
         surtido_limit: form.surtido_limit !== '' ? parseInt(form.surtido_limit) : null,
         inventario_limit: form.inventario_limit !== '' ? parseInt(form.inventario_limit) : null,
         devoluciones_limit: form.devoluciones_limit !== '' ? parseInt(form.devoluciones_limit) : null,
+        recepcion_limit: form.recepcion_limit !== '' ? parseInt(form.recepcion_limit) : null,
+        despacho_limit: form.despacho_limit !== '' ? parseInt(form.despacho_limit) : null,
       }
       if (plan) {
         await adminApi.put(`/plans/${plan.id}`, payload)
@@ -94,6 +99,14 @@ function PlanModal({ plan, onClose, onSaved }) {
     {
       icon: RotateCcw, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
       label: 'Devoluciones', sub: 'entradas / mes', field: 'devoluciones_limit',
+    },
+    {
+      icon: Package, color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20',
+      label: 'Recepción', sub: 'entradas / mes', field: 'recepcion_limit',
+    },
+    {
+      icon: Truck, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20',
+      label: 'Despacho', sub: 'folios / mes', field: 'despacho_limit',
     },
   ]
 
@@ -373,6 +386,8 @@ function PlansTab() {
                       <div><span className="text-gray-600">Sur:</span> {p.surtido_limit != null ? p.surtido_limit.toLocaleString() : <span className="text-gray-600">∞</span>}</div>
                       <div><span className="text-gray-600">Inv:</span> {p.inventario_limit != null ? p.inventario_limit.toLocaleString() : <span className="text-gray-600">∞</span>}</div>
                       <div><span className="text-gray-600">Dev:</span> {p.devoluciones_limit != null ? p.devoluciones_limit.toLocaleString() : <span className="text-gray-600">∞</span>}</div>
+                      <div><span className="text-gray-600">Rec:</span> {p.recepcion_limit != null ? p.recepcion_limit.toLocaleString() : <span className="text-gray-600">∞</span>}</div>
+                      <div><span className="text-gray-600">Desp:</span> {p.despacho_limit != null ? p.despacho_limit.toLocaleString() : <span className="text-gray-600">∞</span>}</div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-400">{p.display_order ?? 0}</td>
