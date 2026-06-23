@@ -637,7 +637,7 @@ function UsersTab({ canEdit, canDel }) {
       {/* Delete User Confirm */}
       <DeleteConfirmModal
         item={deleteTarget}
-        label={deleteTarget?.nombre_completo}
+        message={deleteTarget ? `${t('admin.confirmDeleteUser')} "${deleteTarget.nombre_completo}"` : ''}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => { deleteMutation.mutate(deleteTarget.id); setDeleteTarget(null) }}
         loading={deleteMutation.isPending}
@@ -871,7 +871,7 @@ function RolesTab({ canEdit, canDel }) {
       {/* Delete Role Confirm */}
       <DeleteConfirmModal
         item={deleteTarget}
-        label={deleteTarget?.nombre}
+        message={deleteTarget ? `${t('admin.confirmDeleteRole')} "${deleteTarget.nombre}"` : ''}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => { deleteMutation.mutate(deleteTarget.id); setDeleteTarget(null) }}
         loading={deleteMutation.isPending}
@@ -880,15 +880,13 @@ function RolesTab({ canEdit, canDel }) {
   )
 }
 
-function DeleteConfirmModal({ item, label, onClose, onConfirm, loading }) {
+function DeleteConfirmModal({ item, message, onClose, onConfirm, loading }) {
   const { t } = useI18nStore()
   return (
     <Modal isOpen={!!item} onClose={onClose} title={t('common.delete')} icon={Trash2} size="sm">
       <div className="flex items-start gap-3 rounded-xl border border-danger-200 bg-danger-50 p-3 mb-4">
         <AlertTriangle className="w-4 h-4 text-danger-600 flex-shrink-0 mt-0.5" />
-        <p className="text-sm text-danger-700">
-          {t('admin.confirmDelete')} <span className="font-semibold">{label}</span>?
-        </p>
+        <p className="text-sm text-danger-700">{message}</p>
       </div>
       <div className="flex justify-end gap-3">
         <button onClick={onClose} className="btn-ghost text-sm">{t('common.cancel')}</button>
