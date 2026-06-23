@@ -956,38 +956,33 @@ function GroupDetailModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={() => setDetailFilter('all')}
-            className={`rounded-2xl px-4 py-3 border text-left transition-colors ${detailFilter === 'all' ? `${meta.bg} ring-2 ring-primary-200` : 'border-warm-200 bg-white text-warm-700 hover:bg-warm-50'}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${detailFilter === 'all' ? `${meta.bg} ring-2 ring-primary-200` : 'border-warm-200 bg-white text-warm-600 hover:bg-warm-50'}`}
           >
-            <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.total')}</p>
-            <p className="text-xl font-bold leading-none mt-1">{baseItems.length}</p>
+            {t('inventario.escaneo.total')} <span className="font-bold">{baseItems.length}</span>
           </button>
           <button
             type="button"
             onClick={() => setDetailFilter('marked')}
-            className={`rounded-2xl px-4 py-3 border text-left transition-colors ${detailFilter === 'marked' ? 'border-primary-300 bg-primary-50 text-primary-700 ring-2 ring-primary-200' : 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70'}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${detailFilter === 'marked' ? 'border-primary-300 bg-primary-50 text-primary-700 ring-2 ring-primary-200' : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
           >
-            <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.marked_count')}</p>
-            <p className="text-xl font-bold leading-none mt-1">{markedCount}</p>
+            {t('inventario.escaneo.marked_count')} <span className="font-bold">{markedCount}</span>
           </button>
           <button
             type="button"
             onClick={() => setDetailFilter('unmarked')}
-            className={`rounded-2xl px-4 py-3 border text-left transition-colors ${detailFilter === 'unmarked' ? 'border-warning-300 bg-warning-50 text-warning-700 ring-2 ring-warning-200' : 'border-warning-100 bg-warning-50 text-warning-700 hover:bg-warning-100/70'}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-colors ${detailFilter === 'unmarked' ? 'border-warning-300 bg-warning-50 text-warning-700 ring-2 ring-warning-200' : 'border-warning-200 bg-warning-50 text-warning-700 hover:bg-warning-100'}`}
           >
-            <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.unmarked_count')}</p>
-            <p className="text-xl font-bold leading-none mt-1">{unmarkedCount}</p>
+            {t('inventario.escaneo.unmarked_count')} <span className="font-bold">{unmarkedCount}</span>
           </button>
-          <div className="rounded-2xl px-4 py-3 border border-warm-200 bg-warm-50 text-warm-700">
-            <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.filtered_count')}</p>
-            <p className="text-xl font-bold leading-none mt-1">{filtered.length}</p>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-warm-200 bg-warm-50 text-warm-500 text-xs font-semibold">
+            {t('inventario.escaneo.filtered_count')} <span className="font-bold text-warm-700">{filtered.length}</span>
           </div>
-          <div className="rounded-2xl px-4 py-3 border border-primary-100 bg-primary-50 text-primary-700 md:col-span-4">
-            <p className="text-[10px] uppercase tracking-[0.16em] opacity-70">{t('inventario.escaneo.marked_visible')}</p>
-            <p className="text-xl font-bold leading-none mt-1">{visibleMarkedCount}</p>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-primary-100 bg-primary-50 text-primary-600 text-xs font-semibold">
+            {t('inventario.escaneo.marked_visible')} <span className="font-bold">{visibleMarkedCount}</span>
           </div>
         </div>
 
