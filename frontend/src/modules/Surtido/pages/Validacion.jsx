@@ -32,7 +32,8 @@ import { useSurtidoStore } from '../stores/surtidoStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
-const SCANNER_THRESHOLD_MS = 100
+const SCANNER_THRESHOLD_MS = 100   // per-character inter-key gap (ScanRecount)
+const SCANNER_TOTAL_MS = 2000       // max total time first-char→Enter for scanner barcodes
 const TABS_KEY = 'kirion_surtido_tabs'
 const ACTIVE_TAB_KEY = 'kirion_surtido_active_tab'
 const SESSION_KEY = (tabId) => `kirion_surtido_session_${tabId}`
@@ -907,6 +908,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const scanRef = useRef(null)
   const copyTimeoutRef = useRef(null)
   const lastKeyTimeRef = useRef(0)
+  const inputStartTimeRef = useRef(0)
 
   const [step, setStep] = useState('search')
   const [obc, setObc] = useState(null)
@@ -1381,22 +1383,23 @@ const { data: reasonsData } = useQuery({
   function handleKeyDown(e) {
     if (sessionCompleteLocked) return
     const now = Date.now()
-    const delta = now - lastKeyTimeRef.current
+    // Track when input starts (field goes from empty to first char)
+    if (e.target.value.length === 0 && e.key !== 'Enter') {
+      inputStartTimeRef.current = now
+    }
     lastKeyTimeRef.current = now
     if (e.key === 'Enter') {
       const val = e.target.value.trim()
       if (!val) return
-      if (delta > SCANNER_THRESHOLD_MS) {
+      // Manual typing: total elapsed from first char to Enter exceeds threshold
+      const elapsed = now - inputStartTimeRef.current
+      if (elapsed > SCANNER_TOTAL_MS) {
         toast.warning(t('surtido.validacion.manual_blocked'))
         e.target.value = ''
+        inputStartTimeRef.current = 0
         return
       }
-      doScan(val); e.target.value = ''; return
-    }
-    if (delta > SCANNER_THRESHOLD_MS && e.target.value.length > 0) {
-      e.preventDefault()
-      toast.warning(t('surtido.validacion.manual_blocked'))
-      e.target.value = ''
+      doScan(val); e.target.value = ''; inputStartTimeRef.current = 0; return
     }
   }
 

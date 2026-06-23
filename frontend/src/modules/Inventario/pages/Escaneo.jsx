@@ -808,12 +808,13 @@ function GroupDetailModal({
     }
   }, [isOpen])
 
-  if (!group) return null
-
-  const meta = STATUS_META[group] ?? STATUS_META.nowms
+  const meta = group ? (STATUS_META[group] ?? STATUS_META.nowms) : null
   const normalizedSearch = search.trim().toLowerCase()
-  const baseItems = items.filter(item => getItemGroup(item) === group)
-  const filtered = baseItems.filter(item => {
+  const baseItems = useMemo(
+    () => group ? items.filter(item => getItemGroup(item) === group) : [],
+    [items, group]
+  )
+  const filtered = useMemo(() => baseItems.filter(item => {
     if (detailFilter === 'marked' && !item.marked) return false
     if (detailFilter === 'unmarked' && item.marked) return false
     if (!normalizedSearch) return true
@@ -824,11 +825,11 @@ function GroupDetailModal({
       item.product,
       item.location,
     ].some(value => (value || '').toLowerCase().includes(normalizedSearch))
-  })
-  const markedCount = baseItems.filter(item => item.marked).length
+  }), [baseItems, detailFilter, normalizedSearch])
+  const markedCount = useMemo(() => baseItems.filter(item => item.marked).length, [baseItems])
   const unmarkedCount = Math.max(0, baseItems.length - markedCount)
-  const visibleMarkedCount = filtered.filter(item => item.marked).length
-  const visibleIndices = filtered.map(item => item._idx)
+  const visibleMarkedCount = useMemo(() => filtered.filter(item => item.marked).length, [filtered])
+  const visibleIndices = useMemo(() => filtered.map(item => item._idx), [filtered])
   const sortedItems = useMemo(() => {
     const list = [...filtered]
     const { field, dir } = sortConfig
@@ -863,6 +864,8 @@ function GroupDetailModal({
     })
     return list
   }, [filtered, sortConfig])
+
+  if (!group) return null
 
   function toggleSort(field) {
     setSortConfig((current) => (
