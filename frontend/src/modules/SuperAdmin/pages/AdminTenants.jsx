@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
-import { Search, RefreshCw, Building2, ChevronRight, AlertCircle, CheckCircle2, Clock, XCircle, PauseCircle, Users, Calendar, Database, Zap, Plus, Eye, EyeOff, X, Save } from 'lucide-react'
+import { Search, RefreshCw, Building2, ChevronRight, AlertCircle, Users, Activity, Plus, Eye, EyeOff, X, Save } from 'lucide-react'
 import adminApi from '../services/adminApi'
 import { fmtDate } from '../../../core/utils/dateFormat'
 import { MODULE_CATALOG, ALL_MODULE_CODES } from '../../../core/constants/moduleCatalog'
@@ -23,6 +23,22 @@ function StatusBadge({ status }) {
       {cfg.label}
     </span>
   )
+}
+
+function relativeTime(date) {
+  if (!date) return null
+  const diff = Date.now() - new Date(date).getTime()
+  const mins  = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days  = Math.floor(diff / 86400000)
+  if (mins  <  2) return 'ahora'
+  if (mins  < 60) return `hace ${mins}min`
+  if (hours < 24) return `hace ${hours}h`
+  if (days  <  2) return 'ayer'
+  if (days  <  7) return `hace ${days}d`
+  if (days  < 30) return `hace ${Math.floor(days / 7)}sem`
+  if (days  < 365) return `hace ${Math.floor(days / 30)}mes`
+  return `hace ${Math.floor(days / 365)}año`
 }
 
 const STATUSES = ['', 'trial', 'active', 'trial_expired', 'expired', 'suspended']
@@ -158,7 +174,7 @@ export default function AdminTenants() {
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden md:table-cell">Estado</th>
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden lg:table-cell">Plan</th>
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden lg:table-cell">Usuarios</th>
-                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden xl:table-cell">Guias</th>
+                <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden xl:table-cell">Ultima actividad</th>
                 <th className="text-left px-4 py-3 text-gray-400 font-medium text-xs uppercase tracking-wider hidden xl:table-cell">Vencimiento</th>
                 <th className="px-4 py-3 w-10 text-gray-400 font-medium text-xs uppercase tracking-wider" />
               </tr>
@@ -196,16 +212,14 @@ export default function AdminTenants() {
                       </div>
                     </td>
                     <td className="px-4 py-4 hidden xl:table-cell">
-                      <div className="flex items-center gap-1.5 text-gray-400">
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>
-                          {Number(t.guias_this_month ?? 0).toLocaleString()}
-                          {' / '}
-                          <span className="text-gray-600">
-                            {t.active_plan_guide_limit != null ? Number(t.active_plan_guide_limit).toLocaleString() : '∞'}
-                          </span>
-                        </span>
-                      </div>
+                      {t.last_access ? (
+                        <div className="flex items-center gap-1.5 text-gray-300">
+                          <Activity className="w-3.5 h-3.5 text-emerald-500/70 flex-shrink-0" />
+                          <span className="text-xs">{relativeTime(t.last_access)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-600 text-xs">Sin actividad</span>
+                      )}
                     </td>
                     <td className="px-4 py-4 hidden xl:table-cell">
                       {exp ? (
