@@ -1,7 +1,7 @@
 import api from '../../../core/services/api'
 
-export const getSurtidoDashboard = ({ fecha_inicio, fecha_fin }) =>
-  api.get('/wmshub/dashboard', { params: { fecha_inicio, fecha_fin } }).then(r => r.data)
+export const getSurtidoDashboard = ({ fecha_inicio, fecha_fin, bucket } = {}) =>
+  api.get('/wmshub/dashboard', { params: { fecha_inicio, fecha_fin, bucket } }).then(r => r.data)
 
 export const getInventarioDashboard = ({ fecha_inicio, fecha_fin }) =>
   api.get('/inventory/dashboard', { params: { fecha_inicio, fecha_fin } }).then(r => r.data)

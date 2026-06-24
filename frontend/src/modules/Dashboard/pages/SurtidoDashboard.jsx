@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line,
+  LineChart, Line, AreaChart, Area, LabelList,
 } from 'recharts'
 import {
   ClipboardList, CheckCircle2, AlertTriangle, Users, TrendingUp, Activity,
@@ -113,6 +113,21 @@ function shortDay(dateStr) {
   return `${DAY_LABELS[d.getUTCDay()]} ${d.getUTCDate()}`
 }
 
+function weekNum(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(`${String(dateStr).split('T')[0]}T12:00:00Z`)
+  const jan1 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return String(Math.ceil(((d - jan1) / 86400000 + jan1.getUTCDay() + 1) / 7))
+}
+
+function monthShort(dateStr) {
+  if (!dateStr) return ''
+  const [year, month] = String(dateStr).split('T')[0].split('-')
+  return new Date(`${year}-${month}-15T12:00:00Z`)
+    .toLocaleDateString('es-MX', { month: 'short', timeZone: 'UTC' })
+    .replace('.', '')
+}
+
 export default function SurtidoDashboard({ dateRange }) {
   const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
@@ -140,6 +155,23 @@ export default function SurtidoDashboard({ dateRange }) {
     staleTime: 5 * 60_000,
   })
 
+  const yearStart = `${getToday().slice(0, 4)}-01-01`
+  const prevYearStart = `${Number(getToday().slice(0, 4)) - 1}-01-01`
+
+  const { data: weeklyData } = useQuery({
+    queryKey: ['dash-surtido-weekly', yearStart],
+    queryFn: () => getSurtidoDashboard({ fecha_inicio: yearStart, fecha_fin: getToday(), bucket: 'week' }),
+    enabled: backendOnline,
+    staleTime: 10 * 60_000,
+  })
+
+  const { data: monthlyData } = useQuery({
+    queryKey: ['dash-surtido-monthly', prevYearStart],
+    queryFn: () => getSurtidoDashboard({ fecha_inicio: prevYearStart, fecha_fin: getToday(), bucket: 'month' }),
+    enabled: backendOnline,
+    staleTime: 10 * 60_000,
+  })
+
   if (isLoading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>
 
   const d = data?.data
@@ -155,6 +187,13 @@ export default function SurtidoDashboard({ dateRange }) {
     }))
   const tendenciaBucket = graficas.tendencia_bucket || 'week'
   const fiveDates = Array.from({ length: 5 }, (_, i) => subtractDays(centerDate, 2 - i))
+
+  const cajasPorSemana = (weeklyData?.data?.graficas?.tendencia || [])
+    .map(r => ({ ...r, sem: weekNum(r.periodo), cajas: Number(r.cajas ?? 0) }))
+    .filter(r => r.cajas > 0 || true)
+
+  const cajasPorMes = (monthlyData?.data?.graficas?.tendencia || [])
+    .map(r => ({ ...r, mes: monthShort(r.periodo), cajas: Number(r.cajas ?? 0) }))
   const today = getToday()
 
   const validatedByDay = {}
@@ -255,6 +294,46 @@ export default function SurtidoDashboard({ dateRange }) {
           ) : <NoData height={200} />}
         </ChartCard>
       </div>
+
+      {/* Cajas surtidas por semana — área */}
+      <ChartCard title="Cajas surtidas por semana (año actual)" icon={TrendingUp}>
+        {cajasPorSemana.length > 0 ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={cajasPorSemana} margin={{ top: 20, right: 16, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradCajas" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0ece8" />
+              <XAxis dataKey="sem" tick={{ fontSize: 10 }} label={{ value: 'SEM', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#a8a29e' }} height={28} />
+              <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} width={45} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={v => [v.toLocaleString(), 'Cajas']} labelFormatter={v => `Semana ${v}`} />
+              <Area type="monotone" dataKey="cajas" stroke="#3b82f6" strokeWidth={2} fill="url(#gradCajas)" dot={{ r: 3, fill: '#3b82f6' }} connectNulls>
+                <LabelList dataKey="cajas" position="top" style={{ fontSize: 9, fill: '#3b82f6', fontWeight: 600 }} formatter={v => v > 0 ? v.toLocaleString() : ''} />
+              </Area>
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : <NoData height={220} />}
+      </ChartCard>
+
+      {/* Cajas surtidas por mes — barras */}
+      <ChartCard title="Cajas surtidas por mes" icon={Activity}>
+        {cajasPorMes.length > 0 ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={cajasPorMes} margin={{ top: 24, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0ece8" vertical={false} />
+              <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 10 }} domain={[0, 'auto']} width={45} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={v => [v.toLocaleString(), 'Cajas']} />
+              <Bar dataKey="cajas" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Cajas">
+                <LabelList dataKey="cajas" position="top" style={{ fontSize: 10, fill: '#3b82f6', fontWeight: 600 }} formatter={v => v > 0 ? v.toLocaleString() : ''} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        ) : <NoData height={220} />}
+      </ChartCard>
 
       {/* 5-Day Window Table */}
       <div className="rounded-2xl border border-warm-100 bg-white overflow-hidden">

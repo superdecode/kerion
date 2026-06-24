@@ -11,6 +11,13 @@ function parseDateKey(value) {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
+const BUCKET_META = {
+  day:   { interval: '1 day',   label: 'día' },
+  week:  { interval: '1 week',  label: 'semana' },
+  month: { interval: '1 month', label: 'mes' },
+  year:  { interval: '1 year',  label: 'año' },
+}
+
 function getTrendBucket(fechaInicio, fechaFin) {
   const start = parseDateKey(fechaInicio)
   const end = parseDateKey(fechaFin)
@@ -23,7 +30,7 @@ function getTrendBucket(fechaInicio, fechaFin) {
   return { bucket: 'year', interval: '1 year', label: 'año' }
 }
 
-// GET /api/wmshub/dashboard?fecha_inicio=&fecha_fin=
+// GET /api/wmshub/dashboard?fecha_inicio=&fecha_fin=&bucket=
 router.get('/',
   authenticateToken, loadFullUser,
   requirePermission('surtido.ordenes', 'actualizar'),
@@ -31,11 +38,14 @@ router.get('/',
     try {
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date())
-      const { fecha_inicio = today, fecha_fin = today } = req.query
+      const { fecha_inicio = today, fecha_fin = today, bucket: bucketOverride } = req.query
 
       const dateStart = `${fecha_inicio}T00:00:00`
       const dateEnd = `${fecha_fin}T23:59:59`
-      const trend = getTrendBucket(fecha_inicio, fecha_fin)
+      const auto = getTrendBucket(fecha_inicio, fecha_fin)
+      const trend = (bucketOverride && BUCKET_META[bucketOverride])
+        ? { bucket: bucketOverride, ...BUCKET_META[bucketOverride] }
+        : auto
       const trendPeriodExpr = `DATE_TRUNC('${trend.bucket}', ${instantDateInTZ('created_at', tz)}::timestamp)::date`
 
       const [
