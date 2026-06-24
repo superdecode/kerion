@@ -141,18 +141,16 @@ export default function SurtidoDashboard({ dateRange }) {
         <ChartCard title={t('dashboard.surtido.chart.ordenesEstado')} icon={ClipboardList}>
           {graficas.ordenes_por_estado.length > 0 ? (
             <div className="flex items-center gap-4">
-              <div className="shrink-0" style={{ width: 180, height: 180 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={graficas.ordenes_por_estado} dataKey="cantidad" nameKey="status"
-                      cx="50%" cy="50%" outerRadius={82} innerRadius={50} strokeWidth={2} stroke="#fff">
-                      {graficas.ordenes_por_estado.map((entry, i) => (
-                        <Cell key={i} fill={ESTADO_COLORS[entry.status] || PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(val, name) => [val, estadoLabel(name, t)]} />
-                  </PieChart>
-                </ResponsiveContainer>
+              <div className="shrink-0">
+                <PieChart width={180} height={180}>
+                  <Pie data={graficas.ordenes_por_estado} dataKey="cantidad" nameKey="status"
+                    cx={90} cy={90} outerRadius={82} innerRadius={50} strokeWidth={2} stroke="#fff">
+                    {graficas.ordenes_por_estado.map((entry, i) => (
+                      <Cell key={i} fill={ESTADO_COLORS[entry.status] || PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(val, name) => [val, estadoLabel(name, t)]} />
+                </PieChart>
               </div>
               <div className="flex-1 space-y-2">
                 {graficas.ordenes_por_estado.map((e, i) => (
@@ -261,7 +259,6 @@ export default function SurtidoDashboard({ dateRange }) {
             </thead>
             <tbody className="divide-y divide-warm-50">
               {fiveDates.map(day => {
-                const isFuture = day > today
                 const isToday = day === today
                 const isCenterDate = day === centerDate
                 const exp = expectedByDay[day]
@@ -279,11 +276,11 @@ export default function SurtidoDashboard({ dateRange }) {
                     <td className={`px-3 py-2.5 text-center text-sm font-semibold ${exp?.cajas > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
                       {exp?.cajas || '—'}
                     </td>
-                    <td className={`px-3 py-2.5 text-center text-sm font-semibold ${!isFuture && val?.ordenes > 0 ? 'text-green-700' : 'text-warm-300'}`}>
-                      {isFuture ? '—' : (val?.ordenes || '—')}
+                    <td className={`px-3 py-2.5 text-center text-sm font-semibold ${val?.ordenes > 0 ? 'text-green-700' : 'text-warm-300'}`}>
+                      {val?.ordenes || '—'}
                     </td>
-                    <td className={`px-3 py-2.5 text-center text-sm font-semibold ${!isFuture && val?.cajas > 0 ? 'text-green-700' : 'text-warm-300'}`}>
-                      {isFuture ? '—' : (val?.cajas || '—')}
+                    <td className={`px-3 py-2.5 text-center text-sm font-semibold ${val?.cajas > 0 ? 'text-green-700' : 'text-warm-300'}`}>
+                      {val?.cajas || '—'}
                     </td>
                   </tr>
                 )
