@@ -127,16 +127,13 @@ export default function SurtidoDashboard({ dateRange }) {
   return (
     <div className="space-y-4 p-4">
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard label={t('dashboard.surtido.kpi.ordenesPeriodo')} value={kpis.ordenes_total ?? kpis.sesiones_hoy} icon={ClipboardList} index={0} />
-        <KpiCard label={t('dashboard.surtido.kpi.ordenesCompletadas')} value={kpis.ordenes_completadas ?? kpis.sesiones_completadas} icon={CheckCircle2} index={1} />
-        <KpiCard label={t('dashboard.surtido.kpi.tasaCompletado')} value={`${kpis.tasa_completado}%`} icon={TrendingUp} index={2} />
-        <KpiCard label={t('dashboard.surtido.kpi.cajasEscaneadas')} value={kpis.cajas_escaneadas} icon={Activity} index={3} />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <KpiCard label={t('dashboard.surtido.kpi.cajasEscaneadas')} value={kpis.cajas_escaneadas} icon={Activity} index={1} />
+        <KpiCard label={t('dashboard.surtido.kpi.ordenesCompletadas')} value={kpis.ordenes_completadas ?? kpis.sesiones_completadas} icon={CheckCircle2} index={2} />
+        <KpiCard label={t('dashboard.surtido.kpi.tasaCompletado')} value={`${kpis.tasa_completado}%`} icon={TrendingUp} index={3} />
         <KpiCard label={t('dashboard.surtido.kpi.ordenesAbiertas')} value={kpis.ordenes_abiertas ?? kpis.sesiones_abiertas} icon={Activity} index={4} />
-        <KpiCard label={t('dashboard.surtido.kpi.ordenesFaltantes')} value={kpis.ordenes_con_faltantes} icon={AlertTriangle} alert index={5} />
-        <KpiCard label={t('dashboard.surtido.kpi.ordenesAnormalidades')} value={kpis.ordenes_con_anormalidades} icon={AlertTriangle} alert index={6} />
+        <KpiCard label={t('dashboard.surtido.kpi.ordenesAnormalidades')} value={kpis.ordenes_con_anormalidades} icon={AlertTriangle} alert index={5} />
       </div>
 
       {/* Charts */}
@@ -144,17 +141,19 @@ export default function SurtidoDashboard({ dateRange }) {
         <ChartCard title={t('dashboard.surtido.chart.ordenesEstado')} icon={ClipboardList}>
           {graficas.ordenes_por_estado.length > 0 ? (
             <div className="flex items-center gap-4">
-              <ResponsiveContainer width="50%" height={200}>
-                <PieChart>
-                  <Pie data={graficas.ordenes_por_estado} dataKey="cantidad" nameKey="status"
-                    cx="50%" cy="50%" outerRadius={80} innerRadius={45} strokeWidth={0}>
-                    {graficas.ordenes_por_estado.map((entry, i) => (
-                      <Cell key={i} fill={ESTADO_COLORS[entry.status] || PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(val, name) => [val, estadoLabel(name, t)]} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="shrink-0" style={{ width: 180, height: 180 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={graficas.ordenes_por_estado} dataKey="cantidad" nameKey="status"
+                      cx="50%" cy="50%" outerRadius={82} innerRadius={50} strokeWidth={2} stroke="#fff">
+                      {graficas.ordenes_por_estado.map((entry, i) => (
+                        <Cell key={i} fill={ESTADO_COLORS[entry.status] || PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(val, name) => [val, estadoLabel(name, t)]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
               <div className="flex-1 space-y-2">
                 {graficas.ordenes_por_estado.map((e, i) => (
                   <div key={e.status} className="flex items-center gap-2">
@@ -179,8 +178,8 @@ export default function SurtidoDashboard({ dateRange }) {
                   contentStyle={{ fontSize: 12, borderRadius: 8 }}
                   labelFormatter={v => trendLabel(v, tendenciaBucket)}
                 />
-                <Line type="monotone" dataKey="cajas" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.cajas')} />
-                <Line type="monotone" dataKey="ordenes" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.ordenes')} strokeDasharray="4 2" />
+                <Line type="monotone" dataKey="cajas" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.cajas')} connectNulls />
+                <Line type="monotone" dataKey="ordenes" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.ordenes')} strokeDasharray="4 2" connectNulls />
               </LineChart>
             </ResponsiveContainer>
           ) : <NoData height={200} />}
@@ -253,66 +252,42 @@ export default function SurtidoDashboard({ dateRange }) {
           <table className="w-full">
             <thead>
               <tr className="bg-warm-50 border-b border-warm-100">
-                <th className="table-header w-32 text-left">Métrica</th>
-                {fiveDates.map(day => {
-                  const isToday = day === today
-                  const isCenterDate = day === centerDate
-                  return (
-                    <th key={day} className={`table-header text-center ${isCenterDate ? 'bg-primary-50' : ''}`}>
-                      <span className={isToday ? 'text-primary-600 font-bold' : ''}>{shortDay(day)}</span>
-                      {isToday && <span className="ml-1 text-[9px] bg-primary-100 text-primary-600 rounded px-1 py-0.5 font-bold">HOY</span>}
-                    </th>
-                  )
-                })}
+                <th className="table-header text-left w-24">Fecha</th>
+                <th className="table-header text-center">Órd. esperadas</th>
+                <th className="table-header text-center">Cajas esperadas</th>
+                <th className="table-header text-center">Órd. validadas</th>
+                <th className="table-header text-center">Cajas validadas</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-warm-50">
-              <tr>
-                <td className="px-3 py-2 text-xs font-medium text-warm-500">Órd. esperadas</td>
-                {fiveDates.map(day => {
-                  const val = expectedByDay[day]?.ordenes
-                  return (
-                    <td key={day} className={`px-3 py-2 text-center text-sm font-semibold ${day === centerDate ? 'bg-primary-50/50' : ''} ${val > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
-                      {val || '—'}
+              {fiveDates.map(day => {
+                const isFuture = day > today
+                const isToday = day === today
+                const isCenterDate = day === centerDate
+                const exp = expectedByDay[day]
+                const val = validatedByDay[day]
+                const rowCls = isCenterDate ? 'bg-primary-50/40' : ''
+                return (
+                  <tr key={day} className={rowCls}>
+                    <td className="px-3 py-2.5 text-xs font-semibold text-warm-700 whitespace-nowrap">
+                      {shortDay(day)}
+                      {isToday && <span className="ml-1.5 text-[9px] bg-primary-100 text-primary-600 rounded px-1 py-0.5 font-bold">HOY</span>}
                     </td>
-                  )
-                })}
-              </tr>
-              <tr>
-                <td className="px-3 py-2 text-xs font-medium text-warm-500">Cajas esperadas</td>
-                {fiveDates.map(day => {
-                  const val = expectedByDay[day]?.cajas
-                  return (
-                    <td key={day} className={`px-3 py-2 text-center text-sm font-semibold ${day === centerDate ? 'bg-primary-50/50' : ''} ${val > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
-                      {val || '—'}
+                    <td className={`px-3 py-2.5 text-center text-sm font-semibold ${exp?.ordenes > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
+                      {exp?.ordenes || '—'}
                     </td>
-                  )
-                })}
-              </tr>
-              <tr>
-                <td className="px-3 py-2 text-xs font-medium text-warm-500">Órd. validadas</td>
-                {fiveDates.map(day => {
-                  if (day > today) return <td key={day} className={`px-3 py-2 text-center text-sm text-warm-300 ${day === centerDate ? 'bg-primary-50/50' : ''}`}>—</td>
-                  const val = validatedByDay[day]?.ordenes
-                  return (
-                    <td key={day} className={`px-3 py-2 text-center text-sm font-semibold ${day === centerDate ? 'bg-primary-50/50' : ''} ${val > 0 ? 'text-green-700' : 'text-warm-300'}`}>
-                      {val || '—'}
+                    <td className={`px-3 py-2.5 text-center text-sm font-semibold ${exp?.cajas > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
+                      {exp?.cajas || '—'}
                     </td>
-                  )
-                })}
-              </tr>
-              <tr>
-                <td className="px-3 py-2 text-xs font-medium text-warm-500">Cajas validadas</td>
-                {fiveDates.map(day => {
-                  if (day > today) return <td key={day} className={`px-3 py-2 text-center text-sm text-warm-300 ${day === centerDate ? 'bg-primary-50/50' : ''}`}>—</td>
-                  const val = validatedByDay[day]?.cajas
-                  return (
-                    <td key={day} className={`px-3 py-2 text-center text-sm font-semibold ${day === centerDate ? 'bg-primary-50/50' : ''} ${val > 0 ? 'text-green-700' : 'text-warm-300'}`}>
-                      {val || '—'}
+                    <td className={`px-3 py-2.5 text-center text-sm font-semibold ${!isFuture && val?.ordenes > 0 ? 'text-green-700' : 'text-warm-300'}`}>
+                      {isFuture ? '—' : (val?.ordenes || '—')}
                     </td>
-                  )
-                })}
-              </tr>
+                    <td className={`px-3 py-2.5 text-center text-sm font-semibold ${!isFuture && val?.cajas > 0 ? 'text-green-700' : 'text-warm-300'}`}>
+                      {isFuture ? '—' : (val?.cajas || '—')}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
