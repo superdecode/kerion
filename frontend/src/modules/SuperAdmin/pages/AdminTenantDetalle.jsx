@@ -5,7 +5,7 @@ import {
   Edit2, Save, X, Plus, Calendar, Users, CreditCard, Activity,
   AlertCircle, Check, Clock, Building2, FileText, Package, PackageCheck, Truck, Zap,
   Trash2, KeyRound, Copy, Search, Filter, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, SlidersHorizontal,
-  ChevronUp, ChevronDown, Puzzle, ToggleLeft, ToggleRight
+  ChevronUp, ChevronDown, Puzzle, ToggleLeft, ToggleRight, ScanLine, Boxes, RotateCcw, Database, UserCheck,
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -121,7 +121,7 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
         </Field>
         <Field label="Slug (subdominio)">
           {editing
-            ? <input value={form.slug} onChange={set('slug')} className={inputCls} placeholder="acme" pattern="[a-z0-9-]+" title="Solo letras minusculas, numeros y guiones" />
+            ? <input value={form.slug} onChange={set('slug')} className={inputCls} placeholder="acme" title="Solo letras minusculas, numeros y guiones" />
             : <p className={disabledCls}>{tenant.slug}</p>}
         </Field>
         <Field label="Email de contacto">
@@ -226,23 +226,89 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
   )
 }
 
-function StatCard({ icon: Icon, label, value, color, loading = false }) {
+function fmt(n) { return n == null ? '—' : Number(n).toLocaleString() }
+
+function SummaryCard({ icon: Icon, label, value, sub, color = 'text-blue-400', bg = 'bg-blue-500/10', loading = false }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg ${color} bg-opacity-10 flex items-center justify-center flex-shrink-0`}>
-          <Icon className={`w-5 h-5 ${color}`} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-gray-500 text-xs uppercase tracking-wider">{label}</p>
-          <p className="text-white font-bold text-lg leading-none mt-0.5">
-            {loading ? '...' : value}
-          </p>
-        </div>
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-center gap-3">
+      <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center flex-shrink-0`}>
+        <Icon className={`w-5 h-5 ${color}`} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-gray-500 text-xs uppercase tracking-wider">{label}</p>
+        <p className="text-white font-bold text-xl leading-none mt-0.5">{loading ? '...' : value}</p>
+        {sub && !loading && <p className="text-gray-600 text-[11px] mt-0.5">{sub}</p>}
       </div>
     </div>
   )
 }
+
+function ModuleStatCard({ icon: Icon, label, color, bg, border, total, recent, unit, loading }) {
+  return (
+    <div className={`bg-gray-900 border rounded-xl p-4 ${border}`}>
+      <div className="flex items-center gap-2.5 mb-3">
+        <div className={`w-8 h-8 rounded-lg ${bg} border ${border} flex items-center justify-center flex-shrink-0`}>
+          <Icon className={`w-4 h-4 ${color}`} />
+        </div>
+        <p className={`text-sm font-semibold ${color}`}>{label}</p>
+      </div>
+      {loading ? (
+        <p className="text-gray-500 text-sm">...</p>
+      ) : (
+        <div className="space-y-1">
+          <div className="flex items-baseline justify-between">
+            <span className="text-gray-500 text-xs">Total</span>
+            <span className="text-white font-bold text-lg leading-none">{fmt(total)}</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-gray-500 text-xs">Ultimos 30d</span>
+            <span className={`text-sm font-medium ${color}`}>{fmt(recent)}</span>
+          </div>
+          {unit && <p className="text-gray-700 text-[10px] pt-0.5">{unit}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const MODULE_STATS_CFG = [
+  {
+    key: 'dropscan',
+    icon: ScanLine, label: 'DropScan',
+    color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20',
+    totalKey: 'total_guias', recentKey: 'guias_last_30d', unit: 'guias',
+  },
+  {
+    key: 'surtido',
+    icon: Truck, label: 'Surtido WMS',
+    color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20',
+    totalKey: 'total_surtido_ordenes', recentKey: 'surtido_last_30d', unit: 'OBCs',
+  },
+  {
+    key: 'inventario',
+    icon: Boxes, label: 'Inventario',
+    color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20',
+    totalKey: 'total_inventario_scans', recentKey: 'inventario_last_30d', unit: 'escaneos',
+  },
+  {
+    key: 'devoluciones',
+    icon: RotateCcw, label: 'Devoluciones',
+    color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
+    totalKey: 'total_devoluciones', recentKey: 'devoluciones_last_30d', unit: 'salidas',
+  },
+  {
+    key: 'recepcion',
+    icon: PackageCheck, label: 'Recepcion',
+    color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20',
+    totalKey: 'total_recepcion_ordenes', recentKey: 'recepcion_last_30d', unit: 'entradas',
+  },
+  {
+    key: 'despacho',
+    icon: Package, label: 'Despacho',
+    color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20',
+    totalKey: 'total_folios', recentKey: 'despacho_last_30d', unit: 'folios',
+  },
+]
 
 const HISTORY_PAGE_SIZES = [20, 50, 100, 200, 500]
 const HISTORY_STATUS_FILTERS = [
@@ -1224,27 +1290,47 @@ export default function AdminTenantDetalle() {
         </div>
       </div>
 
-      {/* Stats section */}
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
-        <StatCard icon={Zap} label="Guias totales" value={stats?.total_guias.toLocaleString() ?? '—'} color="text-blue-400" loading={statsLoading} />
-        <StatCard icon={Package} label="Tarimas" value={stats?.total_tarimas.toLocaleString() ?? '—'} color="text-blue-400" loading={statsLoading} />
-        <StatCard icon={FileText} label="Folios" value={stats?.total_folios.toLocaleString() ?? '—'} color="text-cyan-400" loading={statsLoading} />
-        <StatCard icon={Truck} label="Ordenes surtido" value={stats?.total_surtido_ordenes.toLocaleString() ?? '—'} color="text-purple-400" loading={statsLoading} />
-        <StatCard icon={PackageCheck} label="Recepcion" value={stats?.total_recepcion_ordenes.toLocaleString() ?? '—'} color="text-cyan-400" loading={statsLoading} />
-        <StatCard icon={Zap} label="Scans recepcion" value={stats?.total_recepcion_scans.toLocaleString() ?? '—'} color="text-cyan-400" loading={statsLoading} />
-        <StatCard icon={AlertCircle} label="Anormalidades" value={stats?.total_anormalidades.toLocaleString() ?? '—'} color="text-rose-400" loading={statsLoading} />
-        <StatCard icon={Users} label="Escaneadores activos" value={stats?.active_scanners.toLocaleString() ?? '—'} color="text-amber-400" loading={statsLoading} />
+      {/* Stats: summary row + per-module cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <SummaryCard
+          icon={Users} label="Usuarios registrados"
+          value={stats ? fmt(stats.total_users) : '—'}
+          sub={stats ? `${fmt(stats.active_scanners)} escaneadores activos` : undefined}
+          color="text-blue-400" bg="bg-blue-500/10" loading={statsLoading}
+        />
+        <SummaryCard
+          icon={UserCheck} label="Escaneadores activos"
+          value={stats ? fmt(stats.active_scanners) : '—'}
+          color="text-amber-400" bg="bg-amber-500/10" loading={statsLoading}
+        />
+        <SummaryCard
+          icon={Database} label="Registros totales"
+          value={stats ? fmt(stats.total_rows_estimate) : '—'}
+          sub="estimado de peso en base de datos"
+          color="text-violet-400" bg="bg-violet-500/10" loading={statsLoading}
+        />
       </div>
-      {!statsLoading && stats ? (
-        <div className="flex items-center gap-2 text-xs text-gray-500 -mt-2">
-          <Activity className="w-3.5 h-3.5" />
-          <span>{stats.guias_last_30d.toLocaleString()} guias en los ultimos 30 dias</span>
-          <span className="text-gray-700">·</span>
-          <span>{stats.total_users} usuarios registrados</span>
-        </div>
-      ) : !statsLoading && !stats ? (
-        <p className="text-xs text-gray-600 -mt-2">Abre consola (F12) → pestaña Console para ver errores. Verifica que las migraciones se hayan ejecutado.</p>
-      ) : null}
+
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        {MODULE_STATS_CFG.map(cfg => (
+          <ModuleStatCard
+            key={cfg.key}
+            icon={cfg.icon}
+            label={cfg.label}
+            color={cfg.color}
+            bg={cfg.bg}
+            border={cfg.border}
+            total={stats?.[cfg.totalKey]}
+            recent={stats?.[cfg.recentKey]}
+            unit={cfg.unit}
+            loading={statsLoading}
+          />
+        ))}
+      </div>
+
+      {!statsLoading && !stats && (
+        <p className="text-xs text-gray-600">Abre consola (F12) → pestaña Console para ver errores. Verifica que las migraciones se hayan ejecutado.</p>
+      )}
 
       {/* Main grid: left = tenant info + modules, right = subscriptions + provisioning log stacked */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-stretch">

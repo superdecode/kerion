@@ -312,34 +312,73 @@ router.get('/tenants', authenticateAdmin, async (req, res) => {
 router.get('/tenants/:id/stats', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params
+    const ok = r => ({ rows: [{ total: 0, recent: 0 }], ...r })
+    const safe = (promise) => promise.catch(() => ok({}))
 
-    // Simple queries without tenant filter first to test connectivity
-    const [totalGuias, guias30d, tarimas, dispatchFolios, scanners, users, inboundOrders, inboundScans, anormalidades, pickOrders] = await Promise.all([
-      query(`SELECT COUNT(*) AS total FROM guias WHERE tenant_id = $1`, [id]).catch(err => { console.error('[guias query]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM guias WHERE tenant_id = $1 AND created_at >= now() - INTERVAL '30 days'`, [id]).catch(err => { console.error('[guias 30d]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM tarimas WHERE tenant_id = $1`, [id]).catch(err => { console.error('[tarimas]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM dispatch_folios WHERE tenant_id = $1`, [id]).catch(err => { console.error('[dispatch_folios]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM usuarios_internos WHERE tenant_id = $1 AND activo = true`, [id]).catch(err => { console.error('[usuarios_internos]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM usuarios WHERE tenant_id = $1`, [id]).catch(err => { console.error('[usuarios]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM inbound_orders WHERE tenant_id = $1`, [id]).catch(err => { console.error('[inbound_orders]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM inbound_scan_events WHERE tenant_id = $1`, [id]).catch(err => { console.error('[inbound_scan_events]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM anormalidades WHERE tenant_id = $1`, [id]).catch(err => { console.error('[anormalidades]', err.message); return { rows: [{ total: 0 }] } }),
-      query(`SELECT COUNT(*) AS total FROM pick_order_tracking WHERE tenant_id = $1`, [id]).catch(err => { console.error('[pick_order_tracking]', err.message); return { rows: [{ total: 0 }] } }),
+    const [
+      totalGuias, guias30d, tarimas,
+      dispatchFolios, dispatchFolios30d,
+      scanners, users,
+      inboundOrders, inboundOrders30d,
+      pickOrders, pickOrders30d,
+      inventarioScans, inventarioScans30d,
+      devSalidas, devSalidas30d,
+      anormalidades,
+    ] = await Promise.all([
+      safe(query(`SELECT COUNT(*) AS total FROM guias WHERE tenant_id = $1`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM guias WHERE tenant_id = $1 AND created_at >= now() - INTERVAL '30 days'`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM tarimas WHERE tenant_id = $1`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM dispatch_folios WHERE tenant_id = $1`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM dispatch_folios WHERE tenant_id = $1 AND created_at >= now() - INTERVAL '30 days'`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM usuarios_internos WHERE tenant_id = $1 AND activo = true`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM usuarios WHERE tenant_id = $1`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM inbound_orders WHERE tenant_id = $1`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM inbound_orders WHERE tenant_id = $1 AND created_at >= now() - INTERVAL '30 days'`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM pick_order_tracking WHERE tenant_id = $1`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM pick_order_tracking WHERE tenant_id = $1 AND created_at >= now() - INTERVAL '30 days'`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM inv_scans WHERE tenant_id = $1`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM inv_scans WHERE tenant_id = $1 AND created_at >= now() - INTERVAL '30 days'`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM dev_salidas WHERE tenant_id = $1`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM dev_salidas WHERE tenant_id = $1 AND created_at >= now() - INTERVAL '30 days'`, [id])),
+      safe(query(`SELECT COUNT(*) AS total FROM anormalidades WHERE tenant_id = $1`, [id])),
     ])
+
+    const n = r => Number(r.rows[0]?.total ?? 0)
+
+    // Estimate total rows as proxy for DB weight
+    const totalRows = n(totalGuias) + n(tarimas) + n(dispatchFolios) + n(inboundOrders)
+      + n(pickOrders) + n(inventarioScans) + n(devSalidas) + n(anormalidades)
 
     res.json({
       success: true,
       data: {
-        total_guias: Number(totalGuias.rows[0]?.total ?? 0),
-        guias_last_30d: Number(guias30d.rows[0]?.total ?? 0),
-        total_tarimas: Number(tarimas.rows[0]?.total ?? 0),
-        total_folios: Number(dispatchFolios.rows[0]?.total ?? 0),
-        active_scanners: Number(scanners.rows[0]?.total ?? 0),
-        total_users: Number(users.rows[0]?.total ?? 0),
-        total_recepcion_ordenes: Number(inboundOrders.rows[0]?.total ?? 0),
-        total_recepcion_scans: Number(inboundScans.rows[0]?.total ?? 0),
-        total_anormalidades: Number(anormalidades.rows[0]?.total ?? 0),
-        total_surtido_ordenes: Number(pickOrders.rows[0]?.total ?? 0),
+        // Users
+        total_users: n(users),
+        active_scanners: n(scanners),
+        // DB weight
+        total_rows_estimate: totalRows,
+        // DropScan
+        total_guias: n(totalGuias),
+        guias_last_30d: n(guias30d),
+        total_tarimas: n(tarimas),
+        // Surtido
+        total_surtido_ordenes: n(pickOrders),
+        surtido_last_30d: n(pickOrders30d),
+        // Inventario
+        total_inventario_scans: n(inventarioScans),
+        inventario_last_30d: n(inventarioScans30d),
+        // Devoluciones
+        total_devoluciones: n(devSalidas),
+        devoluciones_last_30d: n(devSalidas30d),
+        // Recepcion
+        total_recepcion_ordenes: n(inboundOrders),
+        recepcion_last_30d: n(inboundOrders30d),
+        // Despacho
+        total_folios: n(dispatchFolios),
+        despacho_last_30d: n(dispatchFolios30d),
+        // Misc
+        total_anormalidades: n(anormalidades),
+        total_recepcion_scans: Number(0),
       },
     })
   } catch (err) {
