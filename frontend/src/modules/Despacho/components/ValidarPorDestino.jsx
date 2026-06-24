@@ -15,10 +15,9 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
 import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
-import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
 import {
   getFolio, getFolioScans, addFolioScan, deleteFolioScan,
-  moveFolioScanTarima, cerrarFolio, cancelarFolio,
+  moveFolioScanTarima, cerrarFolio, cancelarFolio, getOutboundList,
 } from '../services/despachoService'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
@@ -48,16 +47,6 @@ function isOrderPending(order, validatedCount) {
   return validatedCount < (order.bultos_esperados ?? 1)
 }
 
-function buildLookupCodeSet(rawCodes = []) {
-  const codes = new Set()
-  rawCodes.filter(Boolean).forEach((rawCode) => {
-    const normalized = normalizeCodeFast(rawCode)
-    if (!normalized) return
-    generateCodeVariations(normalized, false).forEach((variant) => codes.add(variant))
-  })
-  return codes
-}
-
 function buildScanCodeVariants(rawCode) {
   const normalized = normalizeScanCode(rawCode)
   if (!normalized) return []
@@ -68,16 +57,52 @@ function hasCodeVariant(codeSet, variants) {
   return variants.some((variant) => codeSet.has(variant))
 }
 
+function findFirstVariantMatch(variantMap, variants) {
+  for (const variant of variants) {
+    const match = variantMap.get(variant)
+    if (match) return match
+  }
+  return null
+}
+
 function normalizeBaseCode(rawCode) {
   const normalized = normalizeCodeFast(extractBaseCode(rawCode) || rawCode)
   return normalized || ''
 }
 
-function metadataMatchesBase(rawValue, baseCode) {
-  if (!rawValue || !baseCode) return false
-  const normalizedValue = normalizeCodeFast(rawValue)
-  const metadataBase = normalizeBaseCode(rawValue)
-  return metadataBase === baseCode || normalizedValue.includes(baseCode)
+function parseOrderMeta(order) {
+  if (!order?.notas || typeof order.notas !== 'string') return {}
+  try {
+    const parsed = JSON.parse(order.notas)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function getDestinoName(order) {
+  return String(order?.receiverName || order?.logisticsChannel || order?.destinatario || '').trim()
+}
+
+function getOrderDateKey(order) {
+  const raw = order?.outboundTime || order?.expectedTime || order?.orderCreateTime || order?.outbound_date || ''
+  if (!raw) return ''
+  const str = String(raw).trim()
+  const isoLike = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  if (isoLike) return `${isoLike[1]}-${String(isoLike[2]).padStart(2, '0')}-${String(isoLike[3]).padStart(2, '0')}`
+
+  const slashDate = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (slashDate) {
+    const first = Number(slashDate[1])
+    const second = Number(slashDate[2])
+    const day = first > 12 ? first : second
+    const month = first > 12 ? second : first
+    return `${slashDate[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  }
+
+  const date = new Date(str)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString().slice(0, 10)
 }
 
 function CopyMetaPill({ label, value, tone = 'primary' }) {
@@ -136,8 +161,6 @@ export default function ValidarPorDestino({ folioId }) {
   const [showPanel, setShowPanel] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [orderEnrichment, setOrderEnrichment] = useState({})
-  const [enrichmentLoading, setEnrichmentLoading] = useState(false)
   const [forceModal, setForceModal] = useState({ open: false, code: '', orderNo: '' })
   const [overLimitModal, setOverLimitModal] = useState({ open: false, payload: null, scanned: 0, expected: 0 })
   const [moveModal, setMoveModal] = useState({ open: false, scan: null, target: '' })
@@ -163,40 +186,16 @@ export default function ValidarPorDestino({ folioId }) {
   const orders = folioData?.orders ?? []
   const scans = scansData?.scans ?? []
 
+  const { data: outboundCacheData } = useQuery({
+    queryKey: ['despacho-outbound-list'],
+    queryFn: getOutboundList,
+    enabled: false,
+    staleTime: 60_000,
+  })
+
   const isActive = folio && ['borrador', 'en_proceso'].includes(folio.estado)
   const editable = !!isActive && canWrite('despacho.folios')
   const currentTarimaRef = genTarimaRef(currentTarimaNum)
-
-  // Enrich orders with WMS trucking + reference data
-  const orderIdsKey = orders.map(o => o.outbound_order_no).join(',')
-  useEffect(() => {
-    if (!orders.length) return
-    setEnrichmentLoading(true)
-    let cancelled = false
-    Promise.allSettled(
-      orders.map(o =>
-        getOutboundDetail(o.outbound_order_no)
-          .then(r => ({ orderNo: o.outbound_order_no, data: r?.data ?? null }))
-          .catch(() => ({ orderNo: o.outbound_order_no, data: null }))
-      )
-    ).then(results => {
-      if (cancelled) return
-      const map = {}
-      results.forEach(r => {
-        if (r.status === 'fulfilled') {
-          const { orderNo, data } = r.value
-          map[orderNo] = {
-            logisticsTrackNo: data?.logisticsTrackNo || null,
-            thirdOrderNo: data?.thirdOrderNo || null,
-          }
-        }
-      })
-      setOrderEnrichment(map)
-      setEnrichmentLoading(false)
-    })
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderIdsKey, folioId])
 
   useEffect(() => {
     if (editable) setTimeout(() => scanRef.current?.focus(), 100)
@@ -215,6 +214,85 @@ export default function ValidarPorDestino({ folioId }) {
     qc.invalidateQueries({ queryKey: ['despacho-folios'] })
     qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
   }
+
+  const outboundRecords = outboundCacheData?.data?.records ?? []
+
+  const orderMetaByNo = useMemo(() => {
+    const cachedByOrder = new Map(outboundRecords.map(record => [record.outboundOrderNo, record]))
+    const map = new Map()
+    orders.forEach((order) => {
+      const savedMeta = parseOrderMeta(order)
+      const cached = cachedByOrder.get(order.outbound_order_no) || {}
+      map.set(order.outbound_order_no, {
+        logisticsTrackNo: savedMeta.logisticsTrackNo || cached.logisticsTrackNo || null,
+        thirdOrderNo: savedMeta.thirdOrderNo || cached.thirdOrderNo || null,
+        logisticsChannel: savedMeta.logisticsChannel || cached.logisticsChannel || null,
+        destino: savedMeta.destino || getDestinoName(cached) || order.destinatario || folio?.destino || '',
+        outboundDate: savedMeta.outbound_date || getOrderDateKey(cached),
+        allCustomizeCodes: Array.isArray(savedMeta.allCustomizeCodes)
+          ? savedMeta.allCustomizeCodes
+          : Array.isArray(cached.allCustomizeCodes)
+            ? cached.allCustomizeCodes
+            : [],
+      })
+    })
+    return map
+  }, [orders, outboundRecords, folio?.destino])
+
+  const orderCodeLookup = useMemo(() => {
+    const variants = new Map()
+    const bases = new Map()
+    orders.forEach((order) => {
+      const meta = orderMetaByNo.get(order.outbound_order_no) || {}
+      const rawCodes = [
+        order.outbound_order_no,
+        meta.logisticsTrackNo,
+        meta.thirdOrderNo,
+        ...(Array.isArray(meta.allCustomizeCodes) ? meta.allCustomizeCodes : []),
+      ]
+      rawCodes.filter(Boolean).forEach((rawCode) => {
+        const normalized = normalizeCodeFast(rawCode)
+        if (normalized) {
+          generateCodeVariations(normalized, false).forEach((variant) => {
+            if (!variants.has(variant)) variants.set(variant, order.outbound_order_no)
+          })
+        }
+
+        const base = normalizeBaseCode(rawCode)
+        if (base && !bases.has(base)) bases.set(base, order.outbound_order_no)
+      })
+    })
+    return { variants, bases }
+  }, [orders, orderMetaByNo])
+
+  const externalCodeLookup = useMemo(() => {
+    const folioOrderNos = new Set(orders.map(order => order.outbound_order_no))
+    const variants = new Map()
+
+    outboundRecords.forEach((record) => {
+      if (!record?.outboundOrderNo || folioOrderNos.has(record.outboundOrderNo)) return
+      const rawCodes = [
+        record.outboundOrderNo,
+        record.logisticsTrackNo,
+        record.thirdOrderNo,
+      ]
+      rawCodes.filter(Boolean).forEach((rawCode) => {
+        const normalized = normalizeCodeFast(rawCode)
+        if (!normalized) return
+        generateCodeVariations(normalized, false).forEach((variant) => {
+          if (!variants.has(variant)) {
+            variants.set(variant, {
+              orderNo: record.outboundOrderNo,
+              destino: getDestinoName(record),
+              dateKey: getOrderDateKey(record),
+            })
+          }
+        })
+      })
+    })
+
+    return { variants }
+  }, [orders, outboundRecords])
 
   const currentTarimaHasScans = useMemo(
     () => scans.some((scan) => (scan.tarima_ref || 'Sin tarima') === currentTarimaRef),
@@ -252,9 +330,38 @@ export default function ValidarPorDestino({ folioId }) {
 
   const { mutate: doAddScan } = useMutation({
     mutationFn: (body) => addFolioScan(folioId, body),
-    onSuccess: (data, body) => {
+    onMutate: async (body) => {
+      const queryKey = ['despacho-folio-scans', folioId]
+      await qc.cancelQueries({ queryKey })
+      const optimisticId = `optimistic-${Date.now()}-${body?.codigo_caja || 'scan'}`
+      const optimisticScan = {
+        id: optimisticId,
+        codigo_caja: body?.codigo_caja,
+        tarima_ref: body?.tarima_ref || null,
+        matched_order_no: body?.matched_order_no || null,
+        validated_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        validated_by_nombre: 'Pendiente',
+        __optimistic: true,
+      }
+
+      qc.setQueryData(queryKey, (old) => {
+        const oldScans = old?.scans ?? scans
+        return { ...(old || {}), scans: [...oldScans, optimisticScan] }
+      })
+
+      return { queryKey, optimisticId }
+    },
+    onSuccess: (data, body, context) => {
       pendingOnlineRef.current.delete(body?.codigo_caja)
-      qc.invalidateQueries({ queryKey: ['despacho-folio-scans', folioId] })
+      if (Array.isArray(data?.scans)) {
+        qc.setQueryData(['despacho-folio-scans', folioId], (old) => ({ ...(old || {}), scans: data.scans }))
+      } else if (data?.scan) {
+        qc.setQueryData(['despacho-folio-scans', folioId], (old) => ({
+          ...(old || {}),
+          scans: (old?.scans ?? scans).map(scan => scan.id === context?.optimisticId ? data.scan : scan),
+        }))
+      }
       qc.invalidateQueries({ queryKey: ['despacho-folio', folioId] })
       qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
       const matchedOrderNo = body?.matched_order_no
@@ -262,7 +369,9 @@ export default function ValidarPorDestino({ folioId }) {
         const matchedOrder = orders.find(order => order.outbound_order_no === matchedOrderNo)
         const expected = Number(matchedOrder?.bultos_esperados || 0)
         if (expected > 0) {
-          const scansAfterSave = data?.scans || []
+          const scansAfterSave = Array.isArray(data?.scans)
+            ? data.scans
+            : (qc.getQueryData(['despacho-folio-scans', folioId])?.scans || [])
           const scanned = scansAfterSave.filter(scan => scan.matched_order_no === matchedOrderNo).length
           if (scanned === expected) {
             addToast(t('desp.validar.destino.ordenCompletaAlert')
@@ -277,8 +386,14 @@ export default function ValidarPorDestino({ folioId }) {
         }
       }
     },
-    onError: (err, body) => {
+    onError: (err, body, context) => {
       pendingOnlineRef.current.delete(body?.codigo_caja)
+      if (context?.queryKey && context?.optimisticId) {
+        qc.setQueryData(context.queryKey, (old) => ({
+          ...(old || {}),
+          scans: (old?.scans ?? []).filter(scan => scan.id !== context.optimisticId),
+        }))
+      }
       const code = err?.response?.data?.code
       const msg = err?.response?.data?.error || 'Error registrando escaneo'
       if (code === 'DUPLICATE_IN_FOLIO') {
@@ -325,6 +440,7 @@ export default function ValidarPorDestino({ folioId }) {
         return
       }
     }
+    if (payload?.codigo_caja) pendingOnlineRef.current.add(payload.codigo_caja)
     doAddScan(payload)
   }, [doAddScan, orders, scans])
 
@@ -361,32 +477,31 @@ export default function ValidarPorDestino({ folioId }) {
     const baseCode = normalizeBaseCode(code)
 
     // Match by outbound_order_no, logisticsTrackNo, thirdOrderNo, or scanned base
-    // against tracking/reference metadata for orders already inside this folio.
-    let matchedOrderNo = null
-    for (const order of orders) {
-      const enrichment = orderEnrichment[order.outbound_order_no] || {}
-      const lookupCodes = buildLookupCodeSet([
-        order.outbound_order_no,
-        enrichment.logisticsTrackNo,
-        enrichment.thirdOrderNo,
-      ])
-      if (hasCodeVariant(lookupCodes, variants)) {
-        matchedOrderNo = order.outbound_order_no
-        break
-      }
-
-      if (
-        metadataMatchesBase(order.outbound_order_no, baseCode) ||
-        metadataMatchesBase(enrichment.logisticsTrackNo, baseCode) ||
-        metadataMatchesBase(enrichment.thirdOrderNo, baseCode)
-      ) {
-        matchedOrderNo = order.outbound_order_no
-        break
-      }
-    }
+    // against a prebuilt index for orders already inside this folio.
+    const matchedOrderNo =
+      findFirstVariantMatch(orderCodeLookup.variants, variants) ||
+      orderCodeLookup.bases.get(baseCode) ||
+      null
 
     if (!matchedOrderNo) {
-      setErrorModal({ type: 'nomatch', code, allowForce: true })
+      const externalMatch = findFirstVariantMatch(externalCodeLookup.variants, variants)
+      const activeDate = [...orderMetaByNo.values()].find(meta => meta.outboundDate)?.outboundDate || ''
+      const activeDestino = String(folio?.destino || '').trim()
+      let message = null
+
+      if (externalMatch) {
+        const sameDate = activeDate && externalMatch.dateKey === activeDate
+        const sameDestino = activeDestino && externalMatch.destino === activeDestino
+        if (sameDate && !sameDestino) {
+          message = `El codigo pertenece a la fecha ${externalMatch.dateKey}, pero a otro destino: ${externalMatch.destino || 'sin destino'}. Orden ${externalMatch.orderNo}.`
+        } else if (!sameDate) {
+          message = `El codigo pertenece a otra fecha (${externalMatch.dateKey || 'sin fecha'}) y destino ${externalMatch.destino || 'sin destino'}. Orden ${externalMatch.orderNo}.`
+        } else {
+          message = `El codigo existe en WMS, pero no esta dentro del pool activo de este folio. Orden ${externalMatch.orderNo}.`
+        }
+      }
+
+      setErrorModal({ type: 'nomatch', code, allowForce: true, message })
       setTimeout(() => scanRef.current?.focus(), 100)
       return
     }
@@ -402,9 +517,8 @@ export default function ValidarPorDestino({ folioId }) {
       return
     }
 
-    pendingOnlineRef.current.add(code)
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: matchedOrderNo })
-  }, [scanInput, scans, orders, orderEnrichment, currentTarimaRef, isOffline, folioId, requestAddScan, addToast])
+  }, [scanInput, scans, orderCodeLookup, externalCodeLookup, orderMetaByNo, folio?.destino, currentTarimaRef, isOffline, folioId, requestAddScan, addToast])
 
   const openForceModal = useCallback((code) => {
     setErrorModal(null)
@@ -420,7 +534,6 @@ export default function ValidarPorDestino({ folioId }) {
     const code = normalizeScanCode(forceModal.code)
     const orderNo = normalizeCodeFast(forceModal.orderNo)
     if (!code || !orderNo) return
-    pendingOnlineRef.current.add(code)
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: orderNo })
     setForceModal({ open: false, code: '', orderNo: '' })
     setTimeout(() => scanRef.current?.focus(), 100)
@@ -429,7 +542,6 @@ export default function ValidarPorDestino({ folioId }) {
   const submitForceScanNoOrder = useCallback(() => {
     const code = normalizeScanCode(forceModal.code)
     if (!code) return
-    pendingOnlineRef.current.add(code)
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: null })
     setForceModal({ open: false, code: '', orderNo: '' })
     setTimeout(() => scanRef.current?.focus(), 100)
@@ -476,14 +588,14 @@ export default function ValidarPorDestino({ folioId }) {
       filtered = filtered.filter(o => {
         if (o.outbound_order_no.toLowerCase().includes(q)) return true
         if (o.destinatario?.toLowerCase().includes(q)) return true
-        const enrich = orderEnrichment[o.outbound_order_no]
-        if (enrich?.logisticsTrackNo?.toLowerCase().includes(q)) return true
-        if (enrich?.thirdOrderNo?.toLowerCase().includes(q)) return true
+        const meta = orderMetaByNo.get(o.outbound_order_no)
+        if (meta?.logisticsTrackNo?.toLowerCase().includes(q)) return true
+        if (meta?.thirdOrderNo?.toLowerCase().includes(q)) return true
         return false
       })
     }
     return filtered
-  }, [orders, searchQuery, orderEnrichment])
+  }, [orders, searchQuery, orderMetaByNo])
 
   const statusCounts = useMemo(() => ({
     all: searchedOrders.length,
@@ -583,11 +695,6 @@ export default function ValidarPorDestino({ folioId }) {
                 <span className="inline-flex items-center gap-1 rounded-full border border-accent-200 bg-accent-50 px-2 py-0.5 text-[10px] font-bold text-accent-700 shrink-0">
                   <Radio className="w-2.5 h-2.5" />{currentTarimaRef}
                 </span>
-                {enrichmentLoading && (
-                  <span className="inline-flex items-center gap-1 text-[10px] text-warm-400">
-                    <Loader2 className="w-2.5 h-2.5 animate-spin" />WMS
-                  </span>
-                )}
               </div>
             </div>
           </div>
@@ -749,7 +856,10 @@ export default function ValidarPorDestino({ folioId }) {
                         <span className="w-5 text-right text-[10px] text-warm-400 tabular-nums shrink-0">
                           {scansByTarima[tarima].length - i}
                         </span>
-                        <Check className="w-3 h-3 text-success-500 shrink-0" />
+                        {s.__optimistic
+                          ? <Loader2 className="w-3 h-3 text-primary-500 shrink-0 animate-spin" />
+                          : <Check className="w-3 h-3 text-success-500 shrink-0" />
+                        }
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-mono text-xs font-semibold text-warm-800">{s.codigo_caja}</span>
@@ -763,7 +873,7 @@ export default function ValidarPorDestino({ folioId }) {
                           </div>
                           <span className="text-[10px] text-warm-400">{fmtDateTime(s.validated_at)}</span>
                         </div>
-                        {editable && (
+                        {editable && !s.__optimistic && (
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               type="button"
@@ -878,8 +988,7 @@ export default function ValidarPorDestino({ folioId }) {
                 const esperadas = order.bultos_esperados ?? 0
                 const pct = esperadas > 0 ? Math.min(100, Math.round((validadas / esperadas) * 100)) : null
                 const complete = isOrderComplete(order, validadas)
-                const enrich = orderEnrichment[order.outbound_order_no]
-                const enrichDone = order.outbound_order_no in orderEnrichment
+                const enrich = orderMetaByNo.get(order.outbound_order_no) || {}
 
                 return (
                   <div key={order.id} className={`p-3.5 rounded-2xl border transition-all shadow-[0_10px_24px_-18px_rgba(15,23,42,0.28)] ${
@@ -925,21 +1034,13 @@ export default function ValidarPorDestino({ folioId }) {
 
                     {/* Trucking + Reference */}
                     <div className="flex min-h-[1.75rem] flex-nowrap items-start gap-1.5 mb-2.5 overflow-hidden">
-                      {enrichmentLoading && !enrichDone ? (
-                        <span className="text-[10px] text-warm-400 flex items-center gap-1">
-                          <Loader2 className="w-3 h-3 animate-spin" />cargando WMS...
-                        </span>
+                      {enrich?.logisticsTrackNo ? (
+                        <CopyMetaPill value={enrich.logisticsTrackNo} tone="primary" />
                       ) : (
-                        <>
-                          {enrich?.logisticsTrackNo ? (
-                            <CopyMetaPill value={enrich.logisticsTrackNo} tone="primary" />
-                          ) : enrichDone ? (
-                            <span className="shrink-0 text-[10px] text-warm-300 italic">{t('desp.validar.destino.sinTracking')}</span>
-                          ) : null}
-                          {enrich?.thirdOrderNo && (
-                            <CopyMetaPill label="Ref:" value={enrich.thirdOrderNo} tone="warm" />
-                          )}
-                        </>
+                        <span className="shrink-0 text-[10px] text-warm-300 italic">{t('desp.validar.destino.sinTracking')}</span>
+                      )}
+                      {enrich?.thirdOrderNo && (
+                        <CopyMetaPill label="Ref:" value={enrich.thirdOrderNo} tone="warm" />
                       )}
                     </div>
 
@@ -1000,7 +1101,11 @@ export default function ValidarPorDestino({ folioId }) {
       >
         <p className="text-sm text-warm-700">
           {errorModal?.type === 'nomatch'
-            ? <>{t('desp.validar.destino.codNoMatchPre')}<span className="font-mono font-semibold">{errorModal.code}</span>{t('desp.validar.destino.codNoMatchPost')}</>
+            ? (
+              errorModal.message
+                ? <>{errorModal.message}</>
+                : <>{t('desp.validar.destino.codNoMatchPre')}<span className="font-mono font-semibold">{errorModal.code}</span>{t('desp.validar.destino.codNoMatchPost')}</>
+            )
             : errorModal?.type === 'duplicate' && errorModal?.code
             ? <>{t('desp.validar.destino.codDupLocalPre')}<span className="font-mono font-semibold">{errorModal.code}</span>{t('desp.validar.destino.codDupLocalPost')}</>
             : errorModal?.message}

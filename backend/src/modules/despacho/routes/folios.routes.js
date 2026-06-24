@@ -336,13 +336,18 @@ router.post('/:id/orders/bulk',
       // Insert all orders — skip duplicates silently
       for (const o of orders) {
         if (!o.outbound_order_no) continue
+        const notes = typeof o.notas === 'string'
+          ? o.notas
+          : o.notas
+            ? JSON.stringify(o.notas)
+            : null
         await req.tQuery(
           `INSERT INTO dispatch_folio_orders
              (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas)
            VALUES ($1,$2,$3,$4,$5,$6,$7)
            ON CONFLICT (tenant_id, folio_id, outbound_order_no) DO NOTHING`,
           [req.tenantId, req.params.id, o.outbound_order_no,
-           o.destinatario || null, o.bultos || 0, o.bultos_esperados || null, o.notas || null]
+           o.destinatario || null, o.bultos || 0, o.bultos_esperados || null, notes]
         )
       }
       await req.tQuery(
@@ -430,10 +435,11 @@ router.post('/:id/scans',
         })
       }
 
-      await req.tQuery(
+      const insertRes = await req.tQuery(
         `INSERT INTO dispatch_order_scans
            (tenant_id, folio_id, codigo_caja, tarima_ref, matched_order_no, validated_by)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+         VALUES ($1,$2,$3,$4,$5,$6)
+         RETURNING id`,
         [req.tenantId, req.params.id, codigo_caja.trim(), tarima_ref || null, matched_order_no || null, req.user.id]
       )
 
@@ -447,15 +453,14 @@ router.post('/:id/scans',
         [req.params.id, req.tenantId]
       )
 
-      const scansRes = await req.tQuery(
+      const scanRes = await req.tQuery(
         `SELECT s.*, u.nombre_completo AS validated_by_nombre
          FROM dispatch_order_scans s
          LEFT JOIN usuarios u ON u.id = s.validated_by
-         WHERE s.tenant_id = $1 AND s.folio_id = $2
-         ORDER BY s.validated_at ASC`,
-        [req.tenantId, req.params.id]
+         WHERE s.tenant_id = $1 AND s.id = $2`,
+        [req.tenantId, insertRes.rows[0].id]
       )
-      res.json({ scans: scansRes.rows })
+      res.json({ scan: scanRes.rows[0] })
     } catch (error) {
       if (error.code === '23505') {
         return res.status(409).json({ error: 'Código ya escaneado en este folio', code: 'DUPLICATE_IN_FOLIO' })

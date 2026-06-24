@@ -213,6 +213,15 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
         destinatario: getDestinoName(o),
         bultos: 0,
         bultos_esperados: o.outboundBoxCount || null,
+        notas: JSON.stringify({
+          validation_scope: 'por_destino',
+          destino: selectedDestinoOption.name,
+          outbound_date: getOrderDateKey(o),
+          logisticsTrackNo: o.logisticsTrackNo || null,
+          thirdOrderNo: o.thirdOrderNo || null,
+          logisticsChannel: o.logisticsChannel || null,
+          allCustomizeCodes: Array.isArray(o.allCustomizeCodes) ? o.allCustomizeCodes : [],
+        }),
       }))
     }
     onCreate(payload)
