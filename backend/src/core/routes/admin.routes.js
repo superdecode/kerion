@@ -1430,4 +1430,59 @@ router.delete('/notifications', authenticateAdmin, async (req, res) => {
   }
 })
 
+// GET /api/admin/bug-reports — list with pagination and status filter
+router.get('/bug-reports', authenticateAdmin, async (req, res) => {
+  const { status, page = 1, limit = 50 } = req.query
+  const rows_limit = Math.min(100, parseInt(limit))
+  const offset = (Math.max(1, parseInt(page)) - 1) * rows_limit
+  try {
+    const whereClause = status ? 'WHERE status = $3' : ''
+    const dataParams = status ? [rows_limit, offset, status] : [rows_limit, offset]
+    const countParams = status ? [status] : []
+    const [reports, count] = await Promise.all([
+      query(
+        `SELECT id, tenant_id, tenant_name, user_email, user_name, description, page_url,
+                status, admin_notes, created_at, updated_at
+           FROM bug_reports ${whereClause}
+          ORDER BY created_at DESC
+          LIMIT $1 OFFSET $2`,
+        dataParams
+      ),
+      query(
+        `SELECT count(*)::int AS total FROM bug_reports ${status ? 'WHERE status = $1' : ''}`,
+        countParams
+      ),
+    ])
+    res.json({ reports: reports.rows, total: count.rows[0].total })
+  } catch (err) {
+    console.error('[admin/bug-reports GET]', err.message)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// PATCH /api/admin/bug-reports/:id — update status and/or admin_notes
+router.patch('/bug-reports/:id', authenticateAdmin, async (req, res) => {
+  const { status, admin_notes } = req.body
+  const VALID = ['pending', 'reviewing', 'resolved']
+  if (status && !VALID.includes(status)) {
+    return res.status(400).json({ error: 'Estado invalido' })
+  }
+  try {
+    const result = await query(
+      `UPDATE bug_reports
+          SET status      = COALESCE($1, status),
+              admin_notes = COALESCE($2, admin_notes),
+              updated_at  = now()
+        WHERE id = $3
+        RETURNING *`,
+      [status || null, admin_notes !== undefined ? admin_notes : null, req.params.id]
+    )
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Reporte no encontrado' })
+    res.json({ report: result.rows[0] })
+  } catch (err) {
+    console.error('[admin/bug-reports/:id PATCH]', err.message)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
 export default router

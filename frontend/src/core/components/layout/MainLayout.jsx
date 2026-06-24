@@ -5,6 +5,7 @@ import ConnectionBanner from '../common/ConnectionBanner'
 import SubscriptionGuard from '../common/SubscriptionGuard'
 import OnboardingTour from './OnboardingTour'
 import WelcomeModal, { AutoTourLauncher } from './WelcomeModal'
+import BugReportButton from '../common/BugReportButton'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { usePermissionSync } from '../../hooks/usePermissionSync'
 
@@ -27,6 +28,7 @@ export default function MainLayout() {
       <OnboardingTour />
       <WelcomeModal />
       <AutoTourLauncher />
+      <BugReportButton />
     </div>
   )
 }

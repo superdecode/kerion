@@ -16,6 +16,7 @@ import adminRoutes from './core/routes/admin.routes.js'
 import publicRoutes from './core/routes/public.routes.js'
 import cronRoutes from './core/routes/cron.routes.js'
 import usageRoutes from './core/routes/usage.routes.js'
+import supportRoutes from './core/routes/support.routes.js'
 
 // Multi-tenant middleware
 import { tenantContext } from './modules/middleware/tenantContext.js'
@@ -209,6 +210,9 @@ app.use('/api/recepcion', tenantContext, tenantDB, moduleGuard('recepcion'), rec
 
 // Usage summary — available to all authenticated tenants
 app.use('/api/usage', tenantContext, tenantDB, usageRoutes)
+
+// Support — bug reports from tenant users
+app.use('/api/support', tenantContext, tenantDB, supportRoutes)
 
 
 // Inline migrations extracted to backend/migrations/048_server_inline_extract.sql
