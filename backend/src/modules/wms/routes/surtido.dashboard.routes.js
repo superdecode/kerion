@@ -46,13 +46,23 @@ router.get('/',
         topOperadoresRes,
         tendenciaRes,
       ] = await Promise.all([
-        // Órdenes únicas por estado operativo.
+        // Órdenes únicas por estado operativo derivado.
         req.tQuery(
-          `SELECT status, COUNT(DISTINCT outbound_order_no) AS cantidad
-           FROM pick_sessions
-           WHERE tenant_id = $1
-             AND ${instantDateInTZ('created_at', tz)} BETWEEN $2 AND $3
-           GROUP BY status
+          `SELECT
+             CASE
+               WHEN ps.status = 'complete' THEN 'completado'
+               WHEN ps.status = 'open' AND ot.surtidor_nombre IS NOT NULL THEN 'asignado'
+               WHEN ps.status = 'open' THEN 'por_asignar'
+               ELSE ps.status
+             END AS status,
+             COUNT(DISTINCT ps.outbound_order_no) AS cantidad
+           FROM pick_sessions ps
+           LEFT JOIN pick_order_tracking ot
+             ON ot.outbound_order_no = ps.outbound_order_no
+             AND ot.tenant_id = ps.tenant_id
+           WHERE ps.tenant_id = $1
+             AND ${instantDateInTZ('ps.created_at', tz)} BETWEEN $2 AND $3
+           GROUP BY 1
            ORDER BY cantidad DESC`,
           [req.tenantId, dateStart, dateEnd]
         ),

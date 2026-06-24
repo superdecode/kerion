@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell,
+  LineChart, Line,
 } from 'recharts'
 import {
   ClipboardList, CheckCircle2, AlertTriangle, Users, TrendingUp, Activity,
@@ -18,19 +18,68 @@ import { fmtDateString, getToday, subtractDays, toDateKey } from '../../../core/
 import { getOutboundList } from '../../WmsHub/services/googleSheetsService'
 
 const ESTADO_COLORS = {
-  complete: '#22c55e',
-  open: '#3b82f6',
-  with_discrepancies: '#f59e0b',
-  cancelled: '#ef4444',
+  completado:   '#22c55e',
+  asignado:     '#3b82f6',
+  por_asignar:  '#f59e0b',
+  con_faltante: '#ef4444',
+  cancelled:    '#6b7280',
+  // fallback legacy keys
+  complete:     '#22c55e',
+  open:         '#f59e0b',
 }
 const PIE_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4']
 
-function estadoLabel(s, t) {
-  const map = {
-    complete: t('dashboard.status.complete'), open: t('dashboard.status.open'),
-    with_discrepancies: t('dashboard.status.withDiscrepancies'), cancelled: t('dashboard.status.cancelled'),
-  }
-  return map[s] || s
+const ESTADO_LABEL_MAP = {
+  completado:   'Completado',
+  asignado:     'Asignado',
+  por_asignar:  'Por asignar',
+  con_faltante: 'Con faltante',
+  cancelled:    'Cancelado',
+  complete:     'Completado',
+  open:         'Por asignar',
+  with_discrepancies: 'Con discrepancias',
+}
+
+function estadoLabel(s) {
+  return ESTADO_LABEL_MAP[s] || s
+}
+
+function SvgDonut({ data }) {
+  const cx = 90, cy = 90, outerR = 82, innerR = 50
+  const total = data.reduce((s, d) => s + Number(d.cantidad), 0)
+  if (!total) return null
+  let angle = -Math.PI / 2
+  return (
+    <svg width={180} height={180}>
+      {data.map((entry, i) => {
+        const frac = Number(entry.cantidad) / total
+        const sweep = frac * 2 * Math.PI
+        const startA = angle
+        angle += sweep
+        const endA = angle
+        const fill = ESTADO_COLORS[entry.status] || PIE_COLORS[i % PIE_COLORS.length]
+        if (frac >= 0.9999) {
+          return (
+            <g key={i}>
+              <circle cx={cx} cy={cy} r={outerR} fill={fill} />
+              <circle cx={cx} cy={cy} r={innerR} fill="white" />
+            </g>
+          )
+        }
+        const large = sweep > Math.PI ? 1 : 0
+        const ox1 = cx + outerR * Math.cos(startA), oy1 = cy + outerR * Math.sin(startA)
+        const ox2 = cx + outerR * Math.cos(endA),   oy2 = cy + outerR * Math.sin(endA)
+        const ix1 = cx + innerR * Math.cos(endA),   iy1 = cy + innerR * Math.sin(endA)
+        const ix2 = cx + innerR * Math.cos(startA), iy2 = cy + innerR * Math.sin(startA)
+        return (
+          <path key={i}
+            d={`M${ox1} ${oy1} A${outerR} ${outerR} 0 ${large} 1 ${ox2} ${oy2} L${ix1} ${iy1} A${innerR} ${innerR} 0 ${large} 0 ${ix2} ${iy2}Z`}
+            fill={fill} stroke="#fff" strokeWidth={2}
+          />
+        )
+      })}
+    </svg>
+  )
 }
 
 function trendTitle(bucket, t) {
@@ -140,24 +189,16 @@ export default function SurtidoDashboard({ dateRange }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title={t('dashboard.surtido.chart.ordenesEstado')} icon={ClipboardList}>
           {graficas.ordenes_por_estado.length > 0 ? (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6 py-2">
               <div className="shrink-0">
-                <PieChart width={180} height={180}>
-                  <Pie data={graficas.ordenes_por_estado} dataKey="cantidad" nameKey="status"
-                    cx={90} cy={90} outerRadius={82} innerRadius={50} strokeWidth={2} stroke="#fff">
-                    {graficas.ordenes_por_estado.map((entry, i) => (
-                      <Cell key={i} fill={ESTADO_COLORS[entry.status] || PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(val, name) => [val, estadoLabel(name, t)]} />
-                </PieChart>
+                <SvgDonut data={graficas.ordenes_por_estado} />
               </div>
-              <div className="flex-1 space-y-2">
+              <div className="flex-1 space-y-2.5">
                 {graficas.ordenes_por_estado.map((e, i) => (
                   <div key={e.status} className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: ESTADO_COLORS[e.status] || PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="text-xs text-warm-600 flex-1 truncate">{estadoLabel(e.status, t)}</span>
-                    <span className="text-xs font-bold text-warm-700">{e.cantidad}</span>
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: ESTADO_COLORS[e.status] || PIE_COLORS[i % PIE_COLORS.length] }} />
+                    <span className="text-xs text-warm-600 flex-1">{estadoLabel(e.status)}</span>
+                    <span className="text-xs font-bold text-warm-800">{e.cantidad}</span>
                   </div>
                 ))}
               </div>
@@ -171,7 +212,7 @@ export default function SurtidoDashboard({ dateRange }) {
               <LineChart data={tendencia} margin={{ left: 0, right: 20, top: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0ece8" />
                 <XAxis dataKey="periodo" tick={{ fontSize: 10 }} tickFormatter={v => trendLabel(v, tendenciaBucket)} />
-                <YAxis tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
                 <Tooltip
                   contentStyle={{ fontSize: 12, borderRadius: 8 }}
                   labelFormatter={v => trendLabel(v, tendenciaBucket)}
@@ -191,7 +232,7 @@ export default function SurtidoDashboard({ dateRange }) {
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={graficas.top_operadores} layout="vertical" margin={{ left: 4, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0ece8" />
-                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <XAxis type="number" tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
                 <YAxis type="category" dataKey="operador" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Bar dataKey="cajas" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Cajas" />
@@ -205,7 +246,7 @@ export default function SurtidoDashboard({ dateRange }) {
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={[...graficas.top_operadores].sort((a, b) => b.ordenes - a.ordenes)} layout="vertical" margin={{ left: 4, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0ece8" />
-                <XAxis type="number" tick={{ fontSize: 11 }} />
+                <XAxis type="number" tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
                 <YAxis type="category" dataKey="operador" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Bar dataKey="ordenes" fill="#06b6d4" radius={[0, 4, 4, 0]} name="Ordenes" />
