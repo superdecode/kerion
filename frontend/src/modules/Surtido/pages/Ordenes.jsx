@@ -1005,6 +1005,8 @@ export default function Ordenes() {
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
   const [isTransitioning, setIsTransitioning] = useState(false)
   const timeFromInputRef = useRef(null)
+  const dateModeRef = useRef(null)
+  const [dateModeOpen, setDateModeOpen] = useState(false)
 
   const handleStatusChange = (newStatus) => {
     setIsTransitioning(true)
@@ -1103,6 +1105,14 @@ export default function Ordenes() {
     const intervalId = window.setInterval(syncAutoDateWindow, 60 * 1000)
     return () => window.clearInterval(intervalId)
   }, [autoDateAnchor, dateFrom, dateTo, dateFromDraft, dateToDraft])
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (dateModeRef.current && !dateModeRef.current.contains(e.target)) setDateModeOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -1816,6 +1826,45 @@ export default function Ordenes() {
       <div className="sticky top-[3.5rem] z-[20] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5">
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Date-field dropdown — selects which column drives the date range filter */}
+            <div ref={dateModeRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setDateModeOpen(o => !o)}
+                className={`inline-flex h-10 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all ${
+                  dateMode === 'asignacion'
+                    ? 'border-accent-400 bg-accent-50 text-accent-700'
+                    : 'border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100'
+                }`}
+              >
+                <CalendarClock size={13} className="shrink-0" />
+                <span>{t('surtido.ordenes.filtrar_por')}:</span>
+                <span className="font-bold">{t(dateMode === 'asignacion' ? 'surtido.ordenes.date_field.asignacion' : 'surtido.ordenes.date_field.entrega')}</span>
+                <ChevronDown size={12} className={`shrink-0 transition-transform ${dateModeOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {dateModeOpen && (
+                <div className="absolute top-full left-0 mt-1 z-30 bg-white rounded-xl border border-warm-200 shadow-lg py-1 min-w-[160px]">
+                  {[
+                    { key: 'entrega',   labelKey: 'surtido.ordenes.date_field.entrega' },
+                    { key: 'asignacion', labelKey: 'surtido.ordenes.date_field.asignacion' },
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => { setDateMode(opt.key); setDateModeOpen(false) }}
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors hover:bg-warm-50 ${
+                        dateMode === opt.key ? 'text-accent-700 font-semibold' : 'text-warm-700'
+                      }`}
+                    >
+                      {dateMode === opt.key && <span className="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0" />}
+                      {dateMode !== opt.key && <span className="w-1.5 h-1.5 shrink-0" />}
+                      {t(opt.labelKey)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
               <Clock size={13} className="text-warm-400 shrink-0" />
               <input type="date" value={dateFromDraft}
@@ -1834,20 +1883,6 @@ export default function Ordenes() {
                 }}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
             </div>
-
-            <button
-              type="button"
-              onClick={() => setDateMode(m => m === 'entrega' ? 'asignacion' : 'entrega')}
-              className={`inline-flex h-10 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all ${
-                dateMode === 'asignacion'
-                  ? 'border-accent-300 bg-accent-50 text-accent-700'
-                  : 'border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100'
-              }`}
-              title="Cambiar campo de fecha para filtrar"
-            >
-              <CalendarClock size={14} />
-              <span>{dateMode === 'asignacion' ? 'Asignación' : 'Entrega'}</span>
-            </button>
 
             <button
               type="button"
@@ -2083,7 +2118,6 @@ export default function Ordenes() {
                 onPageChange={setPage}
                 onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                 showScannedColumn={filterStatus !== '' && filterStatus !== 'pending_assignment'}
-                dateMode={dateMode}
               />
             </motion.div>
           )}
@@ -2302,7 +2336,7 @@ export default function Ordenes() {
   )
 }
 
-const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, onAssign, onQuickEdit, onValidate, canAssign, canQuickEdit, canValidate, t, showScannedColumn, dateMode = 'entrega' }) {
+const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, onAssign, onQuickEdit, onValidate, canAssign, canQuickEdit, canValidate, t, showScannedColumn }) {
   const obc = r.outboundOrderNo
   const scanned = Number(tracking?.total_scanned ?? 0)
   const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
@@ -2355,17 +2389,19 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
       </td>
 
       <td className="table-cell hidden xl:table-cell col-date">
-        {dateMode === 'asignacion' ? (
-          <div className="leading-none" title={tracking?.assigned_at ? formatDateTimeTz(tracking.assigned_at) : '—'}>
-            <span className="block text-xs text-warm-700">{tracking?.assigned_at ? formatDateTz(tracking.assigned_at) : '—'}</span>
-            <span className="mt-1 block text-[10px] text-accent-400">{tracking?.assigned_at ? fmtTimeShort(tracking.assigned_at) : ''}</span>
-          </div>
-        ) : (
-          <div className="leading-none" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
-            <span className="block text-xs text-warm-700">{r.outboundTime ? formatDateTz(r.outboundTime) : '—'}</span>
-            <span className="mt-1 block text-[10px] text-warm-400">{r.outboundTime ? fmtTimeShort(r.outboundTime) : ''}</span>
-          </div>
-        )}
+        <div className="leading-none" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
+          <span className="block text-xs text-warm-700">{r.outboundTime ? formatDateTz(r.outboundTime) : '—'}</span>
+          <span className="mt-1 block text-[10px] text-warm-400">{r.outboundTime ? fmtTimeShort(r.outboundTime) : ''}</span>
+        </div>
+      </td>
+
+      <td className="table-cell hidden xl:table-cell col-date">
+        <div className="leading-none" title={tracking?.assigned_at ? formatDateTimeTz(tracking.assigned_at) : '—'}>
+          <span className={`block text-xs ${tracking?.assigned_at ? 'text-accent-700' : 'text-warm-300'}`}>
+            {tracking?.assigned_at ? formatDateTz(tracking.assigned_at) : '—'}
+          </span>
+          <span className="mt-1 block text-[10px] text-accent-400">{tracking?.assigned_at ? fmtTimeShort(tracking.assigned_at) : ''}</span>
+        </div>
       </td>
 
       <td className="table-cell hidden lg:table-cell col-name">
@@ -2478,7 +2514,7 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
   prev.r === next.r
 )
 
-function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, onExportDetailed, exportingDetailed, onPrintUbicaciones, printLoading, onBulkForceClose, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange, showScannedColumn = true, dateMode = 'entrega' }) {
+function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, onExportDetailed, exportingDetailed, onPrintUbicaciones, printLoading, onBulkForceClose, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange, showScannedColumn = true }) {
   const [selected, setSelected] = useState(new Set())
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
@@ -2493,6 +2529,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
     const sorters = {
       obc: (r) => r.outboundOrderNo,
       date: (r) => r.outboundTime || r.expectedTime || r.orderCreateTime,
+      assigned: (r) => trackingMap[r.outboundOrderNo]?.assigned_at || '',
       client: (r) => r.customerCode || r.customerNo || r.customerName,
       receiver: (r) => r.receiverName,
       channel: (r) => r.logisticsChannel,
@@ -2641,14 +2678,10 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
                 <SortableHeader label="OBC" sortKey="obc" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
               </th>
               <th className={`${TH_CLASS} hidden xl:table-cell col-date`}>
-                <SortableHeader
-                  label={dateMode === 'asignacion' ? 'Fecha asignación' : t('surtido.ordenes.fecha_entrega')}
-                  sortKey="date"
-                  currentKey={sortKey}
-                  direction={sortDirection}
-                  onSort={handleSort}
-                  textClassName={TH_TEXT}
-                />
+                <SortableHeader label={t('surtido.ordenes.fecha_entrega')} sortKey="date" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+              </th>
+              <th className={`${TH_CLASS} hidden xl:table-cell col-date`}>
+                <SortableHeader label={t('surtido.ordenes.fecha_asignacion')} sortKey="assigned" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
               </th>
               <th className={`${TH_CLASS} hidden lg:table-cell`}>
                 <SortableHeader label={t('surtido.ordenes.cliente')} sortKey="client" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
@@ -2696,7 +2729,6 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
                 canValidate={canValidate}
                 t={t}
                 showScannedColumn={showScannedColumn}
-                dateMode={dateMode}
               />
             ))}
           </tbody>
