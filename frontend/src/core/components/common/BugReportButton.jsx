@@ -101,11 +101,13 @@ export default function BugReportButton() {
           <div className="flex items-center justify-between px-4 py-3 bg-purple-50 border-b border-purple-100">
             <div>
               <p className="text-sm font-semibold text-purple-900">Reportar problema</p>
-              <p className="text-xs text-purple-500 mt-0.5">
-                {exhausted
-                  ? 'Limite diario alcanzado'
-                  : `${remaining} de ${DAILY_LIMIT} reportes disponibles hoy`}
-              </p>
+              {(exhausted || usedToday > 0) && (
+                <p className="text-xs text-purple-500 mt-0.5">
+                  {exhausted
+                    ? 'Limite diario alcanzado'
+                    : `${remaining} de ${DAILY_LIMIT} reportes disponibles hoy`}
+                </p>
+              )}
             </div>
             <button
               onClick={handleClose}
@@ -205,7 +207,7 @@ export default function BugReportButton() {
       <button
         onClick={() => setOpen(v => !v)}
         title={exhausted ? 'Limite diario de reportes alcanzado' : 'Reportar un problema'}
-        className={`w-9 h-9 rounded-full shadow-lg flex items-center justify-center text-white text-sm font-bold transition-all duration-200 select-none ${
+        className={`w-6 h-6 rounded-full shadow-lg flex items-center justify-center text-white text-xs font-bold transition-all duration-200 select-none ${
           exhausted
             ? 'bg-gray-400/70 cursor-not-allowed'
             : open

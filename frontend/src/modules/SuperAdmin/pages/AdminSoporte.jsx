@@ -62,16 +62,16 @@ function DetailModal({ report, onClose, onSave }) {
               <p className="text-gray-500 mb-0.5">Correo</p>
               <p className="text-gray-200">{report.user_email || '-'}</p>
             </div>
-            {report.page_url && (
-              <div className="col-span-2">
-                <p className="text-gray-500 mb-0.5">Pagina</p>
-                <p className="text-gray-400 font-mono text-[11px]">{report.page_url}</p>
-              </div>
-            )}
-            <div>
+            <div className={report.page_url ? '' : 'col-span-2'}>
               <p className="text-gray-500 mb-0.5">Fecha</p>
               <p className="text-gray-300">{fmtDateTimeMini(report.created_at)}</p>
             </div>
+            {report.page_url && (
+              <div>
+                <p className="text-gray-500 mb-0.5">Pagina</p>
+                <p className="text-gray-400 font-mono text-[11px] break-all">{report.page_url}</p>
+              </div>
+            )}
           </div>
 
           <div>
