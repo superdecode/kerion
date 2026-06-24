@@ -14,7 +14,8 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import { getSurtidoDashboard } from '../services/dashboardService'
 import { KpiCard } from '../components/KpiCard'
 import { ChartCard, NoData } from '../components/ChartCard'
-import { fmtDateString, getToday, subtractDays } from '../../../core/utils/dateFormat'
+import { fmtDateString, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
+import { getOutboundList } from '../../WmsHub/services/googleSheetsService'
 
 const ESTADO_COLORS = {
   complete: '#22c55e',
@@ -84,6 +85,12 @@ export default function SurtidoDashboard({ dateRange }) {
     staleTime: 60_000,
   })
 
+  const { data: outboundListData } = useQuery({
+    queryKey: ['wms-outbound'],
+    queryFn: getOutboundList,
+    staleTime: 5 * 60_000,
+  })
+
   if (isLoading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>
 
   const d = data?.data
@@ -98,11 +105,24 @@ export default function SurtidoDashboard({ dateRange }) {
       ordenes: item.ordenes ?? item.completadas ?? 0,
     }))
   const tendenciaBucket = graficas.tendencia_bucket || 'week'
-  const fiveDayRows = (fiveDayData?.data?.graficas?.tendencia || []).map(item => ({
-    periodo: String(item.periodo || '').split('T')[0],
-    ordenes: Number(item.ordenes ?? 0),
-    cajas: Number(item.cajas ?? 0),
-  }))
+  const fiveDates = Array.from({ length: 5 }, (_, i) => subtractDays(centerDate, 2 - i))
+  const today = getToday()
+
+  const validatedByDay = {}
+  for (const item of (fiveDayData?.data?.graficas?.tendencia || [])) {
+    const key = String(item.periodo || '').split('T')[0]
+    if (key) validatedByDay[key] = { ordenes: Number(item.ordenes ?? 0), cajas: Number(item.cajas ?? 0) }
+  }
+
+  const expectedByDay = {}
+  for (const r of (outboundListData?.data?.records || [])) {
+    if (!r.outboundTime) continue
+    const key = toDateKey(r.outboundTime)
+    if (!key) continue
+    if (!expectedByDay[key]) expectedByDay[key] = { ordenes: 0, cajas: 0 }
+    expectedByDay[key].ordenes += 1
+    expectedByDay[key].cajas += Number(r.outboundBoxCount || r.quantity || 0)
+  }
 
   return (
     <div className="space-y-4 p-4">
@@ -183,15 +203,15 @@ export default function SurtidoDashboard({ dateRange }) {
           ) : <NoData height={200} />}
         </ChartCard>
 
-        <ChartCard title="Top surtidores — sesiones/ordenes" icon={Users}>
+        <ChartCard title="Top surtidores — órdenes" icon={Users}>
           {graficas.top_operadores.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={[...graficas.top_operadores].sort((a, b) => b.sesiones - a.sesiones)} layout="vertical" margin={{ left: 4, right: 20 }}>
+              <BarChart data={[...graficas.top_operadores].sort((a, b) => b.ordenes - a.ordenes)} layout="vertical" margin={{ left: 4, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0ece8" />
                 <XAxis type="number" tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="operador" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Bar dataKey="sesiones" fill="#06b6d4" radius={[0, 4, 4, 0]} name="Sesiones" />
+                <Bar dataKey="ordenes" fill="#06b6d4" radius={[0, 4, 4, 0]} name="Ordenes" />
               </BarChart>
             </ResponsiveContainer>
           ) : <NoData height={200} />}
@@ -233,41 +253,68 @@ export default function SurtidoDashboard({ dateRange }) {
           <table className="w-full">
             <thead>
               <tr className="bg-warm-50 border-b border-warm-100">
-                <td className="table-header w-24">Métrica</td>
-                {fiveDayRows.map((row, i) => {
-                  const isToday = row.periodo === getToday()
-                  const isCenterDate = row.periodo === centerDate
+                <th className="table-header w-32 text-left">Métrica</th>
+                {fiveDates.map(day => {
+                  const isToday = day === today
+                  const isCenterDate = day === centerDate
                   return (
-                    <td key={i} className={`table-header text-center ${isCenterDate ? 'bg-primary-50' : ''}`}>
-                      <span className={isToday ? 'text-primary-600 font-bold' : ''}>{shortDay(row.periodo)}</span>
+                    <th key={day} className={`table-header text-center ${isCenterDate ? 'bg-primary-50' : ''}`}>
+                      <span className={isToday ? 'text-primary-600 font-bold' : ''}>{shortDay(day)}</span>
                       {isToday && <span className="ml-1 text-[9px] bg-primary-100 text-primary-600 rounded px-1 py-0.5 font-bold">HOY</span>}
-                    </td>
+                    </th>
                   )
                 })}
               </tr>
             </thead>
             <tbody className="divide-y divide-warm-50">
               <tr>
-                <td className="px-3 py-2 text-xs font-medium text-warm-600">Ordenes</td>
-                {fiveDayRows.map((row, i) => (
-                  <td key={i} className={`px-3 py-2 text-center text-sm font-semibold ${row.periodo === centerDate ? 'bg-primary-50/50' : ''} ${row.ordenes > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
-                    {row.ordenes || '—'}
-                  </td>
-                ))}
+                <td className="px-3 py-2 text-xs font-medium text-warm-500">Órd. esperadas</td>
+                {fiveDates.map(day => {
+                  const val = expectedByDay[day]?.ordenes
+                  return (
+                    <td key={day} className={`px-3 py-2 text-center text-sm font-semibold ${day === centerDate ? 'bg-primary-50/50' : ''} ${val > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
+                      {val || '—'}
+                    </td>
+                  )
+                })}
               </tr>
               <tr>
-                <td className="px-3 py-2 text-xs font-medium text-warm-600">Cajas</td>
-                {fiveDayRows.map((row, i) => (
-                  <td key={i} className={`px-3 py-2 text-center text-sm font-semibold ${row.periodo === centerDate ? 'bg-primary-50/50' : ''} ${row.cajas > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
-                    {row.cajas || '—'}
-                  </td>
-                ))}
+                <td className="px-3 py-2 text-xs font-medium text-warm-500">Cajas esperadas</td>
+                {fiveDates.map(day => {
+                  const val = expectedByDay[day]?.cajas
+                  return (
+                    <td key={day} className={`px-3 py-2 text-center text-sm font-semibold ${day === centerDate ? 'bg-primary-50/50' : ''} ${val > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
+                      {val || '—'}
+                    </td>
+                  )
+                })}
+              </tr>
+              <tr>
+                <td className="px-3 py-2 text-xs font-medium text-warm-500">Órd. validadas</td>
+                {fiveDates.map(day => {
+                  if (day > today) return <td key={day} className={`px-3 py-2 text-center text-sm text-warm-300 ${day === centerDate ? 'bg-primary-50/50' : ''}`}>—</td>
+                  const val = validatedByDay[day]?.ordenes
+                  return (
+                    <td key={day} className={`px-3 py-2 text-center text-sm font-semibold ${day === centerDate ? 'bg-primary-50/50' : ''} ${val > 0 ? 'text-green-700' : 'text-warm-300'}`}>
+                      {val || '—'}
+                    </td>
+                  )
+                })}
+              </tr>
+              <tr>
+                <td className="px-3 py-2 text-xs font-medium text-warm-500">Cajas validadas</td>
+                {fiveDates.map(day => {
+                  if (day > today) return <td key={day} className={`px-3 py-2 text-center text-sm text-warm-300 ${day === centerDate ? 'bg-primary-50/50' : ''}`}>—</td>
+                  const val = validatedByDay[day]?.cajas
+                  return (
+                    <td key={day} className={`px-3 py-2 text-center text-sm font-semibold ${day === centerDate ? 'bg-primary-50/50' : ''} ${val > 0 ? 'text-green-700' : 'text-warm-300'}`}>
+                      {val || '—'}
+                    </td>
+                  )
+                })}
               </tr>
             </tbody>
           </table>
-          {fiveDayRows.length === 0 && (
-            <div className="py-6 text-center text-xs text-warm-400">Sin datos para esta ventana</div>
-          )}
         </div>
       </div>
     </div>

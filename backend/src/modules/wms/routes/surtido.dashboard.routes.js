@@ -86,17 +86,25 @@ router.get('/',
            WHERE tenant_id = $1 AND estado = 'anormalidad'`,
           [req.tenantId]
         ),
-        // Top operadores por cajas escaneadas
+        // Top surtidores por ordenes asignadas (surtidor de la orden, no el operador de sesion)
         req.tQuery(
-          `SELECT u.nombre_completo AS operador,
-                  COUNT(ps.id) AS sesiones,
-                  COALESCE(SUM(ps.total_scanned), 0) AS cajas
-           FROM pick_sessions ps
-           JOIN usuarios u ON u.id = ps.operator_id
-           WHERE ps.tenant_id = $1
-             AND ${instantDateInTZ('ps.created_at', tz)} BETWEEN $2 AND $3
-           GROUP BY u.nombre_completo
-           ORDER BY cajas DESC
+          `SELECT ot.surtidor_nombre AS operador,
+                  COUNT(DISTINCT ot.outbound_order_no) AS ordenes,
+                  COALESCE(SUM(ps_stats.total_scanned), 0) AS cajas
+           FROM pick_order_tracking ot
+           LEFT JOIN (
+             SELECT outbound_order_no, tenant_id, SUM(total_scanned) AS total_scanned
+             FROM pick_sessions
+             WHERE tenant_id = $1
+               AND ${instantDateInTZ('created_at', tz)} BETWEEN $2 AND $3
+             GROUP BY outbound_order_no, tenant_id
+           ) ps_stats ON ps_stats.outbound_order_no = ot.outbound_order_no
+                     AND ps_stats.tenant_id = ot.tenant_id
+           WHERE ot.tenant_id = $1
+             AND ot.surtidor_nombre IS NOT NULL
+             AND ${instantDateInTZ('ot.updated_at', tz)} BETWEEN $2 AND $3
+           GROUP BY ot.surtidor_nombre
+           ORDER BY ordenes DESC
            LIMIT 8`,
           [req.tenantId, dateStart, dateEnd]
         ),
