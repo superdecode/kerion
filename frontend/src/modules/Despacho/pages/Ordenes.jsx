@@ -740,10 +740,10 @@ export default function Ordenes() {
                 <p className="text-xs text-warm-400 max-w-xs">
                   {t('desp.ordenes.errorHintAdmin')}
                 </p>
-                <a href="/sistema/conexion"
-                  className="btn-primary text-xs flex items-center gap-1.5 mt-1 no-underline">
+                <button onClick={() => navigate('/sistema/conexion')}
+                  className="btn-primary text-xs flex items-center gap-1.5 mt-1">
                   {t('desp.ordenes.errorGoConfig')}
-                </a>
+                </button>
               </>
             ) : (
               <p className="text-xs text-warm-400 max-w-xs">

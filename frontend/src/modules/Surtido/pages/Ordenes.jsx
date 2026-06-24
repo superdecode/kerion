@@ -1125,7 +1125,7 @@ export default function Ordenes() {
     }
   }
 
-  const { data: wmsData, isLoading: wmsLoading, isFetching: wmsFetching } = useQuery({
+  const { data: wmsData, isLoading: wmsLoading, isFetching: wmsFetching, isError: wmsError, refetch: refetchWms } = useQuery({
     queryKey: ['wms-outbound'],
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
@@ -1157,7 +1157,7 @@ export default function Ordenes() {
   const surtidores    = getRecords(surtidoresData)
   const isPartial     = wmsData?.data?.partial ?? false
   const fromPersistentCache = wmsData?.data?.fromPersistentCache ?? false
-  const showInitialLoader = backendOnline && allWmsRecords.length === 0 && (!wmsData || wmsLoading || wmsFetching || isPartial)
+  const showInitialLoader = !wmsError && backendOnline && allWmsRecords.length === 0 && (!wmsData || wmsLoading || wmsFetching || isPartial)
 
   useEffect(() => {
     if (!isPartial) return undefined
@@ -2064,7 +2064,32 @@ export default function Ordenes() {
       {/* Table */}
       <div className="flex-1 min-h-0 overflow-hidden p-4">
         <AnimatePresence mode='wait'>
-          {isTransitioning || showInitialLoader || (backendOnline && pagedRecords.length === 0 && (!wmsData || wmsLoading || wmsFetching || isPartial)) ? (
+          {wmsError ? (
+            <motion.div
+              key="wms-error"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col items-center gap-4 py-16 text-center px-6"
+            >
+              <AlertCircle className="w-10 h-10 text-danger-300" />
+              <p className="text-sm font-medium text-warm-700">{t('desp.ordenes.error')}</p>
+              {user?.es_admin_tenant === true ||
+               (user?.es_admin_tenant === undefined && ['administrador', 'admin', 'administrator'].includes(String(user?.rol_nombre || '').trim().toLowerCase())) ? (
+                <>
+                  <p className="text-xs text-warm-400 max-w-xs">{t('desp.ordenes.errorHintAdmin')}</p>
+                  <button onClick={() => navigate('/sistema/conexion')} className="btn-primary text-xs flex items-center gap-1.5">
+                    {t('desp.ordenes.errorGoConfig')}
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs text-warm-400 max-w-xs">{t('desp.ordenes.errorHintUser')}</p>
+              )}
+              <button onClick={() => refetchWms()} className="btn-secondary text-xs flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5" /> {t('desp.btn.reintentar')}
+              </button>
+            </motion.div>
+          ) : isTransitioning || showInitialLoader || (backendOnline && !wmsError && pagedRecords.length === 0 && (!wmsData || wmsLoading || wmsFetching || isPartial)) ? (
              <motion.div
                key="loader"
                initial={{ opacity: 0 }}
