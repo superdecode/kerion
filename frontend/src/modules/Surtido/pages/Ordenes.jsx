@@ -985,6 +985,7 @@ export default function Ordenes() {
   const [dateToDraft, setDateToDraft] = useState(() => getToday())
   const [dateFrom, setDateFrom] = useState(dateFromDraft)
   const [dateTo, setDateTo] = useState(dateToDraft)
+  const [dateMode, setDateMode] = useState('entrega')
   const [autoDateAnchor, setAutoDateAnchor] = useState(() => getToday())
   const [timeFromDraft, setTimeFromDraft] = useState('')
   const [timeToDraft, setTimeToDraft] = useState('')
@@ -1094,6 +1095,8 @@ export default function Ordenes() {
       }
 
       setAutoDateAnchor(today)
+      // Day rolled over — invalidate sheet cache so stale-from-yesterday data is not served
+      qc.invalidateQueries({ queryKey: ['wms-outbound'] })
     }
 
     syncAutoDateWindow()
@@ -1283,7 +1286,9 @@ export default function Ordenes() {
     if (destinationQuery && !(r.receiverName || '').toLowerCase().includes(destinationQuery)) return false
 
     const skipDateFilter = q || bulkSearchCodes.length > 0
-    if (!skipDateFilter && !matchesDateFilter(getFilterDateValue(r))) return false
+    if (!skipDateFilter && !matchesDateFilter(
+      dateMode === 'asignacion' ? (tracking?.assigned_at || '') : getFilterDateValue(r)
+    )) return false
 
     if (!withinTimeRange(r.outboundTime || r.expectedTime || r.orderCreateTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(r.outboundOrderNo)) return false
@@ -1293,7 +1298,7 @@ export default function Ordenes() {
     }
     return true
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [combinedRecords, trackingMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo])
+  }), [combinedRecords, trackingMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo, dateMode])
 
   const filteredValidacion = useMemo(() => trackingList.filter(tr => {
     if (filterStatus && tr.status !== filterStatus) return false
@@ -1307,7 +1312,9 @@ export default function Ordenes() {
     if (destinationQuery && !(wms?.receiverName || '').toLowerCase().includes(destinationQuery)) return false
 
     const skipDateFilter = q || bulkSearchCodes.length > 0
-    if (!skipDateFilter && !matchesDateFilter(getFilterDateValue(wms) || tr.updated_at)) return false
+    if (!skipDateFilter && !matchesDateFilter(
+      dateMode === 'asignacion' ? (tr.assigned_at || '') : (getFilterDateValue(wms) || tr.updated_at)
+    )) return false
 
     if (!withinTimeRange(wms?.outboundTime || wms?.expectedTime || wms?.orderCreateTime, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
@@ -1317,7 +1324,7 @@ export default function Ordenes() {
     }
     return true
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [trackingList, wmsMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo])
+  }), [trackingList, wmsMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo, dateMode])
 
   const activeRecords = filteredWms
   const total       = activeRecords.length
@@ -1830,6 +1837,20 @@ export default function Ordenes() {
 
             <button
               type="button"
+              onClick={() => setDateMode(m => m === 'entrega' ? 'asignacion' : 'entrega')}
+              className={`inline-flex h-10 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all ${
+                dateMode === 'asignacion'
+                  ? 'border-accent-300 bg-accent-50 text-accent-700'
+                  : 'border-warm-200 bg-warm-50 text-warm-600 hover:bg-warm-100'
+              }`}
+              title="Cambiar campo de fecha para filtrar"
+            >
+              <CalendarClock size={14} />
+              <span>{dateMode === 'asignacion' ? 'Asignación' : 'Entrega'}</span>
+            </button>
+
+            <button
+              type="button"
               className={`inline-flex h-10 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-all ${
                 showTimeFilters || timeFromDraft || timeToDraft
                   ? 'border-primary-300 bg-primary-50 text-primary-700'
@@ -2062,6 +2083,7 @@ export default function Ordenes() {
                 onPageChange={setPage}
                 onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
                 showScannedColumn={filterStatus !== '' && filterStatus !== 'pending_assignment'}
+                dateMode={dateMode}
               />
             </motion.div>
           )}
@@ -2280,7 +2302,7 @@ export default function Ordenes() {
   )
 }
 
-const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, onAssign, onQuickEdit, onValidate, canAssign, canQuickEdit, canValidate, t, showScannedColumn }) {
+const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, onAssign, onQuickEdit, onValidate, canAssign, canQuickEdit, canValidate, t, showScannedColumn, dateMode = 'entrega' }) {
   const obc = r.outboundOrderNo
   const scanned = Number(tracking?.total_scanned ?? 0)
   const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
@@ -2333,10 +2355,17 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
       </td>
 
       <td className="table-cell hidden xl:table-cell col-date">
-        <div className="leading-none" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
-          <span className="block text-xs text-warm-700">{r.outboundTime ? formatDateTz(r.outboundTime) : '—'}</span>
-          <span className="mt-1 block text-[10px] text-warm-400">{r.outboundTime ? fmtTimeShort(r.outboundTime) : ''}</span>
-        </div>
+        {dateMode === 'asignacion' ? (
+          <div className="leading-none" title={tracking?.assigned_at ? formatDateTimeTz(tracking.assigned_at) : '—'}>
+            <span className="block text-xs text-warm-700">{tracking?.assigned_at ? formatDateTz(tracking.assigned_at) : '—'}</span>
+            <span className="mt-1 block text-[10px] text-accent-400">{tracking?.assigned_at ? fmtTimeShort(tracking.assigned_at) : ''}</span>
+          </div>
+        ) : (
+          <div className="leading-none" title={r.outboundTime ? formatDateTimeTz(r.outboundTime) : '—'}>
+            <span className="block text-xs text-warm-700">{r.outboundTime ? formatDateTz(r.outboundTime) : '—'}</span>
+            <span className="mt-1 block text-[10px] text-warm-400">{r.outboundTime ? fmtTimeShort(r.outboundTime) : ''}</span>
+          </div>
+        )}
       </td>
 
       <td className="table-cell hidden lg:table-cell col-name">
@@ -2449,7 +2478,7 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
   prev.r === next.r
 )
 
-function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, onExportDetailed, exportingDetailed, onPrintUbicaciones, printLoading, onBulkForceClose, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange, showScannedColumn = true }) {
+function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign, onBulkAssign, onView, onQuickEdit, onValidate, onBulkStatus, onExportSelected, onExportAll, onExportDetailed, exportingDetailed, onPrintUbicaciones, printLoading, onBulkForceClose, canAssign, canQuickEdit, canValidate, canExport, t, page, totalPages, pageSize, total, onPageChange, onPageSizeChange, showScannedColumn = true, dateMode = 'entrega' }) {
   const [selected, setSelected] = useState(new Set())
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false)
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
@@ -2612,7 +2641,14 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
                 <SortableHeader label="OBC" sortKey="obc" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
               </th>
               <th className={`${TH_CLASS} hidden xl:table-cell col-date`}>
-                <SortableHeader label={t('surtido.ordenes.fecha_entrega')} sortKey="date" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
+                <SortableHeader
+                  label={dateMode === 'asignacion' ? 'Fecha asignación' : t('surtido.ordenes.fecha_entrega')}
+                  sortKey="date"
+                  currentKey={sortKey}
+                  direction={sortDirection}
+                  onSort={handleSort}
+                  textClassName={TH_TEXT}
+                />
               </th>
               <th className={`${TH_CLASS} hidden lg:table-cell`}>
                 <SortableHeader label={t('surtido.ordenes.cliente')} sortKey="client" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
@@ -2660,6 +2696,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
                 canValidate={canValidate}
                 t={t}
                 showScannedColumn={showScannedColumn}
+                dateMode={dateMode}
               />
             ))}
           </tbody>

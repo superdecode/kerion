@@ -53,6 +53,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
   const [completed, setCompleted] = useState(false)
   const [currentTarimaNum, setCurrentTarimaNum] = useState(1)
   const [pendingOfflineScans, setPendingOfflineScans] = useState([])
+  const [forceModal, setForceModal] = useState({ open: false, code: '' })
   const pendingOnlineRef = useRef(new Set())
   const isOffline = useOfflineStore((s) => s.status === 'offline')
 
@@ -163,9 +164,8 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     }
     const codes = validCodes()
     if (codes.size > 0 && !codes.has(code)) {
-      addToast('Código no corresponde a esta orden — rechazado', 'error')
       setInput('')
-      scanRef.current?.focus()
+      setForceModal({ open: true, code })
       return
     }
     setInput('')
@@ -194,6 +194,20 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       }, {})
     : null
 
+  const handleForceAccept = () => {
+    const code = forceModal.code
+    setForceModal({ open: false, code: '' })
+    if (!code) return
+    pendingOnlineRef.current.add(code)
+    doAddScan({ code, tarimaRef: currentTarimaRef })
+    setTimeout(() => scanRef.current?.focus(), 100)
+  }
+
+  const closeForceModal = () => {
+    setForceModal({ open: false, code: '' })
+    setTimeout(() => scanRef.current?.focus(), 100)
+  }
+
   if (completed) {
     return (
       <div className="bg-success-50 border-t border-success-100 px-5 py-6 flex flex-col items-center gap-2">
@@ -207,6 +221,47 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
   }
 
   return (
+    <>
+    <Modal
+      isOpen={forceModal.open}
+      onClose={closeForceModal}
+      title="Código no reconocido"
+      icon={AlertCircle}
+      size="sm"
+      footer={
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={closeForceModal} className="btn-secondary text-sm">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleForceAccept}
+            disabled={scanning}
+            className="btn-danger text-sm flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {scanning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            Forzar en esta orden
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-warm-700">
+          Este código no está en la lista de paquetes esperados para esta orden. Puedes forzar su ingreso o cancelar.
+        </p>
+        <div className="rounded-xl border border-danger-100 bg-danger-50 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-danger-500">Código escaneado</p>
+          <p className="font-mono text-sm font-bold text-danger-800 break-all">{forceModal.code}</p>
+        </div>
+        <div className="rounded-xl border border-warm-200 bg-warm-50 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-warm-500">Orden</p>
+          <p className="font-mono text-xs font-semibold text-warm-700">{order.outbound_order_no}</p>
+        </div>
+        <p className="text-xs text-warm-400">
+          El ingreso forzado queda registrado y puede requerir conciliación manual.
+        </p>
+      </div>
+    </Modal>
     <div className="bg-primary-50/60 border-t border-primary-100 px-5 py-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -353,6 +408,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
         !detailLoading && <p className="text-xs text-primary-500/70">{t('desp.validar.orden.sinEscaneos')}</p>
       )}
     </div>
+    </>
   )
 }
 

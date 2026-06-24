@@ -426,6 +426,15 @@ export default function ValidarPorDestino({ folioId }) {
     setTimeout(() => scanRef.current?.focus(), 100)
   }, [forceModal.code, forceModal.orderNo, currentTarimaRef, requestAddScan])
 
+  const submitForceScanNoOrder = useCallback(() => {
+    const code = normalizeScanCode(forceModal.code)
+    if (!code) return
+    pendingOnlineRef.current.add(code)
+    requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: null })
+    setForceModal({ open: false, code: '', orderNo: '' })
+    setTimeout(() => scanRef.current?.focus(), 100)
+  }, [forceModal.code, currentTarimaRef, requestAddScan])
+
   const submitMoveScan = useCallback(() => {
     const scanId = moveModal.scan?.id
     const tarimaRef = normalizeTarimaRef(moveModal.target)
@@ -1146,18 +1155,28 @@ export default function ValidarPorDestino({ folioId }) {
         icon={AlertCircle}
         size="sm"
         footer={
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-between gap-2">
             <button type="button" onClick={closeForceModal} className="btn-secondary text-sm">
               {t('common.cancel')}
             </button>
-            <button
-              type="button"
-              onClick={submitForceScan}
-              disabled={!forceModal.orderNo.trim()}
-              className="btn-danger text-sm disabled:opacity-50"
-            >
-              {t('desp.validar.destino.forceConfirm')}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={submitForceScanNoOrder}
+                className="btn-secondary text-sm border-amber-300 text-amber-700 hover:bg-amber-50"
+                title="Ingresar sin vincular a ninguna orden — requiere conciliación manual"
+              >
+                Sin orden
+              </button>
+              <button
+                type="button"
+                onClick={submitForceScan}
+                disabled={!forceModal.orderNo.trim()}
+                className="btn-danger text-sm disabled:opacity-50"
+              >
+                {t('desp.validar.destino.forceConfirm')}
+              </button>
+            </div>
           </div>
         }
       >
@@ -1193,6 +1212,9 @@ export default function ValidarPorDestino({ folioId }) {
           </label>
           <p className="text-xs text-warm-500">
             {t('desp.validar.destino.forceWarning')}
+          </p>
+          <p className="text-xs text-amber-600 border border-amber-100 bg-amber-50 rounded-lg px-2.5 py-1.5">
+            "Sin orden" ingresa el codigo al folio sin vincularlo a ninguna orden — requiere conciliacion manual posterior.
           </p>
         </div>
       </Modal>

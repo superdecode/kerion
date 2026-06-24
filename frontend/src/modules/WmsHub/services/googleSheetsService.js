@@ -354,19 +354,28 @@ async function warmFullSheet(type) {
   }
 }
 
+function isSameDayAsNow(ts) {
+  if (!ts) return false
+  const d = new Date(ts)
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+}
+
 // ── Load and cache (two-phase: fast partial → background full) ─────────────
 async function loadSheet(type, forceRefresh = false) {
   const entry = cache[type]
   const now = Date.now()
   const requiresFullDataset = type === 'inventory'
 
-  // Fresh full cache hit
-  if (!forceRefresh && entry.data && !entry.partial && (now - entry.ts) < CACHE_TTL) {
+  // Fresh full cache hit — also require same calendar day so overnight sessions don't serve stale data
+  if (!forceRefresh && entry.data && !entry.partial && (now - entry.ts) < CACHE_TTL && isSameDayAsNow(entry.ts)) {
     return entry.data
   }
 
   // Fresh partial data — return immediately, ensure bg full load is running
-  if (!requiresFullDataset && !forceRefresh && entry.data && entry.partial && (now - entry.ts) < CACHE_TTL) {
+  if (!requiresFullDataset && !forceRefresh && entry.data && entry.partial && (now - entry.ts) < CACHE_TTL && isSameDayAsNow(entry.ts)) {
     warmFullSheet(type)
     return entry.data
   }

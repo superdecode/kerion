@@ -132,6 +132,7 @@ const sessionRanges = {}
 
 export default function DashboardPage() {
   const { hasPermission, isModuleEnabled, user } = useAuthStore()
+  const enabledModules = useAuthStore(s => s.enabledModules)
   const { t } = useI18nStore()
   const [searchParams, setSearchParams] = useSearchParams()
   const [refreshKey, setRefreshKey] = useState(0)
@@ -146,7 +147,7 @@ export default function DashboardPage() {
       hasPermission(m.permission, 'actualizar')
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [user, enabledModules]
   )
 
   const activeId = searchParams.get('module') || visibleModules[0]?.id || ''
