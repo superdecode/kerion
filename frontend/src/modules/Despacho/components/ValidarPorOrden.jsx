@@ -53,15 +53,19 @@ const ScanEntryInput = memo(function ScanEntryInput({
   inputClassName = 'flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400',
   containerClassName = 'flex items-center gap-1.5 bg-white border-2 rounded-xl px-3 h-10 flex-1 transition-colors border-primary-200 focus-within:border-primary-400',
 }) {
-  const [value, setValue] = useState('')
-
   const submit = useCallback(() => {
-    const raw = value.trim()
-    if (!raw || disabled || loading) return
+    const input = inputRef?.current
+    const raw = input?.value?.trim() || ''
+    if (!raw || disabled) return
+    if (input) input.value = ''
     onSubmit(raw)
-    setValue('')
     window.setTimeout(() => inputRef?.current?.focus(), 0)
-  }, [disabled, inputRef, loading, onSubmit, value])
+  }, [disabled, inputRef, onSubmit])
+
+  const clear = useCallback(() => {
+    if (inputRef?.current) inputRef.current.value = ''
+    inputRef?.current?.focus()
+  }, [inputRef])
 
   return (
     <>
@@ -70,8 +74,6 @@ const ScanEntryInput = memo(function ScanEntryInput({
         <input
           ref={inputRef}
           type="text"
-          value={value}
-          onChange={e => setValue(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter') {
               e.preventDefault()
@@ -84,13 +86,13 @@ const ScanEntryInput = memo(function ScanEntryInput({
           autoComplete="off"
         />
         {loading && <Loader2 className="w-3 h-3 animate-spin text-primary-300 shrink-0" />}
-        {value && !loading && (
-          <button type="button" onClick={() => { setValue(''); inputRef?.current?.focus() }} className="text-warm-400 hover:text-warm-600">
+        {!loading && (
+          <button type="button" onClick={clear} className="text-warm-400 hover:text-warm-600">
             <X className="w-3 h-3" />
           </button>
         )}
       </div>
-      <button type="button" onClick={submit} disabled={!value.trim() || disabled || loading}
+      <button type="button" onClick={submit} disabled={disabled}
         className={buttonClassName}>
         {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
         {buttonLabel}
@@ -135,18 +137,8 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       setOrderDetail(cached)
       return
     }
-    setDetailLoading(true)
-    getOutboundDetail(order.outbound_order_no)
-      .then(r => {
-        const data = r?.data ?? null
-        detailCache?.current?.set(order.outbound_order_no, data)
-        setOrderDetail(data)
-      })
-      .catch(() => {
-        detailCache?.current?.set(order.outbound_order_no, null)
-        setOrderDetail(null)
-      })
-      .finally(() => setDetailLoading(false))
+    setOrderDetail(null)
+    setDetailLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.outbound_order_no])
 
@@ -459,7 +451,6 @@ export default function ValidarPorOrden({ folioId }) {
 
   // Add-order state
   const [showAddOrder, setShowAddOrder] = useState(false)
-  const [lookupInput, setLookupInput] = useState('')
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupResult, setLookupResult] = useState(null)
   const [addForm, setAddForm] = useState({ outbound_order_no: '', destinatario: '', bultos: '', bultos_esperados: null, notas: '' })
@@ -540,7 +531,6 @@ export default function ValidarPorOrden({ folioId }) {
         setValidatingOrderId(addedOrder.id)
       }
       setShowAddOrder(false)
-      setLookupInput('')
       setLookupResult(null)
       setLookupDetail(null)
       setLocalScans([])
@@ -572,7 +562,7 @@ export default function ValidarPorOrden({ folioId }) {
   const isDuplicateInFolio = !!addOrderNo && orders.some(o => o.outbound_order_no === addOrderNo)
 
   const handleLookup = useCallback(async (code) => {
-    const raw = (code || lookupInput).trim()
+    const raw = String(code || '').trim()
     if (!raw) return
     const q = normalizeScanCode(raw)
     setLookupLoading(true)
@@ -604,11 +594,10 @@ export default function ValidarPorOrden({ folioId }) {
     } finally {
       setLookupLoading(false)
     }
-  }, [lookupInput, addToast])
+  }, [addToast])
 
   const openAddOrder = () => {
     setShowAddOrder(true)
-    setLookupInput('')
     setLookupResult(null)
     setLookupDetail(null)
     setLocalScans([])
@@ -720,7 +709,7 @@ export default function ValidarPorOrden({ folioId }) {
           <div className="flex items-center gap-2 shrink-0">
             {editable && (
               <button
-                onClick={showAddOrder ? () => { setShowAddOrder(false); setLookupResult(null); setLookupInput('') } : openAddOrder}
+                onClick={showAddOrder ? () => { setShowAddOrder(false); setLookupResult(null) } : openAddOrder}
                 className="btn-primary text-xs flex items-center gap-1.5 h-8">
                 {showAddOrder ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
                 {showAddOrder ? t('desp.validar.orden.cerrar') : t('desp.validar.orden.agregarOrden')}
@@ -754,24 +743,14 @@ export default function ValidarPorOrden({ folioId }) {
               <div className="bg-primary-50/60 px-6 py-5 border-b border-primary-100">
                 <p className="text-xs font-semibold text-primary-700 mb-3">{t('desp.validar.orden.buscarOrden')}</p>
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="flex items-center gap-1.5 bg-white border-2 border-primary-200 rounded-xl px-3 h-10 flex-1 focus-within:border-primary-400 transition-colors">
-                    <ScanLine className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-                    <input
-                      ref={lookupRef}
-                      type="text"
-                      value={lookupInput}
-                      onChange={e => setLookupInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleLookup() }}
-                      placeholder={t('desp.validar.orden.scanPlaceholderLookup')}
-                      className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400"
-                      autoComplete="off"
-                    />
-                  </div>
-                  <button onClick={() => handleLookup()} disabled={!lookupInput.trim() || lookupLoading}
-                    className="btn-primary text-xs flex items-center gap-1.5 h-10 px-4">
-                    {lookupLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
-                    {t('desp.validar.orden.buscar')}
-                  </button>
+                  <ScanEntryInput
+                    inputRef={lookupRef}
+                    onSubmit={handleLookup}
+                    placeholder={t('desp.validar.orden.scanPlaceholderLookup')}
+                    loading={lookupLoading}
+                    buttonLabel={t('desp.validar.orden.buscar')}
+                    containerClassName="flex items-center gap-1.5 bg-white border-2 border-primary-200 rounded-xl px-3 h-10 flex-1 focus-within:border-primary-400 transition-colors"
+                  />
                 </div>
 
                 {lookupResult ? (
@@ -1012,7 +991,7 @@ export default function ValidarPorOrden({ folioId }) {
                       : t('desp.validar.orden.confirmar')}
                   </button>
                   <button
-                    onClick={() => { setShowAddOrder(false); setLookupResult(null); setLookupInput(''); setLocalScans([]) }}
+                    onClick={() => { setShowAddOrder(false); setLookupResult(null); setLocalScans([]) }}
                     className="btn-secondary text-sm">{t('common.cancel')}</button>
                 </div>
               </div>
