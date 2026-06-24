@@ -26,7 +26,7 @@ export const MODULE_ROUTES = [
   { module: 'anormalidades.dashboard',    path: '/dashboard?module=anormalidades' },
   { module: 'anormalidades.mejoras',      path: '/anormalidades/mejoras' },
   { module: 'anormalidades.configuracion',path: '/anormalidades/configuracion' },
-  { module: 'sistema.wms',               path: '/wmshub' },
+  { module: 'sistema.wms',               path: '/sistema/conexion' },
   { module: 'despacho.validar',           path: '/despacho/validar' },
   { module: 'despacho.ordenes',           path: '/despacho/ordenes' },
   { module: 'despacho.folios',            path: '/despacho/folios' },

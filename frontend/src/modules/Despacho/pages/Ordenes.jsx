@@ -115,6 +115,10 @@ export default function Ordenes() {
   }
 
   const { hasPermission } = useAuthStore()
+  const currentUser = useAuthStore(s => s.user)
+  const isAdmin = currentUser?.es_admin_tenant === true ||
+    (currentUser?.es_admin_tenant === undefined &&
+      ['administrador', 'admin', 'administrator'].includes(String(currentUser?.rol_nombre || currentUser?.rol || '').trim().toLowerCase()))
   const canManageCatalogs = useAuthStore(s => {
     const lvl = s.getPermissionLevel('despacho.ordenes')
     return lvl === 'actualizar' || lvl === 'eliminar'
@@ -728,11 +732,25 @@ export default function Ordenes() {
             </div>
           </div>
         ) : isError ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <div className="flex flex-col items-center gap-4 py-16 text-center px-6">
             <AlertCircle className="w-10 h-10 text-danger-300" />
-            <p className="text-sm font-medium text-warm-600">{t('desp.ordenes.error')}</p>
-            <p className="text-xs text-warm-400">{t('desp.ordenes.errorHint')}</p>
-            <button onClick={handleRefresh} className="btn-secondary text-xs flex items-center gap-1.5 mt-1">
+            <p className="text-sm font-medium text-warm-700">{t('desp.ordenes.error')}</p>
+            {isAdmin ? (
+              <>
+                <p className="text-xs text-warm-400 max-w-xs">
+                  {t('desp.ordenes.errorHintAdmin')}
+                </p>
+                <a href="/sistema/conexion"
+                  className="btn-primary text-xs flex items-center gap-1.5 mt-1 no-underline">
+                  {t('desp.ordenes.errorGoConfig')}
+                </a>
+              </>
+            ) : (
+              <p className="text-xs text-warm-400 max-w-xs">
+                {t('desp.ordenes.errorHintUser')}
+              </p>
+            )}
+            <button onClick={handleRefresh} className="btn-secondary text-xs flex items-center gap-1.5">
               <RefreshCw className="w-3.5 h-3.5" /> {t('desp.btn.reintentar')}
             </button>
           </div>

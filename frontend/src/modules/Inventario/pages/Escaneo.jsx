@@ -1980,7 +1980,7 @@ export default function Escaneo() {
 
               {!wmsConfigured ? (
                 <div className="flex flex-col items-center gap-3">
-                  <button onClick={() => navigate('/wmshub')}
+                  <button onClick={() => navigate('/sistema/conexion')}
                     className="inline-flex items-center gap-2.5 px-8 py-3.5 text-base font-semibold rounded-2xl bg-warning-100 text-warning-700 hover:bg-warning-200 transition-colors">
                     {t('inventario.escaneo.wms_not_configured')}
                   </button>

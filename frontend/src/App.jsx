@@ -209,9 +209,10 @@ function AppRoutes() {
         } />
 
         {/* WMS Hub — Sistema section */}
-        <Route path="wmshub" element={
+        <Route path="sistema/conexion" element={
           <PermissionRoute module="sistema.wms"><ErrorBoundary><WMSHubConfiguracion /></ErrorBoundary></PermissionRoute>
         } />
+        <Route path="wmshub" element={<Navigate to="/sistema/conexion" replace />} />
 
         {/* Devoluciones */}
         <Route path="devoluciones/entradas" element={

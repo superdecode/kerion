@@ -117,7 +117,7 @@ const getNavItems = (t) => [
 ]
 
 const getAdminNav = (t) => [
-  { path: '/wmshub', tourId: 'nav-wmshub', label: t('nav.wms.config'),     icon: Wifi,      permission: 'sistema.wms' },
+  { path: '/sistema/conexion', tourId: 'nav-wmshub', label: t('nav.wms.config'),     icon: Wifi,      permission: 'sistema.wms' },
   { path: '/admin',  tourId: 'nav-admin',  label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
 ]
 
