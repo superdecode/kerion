@@ -1145,7 +1145,7 @@ router.post('/tenants/:id/subscriptions', authenticateAdmin, async (req, res) =>
 // GET /api/admin/dashboard
 router.get('/dashboard', authenticateAdmin, async (_req, res) => {
   try {
-    const [counts, recent, conversions] = await Promise.all([
+    const [counts, recent, conversions, deliverability] = await Promise.all([
       query(`
         SELECT
           COUNT(*) FILTER (WHERE status = 'trial')          as trial,
@@ -1164,13 +1164,32 @@ router.get('/dashboard', authenticateAdmin, async (_req, res) => {
         FROM tenants
         WHERE created_at >= now() - INTERVAL '30 days'
       `),
+      query(`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'failed')::int AS critical,
+          COUNT(*) FILTER (WHERE status = 'pending' AND attempts > 0)::int AS warnings,
+          MAX(COALESCE(sent_at, created_at)) AS latest_at
+        FROM notifications_outbox
+        WHERE COALESCE(sent_at, created_at) >= now() - INTERVAL '72 hours'
+          AND status IN ('failed', 'pending')
+      `),
     ])
+
+    const deliverabilityRow = deliverability.rows[0] || {}
+    const critical = Number(deliverabilityRow.critical ?? 0)
+    const warnings = Number(deliverabilityRow.warnings ?? 0)
 
     res.json({
       success: true,
       stats: counts.rows[0],
       pending_requests: recent.rows,
       last_30d_conversion: conversions.rows[0],
+      deliverability: {
+        critical,
+        warnings,
+        latest_at: deliverabilityRow.latest_at || null,
+        has_alert: critical > 0 || warnings > 0,
+      },
     })
   } catch (err) {
     console.error('[admin/dashboard]', err)

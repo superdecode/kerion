@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { RefreshCw, Bell, CheckCircle2, XCircle, Clock, AlertCircle, RotateCcw, Search, Trash2, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import adminApi from '../services/adminApi'
 import { fmtDateTimeMini } from '../../../core/utils/dateFormat'
@@ -41,8 +42,11 @@ const PAGE_SIZES = [20, 50, 100, 200, 500]
 const DEFAULT_PAGE_SIZE = 50
 
 export default function AdminNotificaciones() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [notifs, setNotifs] = useState([])
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState(() => (
+    FILTERS.includes(searchParams.get('status')) ? searchParams.get('status') : ''
+  ))
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
@@ -69,6 +73,12 @@ export default function AdminNotificaciones() {
 
   useEffect(() => { load() }, [statusFilter])
   useEffect(() => { setPage(1); setSelected(new Set()) }, [search, statusFilter, pageSize])
+
+  function applyStatusFilter(status) {
+    setStatusFilter(status)
+    if (status) setSearchParams({ status }, { replace: true })
+    else setSearchParams({}, { replace: true })
+  }
 
   async function retry(id) {
     setRetryingId(id)
@@ -196,7 +206,7 @@ export default function AdminNotificaciones() {
           {FILTERS.map(s => (
             <button
               key={s}
-              onClick={() => setStatusFilter(s)}
+              onClick={() => applyStatusFilter(s)}
               className={`relative px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 statusFilter === s ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800'
               }`}

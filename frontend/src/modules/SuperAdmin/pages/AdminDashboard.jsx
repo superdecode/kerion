@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, TrendingUp, AlertCircle, Clock, CheckCircle2, XCircle,
   ArrowRight, RefreshCw, Database, BarChart3, Package, Users, ScanLine, FileStack,
-  Truck, Boxes, RotateCcw, PackageCheck, Waypoints,
+  Truck, Boxes, RotateCcw, PackageCheck, Waypoints, X,
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
@@ -88,6 +88,7 @@ const STATUS_ROW_CFG = {
   suspended:     { bg: 'bg-red-500/15',     text: 'text-red-300',     border: 'border-red-500/25' },
 }
 const STATUS_LABELS_MAP = { trial: 'Trial', active: 'Activo', trial_expired: 'Vencido', expired: 'Expirado', suspended: 'Suspendido' }
+const DELIVERABILITY_DISMISS_PREFIX = 'kirion_admin_deliverability_dismissed:'
 
 function fmt(n) {
   if (n === null || n === undefined) return '—'
@@ -99,6 +100,7 @@ export default function AdminDashboard() {
   const [usage, setUsage] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [dismissedDeliverabilityKey, setDismissedDeliverabilityKey] = useState('')
 
   function load() {
     setLoading(true)
@@ -136,6 +138,19 @@ export default function AdminDashboard() {
 
   const { stats, pending_requests, last_30d_conversion } = data
   const convTotal = Number(last_30d_conversion.converted) + Number(last_30d_conversion.not_converted)
+  const deliverability = data.deliverability || {}
+  const deliverabilityKey = `${deliverability.critical || 0}:${deliverability.warnings || 0}:${deliverability.latest_at || 'none'}`
+  const deliverabilityDismissKey = `${DELIVERABILITY_DISMISS_PREFIX}${deliverabilityKey}`
+  const showDeliverabilityAlert = Boolean(
+    deliverability.has_alert &&
+    dismissedDeliverabilityKey !== deliverabilityKey &&
+    localStorage.getItem(deliverabilityDismissKey) !== '1'
+  )
+
+  const dismissDeliverabilityAlert = () => {
+    localStorage.setItem(deliverabilityDismissKey, '1')
+    setDismissedDeliverabilityKey(deliverabilityKey)
+  }
 
   return (
     <div className="space-y-6">
@@ -149,6 +164,43 @@ export default function AdminDashboard() {
           Actualizar
         </button>
       </div>
+
+      {showDeliverabilityAlert && (
+        <div className="rounded-xl border border-red-500/25 bg-red-950/25 p-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-red-500/25 bg-red-500/10">
+              <AlertCircle className="h-4 w-4 text-red-300" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-red-100">Atencion en entregabilidad</p>
+              <p className="mt-1 text-sm text-red-200/80">
+                {deliverability.critical || 0} criticas y {deliverability.warnings || 0} advertencias en las ultimas 72 horas.
+                Revisa proveedor, dominio o destinatarios rechazados.
+              </p>
+              <p className="mt-1 text-xs text-red-200/55">
+                Las aperturas de correo no se muestran porque el sistema no recibe confirmacion confiable de lectura.
+              </p>
+            </div>
+            <div className="flex flex-shrink-0 items-center gap-2">
+              <Link
+                to="/super-admin/notificaciones?status=failed"
+                onClick={dismissDeliverabilityAlert}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-400/30 bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-100 transition-colors hover:bg-red-500/25"
+              >
+                Revisar <ArrowRight className="h-3 w-3" />
+              </Link>
+              <button
+                type="button"
+                onClick={dismissDeliverabilityAlert}
+                title="Cerrar alerta"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-400/20 bg-red-500/10 text-red-200 transition-colors hover:bg-red-500/20 hover:text-white"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tenant status cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
