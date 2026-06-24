@@ -19,7 +19,7 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDate, fmtTimeShort, toDateKey, fmtDateString } from '../../../core/utils/dateFormat'
 import { getOutboundList, getOrdenesDispatch, getConductores, getUnidades, findAllOrdersByBarcode } from '../services/despachoService'
-import { normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
+import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { ConductoresModal, UnidadesModal } from '../components/CatalogsModals'
 import IniciarDespachoModal  from '../components/IniciarDespachoModal'
 import DispatchQuantityModal from '../components/DispatchQuantityModal'
@@ -382,6 +382,7 @@ export default function Ordenes() {
   const runScan = useCallback(async (q) => {
     const normQ = normalizeScanCode(q.trim())
     if (!normQ) { setScanStatus(SCAN_IDLE); return }
+    const normalizedQueries = new Set(generateCodeVariations(normQ, false))
     setScanStatus(SCAN_LOADING)
 
     function getDateKey(order) {
@@ -397,11 +398,16 @@ export default function Ordenes() {
     }
 
     function matchesInMemory(o) {
-      if (normalizeCodeFast(o.outboundOrderNo || o.order_no || '') === normQ) return true
-      if (normalizeCodeFast(o.thirdOrderNo || '') === normQ) return true
-      if (normalizeCodeFast(o.logisticsTrackNo || '') === normQ) return true
-      if (normalizeCodeFast(o.customizeCode || '') === normQ) return true
-      return (o.allCustomizeCodes || []).some(c => normalizeCodeFast(c) === normQ)
+      const hasCode = (rawCode) => {
+        const normalized = normalizeCodeFast(rawCode)
+        if (!normalized) return false
+        return generateCodeVariations(normalized, false).some((variant) => normalizedQueries.has(variant))
+      }
+      if (hasCode(o.outboundOrderNo || o.order_no || '')) return true
+      if (hasCode(o.thirdOrderNo || '')) return true
+      if (hasCode(o.logisticsTrackNo || '')) return true
+      if (hasCode(o.customizeCode || '')) return true
+      return (o.allCustomizeCodes || []).some(hasCode)
     }
 
     // Fast path: search already-loaded orders (full date range, not just filtered view)

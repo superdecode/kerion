@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from 'react'
+import { memo, useState, useRef, useCallback, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -42,12 +42,68 @@ function buildLookupCodeSet(rawCodes = []) {
   return codes
 }
 
+const ScanEntryInput = memo(function ScanEntryInput({
+  inputRef,
+  onSubmit,
+  placeholder,
+  disabled = false,
+  loading = false,
+  buttonLabel = 'OK',
+  buttonClassName = 'btn-primary text-xs flex items-center gap-1.5 h-10 px-4',
+  inputClassName = 'flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400',
+  containerClassName = 'flex items-center gap-1.5 bg-white border-2 rounded-xl px-3 h-10 flex-1 transition-colors border-primary-200 focus-within:border-primary-400',
+}) {
+  const [value, setValue] = useState('')
+
+  const submit = useCallback(() => {
+    const raw = value.trim()
+    if (!raw || disabled || loading) return
+    onSubmit(raw)
+    setValue('')
+    window.setTimeout(() => inputRef?.current?.focus(), 0)
+  }, [disabled, inputRef, loading, onSubmit, value])
+
+  return (
+    <>
+      <div className={containerClassName}>
+        <ScanLine className="w-3.5 h-3.5 text-primary-400 shrink-0" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              submit()
+            }
+          }}
+          placeholder={placeholder}
+          disabled={disabled}
+          className={inputClassName}
+          autoComplete="off"
+        />
+        {loading && <Loader2 className="w-3 h-3 animate-spin text-primary-300 shrink-0" />}
+        {value && !loading && (
+          <button type="button" onClick={() => { setValue(''); inputRef?.current?.focus() }} className="text-warm-400 hover:text-warm-600">
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+      <button type="button" onClick={submit} disabled={!value.trim() || disabled || loading}
+        className={buttonClassName}>
+        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
+        {buttonLabel}
+      </button>
+    </>
+  )
+})
+
 // ── Validation panel (per order) ─────────────────────────────────────────────
 function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onClose, validarPorTarimas, detailCache }) {
   const { addToast } = useToastStore()
   const { t } = useI18nStore()
   const scanRef = useRef(null)
-  const [input, setInput] = useState('')
   const [orderDetail, setOrderDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [completed, setCompleted] = useState(false)
@@ -152,23 +208,20 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     onError: (err) => addToast(err?.response?.data?.error || 'Error eliminando escaneo', 'error'),
   })
 
-  const handleScan = useCallback(() => {
-    const code = normalizeScanCode(input.trim())
+  const handleScan = useCallback((rawInput) => {
+    const code = normalizeScanCode(rawInput)
     if (!code) return
     const allScannedCodes = new Set([...Array.from(alreadyScanned), ...pendingOfflineScans])
     if (allScannedCodes.has(code) || pendingOnlineRef.current.has(code)) {
       addToast('Código ya escaneado en esta orden', 'warning')
-      setInput('')
       scanRef.current?.focus()
       return
     }
     const codes = validCodes()
     if (codes.size > 0 && !codes.has(code)) {
-      setInput('')
       setForceModal({ open: true, code })
       return
     }
-    setInput('')
     scanRef.current?.focus()
     if (isOffline) {
       useOfflineStore.getState().enqueueModule({
@@ -181,7 +234,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     }
     pendingOnlineRef.current.add(code)
     doAddScan({ code, tarimaRef: currentTarimaRef })
-  }, [input, validCodes, alreadyScanned, pendingOfflineScans, isOffline, doAddScan, addToast, folioId, order.id, currentTarimaRef])
+  }, [validCodes, alreadyScanned, pendingOfflineScans, isOffline, doAddScan, addToast, folioId, order.id, currentTarimaRef])
 
   const pct = expected && expected > 0 ? Math.round((scans.length / expected) * 100) : null
 
@@ -302,37 +355,16 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
 
       {canEdit && (
         <div className="flex items-center gap-2 mb-3">
-          <div className={`flex items-center gap-1.5 bg-white border-2 rounded-xl px-3 h-10 flex-1 transition-colors ${
-            scanning ? 'border-primary-300' : 'border-primary-200 focus-within:border-primary-400'
-          }`}>
-            <ScanLine className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-            <input
-              ref={scanRef}
-              type="text"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  handleScan()
-                }
-              }}
-              placeholder={detailLoading ? 'Cargando datos WMS...' : t('desp.validar.orden.scanPlaceholderPanel')}
-              className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400"
-              autoComplete="off"
-            />
-            {detailLoading && <Loader2 className="w-3 h-3 animate-spin text-primary-300 shrink-0" />}
-            {input && !detailLoading && (
-              <button onClick={() => { setInput(''); scanRef.current?.focus() }} className="text-warm-400 hover:text-warm-600">
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-          <button onClick={handleScan} disabled={!input.trim() || scanning}
-            className="btn-primary text-xs flex items-center gap-1.5 h-10 px-4">
-            {scanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
-            {t('desp.validar.orden.validarBtn')}
-          </button>
+          <ScanEntryInput
+            inputRef={scanRef}
+            onSubmit={handleScan}
+            placeholder={detailLoading ? 'Cargando datos WMS...' : t('desp.validar.orden.scanPlaceholderPanel')}
+            loading={scanning}
+            buttonLabel={t('desp.validar.orden.validarBtn')}
+            containerClassName={`flex items-center gap-1.5 bg-white border-2 rounded-xl px-3 h-10 flex-1 transition-colors ${
+              scanning ? 'border-primary-300' : 'border-primary-200 focus-within:border-primary-400'
+            }`}
+          />
           {scans.length > 0 && (
             <button onClick={() => doDeleteLast()} disabled={deletingLast}
               className="btn-ghost text-xs flex items-center gap-1.5 h-10 px-3 text-danger-600 hover:bg-danger-50 border border-danger-200">
@@ -438,7 +470,6 @@ export default function ValidarPorOrden({ folioId }) {
   const autoValidateRef = useRef(false)
   const [autoValidate, setAutoValidate] = useState(false)
   const [localScans, setLocalScans] = useState([])
-  const [scanInput, setScanInput] = useState('')
   const [lookupDetail, setLookupDetail] = useState(null)
   const [validatingOrderId, setValidatingOrderId] = useState(null)
   const [showConfirmCancel, setShowConfirmCancel] = useState(false)
@@ -513,7 +544,6 @@ export default function ValidarPorOrden({ folioId }) {
       setLookupResult(null)
       setLookupDetail(null)
       setLocalScans([])
-      setScanInput('')
       setAddForm({ outbound_order_no: '', destinatario: '', bultos: '', bultos_esperados: null, notas: '' })
       addToast('Orden agregada', 'success')
     },
@@ -582,24 +612,21 @@ export default function ValidarPorOrden({ folioId }) {
     setLookupResult(null)
     setLookupDetail(null)
     setLocalScans([])
-    setScanInput('')
     setAutoValidate(false)
     autoValidateRef.current = false
     setAddForm({ outbound_order_no: '', destinatario: '', bultos: '', bultos_esperados: null, notas: '' })
     setTimeout(() => lookupRef.current?.focus(), 100)
   }
 
-  const handleInlineScan = useCallback(() => {
-    const code = normalizeScanCode(scanInput.trim())
+  const handleInlineScan = useCallback((rawInput) => {
+    const code = normalizeScanCode(rawInput)
     if (!code) return
-    if (code !== scanInput.trim()) setScanInput(code)
     const alreadyScanned = new Set()
     localScans.forEach((localCode) => {
       generateCodeVariations(localCode, false).forEach((variant) => alreadyScanned.add(variant))
     })
     if (alreadyScanned.has(code)) {
       addToast('Código ya escaneado', 'warning')
-      setScanInput('')
       inlineScanRef.current?.focus()
       return
     }
@@ -612,15 +639,13 @@ export default function ValidarPorOrden({ folioId }) {
       const codes = buildLookupCodeSet(rawCodes)
       if (codes.size > 0 && !codes.has(code)) {
         addToast('Código no corresponde a esta orden — rechazado', 'error')
-        setScanInput('')
         inlineScanRef.current?.focus()
         return
       }
     }
     setLocalScans(prev => [...prev, code])
-    setScanInput('')
     inlineScanRef.current?.focus()
-  }, [scanInput, localScans, lookupDetail, addToast])
+  }, [localScans, lookupDetail, addToast])
 
   const handleConfirmAdd = () => {
     pendingOrderNoRef.current = addForm.outbound_order_no
@@ -899,33 +924,15 @@ export default function ValidarPorOrden({ folioId }) {
                               </div>
                             )}
                             <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1.5 bg-warm-50 border-2 border-primary-200 rounded-xl px-3 h-9 flex-1 focus-within:border-primary-400 focus-within:bg-white transition-all">
-                                <ScanLine className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-                                <input
-                                  ref={inlineScanRef}
-                                  type="text"
-                                  value={scanInput}
-                                  onChange={e => setScanInput(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault()
-                                      handleInlineScan()
-                                    }
-                                  }}
-                                  placeholder={t('desp.validar.orden.scanPlaceholder')}
-                                  className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-300"
-                                  autoComplete="off"
-                                />
-                                {scanInput && (
-                                  <button onClick={() => { setScanInput(''); inlineScanRef.current?.focus() }} className="text-warm-400 hover:text-warm-600">
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                )}
-                              </div>
-                              <button onClick={handleInlineScan} disabled={!scanInput.trim()}
-                                className="btn-primary text-xs h-9 px-3 flex items-center gap-1">
-                                <ScanLine className="w-3.5 h-3.5" />OK
-                              </button>
+                              <ScanEntryInput
+                                inputRef={inlineScanRef}
+                                onSubmit={handleInlineScan}
+                                placeholder={t('desp.validar.orden.scanPlaceholder')}
+                                buttonLabel="OK"
+                                buttonClassName="btn-primary text-xs h-9 px-3 flex items-center gap-1"
+                                containerClassName="flex items-center gap-1.5 bg-warm-50 border-2 border-primary-200 rounded-xl px-3 h-9 flex-1 focus-within:border-primary-400 focus-within:bg-white transition-all"
+                                inputClassName="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-300"
+                              />
                               {localScans.length > 0 && (
                                 <button onClick={() => setLocalScans(prev => prev.slice(0, -1))}
                                   className="h-9 px-2.5 rounded-xl border border-danger-200 text-danger-500 hover:bg-danger-50 transition-colors">
@@ -1005,7 +1012,7 @@ export default function ValidarPorOrden({ folioId }) {
                       : t('desp.validar.orden.confirmar')}
                   </button>
                   <button
-                    onClick={() => { setShowAddOrder(false); setLookupResult(null); setLookupInput(''); setLocalScans([]); setScanInput('') }}
+                    onClick={() => { setShowAddOrder(false); setLookupResult(null); setLookupInput(''); setLocalScans([]) }}
                     className="btn-secondary text-sm">{t('common.cancel')}</button>
                 </div>
               </div>

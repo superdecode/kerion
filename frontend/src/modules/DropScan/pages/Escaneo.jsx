@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { memo, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -47,6 +47,48 @@ const fmtElapsed = (secs) => {
     ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
     : `${m}:${String(s).padStart(2, '0')}`
 }
+
+const ScanBoxInput = memo(function ScanBoxInput({
+  inputRef,
+  onSubmit,
+  placeholder,
+  disabled,
+  flashType,
+  pesoPending,
+}) {
+  const [value, setValue] = useState('')
+
+  const submit = useCallback((event) => {
+    event.preventDefault()
+    const raw = value.trim()
+    if (!raw || disabled) return
+    setValue('')
+    onSubmit(raw)
+  }, [disabled, onSubmit, value])
+
+  return (
+    <form onSubmit={submit} className="flex-1 min-w-0">
+      <div className="relative">
+        <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={placeholder}
+          autoComplete="off"
+          disabled={disabled}
+          className={`w-full pl-14 pr-5 py-5 text-xl bg-white border-2 rounded-2xl
+            focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
+            transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide
+            disabled:bg-warm-50 disabled:text-warm-400 disabled:cursor-not-allowed
+            ${pesoPending ? 'border-warm-200 opacity-50' : 'border-warm-200'}
+            ${flashType === 'success' ? 'animate-scan-success' : flashType === 'error' ? 'animate-scan-error' : ''}`}
+        />
+      </div>
+    </form>
+  )
+})
 
 
 const getTodayDateStr = getToday
@@ -642,8 +684,7 @@ export default function Escaneo() {
   }, [tabs, soundEnabled, updateTab, t, toast, pesoHabilitado])
 
   /* ── scan ─────────────────────────────────────────── */
-  const handleScan = useCallback(async (e, tabId) => {
-    e.preventDefault()
+  const handleScan = useCallback(async (tabId, rawInput) => {
     const tab = tabs.find(t => t.tabId === tabId)
     if (!tab) return
 
@@ -651,7 +692,7 @@ export default function Escaneo() {
     // (React state updates are batched; refs are synchronous)
     if (scanInFlight.current.has(tabId)) return
 
-    const code = tab.scanInput.trim()
+    const code = String(rawInput || '').trim()
     if (!code) return
 
     // Block new scans while peso is pending
@@ -1210,26 +1251,14 @@ export default function Escaneo() {
               {/* Scan input row (with optional inline peso field) */}
               <div className="mb-5 space-y-2">
                 <div className="flex items-stretch gap-2">
-                  <form onSubmit={(e) => handleScan(e, activeTabId)} className="flex-1 min-w-0">
-                    <div className="relative">
-                      <ScanBarcode className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-warm-300" />
-                      <input
-                        ref={inputRef}
-                        type="text"
-                        value={tab.scanInput}
-                        onChange={(e) => updateTab(activeTabId, { scanInput: e.target.value })}
-                        placeholder={canWrite('dropscan.escaneo') ? t('scan.placeholder') : 'Solo lectura — sin permiso para escanear'}
-                        autoComplete="off"
-                        disabled={!canWrite('dropscan.escaneo')}
-                        className={`w-full pl-14 pr-5 py-5 text-xl bg-white border-2 rounded-2xl
-                          focus:border-primary-500 focus:ring-4 focus:ring-primary-100 focus:shadow-glow
-                          transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide
-                          disabled:bg-warm-50 disabled:text-warm-400 disabled:cursor-not-allowed
-                          ${pesoHabilitado && pesoState && pesoState.tabId === activeTabId ? 'border-warm-200 opacity-50' : 'border-warm-200'}
-                          ${tab.flashType === 'success' ? 'animate-scan-success' : tab.flashType === 'error' ? 'animate-scan-error' : ''}`}
-                      />
-                    </div>
-                  </form>
+                  <ScanBoxInput
+                    inputRef={inputRef}
+                    onSubmit={(raw) => handleScan(activeTabId, raw)}
+                    placeholder={canWrite('dropscan.escaneo') ? t('scan.placeholder') : 'Solo lectura — sin permiso para escanear'}
+                    disabled={!canWrite('dropscan.escaneo')}
+                    flashType={tab.flashType}
+                    pesoPending={pesoHabilitado && pesoState && pesoState.tabId === activeTabId}
+                  />
 
                   {pesoHabilitado && pesoState && pesoState.tabId === activeTabId && (
                     <form onSubmit={handlePesoSubmit} className="shrink-0">

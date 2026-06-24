@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { memo, useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -139,6 +139,103 @@ function CopyMetaPill({ label, value, tone = 'primary' }) {
   )
 }
 
+const ScanInputBar = memo(function ScanInputBar({ inputRef, onSubmit, placeholder, buttonLabel, disabled }) {
+  const [value, setValue] = useState('')
+
+  const submit = useCallback(() => {
+    const raw = value.trim()
+    if (!raw || disabled) return
+    setValue('')
+    onSubmit(raw)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [disabled, inputRef, onSubmit, value])
+
+  return (
+    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+      <div className="flex items-center gap-2 bg-white border-2 rounded-2xl px-4 h-11 flex-1 transition-colors border-primary-200 focus-within:border-primary-400">
+        <ScanLine className="w-3.5 h-3.5 text-primary-400 shrink-0" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              submit()
+            }
+          }}
+          placeholder={placeholder}
+          className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400"
+          autoComplete="off"
+          disabled={disabled}
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={() => { setValue(''); inputRef.current?.focus() }}
+            className="text-warm-400 hover:text-warm-600"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!value.trim() || disabled}
+        className="btn-primary text-sm flex items-center justify-center gap-1.5 h-11 px-4 rounded-2xl disabled:opacity-50 w-full sm:w-auto"
+      >
+        <ScanLine className="w-3.5 h-3.5" />
+        {buttonLabel}
+      </button>
+    </div>
+  )
+})
+
+const OrderSearchBox = memo(function OrderSearchBox({ onSearchChange, placeholder }) {
+  const [value, setValue] = useState('')
+  const timerRef = useRef(null)
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+  }, [])
+
+  const commit = useCallback((nextValue, delay = 120) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => onSearchChange(nextValue), delay)
+  }, [onSearchChange])
+
+  const update = (nextValue) => {
+    setValue(nextValue)
+    commit(nextValue)
+  }
+
+  const clear = () => {
+    setValue('')
+    commit('', 0)
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-2xl border border-primary-100/80 bg-gradient-to-r from-white via-primary-50/55 to-white px-3 h-9 shadow-[0_8px_18px_-14px_rgba(37,99,235,0.45)] focus-within:border-primary-300 focus-within:ring-1 focus-within:ring-primary-100 mb-2.5 transition-all">
+      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100/80 shrink-0">
+        <Search className="w-3 h-3 text-primary-500" />
+      </div>
+      <input
+        value={value}
+        onChange={e => update(e.target.value)}
+        placeholder={placeholder}
+        className="flex-1 min-w-0 bg-transparent text-[13px] text-warm-700 outline-none placeholder:text-warm-400 focus-visible:outline-none"
+      />
+      {value && (
+        <button type="button" onClick={clear} className="text-warm-400 hover:text-warm-600 shrink-0">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  )
+})
+
 export default function ValidarPorDestino({ folioId }) {
   const navigate = useNavigate()
   const { addToast } = useToastStore()
@@ -152,7 +249,6 @@ export default function ValidarPorDestino({ folioId }) {
 
   const scanRef = useRef(null)
   const pendingOnlineRef = useRef(new Set())
-  const [scanInput, setScanInput] = useState('')
   const [currentTarimaNum, setCurrentTarimaNum] = useState(1)
   const [errorModal, setErrorModal] = useState(null)
   const [showConfirmCancel, setShowConfirmCancel] = useState(false)
@@ -453,12 +549,11 @@ export default function ValidarPorDestino({ folioId }) {
     setTimeout(() => scanRef.current?.focus(), 100)
   }, [doAddScan, overLimitModal.payload])
 
-  const handleScan = useCallback(() => {
-    const raw = scanInput.trim()
+  const handleScan = useCallback((rawInput) => {
+    const raw = String(rawInput || '').trim()
     if (!raw) return
     const variants = buildScanCodeVariants(raw)
     const code = variants[0] || ''
-    setScanInput('')
     scanRef.current?.focus()
     if (!code) return
 
@@ -518,7 +613,7 @@ export default function ValidarPorDestino({ folioId }) {
     }
 
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: matchedOrderNo })
-  }, [scanInput, scans, orderCodeLookup, externalCodeLookup, orderMetaByNo, folio?.destino, currentTarimaRef, isOffline, folioId, requestAddScan, addToast])
+  }, [scans, orderCodeLookup, externalCodeLookup, orderMetaByNo, folio?.destino, currentTarimaRef, isOffline, folioId, requestAddScan, addToast])
 
   const openForceModal = useCallback((code) => {
     setErrorModal(null)
@@ -759,42 +854,13 @@ export default function ValidarPorDestino({ folioId }) {
         </div>
 
         {/* Row 3: scan input */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <div className={`flex items-center gap-2 bg-white border-2 rounded-2xl px-4 h-11 flex-1 transition-colors ${
-            'border-primary-200 focus-within:border-primary-400'
-          }`}>
-            <ScanLine className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-            <input
-              ref={scanRef}
-              type="text"
-              value={scanInput}
-              onChange={e => setScanInput(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  handleScan()
-                }
-              }}
-              placeholder={t('desp.validar.orden.scanPlaceholder')}
-              className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400"
-              autoComplete="off"
-              disabled={!editable}
-            />
-            {scanInput && (
-              <button onClick={() => { setScanInput(''); scanRef.current?.focus() }} className="text-warm-400 hover:text-warm-600">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-          <button
-            onClick={handleScan}
-            disabled={!scanInput.trim() || !editable}
-            className="btn-primary text-sm flex items-center justify-center gap-1.5 h-11 px-4 rounded-2xl disabled:opacity-50 w-full sm:w-auto"
-          >
-            <ScanLine className="w-3.5 h-3.5" />
-            {t('desp.validar.orden.validarBtn')}
-          </button>
-        </div>
+        <ScanInputBar
+          inputRef={scanRef}
+          onSubmit={handleScan}
+          placeholder={t('desp.validar.orden.scanPlaceholder')}
+          buttonLabel={t('desp.validar.orden.validarBtn')}
+          disabled={!editable}
+        />
 
         {/* Row 4: scan hint */}
         <p className="text-[11px] text-warm-400 flex items-center gap-1.5">
@@ -924,22 +990,10 @@ export default function ValidarPorDestino({ folioId }) {
               </div>
 
               {/* Search */}
-              <div className="flex items-center gap-2 rounded-2xl border border-primary-100/80 bg-gradient-to-r from-white via-primary-50/55 to-white px-3 h-9 shadow-[0_8px_18px_-14px_rgba(37,99,235,0.45)] focus-within:border-primary-300 focus-within:ring-1 focus-within:ring-primary-100 mb-2.5 transition-all">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100/80 shrink-0">
-                  <Search className="w-3 h-3 text-primary-500" />
-                </div>
-                <input
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder={t('desp.validar.destino.searchPlaceholder')}
-                  className="flex-1 min-w-0 bg-transparent text-[13px] text-warm-700 outline-none placeholder:text-warm-400 focus-visible:outline-none"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="text-warm-400 hover:text-warm-600 shrink-0">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+              <OrderSearchBox
+                onSearchChange={setSearchQuery}
+                placeholder={t('desp.validar.destino.searchPlaceholder')}
+              />
 
               {/* Status filters */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
