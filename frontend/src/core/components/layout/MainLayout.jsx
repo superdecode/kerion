@@ -4,6 +4,7 @@ import Toast from '../common/Toast'
 import ConnectionBanner from '../common/ConnectionBanner'
 import SubscriptionGuard from '../common/SubscriptionGuard'
 import OnboardingTour from './OnboardingTour'
+import WelcomeModal, { AutoTourLauncher } from './WelcomeModal'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { usePermissionSync } from '../../hooks/usePermissionSync'
 
@@ -24,6 +25,8 @@ export default function MainLayout() {
       </div>
       <Toast />
       <OnboardingTour />
+      <WelcomeModal />
+      <AutoTourLauncher />
     </div>
   )
 }

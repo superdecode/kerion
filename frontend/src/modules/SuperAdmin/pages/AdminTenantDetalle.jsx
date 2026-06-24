@@ -260,10 +260,12 @@ function ModuleStatCard({ icon: Icon, label, color, bg, border, total, recent, u
             <span className="text-gray-500 text-xs">Total</span>
             <span className="text-white font-bold text-lg leading-none">{fmt(total)}</span>
           </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-gray-500 text-xs">Ultimos 30d</span>
-            <span className={`text-sm font-medium ${color}`}>{fmt(recent)}</span>
-          </div>
+          {recent !== undefined && (
+            <div className="flex items-baseline justify-between">
+              <span className="text-gray-500 text-xs">Ultimos 30d</span>
+              <span className={`text-sm font-medium ${color}`}>{fmt(recent)}</span>
+            </div>
+          )}
           {unit && <p className="text-gray-700 text-[10px] pt-0.5">{unit}</p>}
         </div>
       )}
@@ -279,18 +281,6 @@ const MODULE_STATS_CFG = [
     totalKey: 'total_guias', recentKey: 'guias_last_30d', unit: 'guias',
   },
   {
-    key: 'surtido',
-    icon: Truck, label: 'Surtido WMS',
-    color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20',
-    totalKey: 'total_surtido_ordenes', recentKey: 'surtido_last_30d', unit: 'OBCs',
-  },
-  {
-    key: 'inventario',
-    icon: Boxes, label: 'Inventario',
-    color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20',
-    totalKey: 'total_inventario_scans', recentKey: 'inventario_last_30d', unit: 'escaneos',
-  },
-  {
     key: 'devoluciones',
     icon: RotateCcw, label: 'Devoluciones',
     color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
@@ -303,10 +293,28 @@ const MODULE_STATS_CFG = [
     totalKey: 'total_recepcion_ordenes', recentKey: 'recepcion_last_30d', unit: 'entradas',
   },
   {
+    key: 'inventario',
+    icon: Boxes, label: 'Inventario',
+    color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20',
+    totalKey: 'total_inventario_scans', recentKey: 'inventario_last_30d', unit: 'escaneos',
+  },
+  {
+    key: 'surtido',
+    icon: Truck, label: 'Surtido WMS',
+    color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20',
+    totalKey: 'total_surtido_ordenes', recentKey: 'surtido_last_30d', unit: 'OBCs',
+  },
+  {
     key: 'despacho',
     icon: Package, label: 'Despacho',
     color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20',
     totalKey: 'total_folios', recentKey: 'despacho_last_30d', unit: 'folios',
+  },
+  {
+    key: 'anormalidades',
+    icon: AlertCircle, label: 'Anormalidades',
+    color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20',
+    totalKey: 'total_anormalidades', recentKey: null, unit: 'registros',
   },
 ]
 
@@ -1311,7 +1319,7 @@ export default function AdminTenantDetalle() {
         />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
         {MODULE_STATS_CFG.map(cfg => (
           <ModuleStatCard
             key={cfg.key}
@@ -1321,7 +1329,7 @@ export default function AdminTenantDetalle() {
             bg={cfg.bg}
             border={cfg.border}
             total={stats?.[cfg.totalKey]}
-            recent={stats?.[cfg.recentKey]}
+            recent={cfg.recentKey ? stats?.[cfg.recentKey] : undefined}
             unit={cfg.unit}
             loading={statsLoading}
           />

@@ -89,20 +89,20 @@ function PlanModal({ plan, onClose, onSaved }) {
       label: 'DropScan', sub: 'guías / mes', field: 'guide_limit',
     },
     {
-      icon: Truck, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20',
-      label: 'Surtido WMS', sub: 'OBCs / mes', field: 'surtido_limit',
-    },
-    {
-      icon: Boxes, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20',
-      label: 'Inventario', sub: 'escaneos / mes', field: 'inventario_limit',
-    },
-    {
       icon: RotateCcw, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
       label: 'Devoluciones', sub: 'entradas / mes', field: 'devoluciones_limit',
     },
     {
       icon: Package, color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20',
       label: 'Recepción', sub: 'entradas / mes', field: 'recepcion_limit',
+    },
+    {
+      icon: Boxes, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20',
+      label: 'Inventario', sub: 'escaneos / mes', field: 'inventario_limit',
+    },
+    {
+      icon: Truck, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20',
+      label: 'Surtido WMS', sub: 'OBCs / mes', field: 'surtido_limit',
     },
     {
       icon: Truck, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20',
