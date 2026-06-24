@@ -1115,10 +1115,10 @@ function UnificadoPanel({ items, onRemove, onMove }) {
     )
   }
   return (
-    <div className="card overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
+    <div className="card flex flex-col overflow-hidden shadow-sm xl:flex-1 xl:min-h-0">
+      <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead className="sticky top-0 z-10">
             <tr className="bg-warm-50/60">
               <th className="table-header">#</th>
               <th className="table-header">{t('inventario.escaneo.scan_datetime')}</th>
