@@ -188,23 +188,28 @@ router.post('/orders',
       )
       const order = orderRes.rows[0]
 
-      // Bulk INSERT — one round-trip regardless of line count
-      const COLS = 12
-      const placeholders = lines.map((_, i) => {
-        const b = i * COLS + 1
-        return `($${b},$${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11})`
-      }).join(',')
-      const lineParams = lines.flatMap(l => [
-        req.tenantId, order.id,
-        l.box_type || null, l.custom_box_barcode || null,
-        l.sku || null, l.qty_per_box || null,
-        l.length_oms || null, l.width_oms || null, l.height_oms || null,
-        l.dimension_unit || null, l.weight_oms || null, l.weight_unit || null,
-      ])
+      // Bulk INSERT via UNNEST — 12 array params regardless of row count, no pg 65535-param limit
       await req.tQuery(
         `INSERT INTO inbound_lines (tenant_id, order_id, box_type, custom_box_barcode, sku, qty_per_box, length_oms, width_oms, height_oms, dimension_unit, weight_oms, weight_unit)
-         VALUES ${placeholders}`,
-        lineParams
+         SELECT * FROM UNNEST(
+           $1::uuid[], $2::uuid[], $3::text[], $4::text[], $5::text[],
+           $6::numeric[], $7::numeric[], $8::numeric[], $9::numeric[],
+           $10::text[], $11::numeric[], $12::text[]
+         )`,
+        [
+          lines.map(() => req.tenantId),
+          lines.map(() => order.id),
+          lines.map(l => l.box_type || null),
+          lines.map(l => l.custom_box_barcode || null),
+          lines.map(l => l.sku || null),
+          lines.map(l => l.qty_per_box ?? null),
+          lines.map(l => l.length_oms ?? null),
+          lines.map(l => l.width_oms ?? null),
+          lines.map(l => l.height_oms ?? null),
+          lines.map(l => l.dimension_unit || null),
+          lines.map(l => l.weight_oms ?? null),
+          lines.map(l => l.weight_unit || null),
+        ]
       )
 
       auditLog(req, 'RECEPCION_ORDER_CREATE', 'inbound_orders', order.id, { folio, total_cajas: lines.length })
