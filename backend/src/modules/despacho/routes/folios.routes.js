@@ -707,6 +707,77 @@ router.delete('/:id/orders/:orderId/scans/last',
   }
 )
 
+// Remove an order from destination validation, including its folio-level scans
+router.delete('/:id/destination-orders/:orderId',
+  authenticateToken, loadFullUser,
+  requireDespachoValidar('actualizar'),
+  async (req, res) => {
+    try {
+      const removed = await req.tTransaction(async (client) => {
+        const folioRes = await client.query(
+          `SELECT estado, tipo FROM dispatch_folios
+           WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+          [req.params.id, req.tenantId]
+        )
+        if (folioRes.rows.length === 0) return { status: 404, error: 'Folio no encontrado' }
+        if (!['borrador','en_proceso'].includes(folioRes.rows[0].estado)) {
+          return { status: 409, error: 'El folio ya no se puede modificar' }
+        }
+
+        const orderRes = await client.query(
+          `SELECT id, outbound_order_no
+           FROM dispatch_folio_orders
+           WHERE id = $1 AND folio_id = $2 AND tenant_id = $3
+           FOR UPDATE`,
+          [req.params.orderId, req.params.id, req.tenantId]
+        )
+        if (orderRes.rows.length === 0) return { status: 404, error: 'Orden no encontrada en folio' }
+
+        const order = orderRes.rows[0]
+        const scansDelRes = await client.query(
+          `DELETE FROM dispatch_order_scans
+           WHERE tenant_id = $1
+             AND folio_id = $2
+             AND (
+               folio_order_id = $3
+               OR matched_order_no = $4
+             )
+           RETURNING id`,
+          [req.tenantId, req.params.id, order.id, order.outbound_order_no]
+        )
+
+        await client.query(
+          `DELETE FROM dispatch_folio_orders
+           WHERE id = $1 AND folio_id = $2 AND tenant_id = $3`,
+          [req.params.orderId, req.params.id, req.tenantId]
+        )
+
+        await client.query(
+          `UPDATE dispatch_folios SET updated_at = now()
+           WHERE id = $1 AND tenant_id = $2`,
+          [req.params.id, req.tenantId]
+        )
+
+        return { order, removedScans: scansDelRes.rows.length }
+      })
+
+      if (removed?.status) return res.status(removed.status).json({ error: removed.error })
+
+      auditLog(req, 'DESPACHO_DESTINO_ORDER_REMOVE', 'dispatch_folio_order', removed.order.id, {
+        folio_id: req.params.id,
+        outbound_order_no: removed.order.outbound_order_no,
+        removed_scans: removed.removedScans,
+      })
+
+      const detail = await getFolioDetail(req, req.params.id)
+      res.json({ ...detail, removed_order_id: removed.order.id, removed_scans: removed.removedScans })
+    } catch (error) {
+      console.error('Remove destination folio order error:', error)
+      res.status(500).json({ error: 'Error retirando orden del destino' })
+    }
+  }
+)
+
 // Remove order from folio
 router.delete('/:id/orders/:orderId',
   authenticateToken, loadFullUser,

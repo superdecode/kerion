@@ -33,6 +33,9 @@ export const updateOrder = (id, orderId, body) =>
 export const removeOrder = (id, orderId) =>
   api.delete(`/despacho/folios/${id}/orders/${orderId}`).then(r => r.data)
 
+export const removeDestinationOrder = (id, orderId) =>
+  api.delete(`/despacho/folios/${id}/destination-orders/${orderId}`).then(r => r.data)
+
 export const addOrderScan = (id, orderId, body) =>
   api.post(`/despacho/folios/${id}/orders/${orderId}/scans`, body).then(r => r.data)
 

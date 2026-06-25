@@ -244,6 +244,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
   const sessionData = data?.data?.session ?? {}
   const scans = data?.data?.scans ?? []
   const isClasificacion = (sessionData.scan_type ?? session?.scan_type) === 'clasificacion'
+  const canExportScans = hasPermission('inventario.registros', 'editar')
   const canEditScans = hasPermission('inventario.registros', 'actualizar')
   const canDeleteScans = hasPermission('inventario.registros', 'eliminar')
   const scanBounds = getTimeBounds(scans, {
@@ -424,7 +425,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
       }
       icon={ScanBarcode}
       size="xl"
-      headerAction={!isLoading && scans.length > 0 && (
+      headerAction={!isLoading && scans.length > 0 && canExportScans && (
         <button
           onClick={handleExportDetail}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-success-50 text-success-700 rounded-lg hover:bg-success-100 font-semibold transition-all border border-success-200">
@@ -768,7 +769,7 @@ export default function InventarioRegistros() {
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const canCreate = hasPermission('inventario.escaneo', 'crear')
-  const canExport = hasPermission('inventario.registros', 'actualizar')
+  const canExport = hasPermission('inventario.registros', 'editar')
   const canEdit = hasPermission('inventario.registros', 'actualizar')
   const canDelete = hasPermission('inventario.registros', 'eliminar')
   const searchDebounce = useRef(null)

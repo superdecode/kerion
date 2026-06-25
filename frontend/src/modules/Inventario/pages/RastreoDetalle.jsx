@@ -5,7 +5,7 @@ import {
   Crosshair, ArrowLeft, User, Package, CheckCircle2, XCircle,
   Clock, Loader2, AlertTriangle, History, MessageSquare,
   Trash2, Search, X, ScanBarcode, ChevronUp, ChevronDown as ChevronDownIcon, Plus, Edit3, FileText,
-  FileDown,
+  FileDown, ClipboardList,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -249,6 +249,7 @@ export default function RastreoDetalle() {
   const orden = data?.data?.orden || null
   const cajas = data?.data?.cajas || []
   const historial = data?.data?.historial || []
+  const surtidoTracking = data?.data?.surtido_tracking || null
   const od = outboundData?.data
   const outboundBoxTotal = od?.outboundBoxCount ?? od?.packageList?.length ?? od?.outboundBoxList?.length ?? cajas.length ?? null
   const notas = historial.filter(h => h.accion === 'nota')
@@ -599,6 +600,50 @@ export default function RastreoDetalle() {
                       )}
                     </div>
                   )}
+
+                  {orden.outbound_order_no && (
+                    <div className="mt-4 rounded-2xl border border-accent-100 bg-accent-50/35 p-4 shadow-[0_12px_24px_-28px_rgba(15,23,42,0.18)]">
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-accent-600 shadow-sm">
+                          <ClipboardList className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-600">{t('rastreo.detalle.surtidoSection')}</p>
+                          <p className="text-[11px] text-warm-500">{t('rastreo.detalle.surtidoSectionHint')}</p>
+                        </div>
+                      </div>
+                      {surtidoTracking ? (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                          {[
+                            { label: t('rastreo.detalle.surtidorAsignado'), value: surtidoTracking.surtidor_nombre || t('rastreo.detalle.emptyDash'), icon: User },
+                            { label: t('rastreo.detalle.fechaAsignacionSurtido'), value: safeDate(surtidoTracking.assigned_at) || t('rastreo.detalle.emptyDash'), icon: Clock },
+                            { label: t('rastreo.detalle.estadoSurtido'), value: surtidoTracking.status ? t(`surtido.ordenes.status.${surtidoTracking.status}`) : t('rastreo.detalle.emptyDash'), icon: CheckCircle2 },
+                            { label: t('rastreo.detalle.validacionSurtido'), value: safeDate(surtidoTracking.validation_completed_at) || t('rastreo.detalle.emptyDash'), icon: ScanBarcode },
+                          ].map(item => (
+                            <div key={item.label} className="rounded-xl border border-white/80 bg-white/85 px-3 py-2.5">
+                              <div className="flex items-start gap-2.5">
+                                <item.icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-500" />
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-warm-400">{item.label}</p>
+                                  <p className="mt-0.5 truncate text-xs font-semibold text-warm-800">{item.value}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {surtidoTracking.notes && (
+                            <div className="rounded-xl border border-warning-100 bg-white/90 px-3 py-2.5 sm:col-span-2 xl:col-span-4">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-warning-600">{t('rastreo.detalle.notasSurtido')}</p>
+                              <p className="mt-1 whitespace-pre-wrap text-xs font-medium leading-5 text-warm-700">{surtidoTracking.notes}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="rounded-xl border border-dashed border-accent-200 bg-white/70 px-3 py-3 text-xs text-warm-400">
+                          {t('rastreo.detalle.sinSurtidoTracking')}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -708,6 +753,8 @@ export default function RastreoDetalle() {
                         t('rastreo.causas.col.causa'),
                         t('rastreo.causas.col.area'),
                         t('rastreo.detalle.col.surtido'),
+                        t('rastreo.detalle.surtidoOperador'),
+                        t('rastreo.detalle.surtidoValidadoEn'),
                         t('rastreo.detalle.col.anormalidad'),
                       ]
                       const rows = filteredCajas.map(c => [
@@ -718,6 +765,8 @@ export default function RastreoDetalle() {
                         c.causa_descripcion || '',
                         c.causa_area || '',
                         c.validada_en_surtido ? 'SI' : 'NO',
+                        c.surtido_validacion?.surtido_operator_nombre || '',
+                        c.surtido_validacion?.surtido_validated_at ? safeDate(c.surtido_validacion.surtido_validated_at) : '',
                         c.anormalidad_folio || '',
                       ])
                       const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -824,9 +873,26 @@ export default function RastreoDetalle() {
                           <span className="text-xs text-warm-700 font-medium truncate block">{c.producto || t('rastreo.detalle.emptyDash')}</span>
                         </td>
                         <td className="px-3 py-2.5 text-center">
-                          {c.validada_en_surtido
-                            ? <CheckCircle2 size={14} className="text-success-500 mx-auto" />
-                            : <XCircle size={14} className="text-warm-300 mx-auto" />}
+                          {c.validada_en_surtido ? (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <CheckCircle2 size={14} className="text-success-500" />
+                              {c.surtido_validacion?.surtido_operator_nombre && (
+                                <span className="max-w-[120px] truncate text-[10px] font-semibold text-warm-600" title={c.surtido_validacion.surtido_operator_nombre}>
+                                  {c.surtido_validacion.surtido_operator_nombre}
+                                </span>
+                              )}
+                              {c.surtido_validacion?.surtido_validated_at && (
+                                <span className="whitespace-nowrap text-[10px] text-warm-400">
+                                  {safeDate(c.surtido_validacion.surtido_validated_at)}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <XCircle size={14} className="text-warm-300" />
+                              <span className="text-[10px] text-warm-300">{t('rastreo.detalle.emptyDash')}</span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2.5">
                           {c.anormalidad_folio

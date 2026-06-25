@@ -49,13 +49,16 @@ export default function RecepcionDashboard({ dateRange }) {
       parcial: t('dashboard.status.partial'),
       cancelado: t('dashboard.status.cancelled'),
     })
-      .map(([key, label]) => ({ name: label, value: kpis[key === 'pendiente_validacion' ? 'pendiente' : key] ?? 0, color: ESTADO_COLORS[key] }))
-      .filter(d => d.value > 0),
+      .map(([key, label]) => ({
+        name: label,
+        value: kpis[key === 'pendiente_validacion' ? 'pendiente' : key] ?? 0,
+        color: ESTADO_COLORS[key],
+      })),
     [kpis, t]
   )
+  const hasPieData = pieData.some(d => d.value > 0)
 
   if (isLoading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>
-  if (orders.length === 0) return <NoData height={200} />
 
   return (
     <div className="space-y-4 p-4">
@@ -79,8 +82,8 @@ export default function RecepcionDashboard({ dateRange }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Status pie */}
         <ChartCard title={t('dashboard.recepcion.chart.ordenesEstado')} icon={PackageCheck}>
-          {pieData.length > 0 ? (
-            <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4">
+            {hasPieData ? (
               <ResponsiveContainer width="50%" height={160}>
                 <PieChart>
                   <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={60} stroke="none">
@@ -89,17 +92,21 @@ export default function RecepcionDashboard({ dateRange }) {
                   <Tooltip formatter={(v, n) => [v, n]} />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="space-y-2 flex-1">
-                {pieData.map((entry, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
-                    <span className="text-xs text-warm-600 flex-1">{entry.name}</span>
-                    <span className="text-xs font-bold text-warm-800">{entry.value}</span>
-                  </div>
-                ))}
+            ) : (
+              <div className="w-1/2">
+                <NoData height={160} />
               </div>
+            )}
+            <div className="space-y-2 flex-1">
+              {pieData.map((entry, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: entry.color }} />
+                  <span className="text-xs text-warm-600 flex-1">{entry.name}</span>
+                  <span className="text-xs font-bold text-warm-800">{entry.value}</span>
+                </div>
+              ))}
             </div>
-          ) : <NoData height={160} />}
+          </div>
         </ChartCard>
 
         {/* Cajas progress */}

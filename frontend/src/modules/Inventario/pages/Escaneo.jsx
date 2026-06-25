@@ -1711,17 +1711,22 @@ export default function Escaneo() {
   }, [activeTabId])
 
   const saveSessionMut = useMutation({
-    mutationFn: (clasifGroup) => {
+    mutationFn: (vars = {}) => {
+      const saveVars = typeof vars === 'string' ? { group: vars } : (vars || {})
+      const clasifGroup = saveVars.group || null
       const tab = useInventarioStore.getState().tabs.find(t => t.id === activeTabId)
       if (!tab) throw new Error('No active tab')
       const isClasificacion = tab.scanType === 'clasificacion'
       const itemsToSave = isClasificacion && clasifGroup
         ? tab.items.filter(item => getItemGroup(item) === clasifGroup)
         : tab.items
+      if (isClasificacion && clasifGroup && itemsToSave.length === 0) {
+        throw new Error('No hay registros para la tarima seleccionada')
+      }
 
       return saveInventorySession({
         scan_type: tab.scanType,
-        ubicacion_id: ubicacionId || null,
+        ubicacion_id: saveVars.ubicacionId ?? ubicacionId ?? null,
         tarima_code: null,
         origin_location: originLocation || null,
         scans: itemsToSave.map(item => ({
@@ -1736,7 +1741,9 @@ export default function Escaneo() {
         })),
       })
     },
-    onSuccess: (_, clasifGroup) => {
+    onSuccess: (_, vars) => {
+      const saveVars = typeof vars === 'string' ? { group: vars } : (vars || {})
+      const clasifGroup = saveVars.group || null
       setShowSummaryModal(false)
       setShowClasifSummaryModal(false)
       setPendingClasifGroup(null)
@@ -2361,7 +2368,10 @@ export default function Escaneo() {
         group={pendingClasifGroup}
         tab={activeTab}
         tabIndex={activeTab ? tabs.findIndex(t => t.id === activeTab.id) : 0}
-        onSave={() => saveSessionMut.mutate(pendingClasifGroup)}
+        onSave={() => saveSessionMut.mutate({
+          group: pendingClasifGroup,
+          ubicacionId: ubicacionValidated?.id ?? ubicacionId ?? null,
+        })}
         onClose={() => { setShowClasifSummaryModal(false); setPendingClasifGroup(null) }}
         isSaving={saveSessionMut.isPending}
         ubicacionValidated={ubicacionValidated}

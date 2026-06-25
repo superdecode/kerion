@@ -674,6 +674,19 @@ export default function OrdenDetalle() {
               <GeneralInfoBlock icon={Truck} label={t('surtido.ordenes.canal')} value={d?.logisticsChannel || '—'} compact />
               <GeneralInfoBlock icon={Hash} label={t('surtido.ordenes.referencia')} value={referencia} tone="accent" mono compact />
               <GeneralInfoBlock icon={BarChart3} label={t('surtido.ordenes.detail.tracking')} value={trackingNo} tone="accent" mono compact />
+              {tracking?.notes && (
+                <div className="rounded-2xl border border-warning-100/80 bg-warning-50/55 px-3 py-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.4)] sm:col-span-2 xl:col-span-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-warning-600 shadow-sm">
+                      <ClipboardList className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warning-600/75">{t('surtido.ordenes.observaciones')}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-5 text-warm-800">{tracking.notes}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               {hasValidation && (
                 <ValidationProgressCard
                   scanned={totalScanned}

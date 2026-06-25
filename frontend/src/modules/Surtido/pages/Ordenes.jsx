@@ -53,6 +53,7 @@ const STATUS_META = {
 const STATUS_ORDER = { pending_assignment: 0, sorting: 1, validating: 2, complete: 3, partial: 4, cancelled: 5 }
 const STATUS_FILTER_KEYS = ['pending_assignment', 'sorting', 'validating', 'complete', 'partial', 'cancelled']
 const CLOSED_ORDER_STATUSES = new Set(['complete', 'partial'])
+const CANCEL_NOTE_REQUIRED_STATUSES = new Set(['complete'])
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
 
@@ -91,6 +92,10 @@ function withinTimeRange(value, from, to) {
 
 function getFilterDateValue(record) {
   return record?.outboundTime || record?.expectedTime || record?.orderCreateTime || record?.updated_at || ''
+}
+
+function getAssignmentDateValue(tracking) {
+  return tracking?.assigned_at || ''
 }
 
 function SortableHeader({ label, sortKey, currentKey, direction, onSort, className = '', textClassName = '' }) {
@@ -620,6 +625,8 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
   const referencia = wmsRecord?.thirdOrderNo || wmsRecord?.referenceNo || '—'
   const trackingNo = wmsRecord?.logisticsTrackNo || '—'
   const isClosedOrder = CLOSED_ORDER_STATUSES.has(tracking?.status)
+  const canCancelClosedOrder = tracking?.status === 'complete'
+  const cancelClosedWithoutNote = canCancelClosedOrder && localStatus === 'cancelled' && !localNotes.trim()
   const hasValidationRecord = isClosedOrder || Number(tracking?.session_count ?? 0) > 0
 
   return (
@@ -739,7 +746,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                       <button
                         key={k}
                         onClick={() => setLocalStatus(k)}
-                        disabled={isClosedOrder && k !== localStatus}
+                        disabled={isClosedOrder && k !== localStatus && !(canCancelClosedOrder && k === 'cancelled')}
                         className={`px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all ${
                           localStatus === k
                             ? `${m.cls} border-current ring-1 ring-current/30`
@@ -763,6 +770,9 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                   placeholder={t('surtido.ordenes.panel.nota_placeholder')}
                   className="w-full rounded-xl border border-warm-200 bg-warm-50 px-3 py-2.5 text-xs text-warm-700 outline-none resize-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all"
                 />
+                {cancelClosedWithoutNote && (
+                  <p className="text-[11px] font-medium text-danger-600">{t('surtido.ordenes.cancel_note_required')}</p>
+                )}
               </div>
             </div>
 
@@ -798,7 +808,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                   status: localStatus,
                   notes: localNotes,
                 })}
-                disabled={isSaving}
+                disabled={isSaving || cancelClosedWithoutNote}
                 className="w-full inline-flex items-center justify-center gap-1.5 h-10 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
@@ -1003,6 +1013,7 @@ export default function Ordenes() {
   const [bulkSearchOpen, setBulkSearchOpen] = useState(false)
   const [bulkSearchText, setBulkSearchText] = useState('')
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
+  const [cancelStatusModal, setCancelStatusModal] = useState({ open: false, obcs: [], status: 'cancelled', note: '' })
   const [isTransitioning, setIsTransitioning] = useState(false)
   const timeFromInputRef = useRef(null)
   const dateModeRef = useRef(null)
@@ -1222,8 +1233,8 @@ export default function Ordenes() {
 
   const q = search.trim().toLowerCase()
 
-  function matchesDateFilter(dateStr) {
-    if (!dateStr) return true
+  function matchesDateFilter(dateStr, requireDate = false) {
+    if (!dateStr) return !(requireDate && (dateFrom || dateTo))
     const d = toDateKey(dateStr)
     if (dateFrom && d < dateFrom) return false
     if (dateTo   && d > dateTo)   return false
@@ -1296,11 +1307,10 @@ export default function Ordenes() {
     if (destinationQuery && !(r.receiverName || '').toLowerCase().includes(destinationQuery)) return false
 
     const skipDateFilter = q || bulkSearchCodes.length > 0
-    if (!skipDateFilter && !matchesDateFilter(
-      dateMode === 'asignacion' ? (tracking?.assigned_at || '') : getFilterDateValue(r)
-    )) return false
+    const filterDateValue = dateMode === 'asignacion' ? getAssignmentDateValue(tracking) : getFilterDateValue(r)
+    if (!skipDateFilter && !matchesDateFilter(filterDateValue, dateMode === 'asignacion')) return false
 
-    if (!withinTimeRange(r.outboundTime || r.expectedTime || r.orderCreateTime, timeFrom, timeTo)) return false
+    if (!withinTimeRange(filterDateValue, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(r.outboundOrderNo)) return false
     if (q) {
       const haystack = [r.outboundOrderNo, r.customerCode, r.thirdOrderNo, r.receiverName, r.logisticsChannel].join(' ').toLowerCase()
@@ -1322,11 +1332,10 @@ export default function Ordenes() {
     if (destinationQuery && !(wms?.receiverName || '').toLowerCase().includes(destinationQuery)) return false
 
     const skipDateFilter = q || bulkSearchCodes.length > 0
-    if (!skipDateFilter && !matchesDateFilter(
-      dateMode === 'asignacion' ? (tr.assigned_at || '') : (getFilterDateValue(wms) || tr.updated_at)
-    )) return false
+    const filterDateValue = dateMode === 'asignacion' ? getAssignmentDateValue(tr) : (getFilterDateValue(wms) || tr.updated_at)
+    if (!skipDateFilter && !matchesDateFilter(filterDateValue, dateMode === 'asignacion')) return false
 
-    if (!withinTimeRange(wms?.outboundTime || wms?.expectedTime || wms?.orderCreateTime, timeFrom, timeTo)) return false
+    if (!withinTimeRange(filterDateValue, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
     if (q) {
       const haystack = [tr.outbound_order_no, tr.surtidor_nombre, wms?.customerCode, wms?.thirdOrderNo, wms?.receiverName].filter(Boolean).join(' ').toLowerCase()
@@ -1470,18 +1479,38 @@ export default function Ordenes() {
   })
 
   const statusMut = useMutation({
-    mutationFn: ({ obcs, status }) => bulkUpsertOrderTracking({ obcs, status }),
-    onMutate: ({ obcs, status }) => {
+    mutationFn: ({ obcs, status, notes }) => {
+      if (obcs.length === 1) {
+        return upsertOrderTracking(obcs[0], {
+          status,
+          ...(notes !== undefined ? { notes } : {}),
+        })
+      }
+      return bulkUpsertOrderTracking({
+        obcs,
+        status,
+        ...(notes !== undefined ? { notes } : {}),
+      })
+    },
+    onMutate: ({ obcs, status, notes }) => {
       const prev = qc.getQueryData(['wms-order-tracking'])
       const obcSet = new Set(obcs)
       qc.setQueryData(['wms-order-tracking'], (old) => {
         if (!old?.data) return old
-        return { ...old, data: old.data.map(r => obcSet.has(r.outbound_order_no) ? { ...r, status } : r) }
+        return {
+          ...old,
+          data: old.data.map(r => (
+            obcSet.has(r.outbound_order_no)
+              ? { ...r, status, ...(notes !== undefined ? { notes } : {}) }
+              : r
+          )),
+        }
       })
       return { prev }
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      setCancelStatusModal({ open: false, obcs: [], status: 'cancelled', note: '' })
       if (vars.obcs.length > 1) toast.success(`${vars.obcs.length} ${t('surtido.ordenes.item_label')} actualizadas`)
     },
     onError: (err, vars, context) => {
@@ -1489,6 +1518,19 @@ export default function Ordenes() {
       toast.error(t('toast.error'))
     },
   })
+
+  const requestStatusChange = useCallback((obcs, status) => {
+    const list = Array.isArray(obcs) ? obcs.filter(Boolean) : [obcs].filter(Boolean)
+    if (list.length === 0) return
+    const needsCancelNote = status === 'cancelled' && list.some(obc => (
+      CANCEL_NOTE_REQUIRED_STATUSES.has(trackingMap[obc]?.status)
+    ))
+    if (needsCancelNote) {
+      setCancelStatusModal({ open: true, obcs: list, status, note: '' })
+      return
+    }
+    statusMut.mutate({ obcs: list, status })
+  }, [statusMut, trackingMap])
 
   function clearFilters() {
     setSearchInput('')
@@ -2127,7 +2169,7 @@ export default function Ordenes() {
                 onView={obc => navigate(`/Surtido/ordenes/${encodeURIComponent(obc)}`)}
                 onQuickEdit={obc => setQuickEditObc(obc)}
                 onValidate={obc => navigate(`/Surtido/validacion?obc=${encodeURIComponent(obc)}&autostart=true`)}
-                onBulkStatus={(obcs, status) => statusMut.mutate({ obcs, status })}
+                onBulkStatus={requestStatusChange}
                 onExportSelected={handleExportWmsSelected}
                 onExportAll={handleExportWmsAll}
                 onExportDetailed={handleExportDetailed}
@@ -2192,12 +2234,64 @@ export default function Ordenes() {
         onClose={() => setQuickEditObc(null)}
         onSave={({ surtidorId, canChangeSurtidor, status, notes }) => {
           if (!quickEditObc) return
-          quickEditMut.mutate({ obc: quickEditObc, surtidorId: canChangeSurtidor ? surtidorId : undefined, status, notes })
+          const currentStatus = trackingMap[quickEditObc]?.status
+          const trimmedNotes = (notes || '').trim()
+          if (status === 'cancelled' && CANCEL_NOTE_REQUIRED_STATUSES.has(currentStatus) && !trimmedNotes) {
+            toast.error(t('surtido.ordenes.cancel_note_required'))
+            return
+          }
+          quickEditMut.mutate({ obc: quickEditObc, surtidorId: canChangeSurtidor ? surtidorId : undefined, status, notes: trimmedNotes })
         }}
         isSaving={quickEditMut.isPending}
         onForceValidate={user?.rol_nombre === 'Administrador' ? (obc) => { setForceValidateTarget(obc); setForceReason('') } : undefined}
         t={t}
       />
+
+      <Modal
+        isOpen={cancelStatusModal.open}
+        onClose={() => {
+          if (!statusMut.isPending) setCancelStatusModal({ open: false, obcs: [], status: 'cancelled', note: '' })
+        }}
+        title={t('surtido.ordenes.cancel_note_title')}
+        icon={XCircle}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button
+              className="btn-ghost"
+              disabled={statusMut.isPending}
+              onClick={() => setCancelStatusModal({ open: false, obcs: [], status: 'cancelled', note: '' })}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              className="btn-primary inline-flex items-center gap-2"
+              disabled={statusMut.isPending || !cancelStatusModal.note.trim()}
+              onClick={() => statusMut.mutate({
+                obcs: cancelStatusModal.obcs,
+                status: cancelStatusModal.status,
+                notes: cancelStatusModal.note.trim(),
+              })}
+            >
+              {statusMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+              {t('common.save')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-600">{t('surtido.ordenes.cancel_note_body')}</p>
+          <textarea
+            rows={4}
+            value={cancelStatusModal.note}
+            onChange={e => setCancelStatusModal(current => ({ ...current, note: e.target.value }))}
+            placeholder={t('surtido.ordenes.cancel_note_placeholder')}
+            className="w-full rounded-xl border border-warm-200 bg-warm-50 px-3 py-2.5 text-sm text-warm-700 outline-none resize-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all"
+          />
+          {!cancelStatusModal.note.trim() && (
+            <p className="text-[11px] font-medium text-danger-600">{t('surtido.ordenes.cancel_note_required')}</p>
+          )}
+        </div>
+      </Modal>
 
       {printModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
@@ -2595,7 +2689,9 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
     return true
   })
   const assignableSelectedObcs = assignableSelected.map(r => r.outboundOrderNo)
-  const statusEditableSelectedObcs = assignableSelectedObcs
+  const statusEditableSelectedObcs = selectedRecords
+    .filter(r => (trackingMap[r.outboundOrderNo]?.status || 'pending_assignment') !== 'partial')
+    .map(r => r.outboundOrderNo)
   const toggleAll = () => setSelected(prev => {
     const next = new Set(prev)
     if (allChecked) sortedRecords.forEach(r => next.delete(r.outboundOrderNo))

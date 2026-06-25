@@ -1995,6 +1995,8 @@ router.post('/order-tracking/bulk',
       if (status !== undefined && !ORDER_TRACKING_STATUSES.has(String(status))) {
         return res.status(400).json({ success: false, error: 'Estado de orden inválido' })
       }
+      const requestedStatus = status !== undefined ? String(status) : undefined
+      const normalizedNotes = normalizeOptionalText(notes)
 
       let surtidorNombre = null
       if (surtidor_id) {
@@ -2016,12 +2018,23 @@ router.post('/order-tracking/bulk',
         const existingMap = new Map(existingRows.rows.map(r => [r.outbound_order_no, r]))
 
         // 2. Detect closed orders that cannot be modified — skip them instead of aborting
+        const needsCancelNote = obcs.some(obc => {
+          const row = existingMap.get(obc)
+          return row?.status === 'complete' && requestedStatus === 'cancelled'
+        })
+        if (needsCancelNote && !normalizedNotes) {
+          const err = new Error('La nota es requerida para cancelar una orden completada')
+          err.statusCode = 400
+          throw err
+        }
+
         const closedObcs = new Set(obcs.filter(obc => {
           const row = existingMap.get(obc)
           if (!row) return false
           if (!CLOSED_ORDER_TRACKING_STATUSES.has(row.status)) return false
+          if (row.status === 'complete' && requestedStatus === 'cancelled' && normalizedNotes) return false
           return surtidor_id !== undefined ||
-            (status !== undefined && String(status) !== row.status)
+            (requestedStatus !== undefined && requestedStatus !== row.status)
         }))
         const processableObcs = obcs.filter(obc => !closedObcs.has(obc))
 
@@ -2068,7 +2081,7 @@ router.post('/order-tracking/bulk',
           }
           if (txTrackingColumns.has('notes')) {
             insertColumns.push('notes')
-            insertValues.push(normalizeOptionalText(notes))
+            insertValues.push(normalizedNotes)
           }
           if (txTrackingColumns.has('assigned_at')) {
             insertColumns.push('assigned_at')
@@ -2092,7 +2105,7 @@ router.post('/order-tracking/bulk',
           const params = []
           let p = 1
           if (status !== undefined && txTrackingColumns.has('status')) {
-            fields.push(`status = $${p++}`); params.push(status)
+            fields.push(`status = $${p++}`); params.push(requestedStatus)
             if (status === 'assigned') {
               if (txTrackingColumns.has('assigned_at')) fields.push(`assigned_at = now()`)
               if (txTrackingColumns.has('assigned_by')) { fields.push(`assigned_by = $${p++}`); params.push(userNombre) }
@@ -2113,7 +2126,13 @@ router.post('/order-tracking/bulk',
             if (surtidor_id && txTrackingColumns.has('assigned_at')) fields.push(`assigned_at = COALESCE(assigned_at, now())`)
           }
           if (notes !== undefined && txTrackingColumns.has('notes')) {
-            fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes))
+            if (requestedStatus === 'cancelled' && normalizedNotes) {
+              fields.push(`notes = CASE WHEN COALESCE(notes, '') <> '' THEN notes || E'\n' || $${p} ELSE $${p} END`)
+              p++
+              params.push(normalizedNotes)
+            } else {
+              fields.push(`notes = $${p++}`); params.push(normalizedNotes)
+            }
           }
           if (fields.length === 0) {
             return [...inserted]
@@ -2156,6 +2175,8 @@ router.put('/order-tracking/:obc',
       if (status !== undefined && !ORDER_TRACKING_STATUSES.has(String(status))) {
         return res.status(400).json({ success: false, error: 'Estado de orden inválido' })
       }
+      const requestedStatus = status !== undefined ? String(status) : undefined
+      const normalizedNotes = normalizeOptionalText(notes)
       const existing = await req.tQuery(
         'SELECT id, status FROM pick_order_tracking WHERE tenant_id = $1 AND outbound_order_no = $2',
         [req.tenantId, req.params.obc]
@@ -2228,9 +2249,13 @@ router.put('/order-tracking/:obc',
       }
 
       const existingStatus = existing.rows[0].status
+      const isCompletedCancellation = existingStatus === 'complete' && requestedStatus === 'cancelled'
+      if (isCompletedCancellation && !normalizedNotes) {
+        return res.status(400).json({ success: false, error: 'La nota es requerida para cancelar una orden completada' })
+      }
       if (CLOSED_ORDER_TRACKING_STATUSES.has(existingStatus) && (
         surtidor_id !== undefined ||
-        (status !== undefined && String(status) !== existingStatus)
+        (requestedStatus !== undefined && requestedStatus !== existingStatus && !isCompletedCancellation)
       )) {
         return res.status(409).json({ success: false, error: 'No se puede modificar surtidor o estatus en órdenes completadas o parciales' })
       }
@@ -2239,7 +2264,7 @@ router.put('/order-tracking/:obc',
       const params = []
       let p = 1
       if (status !== undefined && trackingColumns.has('status')) {
-        fields.push(`status = $${p++}`); params.push(status)
+        fields.push(`status = $${p++}`); params.push(requestedStatus)
         const userNombre = req.fullUser?.nombre_completo || null
         if (status === 'assigned') {
           if (trackingColumns.has('assigned_at')) fields.push(`assigned_at = now()`)
@@ -2261,7 +2286,15 @@ router.put('/order-tracking/:obc',
         if (surtidor_id && trackingColumns.has('assigned_at')) fields.push(`assigned_at = COALESCE(assigned_at, now())`)
       }
       if (third_order_no !== undefined && trackingColumns.has('third_order_no')) { fields.push(`third_order_no = $${p++}`); params.push(normalizeOptionalText(third_order_no)) }
-      if (notes !== undefined && trackingColumns.has('notes')) { fields.push(`notes = $${p++}`); params.push(normalizeOptionalText(notes)) }
+      if (notes !== undefined && trackingColumns.has('notes')) {
+        if (requestedStatus === 'cancelled' && normalizedNotes) {
+          fields.push(`notes = CASE WHEN COALESCE(notes, '') <> '' THEN notes || E'\n' || $${p} ELSE $${p} END`)
+          p++
+          params.push(normalizedNotes)
+        } else {
+          fields.push(`notes = $${p++}`); params.push(normalizedNotes)
+        }
+      }
       if (fields.length === 0) {
         return res.status(200).json({ success: true, data: existing.rows[0] || null })
       }

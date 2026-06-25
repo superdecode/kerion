@@ -17,7 +17,7 @@ import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '..
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import {
   getFolio, getFolioScans, addFolioScan, deleteFolioScan,
-  moveFolioScanTarima, cerrarFolio, cancelarFolio, getOutboundList,
+  moveFolioScanTarima, cerrarFolio, cancelarFolio, getOutboundList, removeDestinationOrder,
 } from '../services/despachoService'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
@@ -260,6 +260,7 @@ export default function ValidarPorDestino({ folioId }) {
   const [forceModal, setForceModal] = useState({ open: false, code: '', orderNo: '' })
   const [overLimitModal, setOverLimitModal] = useState({ open: false, payload: null, scanned: 0, expected: 0 })
   const [moveModal, setMoveModal] = useState({ open: false, scan: null, target: '' })
+  const [removeOrderModal, setRemoveOrderModal] = useState({ open: false, order: null })
   const [pendingOfflineScans, setPendingOfflineScans] = useState([])
   const isOffline = useOfflineStore((s) => s.status === 'offline')
 
@@ -525,6 +526,29 @@ export default function ValidarPorDestino({ folioId }) {
     onError: (err) => addToast(err?.response?.data?.error || t('desp.validar.destino.tarimaMoverError'), 'error'),
   })
 
+  const { mutate: doRemoveDestinationOrder, isPending: removingDestinationOrder } = useMutation({
+    mutationFn: ({ orderId }) => removeDestinationOrder(folioId, orderId),
+    onSuccess: (data, variables) => {
+      if (data?.folio || Array.isArray(data?.orders)) {
+        qc.setQueryData(['despacho-folio', folioId], data)
+      }
+      qc.setQueryData(['despacho-folio-scans', folioId], (old) => ({
+        ...(old || {}),
+        scans: (old?.scans ?? scans).filter(scan => (
+          scan.folio_order_id !== variables.orderId && scan.matched_order_no !== variables.orderNo
+        )),
+      }))
+      setRemoveOrderModal({ open: false, order: null })
+      qc.invalidateQueries({ queryKey: ['despacho-folio', folioId] })
+      qc.invalidateQueries({ queryKey: ['despacho-folio-scans', folioId] })
+      qc.invalidateQueries({ queryKey: ['despacho-folios'] })
+      qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
+      addToast(t('desp.validar.destino.removeOrderSuccess'), 'success')
+      setTimeout(() => scanRef.current?.focus(), 80)
+    },
+    onError: (err) => addToast(err?.response?.data?.error || t('desp.validar.destino.removeOrderError'), 'error'),
+  })
+
   const requestAddScan = useCallback((payload, { skipOverLimit = false } = {}) => {
     const matchedOrderNo = payload?.matched_order_no
     if (!skipOverLimit && matchedOrderNo) {
@@ -649,6 +673,13 @@ export default function ValidarPorDestino({ folioId }) {
     doMoveScan({ scanId, tarimaRef })
   }, [doMoveScan, moveModal.scan?.id, moveModal.target])
 
+  const submitRemoveOrder = useCallback(() => {
+    const order = removeOrderModal.order
+    const orderId = order?.id
+    if (!orderId || removingDestinationOrder) return
+    doRemoveDestinationOrder({ orderId, orderNo: order?.outbound_order_no })
+  }, [doRemoveDestinationOrder, removeOrderModal.order, removingDestinationOrder])
+
   // KPI counts
   const totalEsperadas = orders.reduce((s, o) => s + (o.bultos_esperados || 0), 0)
   const totalScaneadas = scans.length
@@ -675,6 +706,12 @@ export default function ValidarPorDestino({ folioId }) {
       return acc
     }, {})
   ), [scans])
+
+  const removeOrderScansCount = useMemo(() => {
+    const order = removeOrderModal.order
+    if (!order) return 0
+    return scans.filter(scan => scan.folio_order_id === order.id || scan.matched_order_no === order.outbound_order_no).length
+  }, [removeOrderModal.order, scans])
 
   const searchedOrders = useMemo(() => {
     let filtered = [...orders]
@@ -1071,12 +1108,27 @@ export default function ValidarPorDestino({ folioId }) {
                           <Copy className="h-3 w-3" />
                         </span>
                       </button>
-                      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-black tabular-nums ${
-                        complete ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-600'
-                      }`}>
-                        {complete && <CheckCircle2 className="w-3.5 h-3.5" />}
-                        {validadas}/{esperadas || '?'}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-black tabular-nums ${
+                          complete ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-600'
+                        }`}>
+                          {complete && <CheckCircle2 className="w-3.5 h-3.5" />}
+                          {validadas}/{esperadas || '?'}
+                        </span>
+                        {canUpdate && isActive && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setRemoveOrderModal({ open: true, order })
+                            }}
+                            title={t('desp.validar.destino.removeOrderTooltip')}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-danger-100 bg-white text-danger-500 transition-colors hover:bg-danger-50 hover:text-danger-700"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Destinatario */}
@@ -1124,6 +1176,60 @@ export default function ValidarPorDestino({ folioId }) {
         </div>
         )}
       </div>
+
+      {/* ── Remove order from destination modal ── */}
+      <Modal
+        isOpen={removeOrderModal.open}
+        onClose={() => {
+          if (removingDestinationOrder) return
+          setRemoveOrderModal({ open: false, order: null })
+          setTimeout(() => scanRef.current?.focus(), 80)
+        }}
+        title={t('desp.validar.destino.removeOrderTitle')}
+        icon={Trash2}
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setRemoveOrderModal({ open: false, order: null })
+                setTimeout(() => scanRef.current?.focus(), 80)
+              }}
+              disabled={removingDestinationOrder}
+              className="btn-secondary text-sm"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={submitRemoveOrder}
+              disabled={!removeOrderModal.order?.id || removingDestinationOrder}
+              className="btn-danger text-sm flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {removingDestinationOrder && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {t('desp.validar.destino.removeOrderConfirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">
+            {t('desp.validar.destino.removeOrderBody')}
+          </p>
+          <div className="rounded-xl border border-danger-100 bg-danger-50 px-3 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-danger-500">
+              {t('desp.validar.orden.col.orden')}
+            </p>
+            <p className="font-mono text-sm font-bold text-danger-800 break-all">
+              {removeOrderModal.order?.outbound_order_no || '—'}
+            </p>
+            <p className="mt-1 text-xs text-danger-700">
+              {t('desp.validar.destino.removeOrderScans').replace('{count}', String(removeOrderScansCount))}
+            </p>
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Blocking error modal ── */}
       <Modal

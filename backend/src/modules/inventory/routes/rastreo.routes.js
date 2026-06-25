@@ -1182,16 +1182,99 @@ router.get('/:folio',
       ])
 
       if (!ordenRes.rows.length) return res.status(404).json({ error: 'Orden no encontrada' })
+      const orden = ordenRes.rows[0]
+      let surtidoTracking = null
+      let cajasWithSurtido = cajasRes.rows
+
+      if (orden.outbound_order_no) {
+        const [trackingRes, cajaSurtidoRes] = await Promise.all([
+          req.tQuery(
+            `SELECT ot.outbound_order_no, ot.status, ot.notes, ot.assigned_at, ot.assigned_by,
+                    ot.surtidor_id, COALESCE(s.nombre, ot.surtidor_nombre) AS surtidor_nombre,
+                    ot.sorting_started_at, ot.sorting_completed_at,
+                    ot.validation_started_at, ot.validation_completed_at, ot.validated_by,
+                    ot.total_expected, ot.total_scanned
+               FROM pick_order_tracking ot
+               LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id AND s.tenant_id = ot.tenant_id
+              WHERE ot.tenant_id = $1 AND ot.outbound_order_no = $2
+              LIMIT 1`,
+            [req.tenantId, orden.outbound_order_no]
+          ),
+          cajasRes.rows.length > 0
+            ? req.tQuery(
+              `WITH boxes AS (
+                 SELECT *
+                   FROM jsonb_to_recordset($3::jsonb)
+                     AS b(id int, box_code text, box_type text)
+               )
+               SELECT DISTINCT ON (b.id)
+                      b.id AS rastreo_caja_id,
+                      pe.scan_result AS surtido_scan_result,
+                      pe.scanned_at AS surtido_validated_at,
+                      pe.scanned_code AS surtido_scanned_code,
+                      pe.normalized_code AS surtido_normalized_code,
+                      pe.matched_box_type AS surtido_matched_box_type,
+                      pe.manual_notes AS surtido_manual_notes,
+                      ps.id AS surtido_session_id,
+                      ps.status AS surtido_session_status,
+                      ps.operator_id AS surtido_operator_id,
+                      u.nombre_completo AS surtido_operator_nombre
+                 FROM boxes b
+                 JOIN pick_sessions ps
+                   ON ps.tenant_id = $1
+                  AND ps.outbound_order_no = $2
+                 JOIN pick_events pe
+                   ON pe.session_id = ps.id
+                  AND pe.scan_result = 'ok'
+                 LEFT JOIN usuarios u
+                   ON u.id = ps.operator_id
+                  AND u.tenant_id = ps.tenant_id
+                WHERE (
+                    REGEXP_REPLACE(UPPER(COALESCE(pe.scanned_code, '')), '[^A-Z0-9]', '', 'g') IN (
+                      REGEXP_REPLACE(UPPER(COALESCE(b.box_code, '')), '[^A-Z0-9]', '', 'g'),
+                      REGEXP_REPLACE(UPPER(COALESCE(b.box_type, '')), '[^A-Z0-9]', '', 'g')
+                    )
+                 OR REGEXP_REPLACE(UPPER(COALESCE(pe.normalized_code, '')), '[^A-Z0-9]', '', 'g') IN (
+                      REGEXP_REPLACE(UPPER(COALESCE(b.box_code, '')), '[^A-Z0-9]', '', 'g'),
+                      REGEXP_REPLACE(UPPER(COALESCE(b.box_type, '')), '[^A-Z0-9]', '', 'g')
+                    )
+                 OR REGEXP_REPLACE(UPPER(COALESCE(pe.matched_box_type, '')), '[^A-Z0-9]', '', 'g') IN (
+                      REGEXP_REPLACE(UPPER(COALESCE(b.box_code, '')), '[^A-Z0-9]', '', 'g'),
+                      REGEXP_REPLACE(UPPER(COALESCE(b.box_type, '')), '[^A-Z0-9]', '', 'g')
+                    )
+                )
+                ORDER BY b.id, pe.scanned_at DESC NULLS LAST, pe.id DESC`,
+              [
+                req.tenantId,
+                orden.outbound_order_no,
+                JSON.stringify(cajasRes.rows.map(c => ({
+                  id: c.id,
+                  box_code: c.box_code,
+                  box_type: c.box_type || null,
+                }))),
+              ]
+            )
+            : Promise.resolve({ rows: [] }),
+        ])
+
+        surtidoTracking = trackingRes.rows[0] || null
+        const cajaSurtidoMap = new Map(cajaSurtidoRes.rows.map(row => [row.rastreo_caja_id, row]))
+        cajasWithSurtido = cajasRes.rows.map(caja => ({
+          ...caja,
+          surtido_validacion: cajaSurtidoMap.get(caja.id) || null,
+        }))
+      }
 
       res.json({
         success: true,
         data: {
           orden: {
-            ...ordenRes.rows[0],
-            estado: normalizeEstado(ordenRes.rows[0].estado),
+            ...orden,
+            estado: normalizeEstado(orden.estado),
           },
-          cajas: cajasRes.rows,
+          cajas: cajasWithSurtido,
           historial: histRes.rows,
+          surtido_tracking: surtidoTracking,
         },
       })
     } catch (err) {

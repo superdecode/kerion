@@ -1846,7 +1846,7 @@ const { data: reasonsData } = useQuery({
                       : 'bg-white/75 text-warm-600 border-transparent hover:border-warm-200 hover:bg-warm-50'
                   }`}
                 >
-                  {key ? (key === 'with_discrepancies' ? 'Diferencias' : t(`surtido.registros.status.${key}`)) : t('common.all')}
+                  {key ? t(`surtido.registros.status.${key}`) : t('common.all')}
                 </button>
               ))}
             </div>
