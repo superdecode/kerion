@@ -661,7 +661,7 @@ export default function RecepcionDetalle() {
               ? handleExportValidacion
               : handleExportOtros
           return (
-            <div className="flex items-center gap-2 border-b border-warm-100 pb-0 overflow-x-auto">
+            <div className="flex items-center gap-2 border-b border-warm-100 pb-0 overflow-x-auto overflow-y-hidden">
               <div className="flex gap-1 shrink-0">
                 <button
                   onClick={() => setActiveTab('detalle')}
@@ -723,7 +723,7 @@ export default function RecepcionDetalle() {
         {activeTab === 'detalle' && (
           <div className="space-y-3">
 
-            <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
+            <div className="card overflow-hidden border border-warm-100/80 shadow-soft" style={{ '--table-shell-offset': '24rem' }}>
               <div className="table-scroll">
                 <table className="w-full text-sm">
                   <thead>
@@ -795,17 +795,17 @@ export default function RecepcionDetalle() {
                   </tbody>
                 </table>
               </div>
-              {sortedLines.length > 100 && (
-                <TablePagination
-                  page={linePage}
-                  pageSize={linePageSize}
-                  total={sortedLines.length}
-                  onPageChange={setLinePage}
-                  onPageSizeChange={(s) => { setLinePageSize(s); setLinePage(1) }}
-                  itemLabel={t('rec.line.items') || 'líneas'}
-                />
-              )}
             </div>
+            {sortedLines.length > 100 && (
+              <TablePagination
+                page={linePage}
+                pageSize={linePageSize}
+                total={sortedLines.length}
+                onPageChange={setLinePage}
+                onPageSizeChange={(s) => { setLinePageSize(s); setLinePage(1) }}
+                itemLabel={t('rec.line.items') || 'líneas'}
+              />
+            )}
           </div>
         )}
 
@@ -813,7 +813,7 @@ export default function RecepcionDetalle() {
         {activeTab === 'validacion' && (
           <div className="space-y-3">
 
-            <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
+            <div className="card overflow-hidden border border-warm-100/80 shadow-soft" style={{ '--table-shell-offset': '24rem' }}>
               <div className="table-scroll">
                 <table className="w-full text-sm">
                   <thead>
@@ -903,17 +903,17 @@ export default function RecepcionDetalle() {
                   </tbody>
                 </table>
               </div>
-              {sortedEvents.length > 100 && (
-                <TablePagination
-                  page={eventPage}
-                  pageSize={eventPageSize}
-                  total={sortedEvents.length}
-                  onPageChange={setEventPage}
-                  onPageSizeChange={(s) => { setEventPageSize(s); setEventPage(1) }}
-                  itemLabel={t('rec.scan.items') || 'escaneos'}
-                />
-              )}
             </div>
+            {sortedEvents.length > 100 && (
+              <TablePagination
+                page={eventPage}
+                pageSize={eventPageSize}
+                total={sortedEvents.length}
+                onPageChange={setEventPage}
+                onPageSizeChange={(s) => { setEventPageSize(s); setEventPage(1) }}
+                itemLabel={t('rec.scan.items') || 'escaneos'}
+              />
+            )}
           </div>
         )}
 
@@ -967,7 +967,7 @@ export default function RecepcionDetalle() {
             </div>
 
             {/* Records table */}
-            <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
+            <div className="card overflow-hidden border border-warm-100/80 shadow-soft" style={{ '--table-shell-offset': '30rem' }}>
               <div className="table-scroll">
                 <table className="w-full text-sm">
                   <thead>
@@ -1025,17 +1025,17 @@ export default function RecepcionDetalle() {
                   </tbody>
                 </table>
               </div>
-              {filteredNovedades.length > 100 && (
-                <TablePagination
-                  page={novPage}
-                  pageSize={novPageSize}
-                  total={filteredNovedades.length}
-                  onPageChange={setNovPage}
-                  onPageSizeChange={(s) => { setNovPageSize(s); setNovPage(1) }}
-                  itemLabel={t('rec.otros.items') || 'registros'}
-                />
-              )}
             </div>
+            {filteredNovedades.length > 100 && (
+              <TablePagination
+                page={novPage}
+                pageSize={novPageSize}
+                total={filteredNovedades.length}
+                onPageChange={setNovPage}
+                onPageSizeChange={(s) => { setNovPageSize(s); setNovPage(1) }}
+                itemLabel={t('rec.otros.items') || 'registros'}
+              />
+            )}
           </div>
         )}
       </div>
