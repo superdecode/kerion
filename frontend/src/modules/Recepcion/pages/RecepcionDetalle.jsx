@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useDeferredValue } from 'react'
+import { useEffect, useState, useMemo, useDeferredValue, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -7,6 +7,7 @@ import {
   User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, MapPin, Plus,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
+import TablePagination from '../../../core/components/common/TablePagination'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
 import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
@@ -147,6 +148,12 @@ export default function RecepcionDetalle() {
   const [listaPreviewData, setListaPreviewData] = useState(null)
   const [lineSortKey, setLineSortKey] = useState('custom_box_barcode')
   const [lineSortDir, setLineSortDir] = useState('asc')
+  const [linePage, setLinePage] = useState(1)
+  const [linePageSize, setLinePageSize] = useState(100)
+  const [eventPage, setEventPage] = useState(1)
+  const [eventPageSize, setEventPageSize] = useState(100)
+  const [novPage, setNovPage] = useState(1)
+  const [novPageSize, setNovPageSize] = useState(100)
   const [eventSortKey, setEventSortKey] = useState('scanned_at')
   const [eventSortDir, setEventSortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
@@ -307,11 +314,13 @@ export default function RecepcionDetalle() {
   const handleLineSort = (key) => {
     if (lineSortKey === key) setLineSortDir((dir) => dir === 'asc' ? 'desc' : 'asc')
     else { setLineSortKey(key); setLineSortDir('asc') }
+    setLinePage(1)
   }
 
   const handleEventSort = (key) => {
     if (eventSortKey === key) setEventSortDir((dir) => dir === 'asc' ? 'desc' : 'asc')
     else { setEventSortKey(key); setEventSortDir(key === 'scanned_at' ? 'desc' : 'asc') }
+    setEventPage(1)
   }
 
   const filteredLines = useMemo(() => {
@@ -355,6 +364,22 @@ export default function RecepcionDetalle() {
       return eventSortDir === 'asc' ? cmp : -cmp
     })
   }, [filteredEvents, eventSortKey, eventSortDir])
+
+  const pagedLines = useMemo(() => {
+    const start = (linePage - 1) * linePageSize
+    return sortedLines.slice(start, start + linePageSize)
+  }, [sortedLines, linePage, linePageSize])
+
+  const pagedEvents = useMemo(() => {
+    const start = (eventPage - 1) * eventPageSize
+    return sortedEvents.slice(start, start + eventPageSize)
+  }, [sortedEvents, eventPage, eventPageSize])
+
+  const pagedNovedades = useMemo(() => {
+    const start = (novPage - 1) * novPageSize
+    return filteredNovedades.slice(start, start + novPageSize)
+  }, [filteredNovedades, novPage, novPageSize])
+
 
   if (isLoading) return <div className="flex items-center justify-center h-full"><LoadingSpinner /></div>
   if (isError || !data) return (
@@ -626,10 +651,10 @@ export default function RecepcionDetalle() {
               ? eventSearch
               : novedadSearch
           const setCurrentSearch = activeTab === 'detalle'
-            ? setLineSearch
+            ? (v) => { setLineSearch(v); setLinePage(1) }
             : activeTab === 'validacion'
-              ? setEventSearch
-              : setNovedadSearch
+              ? (v) => { setEventSearch(v); setEventPage(1) }
+              : (v) => { setNovedadSearch(v); setNovPage(1) }
           const handleInlineExport = activeTab === 'detalle'
             ? handleExportDetalle
             : activeTab === 'validacion'
@@ -729,11 +754,12 @@ export default function RecepcionDetalle() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warm-50">
-                    {sortedLines.map((line, i) => {
+                    {pagedLines.map((line, i) => {
+                      const globalIdx = (linePage - 1) * linePageSize + i
                       const meta = LINE_META[line.estado_validacion] ?? LINE_META.pendiente
                       return (
                         <tr key={line.id} className="table-row">
-                          <td className="px-3 py-2.5 text-warm-400 text-xs tabular-nums">{i + 1}</td>
+                          <td className="px-3 py-2.5 text-warm-400 text-xs tabular-nums">{globalIdx + 1}</td>
                           <td className="px-3 py-2.5 font-mono text-xs text-warm-600">{line.box_type || '—'}</td>
                           <td className="group px-3 py-2.5 font-mono text-xs font-semibold text-primary-700">
                             <CopyInline value={line.custom_box_barcode} mono />
@@ -769,6 +795,16 @@ export default function RecepcionDetalle() {
                   </tbody>
                 </table>
               </div>
+              {sortedLines.length > 100 && (
+                <TablePagination
+                  page={linePage}
+                  pageSize={linePageSize}
+                  total={sortedLines.length}
+                  onPageChange={setLinePage}
+                  onPageSizeChange={(s) => { setLinePageSize(s); setLinePage(1) }}
+                  itemLabel={t('rec.line.items') || 'líneas'}
+                />
+              )}
             </div>
           </div>
         )}
@@ -808,11 +844,12 @@ export default function RecepcionDetalle() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warm-50">
-                    {sortedEvents.map((ev, i) => {
+                    {pagedEvents.map((ev, i) => {
+                      const globalIdx = (eventPage - 1) * eventPageSize + i
                       const meta = SCAN_RESULT_META[ev.resultado] ?? SCAN_RESULT_META.no_encontrado
                       return (
                         <tr key={ev.id} className="table-row">
-                          <td className="px-3 py-2.5 text-warm-400 text-xs tabular-nums">{i + 1}</td>
+                          <td className="px-3 py-2.5 text-warm-400 text-xs tabular-nums">{globalIdx + 1}</td>
                           <td className="group px-3 py-2.5 font-mono text-xs font-semibold text-warm-700">
                             <CopyInline value={ev.codigo_escaneado} mono />
                           </td>
@@ -866,6 +903,16 @@ export default function RecepcionDetalle() {
                   </tbody>
                 </table>
               </div>
+              {sortedEvents.length > 100 && (
+                <TablePagination
+                  page={eventPage}
+                  pageSize={eventPageSize}
+                  total={sortedEvents.length}
+                  onPageChange={setEventPage}
+                  onPageSizeChange={(s) => { setEventPageSize(s); setEventPage(1) }}
+                  itemLabel={t('rec.scan.items') || 'escaneos'}
+                />
+              )}
             </div>
           </div>
         )}
@@ -935,9 +982,11 @@ export default function RecepcionDetalle() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warm-50">
-                    {filteredNovedades.map((n, i) => (
+                    {pagedNovedades.map((n, i) => {
+                      const globalIdx = (novPage - 1) * novPageSize + i
+                      return (
                       <tr key={n.id} className="table-row">
-                        <td className="px-3 py-2.5 text-warm-400 text-xs tabular-nums">{i + 1}</td>
+                        <td className="px-3 py-2.5 text-warm-400 text-xs tabular-nums">{globalIdx + 1}</td>
                         <td className="px-3 py-2.5">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${TIPO_META[n.tipo] || 'bg-warm-100 text-warm-600'}`}>
                             {n.tipo}
@@ -966,7 +1015,8 @@ export default function RecepcionDetalle() {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                     {filteredNovedades.length === 0 && (
                       <tr>
                         <td colSpan={7} className="px-3 py-10 text-center text-warm-400 text-sm">{t('rec.otros.sin_registros')}</td>
@@ -975,6 +1025,16 @@ export default function RecepcionDetalle() {
                   </tbody>
                 </table>
               </div>
+              {filteredNovedades.length > 100 && (
+                <TablePagination
+                  page={novPage}
+                  pageSize={novPageSize}
+                  total={filteredNovedades.length}
+                  onPageChange={setNovPage}
+                  onPageSizeChange={(s) => { setNovPageSize(s); setNovPage(1) }}
+                  itemLabel={t('rec.otros.items') || 'registros'}
+                />
+              )}
             </div>
           </div>
         )}
