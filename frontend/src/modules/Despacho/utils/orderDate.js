@@ -1,5 +1,10 @@
 import { toDateKey } from '../../../core/utils/dateFormat'
 
+/** Returns the raw WMS datetime string (preserving time component) for storage. */
+export function getOrderDateTimeRaw(order) {
+  return String(order?.outboundTime || order?.expectedTime || order?.orderCreateTime || '').trim()
+}
+
 /** Returns "YYYY-MM-DD" from WMS order date fields, or '' if none available. */
 export function getOrderDateKey(order) {
   const raw = order?.outboundTime || order?.expectedTime || order?.orderCreateTime || ''

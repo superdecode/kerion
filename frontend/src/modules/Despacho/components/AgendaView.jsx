@@ -63,7 +63,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
       <div class="group">
         <div class="group-header">DESTINO: ${escapeHtml(g.customer)}</div>
         <table>
-          <thead><tr><th>Horario</th><th>Orden</th><th>Código base</th><th>Bultos</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Fecha Envío</th><th>Orden</th><th>Código base</th><th>Bultos</th><th>Estado</th></tr></thead>
           <tbody>
             ${g.rows.map(o => {
               const orderNo  = o.outboundOrderNo || o.order_no || ''
@@ -73,8 +73,13 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
               const estado   = dispatch ? DISPATCH_LABEL[dispatch.order_estado] ?? escapeHtml(dispatch.order_estado) : 'Sin folio'
               const time     = o.outboundTime || o.expectedTime || o.orderCreateTime || ''
               const hasTime  = time && String(time).length > 10
+              const dateStr  = time
+                ? (hasTime
+                    ? new Date(time).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + new Date(time).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+                    : new Date(time + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }))
+                : '—'
               return `<tr>
-                <td>${hasTime ? new Date(time).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                <td>${dateStr}</td>
                 <td class="mono">${escapeHtml(orderNo)}</td>
                 <td class="mono">${bases.length ? bases.map(b => escapeHtml(b)).join(', ') : '—'}</td>
                 <td class="center">${escapeHtml(o.outboundBoxCount ?? '—')}</td>
@@ -182,7 +187,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
             <table className="w-full text-sm">
               <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                 <tr>
-                  <th className="table-header">Horario</th>
+                  <th className="table-header">Fecha Envío</th>
                   <th className="table-header">Orden</th>
                   <th className="table-header">Código base</th>
                   <th className="table-header text-center">Bultos</th>
@@ -200,8 +205,15 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
                   const hasTime  = time && String(time).length > 10
                   return (
                     <tr key={orderNo} className="hover:bg-primary-100 transition-colors">
-                      <td className="px-4 py-2.5 text-xs text-warm-500">
-                        {hasTime ? fmtTimeShort(time) : '—'}
+                      <td className="px-4 py-2.5 text-xs text-warm-500 whitespace-nowrap">
+                        {time
+                          ? (hasTime
+                              ? <div className="flex flex-col leading-tight gap-0.5">
+                                  <span>{fmtDate(time)}</span>
+                                  <span className="text-[10px]">{fmtTimeShort(time)}</span>
+                                </div>
+                              : <span>{fmtDate(time + 'T12:00:00')}</span>)
+                          : '—'}
                       </td>
                       <td className="px-4 py-2.5">
                         <span className="font-mono text-xs font-semibold text-primary-700">{orderNo}</span>

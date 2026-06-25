@@ -7,7 +7,7 @@ import Modal from '../../../core/components/common/Modal'
 import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getOutboundList } from '../services/despachoService'
-import { getOrderDateKey } from '../utils/orderDate'
+import { getOrderDateKey, getOrderDateTimeRaw } from '../utils/orderDate'
 
 const EASE = [0.16, 1, 0.3, 1]
 
@@ -189,7 +189,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
         destinatario: getDestinoName(o),
         bultos: 0,
         bultos_esperados: o.outboundBoxCount || null,
-        outbound_date: getOrderDateKey(o) || null,
+        outbound_date: getOrderDateTimeRaw(o) || null,
         notas: JSON.stringify({
           validation_scope: 'por_destino',
           destino: selectedDestinoOption.name,

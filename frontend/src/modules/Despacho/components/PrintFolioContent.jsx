@@ -5,6 +5,24 @@ function fmtDate(dt) {
   return new Date(dt).toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
+function getOrderDate(order, folio) {
+  if (order.outbound_date) return String(order.outbound_date)
+  try {
+    const meta = typeof order.notas === 'string' ? JSON.parse(order.notas) : null
+    if (meta?.outbound_date) return String(meta.outbound_date)
+  } catch {}
+  if (folio?.fecha_salida) return String(folio.fecha_salida)
+  if (folio?.created_at) return String(folio.created_at)
+  return null
+}
+
+function fmtOrderDate(raw) {
+  if (!raw) return '—'
+  const hasTime = raw.length > 10
+  if (hasTime) return fmtDateTime(raw)
+  return fmtDate(raw + 'T12:00:00')
+}
+
 function fmtDateTime(dt) {
   if (!dt) return '—'
   return new Date(dt).toLocaleString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -136,6 +154,7 @@ export default function PrintFolioContent({ folio, orders }) {
           {orders.map((o, i) => {
             const codes = getOrderCodes(o)
             const tarimas = showTarimas ? getOrderTarimas(o) : []
+            const orderDate = getOrderDate(o, folio)
             return (
               <tr key={o.id || i} style={{ background: i % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
                 <td style={{ ...TD, textAlign: 'center', color: '#94a3b8', fontWeight: '600' }}>{i + 1}</td>
@@ -143,7 +162,7 @@ export default function PrintFolioContent({ folio, orders }) {
                   {o.outbound_order_no || '—'}
                 </td>
                 <td style={{ ...TD, whiteSpace: 'nowrap', color: '#475569', fontSize: '9px' }}>
-                  {o.outbound_date ? fmtDate(o.outbound_date + 'T12:00:00') : '—'}
+                  {fmtOrderDate(orderDate)}
                 </td>
                 <td style={TD}>
                   {codes.length > 0
