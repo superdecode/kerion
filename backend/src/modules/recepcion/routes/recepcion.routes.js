@@ -159,6 +159,9 @@ router.post('/orders',
       if (!Array.isArray(lines) || lines.length === 0) {
         return res.status(400).json({ error: 'Se requieren líneas de recepción' })
       }
+      if (lines.length > 50000) {
+        return res.status(400).json({ error: `El límite máximo de importación es 50,000 registros. El archivo enviado contiene ${lines.length.toLocaleString()}.` })
+      }
 
       const inboundOrderNo = String(inbound_order_no || '').trim()
       if (inboundOrderNo) {

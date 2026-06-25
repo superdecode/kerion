@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import Modal from '../../../core/components/common/Modal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { Settings2, ChevronDown, Check } from 'lucide-react'
 
-// Custom select that renders its dropdown at a fixed position so it
-// stays correctly placed inside framer-motion transformed containers.
+// Renders dropdown via portal into document.body so position:fixed is
+// truly viewport-relative, unaffected by framer-motion transforms on ancestors.
 function MappingSelect({ value, options, onChange }) {
   const [open, setOpen] = useState(false)
   const btnRef = useRef(null)
@@ -18,7 +19,6 @@ function MappingSelect({ value, options, onChange }) {
     setOpen(true)
   }, [])
 
-  // Close on click-outside or scroll
   useEffect(() => {
     if (!open) return
     const close = (e) => {
@@ -26,15 +26,47 @@ function MappingSelect({ value, options, onChange }) {
         setOpen(false)
       }
     }
+    const closeOnScroll = () => setOpen(false)
     document.addEventListener('mousedown', close)
-    document.addEventListener('scroll', () => setOpen(false), true)
+    document.addEventListener('scroll', closeOnScroll, true)
     return () => {
       document.removeEventListener('mousedown', close)
-      document.removeEventListener('scroll', () => setOpen(false), true)
+      document.removeEventListener('scroll', closeOnScroll, true)
     }
   }, [open])
 
   const selected = options.find(o => o.value === value)
+
+  const dropdown = open ? (
+    <div
+      ref={dropRef}
+      className="fixed z-[10010] bg-white border border-warm-200 rounded-xl shadow-xl py-1 overflow-y-auto"
+      style={{ top: pos.top, left: pos.left, width: Math.max(pos.width, 220), maxHeight: 280 }}
+    >
+      <button
+        type="button"
+        className="w-full text-left px-3 py-2 text-xs text-warm-400 hover:bg-warm-50 transition-colors"
+        onClick={() => { onChange(''); setOpen(false) }}
+      >
+        — No mapear —
+      </button>
+      {options.map(o => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => { onChange(o.value); setOpen(false) }}
+          className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
+            o.value === value
+              ? 'bg-primary-50 text-primary-700 font-semibold'
+              : 'text-warm-700 hover:bg-warm-50'
+          }`}
+        >
+          {o.value === value && <Check size={11} className="shrink-0" />}
+          <span className={o.value === value ? '' : 'ml-[15px]'}>{o.label}</span>
+        </button>
+      ))}
+    </div>
+  ) : null
 
   return (
     <>
@@ -52,36 +84,7 @@ function MappingSelect({ value, options, onChange }) {
         <ChevronDown size={12} className="shrink-0 opacity-50" />
       </button>
 
-      {open && (
-        <div
-          ref={dropRef}
-          className="fixed z-[9999] bg-white border border-warm-200 rounded-xl shadow-xl py-1 overflow-y-auto"
-          style={{ top: pos.top, left: pos.left, width: Math.max(pos.width, 220), maxHeight: 280 }}
-        >
-          <button
-            type="button"
-            className="w-full text-left px-3 py-2 text-xs text-warm-400 hover:bg-warm-50 transition-colors"
-            onClick={() => { onChange(''); setOpen(false) }}
-          >
-            — No mapear —
-          </button>
-          {options.map(o => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => { onChange(o.value); setOpen(false) }}
-              className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
-                o.value === value
-                  ? 'bg-primary-50 text-primary-700 font-semibold'
-                  : 'text-warm-700 hover:bg-warm-50'
-              }`}
-            >
-              {o.value === value && <Check size={11} className="shrink-0" />}
-              <span className={o.value === value ? '' : 'ml-[15px]'}>{o.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {createPortal(dropdown, document.body)}
     </>
   )
 }

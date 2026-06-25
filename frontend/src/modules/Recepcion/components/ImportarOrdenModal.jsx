@@ -164,6 +164,10 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
     try {
       const raw = await parseExcel(file)
       if (raw.length === 0) { toast.error(t('rec.import.err.vacio')); return }
+      if (raw.length > 50000) {
+        toast.error(`El archivo contiene ${raw.length.toLocaleString()} registros. El límite máximo por importación es 50,000 registros.`)
+        return
+      }
 
       const headers = Object.keys(raw[0])
       setFileHeaders(headers)
@@ -189,6 +193,10 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
       try {
         const raw = await parseExcelOnMainThread(file)
         if (raw.length === 0) { toast.error(t('rec.import.err.vacio')); return }
+        if (raw.length > 50000) {
+          toast.error(`El archivo contiene ${raw.length.toLocaleString()} registros. El límite máximo por importación es 50,000 registros.`)
+          return
+        }
 
         const headers = Object.keys(raw[0])
         setFileHeaders(headers)
