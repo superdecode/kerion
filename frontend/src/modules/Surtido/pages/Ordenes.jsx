@@ -94,8 +94,14 @@ function getFilterDateValue(record) {
   return record?.outboundTime || record?.expectedTime || record?.orderCreateTime || record?.updated_at || ''
 }
 
+function getSurtidorName(tracking) {
+  return tracking?.surtidor_nombre || tracking?.surtidor_nombre_actual || null
+}
+
 function getAssignmentDateValue(tracking) {
-  return tracking?.assigned_at || ''
+  if (tracking?.assigned_at) return tracking.assigned_at
+  if (getSurtidorName(tracking)) return tracking?.updated_at || ''
+  return ''
 }
 
 function SortableHeader({ label, sortKey, currentKey, direction, onSort, className = '', textClassName = '' }) {
@@ -610,7 +616,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
 
   useEffect(() => {
     if (isOpen) {
-      const current = surtidores.find(s => s.nombre === tracking?.surtidor_nombre)
+      const current = surtidores.find(s => s.nombre === getSurtidorName(tracking))
       setLocalSurtidorId(current?.id ? String(current.id) : '')
       setLocalNotes(tracking?.notes || '')
       setLocalStatus(tracking?.status || 'pending_assignment')
@@ -760,18 +766,18 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
                 </div>
               </div>
 
-              {/* Notes */}
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wider">{t('surtido.ordenes.panel.nota')}</p>
+              {/* Notes — compact full-width section */}
+              <div className="border-t border-warm-100 -mx-5 px-5 pt-4 pb-1">
+                <p className="text-[10px] font-bold text-warm-400 uppercase tracking-wider mb-1.5">{t('surtido.ordenes.panel.nota')}</p>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={localNotes}
                   onChange={e => setLocalNotes(e.target.value)}
                   placeholder={t('surtido.ordenes.panel.nota_placeholder')}
-                  className="w-full rounded-xl border border-warm-200 bg-warm-50 px-3 py-2.5 text-xs text-warm-700 outline-none resize-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 transition-all"
+                  className="w-full rounded-lg border border-warm-200/70 bg-warm-100/50 px-3 py-2 text-[11px] text-warm-600 outline-none resize-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100 transition-all"
                 />
                 {cancelClosedWithoutNote && (
-                  <p className="text-[11px] font-medium text-danger-600">{t('surtido.ordenes.cancel_note_required')}</p>
+                  <p className="text-[11px] font-medium text-danger-600 mt-1">{t('surtido.ordenes.cancel_note_required')}</p>
                 )}
               </div>
             </div>
@@ -1300,8 +1306,9 @@ export default function Ordenes() {
 
     if (filterClient.length > 0 && !filterClient.includes(r.customerCode || r.customerNo || r.customerName || '')) return false
     if (filterSurtidor.length > 0) {
-      const matchesUnassigned = filterSurtidor.includes('__unassigned__') && !tracking?.surtidor_nombre
-      const matchesNamed = filterSurtidor.some(v => v !== '__unassigned__' && v === tracking?.surtidor_nombre)
+      const surtNombre = getSurtidorName(tracking)
+      const matchesUnassigned = filterSurtidor.includes('__unassigned__') && !surtNombre
+      const matchesNamed = filterSurtidor.some(v => v !== '__unassigned__' && v === surtNombre)
       if (!matchesUnassigned && !matchesNamed) return false
     }
     if (destinationQuery && !(r.receiverName || '').toLowerCase().includes(destinationQuery)) return false
@@ -1325,8 +1332,8 @@ export default function Ordenes() {
     const wms = wmsMap[tr.outbound_order_no]
     if (filterClient.length > 0 && !filterClient.includes(wms?.customerCode || wms?.customerNo || wms?.customerName || '')) return false
     if (filterSurtidor.length > 0) {
-      const matchesUnassigned = filterSurtidor.includes('__unassigned__') && !tr.surtidor_nombre
-      const matchesNamed = filterSurtidor.some(v => v !== '__unassigned__' && v === tr.surtidor_nombre)
+      const matchesUnassigned = filterSurtidor.includes('__unassigned__') && !getSurtidorName(tr)
+      const matchesNamed = filterSurtidor.some(v => v !== '__unassigned__' && v === getSurtidorName(tr))
       if (!matchesUnassigned && !matchesNamed) return false
     }
     if (destinationQuery && !(wms?.receiverName || '').toLowerCase().includes(destinationQuery)) return false
@@ -1338,7 +1345,7 @@ export default function Ordenes() {
     if (!withinTimeRange(filterDateValue, timeFrom, timeTo)) return false
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
     if (q) {
-      const haystack = [tr.outbound_order_no, tr.surtidor_nombre, wms?.customerCode, wms?.thirdOrderNo, wms?.receiverName].filter(Boolean).join(' ').toLowerCase()
+      const haystack = [tr.outbound_order_no, getSurtidorName(tr), wms?.customerCode, wms?.thirdOrderNo, wms?.receiverName].filter(Boolean).join(' ').toLowerCase()
       if (!haystack.includes(q)) return false
     }
     return true
@@ -1511,7 +1518,9 @@ export default function Ordenes() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
       setCancelStatusModal({ open: false, obcs: [], status: 'cancelled', note: '' })
-      if (vars.obcs.length > 1) toast.success(`${vars.obcs.length} ${t('surtido.ordenes.item_label')} actualizadas`)
+      toast.success(vars.obcs.length > 1
+        ? `${vars.obcs.length} ${t('surtido.ordenes.item_label')} actualizadas`
+        : t('common.save') + ' OK')
     },
     onError: (err, vars, context) => {
       if (context?.prev) qc.setQueryData(['wms-order-tracking'], context.prev)
@@ -1592,7 +1601,7 @@ export default function Ordenes() {
         r.outboundBoxCount ?? r.packageCount ?? '',
         tr.total_scanned ?? 0,
         r.outboundTime || '',
-        tr.surtidor_nombre || '',
+        getSurtidorName(tr) || '',
         t(getStatusMeta(tr.status || 'pending_assignment').labelKey),
         r.orderCreateTime || '',
       ]
@@ -1606,7 +1615,7 @@ export default function Ordenes() {
       return [
         tr.outbound_order_no || '',
         wms.customerCode || wms.customerName || '',
-        tr.surtidor_nombre || '',
+        getSurtidorName(tr) || '',
         wms.outboundTime || '',
         tr.total_scanned ?? 0,
         tr.total_expected ?? '',
@@ -2463,7 +2472,7 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
   const rawStatus = tracking?.status || 'pending_assignment'
   const displayStatus = (is100Percent && rawStatus !== 'complete' && rawStatus !== 'partial' && rawStatus !== 'cancelled') ? 'complete' : rawStatus
   const meta = getStatusMeta(displayStatus)
-  const noSurtidor = !tracking?.surtidor_nombre
+  const noSurtidor = !getSurtidorName(tracking)
   const isClosedOrder = CLOSED_ORDER_STATUSES.has(displayStatus)
   const cliente = r.customerCode || r.customerNo || r.customerName || '—'
   const destino = r.receiverName || '—'
@@ -2580,13 +2589,13 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
             }`}
             onClick={e => { e.stopPropagation(); onAssign(r) }}>
             <UserCheck size={11} />
-            <span className="max-w-[110px] truncate" title={tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}>
-              {tracking?.surtidor_nombre || t('surtido.ordenes.no_surtidor')}
+            <span className="max-w-[110px] truncate" title={getSurtidorName(tracking) || t('surtido.ordenes.no_surtidor')}>
+              {getSurtidorName(tracking) || t('surtido.ordenes.no_surtidor')}
             </span>
             <ChevronDown size={9} />
           </button>
         ) : (
-          <span className="text-warm-600 text-xs">{tracking?.surtidor_nombre || '—'}</span>
+          <span className="text-warm-600 text-xs">{getSurtidorName(tracking) || '—'}</span>
         )}
       </td>
 
@@ -2655,7 +2664,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
       reference: (r) => r.thirdOrderNo || r.referenceNo,
       cajas: (r) => Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? 0),
       scanned: (r) => trackingMap[r.outboundOrderNo]?.total_scanned || 0,
-      surtidor: (r) => trackingMap[r.outboundOrderNo]?.surtidor_nombre,
+      surtidor: (r) => getSurtidorName(trackingMap[r.outboundOrderNo]),
       status: (r) => STATUS_ORDER[trackingMap[r.outboundOrderNo]?.status || 'pending_assignment'] ?? 99,
     }
     const sorter = sorters[sortKey] || sorters.date
@@ -3100,7 +3109,7 @@ function ValidacionTable({ records, allFilteredObcs, wmsMap, surtidores, onView,
                   <td className="table-cell col-name">
                     <span className="text-warm-700 text-xs flex items-center gap-1">
                       <User size={10} className="text-warm-300" />
-                      {tr.surtidor_nombre || t('surtido.ordenes.no_surtidor')}
+                      {getSurtidorName(tr) || t('surtido.ordenes.no_surtidor')}
                     </span>
                   </td>
                   <td className="table-cell text-right">
