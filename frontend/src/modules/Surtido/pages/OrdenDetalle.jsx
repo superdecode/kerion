@@ -202,14 +202,32 @@ function ValidationProgressCard({ scanned, expected, pct, t }) {
   )
 }
 
-function TraceabilityTimeline({ tracking, t }) {
+function TraceabilityTimeline({ tracking, sessions = [], isComplete, t }) {
+  const surtidorActual = tracking?.surtidor_nombre || tracking?.surtidor_nombre_actual || null
+  const hasSession = sessions.length > 0
+
+  // Most recent completed (or latest updated) session — source of validation timestamp + operator
+  const lastSession = [...sessions].sort((a, b) => {
+    const ta = a.completed_at || a.updated_at || ''
+    const tb = b.completed_at || b.updated_at || ''
+    return tb > ta ? 1 : tb < ta ? -1 : 0
+  })[0] ?? null
+
+  const validationAt =
+    tracking?.validation_completed_at ||
+    lastSession?.completed_at ||
+    lastSession?.updated_at ||
+    (isComplete ? tracking?.updated_at : null)
+
+  const validatedBy =
+    tracking?.validated_by || lastSession?.operator_nombre || null
+
   const steps = [
     {
       key: 'received',
       label: t('surtido.ordenes.trace.step_received'),
       Icon: ClipboardList,
       at: tracking?.created_at,
-      to: null,
       by: null,
       done: true,
     },
@@ -218,24 +236,24 @@ function TraceabilityTimeline({ tracking, t }) {
       label: t('surtido.ordenes.trace.step_assigned'),
       Icon: UserCheck,
       at: tracking?.assigned_at,
-      by: tracking?.assigned_by || tracking?.surtidor_nombre || null,
-      done: !!(tracking?.assigned_at || tracking?.surtidor_nombre),
+      by: tracking?.assigned_by || surtidorActual || null,
+      done: !!(tracking?.assigned_at || surtidorActual),
     },
     {
       key: 'sorting',
       label: t('surtido.ordenes.trace.step_sorting'),
       Icon: Package2,
-      at: tracking?.sorting_completed_at,
-      by: tracking?.surtidor_nombre || null,
-      done: !!(tracking?.sorting_started_at),
+      at: tracking?.sorting_completed_at || (hasSession ? lastSession?.started_at : null),
+      by: surtidorActual || null,
+      done: !!(tracking?.sorting_started_at) || hasSession,
     },
     {
       key: 'validation',
       label: t('surtido.ordenes.trace.step_validation'),
       Icon: ScanBarcode,
-      at: tracking?.validation_completed_at,
-      by: tracking?.validated_by,
-      done: !!(tracking?.validation_started_at),
+      at: validationAt,
+      by: validatedBy,
+      done: isComplete || !!(tracking?.validation_started_at) || hasSession,
     },
   ]
 
@@ -243,26 +261,43 @@ function TraceabilityTimeline({ tracking, t }) {
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
       {steps.map((step, idx) => {
         const isConnected = idx < steps.length - 1
+        const nextDone = steps[idx + 1]?.done ?? false
+        const isValidatedStep = step.key === 'validation' && isComplete
         return (
           <div key={step.key} className="relative">
             {isConnected && (
-              <div className={`hidden sm:block absolute top-3.5 left-[calc(50%+14px)] right-[-calc(50%-14px)] h-px ${
-                step.done ? 'bg-primary-200' : 'bg-warm-200'
-              }`} style={{ width: 'calc(100% - 28px)', left: '50%' }} />
+              <div
+                className={`hidden sm:block absolute top-3.5 h-0.5 transition-colors ${
+                  step.done && nextDone ? 'bg-primary-400' : step.done ? 'bg-primary-200' : 'bg-warm-200'
+                }`}
+                style={{ left: '50%', width: 'calc(100% - 28px)' }}
+              />
             )}
             <div className="flex flex-col items-center text-center gap-1.5">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 border-2 z-10 relative ${
-                step.done ? 'border-primary-400 bg-primary-50' : 'border-warm-200 bg-white'
+                isValidatedStep
+                  ? 'border-success-400 bg-success-50'
+                  : step.done
+                  ? 'border-primary-400 bg-primary-50'
+                  : 'border-warm-200 bg-white'
               }`}>
-                <step.Icon size={12} className={step.done ? 'text-primary-600' : 'text-warm-300'} />
+                <step.Icon size={12} className={
+                  isValidatedStep ? 'text-success-600' : step.done ? 'text-primary-600' : 'text-warm-300'
+                } />
               </div>
-              <p className={`text-[10px] font-semibold leading-tight ${step.done ? 'text-warm-800' : 'text-warm-400'}`}>
+              <p className={`text-[10px] font-semibold leading-tight ${
+                isValidatedStep ? 'text-success-700' : step.done ? 'text-warm-800' : 'text-warm-400'
+              }`}>
                 {step.label}
               </p>
               {step.done ? (
                 <div className="space-y-0.5">
                   <p className="text-[10px] text-warm-500 tabular-nums">{step.at ? safeDate(step.at) : '—'}</p>
-                  {step.by && <p className="text-[10px] text-primary-600 font-semibold">{step.by}</p>}
+                  {step.by && (
+                    <p className={`text-[10px] font-semibold ${isValidatedStep ? 'text-success-600' : 'text-primary-600'}`}>
+                      {step.by}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <p className="text-[10px] text-warm-300">{t('surtido.ordenes.trace.pending')}</p>
@@ -714,7 +749,12 @@ export default function OrdenDetalle() {
             </p>
           </div>
           {tracking ? (
-            <TraceabilityTimeline tracking={tracking} t={t} />
+            <TraceabilityTimeline
+              tracking={tracking}
+              sessions={sessions}
+              isComplete={displayStatus === 'complete' || displayStatus === 'partial'}
+              t={t}
+            />
           ) : (
             <p className="text-xs text-warm-400 text-center py-4">{t('common.noData')}</p>
           )}
