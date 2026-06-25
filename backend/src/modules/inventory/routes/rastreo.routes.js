@@ -1201,7 +1201,7 @@ router.get('/:folio',
               `WITH boxes AS (
                  SELECT *
                    FROM jsonb_to_recordset($3::jsonb)
-                     AS b(id int, box_code text, box_type text)
+                     AS b(id uuid, box_code text, box_type text)
                )
                SELECT DISTINCT ON (b.id)
                       b.id AS rastreo_caja_id,
