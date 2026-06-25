@@ -8,6 +8,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getFolios, createFolio, addOrder } from '../services/despachoService'
 import { fmtDate } from '../../../core/utils/dateFormat'
+import { getOrderDateKey } from '../utils/orderDate'
 
 export default function DispatchQuantityModal({ isOpen, onClose, order, conductores = [], unidades = [], dateFrom = '' }) {
   const qc = useQueryClient()
@@ -67,8 +68,9 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
 
       await addOrder(folioId, {
         outbound_order_no: order.outboundOrderNo || order.order_no,
-        cliente: order.customerName || order.cliente || '',
+        destinatario: order.receiverName || order.customerName || order.cliente || null,
         bultos: Number(bultos),
+        outbound_date: getOrderDateKey(order) || null,
       })
 
       await qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })

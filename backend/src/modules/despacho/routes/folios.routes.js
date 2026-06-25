@@ -343,11 +343,11 @@ router.post('/:id/orders/bulk',
             : null
         await req.tQuery(
           `INSERT INTO dispatch_folio_orders
-             (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)
+             (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas, outbound_date)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
            ON CONFLICT (tenant_id, folio_id, outbound_order_no) DO NOTHING`,
           [req.tenantId, req.params.id, o.outbound_order_no,
-           o.destinatario || null, o.bultos || 0, o.bultos_esperados || null, notes]
+           o.destinatario || null, o.bultos || 0, o.bultos_esperados || null, notes, o.outbound_date || null]
         )
       }
       await req.tQuery(
@@ -560,7 +560,7 @@ router.post('/:id/orders',
   requireDespachoValidar('crear'),
   async (req, res) => {
     try {
-      const { outbound_order_no, destinatario = null, bultos = 1, bultos_esperados = null, notas = '' } = req.body
+      const { outbound_order_no, destinatario = null, bultos = 1, bultos_esperados = null, notas = '', outbound_date = null } = req.body
       if (!outbound_order_no) return res.status(400).json({ error: 'outbound_order_no es requerido' })
 
       const folioRes = await req.tQuery(
@@ -597,10 +597,10 @@ router.post('/:id/orders',
 
       const result = await req.tQuery(
         `INSERT INTO dispatch_folio_orders
-           (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+           (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas, outbound_date)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          RETURNING *`,
-        [req.tenantId, req.params.id, outbound_order_no, destinatario, bultos, bultos_esperados, notas || null]
+        [req.tenantId, req.params.id, outbound_order_no, destinatario, bultos, bultos_esperados, notas || null, outbound_date || null]
       )
       await req.tQuery(
         `UPDATE dispatch_folios SET estado = 'en_proceso', updated_at = now()

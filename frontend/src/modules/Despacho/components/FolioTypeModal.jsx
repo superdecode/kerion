@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { List, MapPin, ArrowRight, Loader2, ScanBarcode, CalendarDays, User, Truck, Search, X } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
-import { toDateKey } from '../../../core/utils/dateFormat'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getOutboundList } from '../services/despachoService'
+import { getOrderDateKey } from '../utils/orderDate'
 
 const EASE = [0.16, 1, 0.3, 1]
 
@@ -42,30 +42,6 @@ function getDestinoName(order) {
   return String(order?.receiverName || order?.logisticsChannel || '').trim()
 }
 
-function getOrderDateKey(order) {
-  const raw = order?.outboundTime || order?.expectedTime || order?.orderCreateTime || ''
-  if (!raw) return ''
-  const str = String(raw).trim()
-  const isoLike = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
-  if (isoLike) {
-    return `${isoLike[1]}-${String(isoLike[2]).padStart(2, '0')}-${String(isoLike[3]).padStart(2, '0')}`
-  }
-
-  const slashDate = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
-  if (slashDate) {
-    const first = Number(slashDate[1])
-    const second = Number(slashDate[2])
-    const day = first > 12 ? first : second
-    const month = first > 12 ? second : first
-    return `${slashDate[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-  }
-
-  try {
-    return toDateKey(str)
-  } catch {
-    return ''
-  }
-}
 
 export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores = [], unidades = [], isCreating = false }) {
   const { t } = useI18nStore()
@@ -213,10 +189,10 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
         destinatario: getDestinoName(o),
         bultos: 0,
         bultos_esperados: o.outboundBoxCount || null,
+        outbound_date: getOrderDateKey(o) || null,
         notas: JSON.stringify({
           validation_scope: 'por_destino',
           destino: selectedDestinoOption.name,
-          outbound_date: getOrderDateKey(o),
           logisticsTrackNo: o.logisticsTrackNo || null,
           thirdOrderNo: o.thirdOrderNo || null,
           logisticsChannel: o.logisticsChannel || null,
