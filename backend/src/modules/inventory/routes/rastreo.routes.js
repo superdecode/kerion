@@ -1189,11 +1189,7 @@ router.get('/:folio',
       if (orden.outbound_order_no) {
         const [trackingRes, cajaSurtidoRes] = await Promise.all([
           req.tQuery(
-            `SELECT ot.outbound_order_no, ot.status, ot.notes, ot.assigned_at, ot.assigned_by,
-                    ot.surtidor_id, COALESCE(s.nombre, ot.surtidor_nombre) AS surtidor_nombre,
-                    ot.sorting_started_at, ot.sorting_completed_at,
-                    ot.validation_started_at, ot.validation_completed_at, ot.validated_by,
-                    ot.total_expected, ot.total_scanned
+            `SELECT ot.*, s.nombre AS surtidor_nombre_actual
                FROM pick_order_tracking ot
                LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id AND s.tenant_id = ot.tenant_id
               WHERE ot.tenant_id = $1 AND ot.outbound_order_no = $2
@@ -1257,7 +1253,13 @@ router.get('/:folio',
             : Promise.resolve({ rows: [] }),
         ])
 
-        surtidoTracking = trackingRes.rows[0] || null
+        const rawTracking = trackingRes.rows[0] || null
+        surtidoTracking = rawTracking
+          ? {
+              ...rawTracking,
+              surtidor_nombre: rawTracking.surtidor_nombre || rawTracking.surtidor_nombre_actual || null,
+            }
+          : null
         const cajaSurtidoMap = new Map(cajaSurtidoRes.rows.map(row => [row.rastreo_caja_id, row]))
         cajasWithSurtido = cajasRes.rows.map(caja => ({
           ...caja,
