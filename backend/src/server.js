@@ -132,8 +132,8 @@ const loginLimiter = rateLimit({
   message: { error: 'Demasiados intentos, intenta más tarde' }
 })
 
-// Evidence uploads travel as base64 JSON; keep the limit bounded for small instances.
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '4mb' }))
+// 25 mb supports up to ~50k-row CSV imports; override via JSON_BODY_LIMIT env var.
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '25mb' }))
 
 // Health check
 app.get('/api/health', (_req, res) => {

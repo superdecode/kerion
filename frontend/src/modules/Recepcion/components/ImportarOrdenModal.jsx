@@ -1,5 +1,8 @@
-import { useState, useRef, useMemo } from 'react'
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, X, Search, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { useState, useRef, useMemo, useEffect } from 'react'
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, X, Search, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+
+const REVIEW_PAGE_SIZE = 1000
+const LARGE_IMPORT_THRESHOLD = 5000
 import Modal from '../../../core/components/common/Modal'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -143,6 +146,10 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
   const [sortKey, setSortKey] = useState(null)
   const [sortDir, setSortDir] = useState('asc')
   const [duplicateError, setDuplicateError] = useState(null)
+  const [reviewPage, setReviewPage] = useState(1)
+  const [importProgress, setImportProgress] = useState(0)
+  const [importMessage, setImportMessage] = useState('')
+  const progressIntervalRef = useRef(null)
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -152,7 +159,8 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
   const reset = () => {
     setStep('upload'); setRawRows([]); setFileHeaders([]); setMapping({})
     setMappedRows([]); setReviewSearch(''); setSortKey(null); setSortDir('asc')
-    setDuplicateError(null)
+    setDuplicateError(null); setReviewPage(1); setImportProgress(0); setImportMessage('')
+    if (progressIntervalRef.current) { clearInterval(progressIntervalRef.current); progressIntervalRef.current = null }
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -238,8 +246,25 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
     if (mappedRows.length === 0) return
     setDuplicateError(null)
     const count = mappedRows.length
-    const preloaderTask = beginPreloader('Importando orden...', 8000)
     setSubmitting(true)
+    setImportProgress(0)
+    setImportMessage(`Preparando ${count.toLocaleString()} registros...`)
+
+    // Simulate progress up to 85% over estimated duration
+    // ~1.5ms per row for serialization + transfer + DB insert
+    const estimatedMs = Math.max(4000, Math.min(150000, count * 2.5))
+    const tickMs = 400
+    const tickStep = (85 / (estimatedMs / tickMs))
+    let prog = 0
+    progressIntervalRef.current = setInterval(() => {
+      prog = Math.min(85, prog + tickStep)
+      setImportProgress(prog)
+      if (prog < 15) setImportMessage(`Preparando ${count.toLocaleString()} registros...`)
+      else if (prog < 40) setImportMessage(`Enviando ${count.toLocaleString()} registros al servidor...`)
+      else if (prog < 70) setImportMessage(`Procesando en base de datos...`)
+      else setImportMessage(`Guardando orden de entrada...`)
+    }, tickMs)
+
     let result
     try {
       const first = mappedRows[0]
@@ -261,8 +286,13 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
           weight_unit: r.weight_unit || null,
         })),
       }
-      result = await createOrder(payload)
+      // Allow up to 3 minutes for large imports
+      result = await createOrder(payload, { timeout: 180000 })
     } catch (err) {
+      clearInterval(progressIntervalRef.current)
+      progressIntervalRef.current = null
+      setSubmitting(false)
+      setImportProgress(0)
       if (err.response?.status === 409 && err.response?.data?.duplicateInboundOrder) {
         setDuplicateError(err.response.data)
         return
@@ -274,10 +304,13 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
         toast.error(err.response?.data?.error || t('rec.import.err.file'))
       }
       return
-    } finally {
-      endPreloader(preloaderTask)
-      setSubmitting(false)
     }
+
+    clearInterval(progressIntervalRef.current)
+    progressIntervalRef.current = null
+    setImportProgress(100)
+    setImportMessage(`${count.toLocaleString()} registros importados`)
+    setSubmitting(false)
 
     // Success path — reset and navigate
     const order = result?.order
@@ -307,6 +340,14 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
     return rows
   }, [mappedRows, reviewSearch, sortKey, sortDir])
 
+  const usePagination = mappedRows.length > LARGE_IMPORT_THRESHOLD
+  const totalPages = usePagination ? Math.ceil(filteredRows.length / REVIEW_PAGE_SIZE) : 1
+  const pagedRows = useMemo(() => {
+    if (!usePagination) return filteredRows
+    const start = (reviewPage - 1) * REVIEW_PAGE_SIZE
+    return filteredRows.slice(start, start + REVIEW_PAGE_SIZE)
+  }, [filteredRows, reviewPage, usePagination])
+
   const emptyFieldRows = mappedRows.filter(r =>
     !r.custom_box_barcode && !r.box_type
   ).length
@@ -321,26 +362,44 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
         size="xl"
         footer={
           step === 'review' ? (
-            <div className="flex items-center gap-2 w-full">
-              <span className="text-xs text-warm-500 flex-1">
-                {mappedRows.length} {t('rec.import.detected')}
-                {emptyFieldRows > 0 && (
-                  <span className="ml-2 text-warning-600">
-                    · {emptyFieldRows} {t('rec.import.warn.empty_fields')}
+            submitting ? (
+              <div className="w-full space-y-2">
+                <div className="flex items-center justify-between text-xs text-warm-600">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 size={13} className="animate-spin text-primary-500" />
+                    {importMessage}
                   </span>
-                )}
-              </span>
-              <button onClick={reset} className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">
-                {t('rec.import.btn.cancel')}
-              </button>
-              <button
-                onClick={handleConfirm}
-                disabled={submitting || mappedRows.length === 0}
-                className="btn-primary text-sm disabled:opacity-50"
-              >
-                {submitting ? t('common.loading') : t('rec.import.btn.confirm')}
-              </button>
-            </div>
+                  <span className="font-mono text-warm-400">{Math.round(importProgress)}%</span>
+                </div>
+                <div className="w-full h-2 bg-warm-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary-500 rounded-full transition-all duration-300"
+                    style={{ width: `${importProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 w-full">
+                <span className="text-xs text-warm-500 flex-1">
+                  {mappedRows.length.toLocaleString()} {t('rec.import.detected')}
+                  {emptyFieldRows > 0 && (
+                    <span className="ml-2 text-warning-600">
+                      · {emptyFieldRows} {t('rec.import.warn.empty_fields')}
+                    </span>
+                  )}
+                </span>
+                <button onClick={reset} className="px-4 py-2 rounded-xl border border-warm-200 text-sm text-warm-600">
+                  {t('rec.import.btn.cancel')}
+                </button>
+                <button
+                  onClick={handleConfirm}
+                  disabled={mappedRows.length === 0}
+                  className="btn-primary text-sm disabled:opacity-50"
+                >
+                  {t('rec.import.btn.confirm')}
+                </button>
+              </div>
+            )
           ) : null
         }
       >
@@ -393,7 +452,7 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-warm-300" />
                 <input
                   value={reviewSearch}
-                  onChange={e => setReviewSearch(e.target.value)}
+                  onChange={e => { setReviewSearch(e.target.value); setReviewPage(1) }}
                   placeholder={t('rec.import.search')}
                   className="pl-8 pr-3 py-1.5 rounded-lg border border-warm-200 text-xs focus:outline-none focus:border-primary-400 w-52"
                 />
@@ -450,12 +509,13 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warm-50">
-                    {filteredRows.map((row, i) => {
+                    {pagedRows.map((row, i) => {
+                      const globalIndex = usePagination ? (reviewPage - 1) * REVIEW_PAGE_SIZE + i : i
                       const hasIssue = !row.custom_box_barcode && !row.box_type
                       const cell = 'px-3 py-2 truncate max-w-0'
                       return (
-                        <tr key={i} className={hasIssue ? 'bg-warning-50/40' : ''}>
-                          <td className="px-3 py-2 text-warm-400 tabular-nums">{i + 1}</td>
+                        <tr key={globalIndex} className={hasIssue ? 'bg-warning-50/40' : ''}>
+                          <td className="px-3 py-2 text-warm-400 tabular-nums">{globalIndex + 1}</td>
                           <td className={`${cell} font-mono text-warm-600`} title={row.box_type || ''}>
                             {row.box_type || <span className="text-warm-300">—</span>}
                           </td>
@@ -489,6 +549,30 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
                 </table>
               </div>
             </div>
+
+            {usePagination && totalPages > 1 && (
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-warm-400">
+                  Página {reviewPage} de {totalPages} · mostrando {((reviewPage - 1) * REVIEW_PAGE_SIZE + 1).toLocaleString()}–{Math.min(reviewPage * REVIEW_PAGE_SIZE, filteredRows.length).toLocaleString()} de {filteredRows.length.toLocaleString()}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setReviewPage(p => Math.max(1, p - 1))}
+                    disabled={reviewPage === 1}
+                    className="p-1 rounded-lg border border-warm-200 text-warm-500 hover:bg-warm-50 disabled:opacity-30"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <button
+                    onClick={() => setReviewPage(p => Math.min(totalPages, p + 1))}
+                    disabled={reviewPage === totalPages}
+                    className="p-1 rounded-lg border border-warm-200 text-warm-500 hover:bg-warm-50 disabled:opacity-30"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Modal>
