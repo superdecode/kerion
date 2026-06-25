@@ -72,8 +72,9 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
               const dispatch = dispatchMap?.get(orderNo)
               const estado   = dispatch ? DISPATCH_LABEL[dispatch.order_estado] ?? escapeHtml(dispatch.order_estado) : 'Sin folio'
               const time     = o.outboundTime || o.expectedTime || o.orderCreateTime || ''
+              const hasTime  = time && String(time).length > 10
               return `<tr>
-                <td>${time ? new Date(time).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                <td>${hasTime ? new Date(time).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                 <td class="mono">${escapeHtml(orderNo)}</td>
                 <td class="mono">${bases.length ? bases.map(b => escapeHtml(b)).join(', ') : '—'}</td>
                 <td class="center">${escapeHtml(o.outboundBoxCount ?? '—')}</td>
@@ -196,10 +197,11 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
                   const dispatch = dispatchMap?.get(orderNo)
                   const estado   = dispatch?.order_estado
                   const time     = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
+                  const hasTime  = time && String(time).length > 10
                   return (
                     <tr key={orderNo} className="hover:bg-primary-100 transition-colors">
                       <td className="px-4 py-2.5 text-xs text-warm-500">
-                        {time ? fmtTimeShort(time) : '—'}
+                        {hasTime ? fmtTimeShort(time) : '—'}
                       </td>
                       <td className="px-4 py-2.5">
                         <span className="font-mono text-xs font-semibold text-primary-700">{orderNo}</span>

@@ -125,7 +125,6 @@ export default function PrintFolioContent({ folio, orders }) {
           <tr>
             <th style={{ ...TH, width: '30px', textAlign: 'center' }}>#</th>
             <th style={TH}>Orden</th>
-            <th style={{ ...TH, whiteSpace: 'nowrap' }}>Fecha / Hora</th>
             <th style={TH}>Código</th>
             {showTarimas && <th style={{ ...TH, textAlign: 'center', width: '70px' }}># Tarima</th>}
             <th style={TH}>Destinatario</th>
@@ -142,7 +141,6 @@ export default function PrintFolioContent({ folio, orders }) {
                 <td style={{ ...TD, fontFamily: 'monospace', fontWeight: '700', color: '#1e3a5f', whiteSpace: 'nowrap' }}>
                   {o.outbound_order_no || '—'}
                 </td>
-                <td style={{ ...TD, whiteSpace: 'nowrap', color: '#475569', fontSize: '9px' }}>{fmtDateTime(o.created_at)}</td>
                 <td style={TD}>
                   {codes.length > 0
                     ? codes.map(([base, count]) => (
@@ -172,7 +170,7 @@ export default function PrintFolioContent({ folio, orders }) {
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={showTarimas ? 5 : 4} style={{ ...TD, background: '#eef2ff', fontWeight: '800', color: '#3730a3', borderBottom: 'none' }}>
+            <td colSpan={showTarimas ? 4 : 3} style={{ ...TD, background: '#eef2ff', fontWeight: '800', color: '#3730a3', borderBottom: 'none' }}>
               TOTALES
             </td>
             <td style={{ ...TD, background: '#eef2ff', fontWeight: '600', color: '#3730a3', borderBottom: 'none' }}>

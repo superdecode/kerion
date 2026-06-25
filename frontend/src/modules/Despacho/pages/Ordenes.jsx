@@ -889,7 +889,9 @@ export default function Ordenes() {
                           {dateVal ? (
                             <div className="flex flex-col leading-tight">
                               <span className="text-xs text-warm-700">{fmtDate(dateVal)}</span>
-                              <span className="text-[10px] text-warm-400">{fmtTimeShort(dateVal)}</span>
+                              {String(dateVal).length > 10 && (
+                                <span className="text-[10px] text-warm-400">{fmtTimeShort(dateVal)}</span>
+                              )}
                             </div>
                           ) : <span className="text-warm-300 text-xs">—</span>}
                         </td>
