@@ -6,7 +6,7 @@ import { fmtTimeShort, fmtDateShort } from '../core/utils/dateFormat'
 import {
   ScanBarcode, Package, RotateCcw, ArrowUpRight,
   AlertTriangle, Settings2,
-  Truck, Clock, LayoutGrid, PackageCheck,
+  Truck, Clock, LayoutGrid, PackageCheck, ShieldOff,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -268,9 +268,14 @@ export default function GlobalDashboard() {
             })}
 
             {modules.length === 0 && (
-              <div className="col-span-full flex flex-col items-center justify-center py-16 text-warm-300 gap-3">
-                <LayoutGrid size={32} className="opacity-30" />
-                <p className="text-sm font-medium">Sin módulos disponibles</p>
+              <div className="col-span-full flex flex-col items-center justify-center py-20 gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-warm-100 flex items-center justify-center">
+                  <ShieldOff className="w-8 h-8 text-warm-400" />
+                </div>
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-semibold text-warm-700">Sin acceso a módulos</p>
+                  <p className="text-xs text-warm-400 max-w-xs">No tienes permisos asignados. Solicita acceso a tu administrador.</p>
+                </div>
               </div>
             )}
           </motion.div>

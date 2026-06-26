@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './core/stores/authStore'
-import { MODULE_ROUTES } from './core/constants/moduleRoutes'
 
 // Layout
 import MainLayout from './core/components/layout/MainLayout'
@@ -103,10 +102,6 @@ const queryClient = new QueryClient({
 
 
 function SmartRedirect() {
-  const { canView } = useAuthStore()
-  if (canView('global.inicio')) return <GlobalDashboard />
-  const first = MODULE_ROUTES.find(r => r.path !== '/' && canView(r.module))
-  if (first) return <Navigate to={first.path} replace />
   return <GlobalDashboard />
 }
 

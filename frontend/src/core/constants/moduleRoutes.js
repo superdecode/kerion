@@ -6,7 +6,6 @@
  * Paths use lowercase to match the <Route path="..."> definitions in App.jsx.
  */
 export const MODULE_ROUTES = [
-  { module: 'global.inicio',              path: '/' },
   { module: 'dropscan.dashboard',         path: '/dashboard?module=dropscan' },
   { module: 'dropscan.escaneo',           path: '/dropscan/escaneo' },
   { module: 'dropscan.tarimas',           path: '/dropscan/tarimas' },
