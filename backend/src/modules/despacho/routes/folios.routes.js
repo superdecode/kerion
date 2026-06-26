@@ -222,21 +222,91 @@ router.post('/',
         })
       }
 
-      const { conductor_id = null, unidad_id = null, notas = '', tipo = 'por_orden', destino = null } = req.body
+      const { conductor_id = null, unidad_id = null, notas = '', tipo = 'por_orden', destino = null, orders = [] } = req.body
       const fecha_salida = req.body.fecha_salida === '' ? null : (req.body.fecha_salida ?? null)
       if (!conductor_id || !unidad_id || !fecha_salida) {
         return res.status(400).json({ error: 'Conductor, unidad y fecha de salida son obligatorios para crear el folio' })
       }
       const folio_numero = await generateFolioNumero(req)
-      const result = await req.tQuery(
-        `INSERT INTO dispatch_folios (tenant_id, folio_numero, conductor_id, unidad_id, operador_id, fecha_salida, notas, tipo, destino)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         RETURNING *`,
-        [req.tenantId, folio_numero, conductor_id, unidad_id, req.user.id, fecha_salida, notas || null, tipo, destino || null]
-      )
-      auditLog(req, 'DESPACHO_FOLIO_CREATE', 'dispatch_folio', result.rows[0].id, { folio_numero, tipo })
-      res.status(201).json({ folio: result.rows[0] })
+      const result = await req.tTransaction(async (client) => {
+        const folioInsert = await client.query(
+          `INSERT INTO dispatch_folios (tenant_id, folio_numero, conductor_id, unidad_id, operador_id, fecha_salida, notas, tipo, destino)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           RETURNING *`,
+          [req.tenantId, folio_numero, conductor_id, unidad_id, req.user.id, fecha_salida, notas || null, tipo, destino || null]
+        )
+        const folio = folioInsert.rows[0]
+
+        const normalizedOrders = Array.isArray(orders)
+          ? orders
+              .map((order) => ({
+                outbound_order_no: String(order?.outbound_order_no || '').trim(),
+                destinatario: order?.destinatario || null,
+                bultos: Number.isFinite(Number(order?.bultos)) ? Number(order.bultos) : 0,
+                bultos_esperados: order?.bultos_esperados ?? null,
+                notas: typeof order?.notas === 'string'
+                  ? order.notas
+                  : order?.notas
+                    ? JSON.stringify(order.notas)
+                    : null,
+                outbound_date: order?.outbound_date || null,
+              }))
+              .filter(order => order.outbound_order_no)
+          : []
+
+        if (normalizedOrders.length > 0) {
+          const orderNos = [...new Set(normalizedOrders.map(order => order.outbound_order_no))]
+          const conflictRes = await client.query(
+            `SELECT fo.outbound_order_no, f.folio_numero
+             FROM dispatch_folio_orders fo
+             JOIN dispatch_folios f ON f.id = fo.folio_id
+             WHERE fo.tenant_id = $1
+               AND fo.outbound_order_no = ANY($2::text[])
+               AND f.estado IN ('borrador','en_proceso')
+               AND f.deleted_at IS NULL`,
+            [req.tenantId, orderNos]
+          )
+          if (conflictRes.rows.length > 0) {
+            const activeFolio = conflictRes.rows[0].folio_numero
+            const blockedCodes = conflictRes.rows.map(row => row.outbound_order_no).join(', ')
+            const error = new Error(`Las órdenes ${blockedCodes} ya están asignadas al folio activo ${activeFolio}.`)
+            error.status = 409
+            error.code = 'ORDER_ALREADY_IN_ACTIVE_FOLIO'
+            error.folio_numero = activeFolio
+            error.codes = conflictRes.rows.map(row => row.outbound_order_no)
+            throw error
+          }
+
+          for (const order of normalizedOrders) {
+            await client.query(
+              `INSERT INTO dispatch_folio_orders
+                 (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas, outbound_date)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+               ON CONFLICT (tenant_id, folio_id, outbound_order_no) DO NOTHING`,
+              [req.tenantId, folio.id, order.outbound_order_no, order.destinatario, order.bultos, order.bultos_esperados, order.notas, order.outbound_date]
+            )
+          }
+        }
+
+        await client.query(
+          `UPDATE dispatch_folios SET estado = CASE WHEN $3::int > 0 THEN 'en_proceso' ELSE estado END, updated_at = now()
+           WHERE id = $1 AND tenant_id = $2`,
+          [folio.id, req.tenantId, normalizedOrders.length]
+        )
+
+        return { folio, orders_added: normalizedOrders.length }
+      })
+      auditLog(req, 'DESPACHO_FOLIO_CREATE', 'dispatch_folio', result.folio.id, { folio_numero, tipo, orders_added: result.orders_added })
+      res.status(201).json({ folio: result.folio, orders_added: result.orders_added })
     } catch (error) {
+      if (error.status === 409) {
+        return res.status(409).json({
+          error: error.message,
+          code: error.code || 'ORDER_ALREADY_IN_ACTIVE_FOLIO',
+          folio_numero: error.folio_numero || null,
+          codes: error.codes || [],
+        })
+      }
       console.error('Create folio error:', error)
       res.status(500).json({ error: 'Error creando folio' })
     }

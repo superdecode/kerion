@@ -10,7 +10,7 @@ import UserMenu from '../../../core/components/layout/UserMenu'
 import FolioTypeModal from '../components/FolioTypeModal'
 import ValidarPorOrden from '../components/ValidarPorOrden'
 import ValidarPorDestino from '../components/ValidarPorDestino'
-import { createFolio, bulkAddOrders, getConductores, getUnidades, getOutboundList } from '../services/despachoService'
+import { createFolio, getConductores, getUnidades, getOutboundList } from '../services/despachoService'
 
 const TABS_KEY = 'kirion_despacho_tabs'
 const ACTIVE_TAB_KEY = 'kirion_despacho_active_tab'
@@ -173,12 +173,9 @@ export default function Validar() {
         unidad_id: payload.unidad_id,
         fecha_salida: payload.fecha_salida,
         destino: payload.destino ?? null,
+        orders: payload.orders ?? [],
       })
-      const folio = created.folio
-      if (payload.tipo === 'por_destino' && payload.orders?.length > 0) {
-        await bulkAddOrders(folio.id, payload.orders)
-      }
-      return folio
+      return created.folio
     },
     onSuccess: (folio) => {
       const newTab = {
