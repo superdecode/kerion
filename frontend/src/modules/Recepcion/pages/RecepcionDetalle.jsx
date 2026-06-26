@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Copy, Check, PackageCheck, ScanBarcode, Printer,
   Download, Trash2, CheckCircle2, Clock, Search, X,
-  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, MapPin, Plus,
+  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, AlertTriangle, MapPin, Plus,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import TablePagination from '../../../core/components/common/TablePagination'
@@ -28,6 +28,7 @@ const ESTADO_META = {
   en_validacion:        { cls: 'bg-sky-100 text-sky-700' },
   completo:             { cls: 'bg-success-100 text-success-700' },
   parcial:              { cls: 'bg-warning-100 text-warning-700' },
+  anormal:              { cls: 'bg-danger-100 text-danger-700' },
   cancelado:            { cls: 'bg-danger-100 text-danger-700' },
 }
 
@@ -198,7 +199,7 @@ export default function RecepcionDetalle() {
 
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
-    queryFn: () => getScanEvents(id),
+    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1 }),
     enabled: canQueryRecepcion && Boolean(data?.order) && activeTab === 'validacion',
     retry: false,
     staleTime: STALE.SHORT,
@@ -309,7 +310,8 @@ export default function RecepcionDetalle() {
   const linesTotal = Number(linesMeta.total ?? lines.length)
 
   const totalBase = Number(order.total_cajas || 0) > 0 ? Number(order.total_cajas) : Number(linesMeta.total_all || lines.length)
-  const validadasFromOrder = Number(order.cajas_validadas || 0)
+  const validadasFromOrder = Number(order.cajas_registradas ?? order.cajas_validadas ?? 0)
+  const forzadasFromOrder = Number(order.cajas_forzadas || 0)
   const lineStatusCounts = useMemo(() => {
     if (linesMeta.status_counts) {
       return {
@@ -606,8 +608,15 @@ export default function RecepcionDetalle() {
               <div className="inline-flex items-center gap-1.5 rounded-full border border-success-200 bg-success-50 px-2.5 py-1 shadow-sm">
                 <CheckCircle2 className="w-3 h-3 text-success-500 shrink-0" />
                 <span className="text-xs font-bold text-success-700 tabular-nums">{validadas}</span>
-                <span className="text-[10px] font-medium text-success-600">{t('rec.cajas_validadas')}</span>
+                <span className="text-[10px] font-medium text-success-600">{order.estado === 'anormal' ? t('rec.cajas_registradas') : t('rec.cajas_validadas')}</span>
               </div>
+              {order.estado === 'anormal' && (
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-danger-200 bg-danger-50 px-2.5 py-1 shadow-sm">
+                  <AlertTriangle className="w-3 h-3 text-danger-500 shrink-0" />
+                  <span className="text-xs font-bold text-danger-700 tabular-nums">{forzadasFromOrder}</span>
+                  <span className="text-[10px] font-medium text-danger-600">{t('rec.cajas_forzadas')}</span>
+                </div>
+              )}
               {pendientes > 0 && (
                 <div className="inline-flex items-center gap-1.5 rounded-full border border-warm-200 bg-warm-50 px-2.5 py-1 shadow-sm">
                   <Clock className="w-3 h-3 text-warm-400 shrink-0" />

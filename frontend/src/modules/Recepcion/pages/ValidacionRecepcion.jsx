@@ -16,7 +16,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
-import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteScanEvent, getScanEvents, relocateScanEvents } from '../services/recepcionService'
+import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteScanEvent, getScanEvents, relocateScanEvents, getNovedadTipos, createNovedad } from '../services/recepcionService'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { STALE } from '../../../core/constants/queryConfig'
@@ -198,6 +198,7 @@ export default function ValidacionRecepcion() {
   const [pendingDeleteEventId, setPendingDeleteEventId] = useState(null)
   const [dupModal, setDupModal] = useState({ open: false, code: null, entry: null })
   const [rejectModal, setRejectModal] = useState({ open: false, code: null, message: null, reason: null })
+  const [forceModal, setForceModal] = useState({ open: false, code: '', tipo: '', ubicacion: '' })
   const [showTarimaConfirm, setShowTarimaConfirm] = useState(false)
   const [tarimaSearch, setTarimaSearch] = useState('')
   const [tarimaFilter, setTarimaFilter] = useState(null)
@@ -261,6 +262,14 @@ export default function ValidacionRecepcion() {
   })
   const serverEvents = eventsData?.events ?? []
 
+  const { data: tiposData } = useQuery({
+    queryKey: ['recepcion-novedad-tipos'],
+    queryFn: getNovedadTipos,
+    enabled: canQueryRecepcion && Boolean(orderData?.order),
+    retry: false,
+    staleTime: STALE.MEDIUM,
+  })
+
   const order    = orderData?.order ?? null
   const lines    = orderData?.lines ?? []
   const pendingRecepcionScans = useMemo(() =>
@@ -302,8 +311,10 @@ export default function ValidacionRecepcion() {
     [lines, localValidationScans]
   )
   const correctHistoryCount = correctHistory.length
-  const total    = Math.max(Number(order?.total_cajas || 0), effectiveLines.length)
-  const validadas  = Math.max(effectiveLines.filter(l => l.estado_validacion === 'validada').length, Number(order?.cajas_validadas || 0))
+  const total = Math.max(Number(order?.total_cajas || 0), effectiveLines.length)
+  const totalRegistradas = Number(order?.cajas_registradas ?? order?.cajas_validadas ?? 0)
+  const totalForzadas = Number(order?.cajas_forzadas ?? 0)
+  const validadas = Math.max(totalRegistradas, effectiveLines.filter(l => l.estado_validacion === 'validada').length)
   const faltantes  = effectiveLines.filter(l => l.estado_validacion === 'faltante').length
   const pendientes = Math.max(total - validadas - faltantes, 0)
   const progressPct = total > 0 ? Math.min(100, Math.round((validadas / total) * 100)) : 0
@@ -659,7 +670,13 @@ export default function ValidacionRecepcion() {
               if (!cur) return cur
               return {
                 ...cur,
-                order: { ...cur.order, cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0, estado: data.estado || cur.order?.estado },
+                order: {
+                  ...cur.order,
+                  cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0,
+                  cajas_forzadas: data.cajas_forzadas ?? cur.order?.cajas_forzadas ?? 0,
+                  cajas_registradas: data.cajas_registradas ?? cur.order?.cajas_registradas ?? cur.order?.cajas_validadas ?? 0,
+                  estado: data.estado || cur.order?.estado,
+                },
                 lines: (cur.lines || []).map(l => l.id === data.line.id
                   ? { ...l, estado_validacion: 'validada', validated_at: ev.scanned_at, validated_by_nombre: ev.scanned_by_nombre || l.validated_by_nombre }
                   : l),
@@ -692,7 +709,13 @@ export default function ValidacionRecepcion() {
         if (!cur) return cur
         return {
           ...cur,
-          order: { ...cur.order, cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0, estado: data.estado || cur.order?.estado },
+          order: {
+            ...cur.order,
+            cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0,
+            cajas_forzadas: data.cajas_forzadas ?? cur.order?.cajas_forzadas ?? 0,
+            cajas_registradas: data.cajas_registradas ?? cur.order?.cajas_registradas ?? cur.order?.cajas_validadas ?? 0,
+            estado: data.estado || cur.order?.estado,
+          },
           lines: (cur.lines || []).map(l => l.id === data.lineId
             ? { ...l, estado_validacion: 'pendiente', validated_at: null, validated_by_nombre: null }
             : l),
@@ -740,6 +763,29 @@ export default function ValidacionRecepcion() {
     onError: () => toast.error(t('toast.error')),
   })
 
+  const forceEntryMut = useMutation({
+    mutationFn: (payload) => createNovedad(id, payload),
+    onSuccess: (data) => {
+      const nextOrder = data?.order || null
+      qc.setQueryData(['recepcion-order', id], (cur) => {
+        if (!cur) return cur
+        return {
+          ...cur,
+          order: nextOrder ? { ...cur.order, ...nextOrder } : cur.order,
+        }
+      })
+      qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
+      toast.success(t('rec.val.forceEntry.success'))
+      setForceModal({ open: false, code: '', tipo: '', ubicacion: '' })
+      setRejectModal({ open: false, code: null, message: null, reason: null })
+      setDupModal({ open: false, code: null, entry: null })
+      refocus()
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
   async function persistTarimaAssignments(nextMap, nextEmptyTarimas = savedEmptyTarimas) {
     const nextConfig = {
       ...buildValidationConfig(),
@@ -770,6 +816,16 @@ export default function ValidacionRecepcion() {
     setShowTarimaConfirm(false)
     refocus()
   }
+
+  const openForceEntryModal = useCallback((code) => {
+    const tipos = tiposData?.tipos || []
+    setForceModal({
+      open: true,
+      code: code || '',
+      tipo: tipos[0]?.nombre || '',
+      ubicacion: '',
+    })
+  }, [tiposData?.tipos])
 
 
   const handleKeyDown = (e) => {
@@ -864,9 +920,13 @@ export default function ValidacionRecepcion() {
             if (matchedLine) {
               qc.setQueryData(['recepcion-order', id], (cur) => {
                 if (!cur) return cur
-                return {
-                  ...cur,
-                  order: { ...cur.order, cajas_validadas: (cur.order?.cajas_validadas || 0) + 1 },
+              return {
+                ...cur,
+                  order: {
+                    ...cur.order,
+                    cajas_validadas: (cur.order?.cajas_validadas || 0) + 1,
+                    cajas_registradas: (cur.order?.cajas_registradas || cur.order?.cajas_validadas || 0) + 1,
+                  },
                   lines: (cur.lines || []).map(l =>
                     l.id === matchedLine.id
                       ? { ...l, estado_validacion: 'validada', validated_at: new Date().toISOString(), validated_by_nombre: '—' }
@@ -1515,7 +1575,7 @@ export default function ValidacionRecepcion() {
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-center rounded-xl border border-success-100 bg-success-50 py-2">
                   <p className="text-2xl sm:text-3xl font-black text-success-700 tabular-nums">{validadas}</p>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-success-600 mt-0.5">{t('rec.cajas_validadas')}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-success-600 mt-0.5">{order?.estado === 'anormal' ? t('rec.cajas_registradas') : t('rec.cajas_validadas')}</p>
                 </div>
                 <div className="text-center rounded-xl border border-warm-100 bg-warm-50 py-2">
                   <p className="text-2xl sm:text-3xl font-black text-warm-600 tabular-nums">{pendientes}</p>
@@ -1526,6 +1586,12 @@ export default function ValidacionRecepcion() {
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-danger-500 mt-0.5">{t('rec.cajas_faltantes')}</p>
                 </div>
               </div>
+              {order?.estado === 'anormal' && (
+                <div className="mt-2.5 flex items-center gap-2 bg-danger-50 border border-danger-200 text-danger-700 rounded-xl px-3 py-2 text-sm font-semibold">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {t('rec.status.anormal')}
+                </div>
+              )}
               {progressPct >= 100 && (
                 <div className="mt-2.5 flex items-center gap-2 bg-success-50 border border-success-200 text-success-700 rounded-xl px-3 py-2 text-sm font-semibold">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -2151,7 +2217,14 @@ export default function ValidacionRecepcion() {
         icon={AlertCircle}
         size="sm"
         footer={
-          <div className="flex justify-end w-full">
+          <div className="flex w-full justify-end gap-2">
+            <button
+              onClick={() => openForceEntryModal(dupModal.code)}
+              className="btn-ghost"
+              disabled={!dupModal.code}
+            >
+              {t('rec.val.forceEntry.btn')}
+            </button>
             <button onClick={() => { setDupModal({ open: false, code: null, entry: null }); refocus() }} className="btn-primary">
               {t('rec.val.dup.confirm')}
             </button>
@@ -2412,7 +2485,14 @@ export default function ValidacionRecepcion() {
         icon={XCircle}
         size="sm"
         footer={
-          <div className="flex justify-end w-full">
+          <div className="flex w-full justify-end gap-2">
+            <button
+              onClick={() => openForceEntryModal(rejectModal.code)}
+              className="btn-ghost"
+              disabled={!rejectModal.code}
+            >
+              {t('rec.val.forceEntry.btn')}
+            </button>
             <button onClick={() => { setRejectModal({ open: false, code: null, message: null, reason: null }); refocus() }} className="btn-danger">
               {t('rec.val.reject.confirm')}
             </button>
@@ -2430,6 +2510,72 @@ export default function ValidacionRecepcion() {
             )}
           </div>
           <p className="text-xs text-warm-500 leading-relaxed">{t('rec.val.reject.hint')}</p>
+        </div>
+      </Modal>
+
+      {/* ── Force entry modal ── */}
+      <Modal
+        isOpen={forceModal.open}
+        onClose={() => setForceModal({ open: false, code: '', tipo: '', ubicacion: '' })}
+        title={t('rec.val.forceEntry.title')}
+        icon={AlertTriangle}
+        size="sm"
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <button
+              onClick={() => setForceModal({ open: false, code: '', tipo: '', ubicacion: '' })}
+              className="btn-ghost"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={() => forceEntryMut.mutate({
+                tipo: forceModal.tipo,
+                codigo: forceModal.code,
+                ubicacion: forceModal.ubicacion || null,
+              })}
+              disabled={!forceModal.tipo || forceEntryMut.isPending}
+              className="btn-primary disabled:opacity-50"
+            >
+              {forceEntryMut.isPending ? t('common.loading') : t('rec.val.forceEntry.confirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">{t('rec.val.forceEntry.helper')}</p>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-warm-600">{t('rec.val.forceEntry.tipo')}</label>
+            <select
+              value={forceModal.tipo}
+              onChange={e => setForceModal(prev => ({ ...prev, tipo: e.target.value }))}
+              className="w-full rounded-xl border border-warm-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">{t('rec.otros.select_tipo')}</option>
+              {(tiposData?.tipos || []).map((tipo) => (
+                <option key={tipo.id} value={tipo.nombre}>{tipo.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-warm-600">{t('rec.val.forceEntry.codigo')}</label>
+            <input
+              value={forceModal.code}
+              onChange={e => setForceModal(prev => ({ ...prev, code: e.target.value }))}
+              className="w-full rounded-xl border border-warm-200 bg-white px-3 py-2 text-sm font-mono"
+              placeholder={t('rec.val.forceEntry.codigo_placeholder')}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-warm-600">{t('rec.val.forceEntry.ubicacion')}</label>
+            <input
+              value={forceModal.ubicacion}
+              onChange={e => setForceModal(prev => ({ ...prev, ubicacion: e.target.value.toUpperCase() }))}
+              className="w-full rounded-xl border border-warm-200 bg-white px-3 py-2 text-sm font-mono"
+              placeholder={t('rec.val.forceEntry.ubicacion_placeholder')}
+            />
+          </div>
+          <p className="text-[11px] text-warm-500 leading-relaxed">{t('rec.val.forceEntry.ubicacion_hint')}</p>
         </div>
       </Modal>
 

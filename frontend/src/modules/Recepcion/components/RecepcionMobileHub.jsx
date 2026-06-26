@@ -13,6 +13,7 @@ const ESTADO_META = {
   en_validacion:        { cls: 'bg-sky-100 text-sky-700' },
   completo:             { cls: 'bg-success-100 text-success-700' },
   parcial:              { cls: 'bg-warning-100 text-warning-700' },
+  anormal:              { cls: 'bg-danger-100 text-danger-700' },
   cancelado:            { cls: 'bg-danger-100 text-danger-700' },
 }
 
@@ -26,7 +27,8 @@ function EstadoBadge({ estado, t }) {
 }
 
 function MobileOrderCard({ order, t, onValidate, onView, highlight = false }) {
-  const pct = order.total_cajas > 0 ? Math.round((order.cajas_validadas / order.total_cajas) * 100) : 0
+  const counted = order.cajas_registradas ?? order.cajas_validadas ?? 0
+  const pct = order.total_cajas > 0 ? Math.round((counted / order.total_cajas) * 100) : 0
   return (
     <div className={`rounded-2xl border overflow-hidden transition-all ${
       highlight
@@ -63,7 +65,7 @@ function MobileOrderCard({ order, t, onValidate, onView, highlight = false }) {
         {order.total_cajas > 0 && (
           <div>
             <p className="text-[9px] text-warm-400 font-bold uppercase tracking-wider mb-0.5">Cajas</p>
-            <p className="font-mono text-[11px] text-warm-700 tabular-nums">{order.cajas_validadas}/{order.total_cajas}</p>
+            <p className="font-mono text-[11px] text-warm-700 tabular-nums">{counted}/{order.total_cajas}</p>
           </div>
         )}
         <div>

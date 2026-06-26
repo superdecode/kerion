@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
+import { refreshRecepcionOrderState } from '../utils/orderState.js'
 
 const router = Router()
 
@@ -191,26 +192,16 @@ router.post('/orders/:id/scan',
         const matchField = line ? 'custom_box_barcode' : null
 
         if (!line && previousSuccess) {
-          const eventRes = await client.query(
-            `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
-             VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
-             RETURNING *`,
-            [
-              req.tenantId,
-              req.params.id,
-              previousSuccess.line_id || null,
-              normalizedCode || rawCode,
-              previousSuccess.match_field || null,
-              previousSuccess.sku_asociado || null,
-              req.user.id,
-              ubicacion || null,
-            ]
-          )
           return {
             resultado: 'duplicado',
             codigo: normalizedCode || rawCode,
             line,
-            event: eventRes.rows[0],
+            event: {
+              resultado: 'duplicado',
+              codigo_escaneado: normalizedCode || rawCode,
+              ubicacion: ubicacion || null,
+              scanned_by_nombre: req.fullUser?.nombre_completo || null,
+            },
             motivo: 'codigo_ya_validado',
             mensaje: 'Todas las cajas esperadas para este código ya fueron validadas.',
             previous_event: {
@@ -223,16 +214,15 @@ router.post('/orders/:id/scan',
         }
 
         if (!line) {
-          const eventRes = await client.query(
-            `INSERT INTO inbound_scan_events (tenant_id, order_id, codigo_escaneado, resultado, scanned_by, ubicacion)
-             VALUES ($1,$2,$3,'no_encontrado',$4,$5)
-             RETURNING *`,
-            [req.tenantId, req.params.id, normalizedCode || rawCode, req.user.id, ubicacion || null]
-          )
           return {
             resultado: 'no_encontrado',
             codigo: normalizedCode || rawCode,
-            event: eventRes.rows[0],
+            event: {
+              resultado: 'no_encontrado',
+              codigo_escaneado: normalizedCode || rawCode,
+              ubicacion: ubicacion || null,
+              scanned_by_nombre: req.fullUser?.nombre_completo || null,
+            },
             motivo: 'codigo_no_pertenece_orden',
             mensaje: 'El código no existe en las líneas esperadas de esta orden de recepción.',
           }
@@ -272,26 +262,16 @@ router.post('/orders/:id/scan',
            RETURNING *`,
           [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
         )
-        const statsRes = await client.query(
-          `SELECT COUNT(*) FILTER (WHERE estado_validacion='validada') AS validadas, COUNT(*) AS total
-           FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2`,
-          [req.params.id, req.tenantId]
-        )
-        const validadas = parseInt(statsRes.rows[0].validadas)
-        const total = parseInt(statsRes.rows[0].total)
-        const newEstado = validadas === total ? 'completo' : 'en_validacion'
-
-        await client.query(
-          `UPDATE inbound_orders SET cajas_validadas=$3, estado=$4, updated_at=now() WHERE id=$1 AND tenant_id=$2`,
-          [req.params.id, req.tenantId, validadas, newEstado]
-        )
+        const orderState = await refreshRecepcionOrderState(client, req.tenantId, req.params.id)
 
         return {
           resultado: 'correcto',
           codigo: normalizedCode || rawCode,
           line,
-          cajas_validadas: validadas,
-          estado: newEstado,
+          cajas_validadas: orderState?.cajas_validadas || 0,
+          cajas_forzadas: orderState?.cajas_forzadas || 0,
+          cajas_registradas: orderState?.cajas_registradas || 0,
+          estado: orderState?.estado || 'en_validacion',
           event: eventRes.rows[0],
         }
       })
@@ -418,37 +398,16 @@ router.delete('/orders/:id/scan-events/last-validation',
         [event.line_id, req.tenantId]
       )
 
-      const statsRes = await req.tQuery(
-        `SELECT
-           COUNT(*) FILTER (WHERE estado_validacion='validada') AS validadas,
-           COUNT(*) FILTER (WHERE estado_validacion='faltante') AS faltantes,
-           COUNT(*) AS total
-         FROM inbound_lines
-         WHERE order_id=$1 AND tenant_id=$2`,
-        [req.params.id, req.tenantId]
-      )
-
-      const validadas = parseInt(statsRes.rows[0].validadas || 0, 10)
-      const faltantes = parseInt(statsRes.rows[0].faltantes || 0, 10)
-      const total = parseInt(statsRes.rows[0].total || 0, 10)
-
-      let newEstado = 'pendiente_validacion'
-      if (validadas > 0 && validadas === total) newEstado = 'completo'
-      else if (validadas > 0 || faltantes > 0) newEstado = 'en_validacion'
-
-      await req.tQuery(
-        `UPDATE inbound_orders
-         SET cajas_validadas=$3, estado=$4, updated_at=now()
-         WHERE id=$1 AND tenant_id=$2`,
-        [req.params.id, req.tenantId, validadas, newEstado]
-      )
+      const orderState = await refreshRecepcionOrderState(req, req.tenantId, req.params.id)
 
       res.json({
         ok: true,
         removedEvent: event,
         lineId: event.line_id,
-        cajas_validadas: validadas,
-        estado: newEstado,
+        cajas_validadas: orderState?.cajas_validadas || 0,
+        cajas_forzadas: orderState?.cajas_forzadas || 0,
+        cajas_registradas: orderState?.cajas_registradas || 0,
+        estado: orderState?.estado || 'pendiente_validacion',
       })
     } catch (err) {
       console.error('[recepcion] undo last validation:', err.message)
@@ -484,30 +443,17 @@ router.delete('/orders/:id/scan-events/:eventId',
         )
       }
 
-      const statsRes = await req.tQuery(
-        `SELECT
-           COUNT(*) FILTER (WHERE estado_validacion='validada') AS validadas,
-           COUNT(*) FILTER (WHERE estado_validacion='faltante') AS faltantes,
-           COUNT(*) AS total
-         FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2`,
-        [req.params.id, req.tenantId]
-      )
+      const orderState = await refreshRecepcionOrderState(req, req.tenantId, req.params.id)
 
-      const validadas = parseInt(statsRes.rows[0].validadas || 0, 10)
-      const faltantes = parseInt(statsRes.rows[0].faltantes || 0, 10)
-      const total = parseInt(statsRes.rows[0].total || 0, 10)
-
-      let newEstado = 'pendiente_validacion'
-      if (validadas > 0 && validadas === total) newEstado = 'completo'
-      else if (validadas > 0 || faltantes > 0) newEstado = 'en_validacion'
-
-      await req.tQuery(
-        `UPDATE inbound_orders SET cajas_validadas=$3, estado=$4, updated_at=now()
-         WHERE id=$1 AND tenant_id=$2`,
-        [req.params.id, req.tenantId, validadas, newEstado]
-      )
-
-      res.json({ ok: true, removedEvent: event, lineId: event.line_id, cajas_validadas: validadas, estado: newEstado })
+      res.json({
+        ok: true,
+        removedEvent: event,
+        lineId: event.line_id,
+        cajas_validadas: orderState?.cajas_validadas || 0,
+        cajas_forzadas: orderState?.cajas_forzadas || 0,
+        cajas_registradas: orderState?.cajas_registradas || 0,
+        estado: orderState?.estado || 'pendiente_validacion',
+      })
     } catch (err) {
       console.error('[recepcion] delete scan event:', err.message)
       res.status(500).json({ error: 'Error al eliminar registro de escaneo' })
@@ -545,12 +491,23 @@ router.post('/orders/:id/novedades',
       const { tipo, codigo, ubicacion } = req.body
       if (!tipo) return res.status(400).json({ error: 'Tipo requerido' })
       const normalizedCodigo = normalizeScanCode(codigo)
-      const result = await req.tQuery(
-        `INSERT INTO inbound_novedades (tenant_id, order_id, tipo, codigo, ubicacion, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [req.tenantId, req.params.id, tipo, normalizedCodigo || null, ubicacion?.trim() || null, req.user.id]
+      const tipoRes = await req.tQuery(
+        `SELECT id, nombre
+         FROM inbound_novedad_tipos
+         WHERE tenant_id=$1 AND activo=true AND LOWER(nombre)=LOWER($2)
+         LIMIT 1`,
+        [req.tenantId, String(tipo).trim()]
       )
-      res.status(201).json({ novedad: result.rows[0] })
+      if (!tipoRes.rows.length) {
+        return res.status(400).json({ error: 'Tipo de anomalía inválido para este tenant' })
+      }
+      const result = await req.tQuery(
+        `INSERT INTO inbound_novedades (tenant_id, order_id, tipo, codigo, ubicacion, created_by, es_forzada, cuenta_conteo)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [req.tenantId, req.params.id, tipoRes.rows[0].nombre, normalizedCodigo || null, ubicacion?.trim() || null, req.user.id, true, true]
+      )
+      const orderState = await refreshRecepcionOrderState(req, req.tenantId, req.params.id)
+      res.status(201).json({ novedad: result.rows[0], order: orderState?.order || null })
     } catch (err) {
       console.error('[recepcion] novedad create:', err.message, '\n', err.stack)
       res.status(500).json({ error: 'Error al registrar novedad' })
@@ -568,7 +525,8 @@ router.delete('/orders/:id/novedades/:nid',
         `DELETE FROM inbound_novedades WHERE id=$1 AND order_id=$2 AND tenant_id=$3`,
         [req.params.nid, req.params.id, req.tenantId]
       )
-      res.json({ ok: true })
+      const orderState = await refreshRecepcionOrderState(req, req.tenantId, req.params.id)
+      res.json({ ok: true, order: orderState?.order || null })
     } catch (err) {
       res.status(500).json({ error: 'Error al eliminar novedad' })
     }

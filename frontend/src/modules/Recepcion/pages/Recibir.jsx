@@ -31,6 +31,7 @@ const ESTADO_META = {
   en_validacion:        { cls: 'bg-sky-100 text-sky-700' },
   completo:             { cls: 'bg-success-100 text-success-700' },
   parcial:              { cls: 'bg-warning-100 text-warning-700' },
+  anormal:              { cls: 'bg-danger-100 text-danger-700' },
   cancelado:            { cls: 'bg-danger-100 text-danger-700' },
 }
 
@@ -173,7 +174,7 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
                   <th className={TH}>{t('rec.tracking_no')}</th>
                   <th className={TH}>{t('rec.reference_no')}</th>
                   <th className={`${TH} text-right`}>{t('rec.total_cajas')}</th>
-                  <th className={`${TH} text-right`}>{t('rec.cajas_validadas')}</th>
+                  <th className={`${TH} text-right`}>{t('rec.cajas_registradas')}</th>
                   <th className={TH}>{t('common.status')}</th>
                   <th className={`${TH} text-right`}>{t('common.actions')}</th>
                 </tr>
@@ -197,7 +198,7 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
                     <td className="group px-3 py-2.5 font-mono text-xs text-warm-600"><CopyCell value={order.tracking_no} muted /></td>
                     <td className="group px-3 py-2.5 text-xs text-warm-600"><CopyCell value={order.reference_no} muted /></td>
                     <td className="px-3 py-2.5 text-right text-xs font-medium text-warm-700">{order.total_cajas}</td>
-                    <td className="px-3 py-2.5 text-right text-xs font-medium text-success-700">{order.cajas_validadas}</td>
+                    <td className="px-3 py-2.5 text-right text-xs font-medium text-success-700">{order.cajas_registradas ?? order.cajas_validadas}</td>
                     <td className="px-3 py-2.5"><EstadoBadge estado={order.estado} t={t} /></td>
                     <td className="px-3 py-2.5 text-right" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center gap-1 justify-end">
@@ -377,6 +378,7 @@ export default function Recibir() {
     { value: 'en_validacion',        label: t('rec.status.en_validacion') },
     { value: 'completo',             label: t('rec.status.completo') },
     { value: 'parcial',              label: t('rec.status.parcial') },
+    { value: 'anormal',              label: t('rec.status.anormal') },
     { value: 'cancelado',            label: t('rec.status.cancelado') },
   ], [t])
 
@@ -411,7 +413,7 @@ export default function Recibir() {
     if (!sel.length) return
     const rows = sel.map(o => [
       o.folio, fmtDate(o.created_at), o.cliente || '', o.inbound_order_no || '', o.tracking_no || '',
-      o.reference_no || '', o.total_cajas, o.cajas_validadas,
+      o.reference_no || '', o.total_cajas, o.cajas_registradas ?? o.cajas_validadas,
       t(`rec.status.${o.estado}`), o.responsable_nombre || '',
     ])
     const ws = XLSX.utils.aoa_to_sheet([[

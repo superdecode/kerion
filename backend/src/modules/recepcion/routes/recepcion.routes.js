@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { getPermissionLevel, requirePermission } from '../../../shared/middleware/permissions.js'
 import { checkModuleLimit } from '../../middleware/usageGuard.js'
+import { getRecepcionValidationRecordCount, refreshRecepcionOrderState } from '../utils/orderState.js'
 
 const router = Router()
 
@@ -118,6 +119,12 @@ router.get('/orders',
                   SELECT COUNT(*)::int
                   FROM inbound_scan_events e
                   WHERE e.order_id = o.id AND e.tenant_id = o.tenant_id
+                    AND e.resultado = 'correcto'
+                ), 0) + COALESCE((
+                  SELECT COUNT(*)::int
+                  FROM inbound_novedades n
+                  WHERE n.order_id = o.id AND n.tenant_id = o.tenant_id
+                    AND COALESCE(n.cuenta_conteo, true) = true
                 ), 0) AS validation_records
          FROM inbound_orders o
          LEFT JOIN usuarios u ON u.id = o.responsable_id
@@ -242,13 +249,7 @@ router.patch('/lines/:id',
       if (result.rows.length === 0) return res.status(404).json({ error: 'Línea no encontrada' })
 
       const orderId = result.rows[0].order_id
-      await req.tQuery(
-        `UPDATE inbound_orders SET
-           cajas_validadas=(SELECT COUNT(*) FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2 AND estado_validacion='validada'),
-           updated_at=now()
-         WHERE id=$1 AND tenant_id=$2`,
-        [orderId, req.tenantId]
-      )
+      await refreshRecepcionOrderState(req, req.tenantId, orderId)
 
       res.json({ line: result.rows[0] })
     } catch (err) {
@@ -272,14 +273,7 @@ router.delete('/lines/:id',
       await req.tQuery(`DELETE FROM inbound_lines WHERE id=$1 AND tenant_id=$2`, [req.params.id, req.tenantId])
 
       const orderId = lineRes.rows[0].order_id
-      await req.tQuery(
-        `UPDATE inbound_orders SET
-           total_cajas=(SELECT COUNT(*) FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2),
-           cajas_validadas=(SELECT COUNT(*) FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2 AND estado_validacion='validada'),
-           updated_at=now()
-         WHERE id=$1 AND tenant_id=$2`,
-        [orderId, req.tenantId]
-      )
+      await refreshRecepcionOrderState(req, req.tenantId, orderId)
       res.json({ ok: true })
     } catch (err) {
       res.status(500).json({ error: 'Error al eliminar línea' })
@@ -299,7 +293,7 @@ router.get('/orders/search-by-code',
       }
       const c = String(code).trim()
       const result = await req.tQuery(
-        `SELECT DISTINCT o.id, o.folio, o.cliente, o.estado, o.total_cajas, o.cajas_validadas, o.created_at
+        `SELECT DISTINCT o.id, o.folio, o.cliente, o.estado, o.total_cajas, o.cajas_validadas, o.cajas_forzadas, o.cajas_registradas, o.created_at
          FROM inbound_orders o
          JOIN inbound_lines l ON l.order_id = o.id AND l.tenant_id = o.tenant_id
          WHERE o.tenant_id = $1 AND (
@@ -437,7 +431,7 @@ router.patch('/orders/:id',
   async (req, res) => {
     try {
       const { estado, validation_config } = req.body
-      const allowed = ['pendiente_validacion', 'en_validacion', 'completo', 'parcial', 'cancelado']
+      const allowed = ['pendiente_validacion', 'en_validacion', 'completo', 'parcial', 'cancelado', 'anormal']
       if (estado && !allowed.includes(estado)) return res.status(400).json({ error: 'Estado inválido' })
 
       const updates = ['updated_at=now()']
@@ -510,13 +504,7 @@ router.delete('/orders/:id',
         return res.status(404).json({ error: 'Orden no encontrada' })
       }
 
-      const validationRes = await client.query(
-        `SELECT COUNT(*)::int AS validation_records
-         FROM inbound_scan_events
-         WHERE order_id=$1 AND tenant_id=$2`,
-        [req.params.id, req.tenantId]
-      )
-      const validationRecords = Number(validationRes.rows[0]?.validation_records || 0)
+      const validationRecords = await getRecepcionValidationRecordCount(client, req.tenantId, req.params.id)
 
       if (!canForceDelete && validationRecords > 0) {
         await client.query('ROLLBACK')
