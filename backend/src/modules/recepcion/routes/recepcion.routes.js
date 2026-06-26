@@ -323,28 +323,109 @@ router.get('/orders/:id',
   authenticateToken, loadFullUser,
   requirePermission('recepcion.recibir', 'ver'),
   async (req, res) => {
+    let client
     try {
-      const [orderRes, linesRes] = await Promise.all([
-        req.tQuery(
-          `SELECT o.*, u.nombre_completo AS responsable_nombre
-           FROM inbound_orders o
-           LEFT JOIN usuarios u ON u.id = o.responsable_id
-           WHERE o.id=$1 AND o.tenant_id=$2`,
-          [req.params.id, req.tenantId]
-        ),
-        req.tQuery(
-          `SELECT l.*, u.nombre_completo AS validated_by_nombre
-           FROM inbound_lines l
-           LEFT JOIN usuarios u ON u.id = l.validated_by
-           WHERE l.order_id=$1 AND l.tenant_id=$2
-           ORDER BY l.created_at ASC`,
-          [req.params.id, req.tenantId]
-        ),
-      ])
-      if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
-      res.json({ order: orderRes.rows[0], lines: linesRes.rows })
+      const page = Math.max(1, parseInt(req.query.lines_page, 10) || 1)
+      const limit = Math.min(500, Math.max(25, parseInt(req.query.lines_limit, 10) || 100))
+      const offset = (page - 1) * limit
+      const q = String(req.query.lines_q || '').trim()
+      const sortKey = String(req.query.lines_sort_key || 'created_at')
+      const sortDir = String(req.query.lines_sort_dir || 'asc').toLowerCase() === 'desc' ? 'DESC' : 'ASC'
+      const sortColumns = {
+        box_type: 'l.box_type',
+        custom_box_barcode: 'l.custom_box_barcode',
+        sku: 'l.sku',
+        qty_per_box: 'l.qty_per_box',
+        estado_validacion: 'l.estado_validacion',
+        validated_by_nombre: 'u.nombre_completo',
+        validated_at: 'l.validated_at',
+        created_at: 'l.created_at',
+      }
+      const sortColumn = sortColumns[sortKey] || sortColumns.created_at
+
+      client = await req.tGetClient()
+
+      const orderRes = await client.query(
+        `SELECT o.*, u.nombre_completo AS responsable_nombre
+         FROM inbound_orders o
+         LEFT JOIN usuarios u ON u.id = o.responsable_id
+         WHERE o.id=$1 AND o.tenant_id=$2`,
+        [req.params.id, req.tenantId]
+      )
+      if (orderRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return res.status(404).json({ error: 'Orden no encontrada' })
+      }
+
+      const statsRes = await client.query(
+        `SELECT
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE estado_validacion='validada')::int AS validada,
+           COUNT(*) FILTER (WHERE estado_validacion='faltante')::int AS faltante,
+           COUNT(*) FILTER (WHERE estado_validacion='pendiente')::int AS pendiente
+         FROM inbound_lines
+         WHERE order_id=$1 AND tenant_id=$2`,
+        [req.params.id, req.tenantId]
+      )
+
+      const where = ['l.order_id=$1', 'l.tenant_id=$2']
+      const params = [req.params.id, req.tenantId]
+      if (q) {
+        params.push(`%${q}%`)
+        const p = `$${params.length}`
+        where.push(`(
+          l.box_type ILIKE ${p}
+          OR l.custom_box_barcode ILIKE ${p}
+          OR l.sku ILIKE ${p}
+          OR l.estado_validacion ILIKE ${p}
+          OR u.nombre_completo ILIKE ${p}
+        )`)
+      }
+      const whereClause = where.join(' AND ')
+
+      const filteredTotal = q
+        ? Number((await client.query(
+            `SELECT COUNT(*)::int AS total
+             FROM inbound_lines l
+             LEFT JOIN usuarios u ON u.id = l.validated_by
+             WHERE ${whereClause}`,
+            params
+          )).rows[0]?.total || 0)
+        : Number(statsRes.rows[0]?.total || 0)
+
+      const linesParams = [...params, limit, offset]
+      const linesRes = await client.query(
+        `SELECT l.*, u.nombre_completo AS validated_by_nombre
+         FROM inbound_lines l
+         LEFT JOIN usuarios u ON u.id = l.validated_by
+         WHERE ${whereClause}
+         ORDER BY ${sortColumn} ${sortDir} NULLS LAST, l.created_at ASC, l.id ASC
+         LIMIT $${linesParams.length - 1} OFFSET $${linesParams.length}`,
+        linesParams
+      )
+
+      await client.query('COMMIT')
+      res.json({
+        order: orderRes.rows[0],
+        lines: linesRes.rows,
+        lines_meta: {
+          page,
+          limit,
+          total: filteredTotal,
+          total_all: Number(statsRes.rows[0]?.total || 0),
+          status_counts: {
+            validada: Number(statsRes.rows[0]?.validada || 0),
+            faltante: Number(statsRes.rows[0]?.faltante || 0),
+            pendiente: Number(statsRes.rows[0]?.pendiente || 0),
+          },
+        },
+      })
     } catch (err) {
-      res.status(500).json({ error: 'Error al obtener detalle de orden' })
+      if (client) try { await client.query('ROLLBACK') } catch {}
+      console.error('[recepcion] detail:', err.message)
+      res.status(500).json({ error: 'Error al obtener detalle de orden', detalle: err.message })
+    } finally {
+      if (client) client.release()
     }
   }
 )

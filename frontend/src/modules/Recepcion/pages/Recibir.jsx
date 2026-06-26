@@ -78,6 +78,7 @@ function CopyCell({ value, className = '', muted = false }) {
 const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
   orders,
   total,
+  isLoading,
   selected,
   setSelected,
   deletableSelected,
@@ -146,7 +147,11 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
           </div>
         )}
 
-        {orders.length === 0 ? null : (
+        {isLoading ? (
+          <div className="flex min-h-[360px] items-center justify-center">
+            <LoadingSpinner size="lg" text="Cargando datos..." />
+          </div>
+        ) : orders.length === 0 ? null : (
           <div className="overflow-x-auto table-scroll">
             <table className="w-full text-sm">
               <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
@@ -230,7 +235,7 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
           </div>
         )}
 
-        {orders.length === 0 && (
+        {!isLoading && orders.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-warm-400">
             <PackageCheck className="w-10 h-10 mb-3 text-warm-200" />
             <p className="text-sm">{t('common.noData')}</p>
@@ -281,7 +286,7 @@ export default function Recibir() {
 
   const canQueryRecepcion = isAuthenticated
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['recepcion-orders', params],
     queryFn: () => listOrders(params),
     enabled: canQueryRecepcion,
@@ -362,6 +367,7 @@ export default function Recibir() {
 
   const orders = data?.orders || []
   const total = data?.total || 0
+  const loadingOrders = canQueryRecepcion && (isLoading || (isFetching && !data))
   const clienteOptions = useMemo(() =>
     (clientesData?.clientes || []).map(c => ({ value: c, label: c })),
     [clientesData?.clientes]
@@ -524,6 +530,7 @@ export default function Recibir() {
         <DesktopOrdersPanel
           orders={orders}
           total={total}
+          isLoading={loadingOrders}
           selected={selected}
           setSelected={setSelected}
           deletableSelected={deletableSelected}

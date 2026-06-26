@@ -128,6 +128,15 @@ function normalizeNovedadCode(value) {
   return normalized || ''
 }
 
+function getReadableQueryError(error) {
+  const data = error?.response?.data
+  if (data?.error) return typeof data.error === 'string' ? data.error : JSON.stringify(data.error)
+  if (error?.code === 'ERR_BACKEND_UNAVAILABLE') return 'El backend no respondió. Intenta de nuevo en unos segundos.'
+  if (error?.code === 'ERR_RATE_LIMITED') return 'La consulta fue limitada temporalmente. Intenta de nuevo en unos segundos.'
+  if (error?.message) return error.message
+  return 'No se pudo cargar la orden de recepción.'
+}
+
 export default function RecepcionDetalle() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -171,10 +180,17 @@ export default function RecepcionDetalle() {
   }, [id])
 
   const canQueryRecepcion = isAuthenticated
+  const orderQueryParams = useMemo(() => ({
+    lines_page: linePage,
+    lines_limit: linePageSize,
+    lines_q: deferredLineSearch.trim() || undefined,
+    lines_sort_key: lineSortKey,
+    lines_sort_dir: lineSortDir,
+  }), [linePage, linePageSize, deferredLineSearch, lineSortKey, lineSortDir])
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['recepcion-order', id],
-    queryFn: () => getOrder(id),
+  const { data, isLoading, isFetching, isError, error } = useQuery({
+    queryKey: ['recepcion-order', id, orderQueryParams],
+    queryFn: () => getOrder(id, orderQueryParams),
     enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.SHORT,
@@ -183,7 +199,7 @@ export default function RecepcionDetalle() {
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
     queryFn: () => getScanEvents(id),
-    enabled: canQueryRecepcion,
+    enabled: canQueryRecepcion && Boolean(data?.order) && activeTab === 'validacion',
     retry: false,
     staleTime: STALE.SHORT,
   })
@@ -191,7 +207,7 @@ export default function RecepcionDetalle() {
   const { data: novedadesData } = useQuery({
     queryKey: ['recepcion-novedades', id],
     queryFn: () => getNovedades(id),
-    enabled: canQueryRecepcion,
+    enabled: canQueryRecepcion && Boolean(data?.order) && activeTab === 'otros',
     retry: false,
     staleTime: STALE.SHORT,
   })
@@ -199,7 +215,7 @@ export default function RecepcionDetalle() {
   const { data: tiposData } = useQuery({
     queryKey: ['recepcion-novedad-tipos'],
     queryFn: getNovedadTipos,
-    enabled: canQueryRecepcion,
+    enabled: canQueryRecepcion && Boolean(data?.order) && activeTab === 'otros',
     retry: false,
     staleTime: STALE.MEDIUM,
   })
@@ -287,12 +303,20 @@ export default function RecepcionDetalle() {
 
   const order = data?.order ?? {}
   const lines = data?.lines ?? []
+  const linesMeta = data?.lines_meta ?? {}
   const events = eventsData?.events || []
   const novedades = novedadesData?.novedades || []
+  const linesTotal = Number(linesMeta.total ?? lines.length)
 
-  const totalBase = Number(order.total_cajas || 0) > 0 ? Number(order.total_cajas) : lines.length
+  const totalBase = Number(order.total_cajas || 0) > 0 ? Number(order.total_cajas) : Number(linesMeta.total_all || lines.length)
   const validadasFromOrder = Number(order.cajas_validadas || 0)
   const lineStatusCounts = useMemo(() => {
+    if (linesMeta.status_counts) {
+      return {
+        validada: Number(linesMeta.status_counts.validada || 0),
+        faltante: Number(linesMeta.status_counts.faltante || 0),
+      }
+    }
     let validada = 0
     let faltante = 0
     for (const line of lines) {
@@ -300,7 +324,7 @@ export default function RecepcionDetalle() {
       else if (line.estado_validacion === 'faltante') faltante++
     }
     return { validada, faltante }
-  }, [lines])
+  }, [lines, linesMeta.status_counts])
   const validadas = validadasFromOrder > 0 ? validadasFromOrder : lineStatusCounts.validada
   const faltantes = lineStatusCounts.faltante
   const pendientes = Math.max(totalBase - validadas - faltantes, 0)
@@ -323,23 +347,8 @@ export default function RecepcionDetalle() {
     setEventPage(1)
   }
 
-  const filteredLines = useMemo(() => {
-    const q = deferredLineSearch.trim().toLowerCase()
-    if (!q) return lines
-    return lines.filter((l) => [l.box_type, l.custom_box_barcode, l.sku].some((v) => String(v || '').toLowerCase().includes(q)))
-  }, [lines, deferredLineSearch])
-
-  const sortedLines = useMemo(() => {
-    const collator = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
-    return [...filteredLines].sort((a, b) => {
-      const av = a?.[lineSortKey] ?? ''
-      const bv = b?.[lineSortKey] ?? ''
-      const cmp = lineSortKey === 'created_at'
-        ? new Date(av).getTime() - new Date(bv).getTime()
-        : collator.compare(String(av), String(bv))
-      return lineSortDir === 'asc' ? cmp : -cmp
-    })
-  }, [filteredLines, lineSortKey, lineSortDir])
+  const filteredLines = lines
+  const sortedLines = lines
 
   const filteredEvents = useMemo(() => {
     const q = deferredEventSearch.trim().toLowerCase()
@@ -365,10 +374,7 @@ export default function RecepcionDetalle() {
     })
   }, [filteredEvents, eventSortKey, eventSortDir])
 
-  const pagedLines = useMemo(() => {
-    const start = (linePage - 1) * linePageSize
-    return sortedLines.slice(start, start + linePageSize)
-  }, [sortedLines, linePage, linePageSize])
+  const pagedLines = lines
 
   const pagedEvents = useMemo(() => {
     const start = (eventPage - 1) * eventPageSize
@@ -380,13 +386,17 @@ export default function RecepcionDetalle() {
     return filteredNovedades.slice(start, start + novPageSize)
   }, [filteredNovedades, novPage, novPageSize])
 
+  const loadingOrder = canQueryRecepcion && (isLoading || (isFetching && !data))
 
-  if (isLoading) return <div className="flex items-center justify-center h-full"><LoadingSpinner /></div>
+  if (loadingOrder) {
+    return <div className="flex items-center justify-center h-full"><LoadingSpinner size="lg" text="Cargando datos..." /></div>
+  }
   if (isError || !data) return (
     <div className="flex flex-col h-full">
       <Header title={t('rec.recibir.title')} icon={PackageCheck} />
-      <div className="flex flex-col items-center justify-center h-full gap-3">
-        <p className="text-sm text-danger-500">{t('toast.error')}</p>
+      <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
+        <p className="text-sm font-semibold text-danger-600">No se pudo cargar el detalle de la orden.</p>
+        <p className="max-w-xl text-xs text-warm-500">{getReadableQueryError(error)}</p>
         <button onClick={() => navigate('/recepcion/recibir')} className="btn-ghost text-sm flex items-center gap-1.5">
           <ArrowLeft className="w-4 h-4" /> Volver
         </button>
@@ -787,7 +797,7 @@ export default function RecepcionDetalle() {
                         </tr>
                       )
                     })}
-                    {filteredLines.length === 0 && (
+                    {lines.length === 0 && (
                       <tr>
                         <td colSpan={8} className="px-3 py-10 text-center text-warm-400 text-sm">{t('common.noData')}</td>
                       </tr>
@@ -796,11 +806,11 @@ export default function RecepcionDetalle() {
                 </table>
               </div>
             </div>
-            {sortedLines.length > 100 && (
+            {linesTotal > linePageSize && (
               <TablePagination
                 page={linePage}
                 pageSize={linePageSize}
-                total={sortedLines.length}
+                total={linesTotal}
                 onPageChange={setLinePage}
                 onPageSizeChange={(s) => { setLinePageSize(s); setLinePage(1) }}
                 itemLabel={t('rec.line.items') || 'líneas'}
