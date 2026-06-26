@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useAuthStore } from '../core/stores/authStore'
 import { useI18nStore } from '../core/stores/i18nStore'
 import { motion } from 'framer-motion'
@@ -10,102 +11,121 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-const ALL_MODULES = () => [
+// Each module defines its sub-routes in priority order.
+// The card shows if the user has ANY sub-permission enabled.
+// The card link goes to the FIRST accessible sub-route.
+const MODULE_DEFS = [
   {
     id: 'dropscan',
-    permission: 'dropscan.dashboard',
+    moduleCode: 'dropscan',
     name: 'DropScan',
     description: 'Escaneo de guías y gestión de tarimas',
     icon: ScanBarcode,
-    path: '/dropscan',
-    from: '#6366f1',
-    to: '#4338ca',
-    light: 'rgba(99,102,241,0.08)',
-    ring: 'rgba(99,102,241,0.2)',
+    from: '#6366f1', to: '#4338ca',
+    light: 'rgba(99,102,241,0.08)', ring: 'rgba(99,102,241,0.2)',
+    subRoutes: [
+      { permission: 'dropscan.dashboard',      path: '/dashboard?module=dropscan' },
+      { permission: 'dropscan.escaneo',         path: '/dropscan/escaneo' },
+      { permission: 'dropscan.tarimas',         path: '/dropscan/tarimas' },
+      { permission: 'dropscan.reportes',        path: '/dropscan/reportes' },
+      { permission: 'dropscan.configuracion',   path: '/dropscan/configuracion' },
+    ],
   },
   {
     id: 'devoluciones',
-    permission: 'devoluciones.dashboard',
+    moduleCode: 'devoluciones',
     name: 'Devoluciones',
     description: 'Entradas, inventario temporal y salidas',
     icon: RotateCcw,
-    path: '/devoluciones/entradas',
-    from: '#f43f5e',
-    to: '#ea580c',
-    light: 'rgba(244,63,94,0.08)',
-    ring: 'rgba(244,63,94,0.2)',
+    from: '#f43f5e', to: '#ea580c',
+    light: 'rgba(244,63,94,0.08)', ring: 'rgba(244,63,94,0.2)',
+    subRoutes: [
+      { permission: 'devoluciones.entradas',    path: '/devoluciones/entradas' },
+      { permission: 'devoluciones.inventario',  path: '/devoluciones/inventario' },
+      { permission: 'devoluciones.salidas',     path: '/devoluciones/salidas' },
+    ],
   },
   {
     id: 'recepcion',
-    permission: 'recepcion.dashboard',
+    moduleCode: 'recepcion',
     name: 'Recepción',
     description: 'Recepción de mercancía e importación por Excel',
     icon: PackageCheck,
-    path: '/recepcion/recibir',
-    from: '#0ea5e9',
-    to: '#0369a1',
-    light: 'rgba(14,165,233,0.08)',
-    ring: 'rgba(14,165,233,0.2)',
+    from: '#0ea5e9', to: '#0369a1',
+    light: 'rgba(14,165,233,0.08)', ring: 'rgba(14,165,233,0.2)',
+    subRoutes: [
+      { permission: 'recepcion.recibir',        path: '/recepcion/recibir' },
+      { permission: 'recepcion.validacion',     path: '/recepcion/validacion' },
+    ],
   },
   {
     id: 'inventario',
-    permission: 'inventario.dashboard',
+    moduleCode: 'inventario',
     name: 'Inventario',
     description: 'Escaneo, registros y rastreo de stock',
     icon: Package,
-    path: '/inventario/registros',
-    from: '#06b6d4',
-    to: '#0e7490',
-    light: 'rgba(6,182,212,0.08)',
-    ring: 'rgba(6,182,212,0.2)',
+    from: '#06b6d4', to: '#0e7490',
+    light: 'rgba(6,182,212,0.08)', ring: 'rgba(6,182,212,0.2)',
+    subRoutes: [
+      { permission: 'inventario.registros',     path: '/inventario/registros' },
+      { permission: 'inventario.escaneo',       path: '/inventario/escaneo' },
+      { permission: 'inventario.rastreo',       path: '/inventario/rastreo' },
+    ],
   },
   {
     id: 'surtido',
-    permission: 'surtido.dashboard',
+    moduleCode: 'surtido',
     name: 'Surtido',
     description: 'Control de órdenes, surtidores y validación de cajas',
     icon: Truck,
-    path: '/surtido',
-    from: '#8b5cf6',
-    to: '#6d28d9',
-    light: 'rgba(139,92,246,0.08)',
-    ring: 'rgba(139,92,246,0.2)',
+    from: '#8b5cf6', to: '#6d28d9',
+    light: 'rgba(139,92,246,0.08)', ring: 'rgba(139,92,246,0.2)',
+    subRoutes: [
+      { permission: 'surtido.ordenes',          path: '/surtido' },
+      { permission: 'surtido.validacion',       path: '/surtido/validacion' },
+      { permission: 'surtido.registros',        path: '/surtido/registros' },
+    ],
   },
   {
     id: 'despacho',
-    permission: 'despacho.dashboard',
+    moduleCode: 'despacho',
     name: 'Despacho',
     description: 'Embarques, folios de salida y gestión de conductores',
     icon: Truck,
-    path: '/despacho/validar',
-    from: '#22c55e',
-    to: '#16a34a',
-    light: 'rgba(34,197,94,0.08)',
-    ring: 'rgba(34,197,94,0.2)',
+    from: '#22c55e', to: '#16a34a',
+    light: 'rgba(34,197,94,0.08)', ring: 'rgba(34,197,94,0.2)',
+    subRoutes: [
+      { permission: 'despacho.validar',         path: '/despacho/validar' },
+      { permission: 'despacho.ordenes',         path: '/despacho/ordenes' },
+      { permission: 'despacho.folios',          path: '/despacho/folios' },
+    ],
   },
   {
     id: 'anormalidades',
-    permission: 'anormalidades.dashboard',
+    moduleCode: 'anormalidades',
     name: 'Anormalidades',
     description: 'Registro y seguimiento de incidencias',
     icon: AlertTriangle,
-    path: '/anormalidades/registro',
-    from: '#f59e0b',
-    to: '#d97706',
-    light: 'rgba(245,158,11,0.08)',
-    ring: 'rgba(245,158,11,0.2)',
+    from: '#f59e0b', to: '#d97706',
+    light: 'rgba(245,158,11,0.08)', ring: 'rgba(245,158,11,0.2)',
+    subRoutes: [
+      { permission: 'anormalidades.registro',      path: '/anormalidades/registro' },
+      { permission: 'anormalidades.dashboard',     path: '/dashboard?module=anormalidades' },
+      { permission: 'anormalidades.mejoras',       path: '/anormalidades/mejoras' },
+      { permission: 'anormalidades.configuracion', path: '/anormalidades/configuracion' },
+    ],
   },
   {
     id: 'admin',
-    permission: 'global.administracion',
+    moduleCode: null, // global permission, no module enablement check
     name: 'Administración',
     description: 'Usuarios, roles y configuración del sistema',
     icon: Settings2,
-    path: '/admin',
-    from: '#64748b',
-    to: '#334155',
-    light: 'rgba(100,116,139,0.08)',
-    ring: 'rgba(100,116,139,0.2)',
+    from: '#64748b', to: '#334155',
+    light: 'rgba(100,116,139,0.08)', ring: 'rgba(100,116,139,0.2)',
+    subRoutes: [
+      { permission: 'global.administracion',    path: '/admin' },
+    ],
   },
 ]
 
@@ -136,9 +156,23 @@ const bannerVariants = {
 }
 
 export default function GlobalDashboard() {
-  const { user, canView } = useAuthStore()
+  const { user, canView, isModuleEnabled } = useAuthStore()
   const { t } = useI18nStore()
-  const modules = ALL_MODULES().filter(m => canView(m.permission))
+
+  const modules = useMemo(() =>
+    MODULE_DEFS.map(m => {
+      // Admin: only permission check, no module enablement
+      if (!m.moduleCode) {
+        const first = m.subRoutes.find(r => canView(r.permission))
+        return first ? { ...m, path: first.path } : null
+      }
+      // Regular modules: must be enabled at tenant level
+      if (!isModuleEnabled(m.moduleCode)) return null
+      // Then find first sub-route the user can access
+      const first = m.subRoutes.find(r => canView(r.permission))
+      return first ? { ...m, path: first.path } : null
+    }).filter(Boolean),
+  [canView, isModuleEnabled])
 
   return (
     <div className="flex flex-col h-full">
@@ -153,13 +187,11 @@ export default function GlobalDashboard() {
           animate="visible"
           className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 via-primary-700 to-accent-700 px-7 py-5 text-white shadow-xl"
         >
-          {/* Decorative blobs */}
           <div className="pointer-events-none absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/5 blur-3xl" />
           <div className="pointer-events-none absolute -left-8 -bottom-12 w-48 h-48 rounded-full bg-accent-400/10 blur-2xl" />
           <div className="pointer-events-none absolute right-1/3 top-0 w-64 h-full bg-primary-400/5 blur-2xl" />
 
           <div className="relative flex items-center justify-between gap-6">
-            {/* Left: greeting */}
             <div>
               <motion.p
                 className="text-xl font-extrabold tracking-tight"
@@ -179,7 +211,6 @@ export default function GlobalDashboard() {
               </motion.p>
             </div>
 
-            {/* Right: chips */}
             <motion.div
               className="flex items-center gap-2.5"
               initial={{ opacity: 0, x: 12 }}
@@ -229,13 +260,11 @@ export default function GlobalDashboard() {
                     to={mod.path}
                     className="group relative flex flex-col gap-3.5 overflow-hidden rounded-2xl border border-warm-100 bg-white p-5 shadow-sm transition-shadow duration-300 hover:shadow-lg h-full"
                   >
-                    {/* Subtle background glow on hover */}
                     <div
                       className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"
                       style={{ background: `radial-gradient(circle at top left, ${mod.light} 0%, transparent 70%)` }}
                     />
 
-                    {/* Icon row */}
                     <div className="relative flex items-center justify-between">
                       <div
                         className="flex h-11 w-11 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110"
@@ -251,13 +280,11 @@ export default function GlobalDashboard() {
                       </div>
                     </div>
 
-                    {/* Text */}
                     <div className="relative">
                       <p className="text-sm font-bold text-warm-800 leading-snug">{mod.name}</p>
                       <p className="mt-1 text-[11px] leading-relaxed text-warm-400 line-clamp-2">{mod.description}</p>
                     </div>
 
-                    {/* Bottom accent line */}
                     <div
                       className="absolute bottom-0 left-0 h-0.5 w-0 rounded-full transition-all duration-500 group-hover:w-full"
                       style={{ background: `linear-gradient(90deg, ${mod.from}, ${mod.to})` }}
