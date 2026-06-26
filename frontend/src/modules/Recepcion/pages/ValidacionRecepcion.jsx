@@ -138,6 +138,14 @@ function codesMatch(left, right) {
   return generateCodeVariations(normalizeScanCode(right), false).some((variant) => leftVars.has(variant))
 }
 
+function getScanErrorMessage(err) {
+  const data = err?.response?.data
+  const parts = [data?.error, data?.detalle].filter(Boolean)
+  if (parts.length > 0) return parts.join(': ')
+  if (err?.message) return err.message
+  return 'Error al procesar escaneo'
+}
+
 export default function ValidacionRecepcion() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -145,7 +153,7 @@ export default function ValidacionRecepcion() {
   const toast = useToastStore()
   const qc = useQueryClient()
   const { hasPermission, isAuthenticated } = useAuthStore()
-  const canDeleteScan = hasPermission('recepcion.validacion', 'editar')
+  const canDeleteScan = hasPermission('recepcion.validacion', 'eliminar')
 
   const scanRefDesktop = useRef(null)
   const scanRefMobile  = useRef(null)
@@ -166,7 +174,7 @@ export default function ValidacionRecepcion() {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [pendingDeleteEventId, setPendingDeleteEventId] = useState(null)
   const [dupModal, setDupModal] = useState({ open: false, code: null, entry: null })
-  const [rejectModal, setRejectModal] = useState({ open: false, code: null })
+  const [rejectModal, setRejectModal] = useState({ open: false, code: null, message: null, reason: null })
   const [showTarimaConfirm, setShowTarimaConfirm] = useState(false)
   const [tarimaSearch, setTarimaSearch] = useState('')
   const [tarimaFilter, setTarimaFilter] = useState(null)
@@ -548,7 +556,12 @@ export default function ValidacionRecepcion() {
       startTransition(() => {
         setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado, tarimaNum: parseTarimaNumber(ev.ubicacion || variables.ubicacion) })
         if (ev.resultado === 'no_encontrado') {
-          setRejectModal({ open: true, code: ev.codigo_escaneado })
+          setRejectModal({
+            open: true,
+            code: ev.codigo_escaneado,
+            message: data.mensaje || 'El código no existe en las líneas esperadas de esta orden de recepción.',
+            reason: data.motivo || 'codigo_no_pertenece_orden',
+          })
         }
         if (ev.resultado === 'duplicado') {
           playSound('duplicate')
@@ -558,6 +571,8 @@ export default function ValidacionRecepcion() {
             entry: {
               scannedAt: data.previous_event?.scanned_at || null,
               scannedBy: data.previous_event?.scanned_by_nombre || '—',
+              message: data.mensaje || 'Todas las cajas esperadas para este código ya fueron validadas.',
+              reason: data.motivo || 'codigo_ya_validado',
             },
           })
         }
@@ -594,13 +609,13 @@ export default function ValidacionRecepcion() {
       else if (ev.resultado === 'duplicado') playSound('duplicate')
       else playSound('error')
     },
-    onError: () => {
+    onError: (err) => {
       if (import.meta.env.DEV && scanStartRef.current != null) {
         const elapsed = performance.now() - scanStartRef.current
         console.debug(`[recepcion] scan client failed ${elapsed.toFixed(1)}ms`)
         scanStartRef.current = null
       }
-      toast.error('Error al procesar escaneo')
+      toast.error(getScanErrorMessage(err))
     },
     onSettled: () => refocus(),
   })
@@ -699,15 +714,26 @@ export default function ValidacionRecepcion() {
     if (e.key === 'Enter' && e.target.value.trim()) {
       const code = e.target.value.trim()
       e.target.value = ''
+      const matchingLines = lines.filter(l => l.custom_box_barcode && codesMatch(l.custom_box_barcode, code))
+      const hasPendingMatchingLine = matchingLines.some(l => l.estado_validacion !== 'validada')
       const existing = history.find(h => codesMatch(h.code, code))
         || serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
-      if (existing) {
+      if (existing && !hasPendingMatchingLine) {
         playSound('duplicate')
         setDupModal({
           open: true, code,
           entry: existing.scannedAt
-            ? existing
-            : { scannedAt: existing.scanned_at || null, scannedBy: existing.scanned_by_nombre || '—' },
+            ? {
+                ...existing,
+                message: 'Todas las cajas esperadas para este código ya fueron validadas.',
+                reason: 'codigo_ya_validado',
+              }
+            : {
+                scannedAt: existing.scanned_at || null,
+                scannedBy: existing.scanned_by_nombre || '—',
+                message: 'Todas las cajas esperadas para este código ya fueron validadas.',
+                reason: 'codigo_ya_validado',
+              },
         })
         refocus()
         return
@@ -724,7 +750,7 @@ export default function ValidacionRecepcion() {
       const tarimaNum = withTarimas ? effectiveTarimaMap.get(extractBaseCode(code)) : null
       const ubicacion = withTarimas ? formatTarimaLocation(tarimaNum) : selectedUbicacion
       if (isOffline) {
-        const matchedLine = lines.find(l => l.custom_box_barcode && codesMatch(l.custom_box_barcode, code))
+        const matchedLine = matchingLines.find(l => l.estado_validacion !== 'validada') || matchingLines[0]
         const offlineResult = !matchedLine
           ? 'no_encontrado'
           : matchedLine.estado_validacion === 'validada'
@@ -743,10 +769,24 @@ export default function ValidacionRecepcion() {
         startTransition(() => {
           setLastResult({ result: offlineResult, code, sku: null, tarimaNum })
           if (offlineResult === 'no_encontrado') {
-            setRejectModal({ open: true, code })
+            setRejectModal({
+              open: true,
+              code,
+              message: 'El código no existe en las líneas esperadas de esta orden de recepción.',
+              reason: 'codigo_no_pertenece_orden',
+            })
           } else if (offlineResult === 'duplicado') {
             playSound('duplicate')
-            setDupModal({ open: true, code, entry: { scannedAt: null, scannedBy: '—' } })
+            setDupModal({
+              open: true,
+              code,
+              entry: {
+                scannedAt: null,
+                scannedBy: '—',
+                message: 'Todas las cajas esperadas para este código ya fueron validadas.',
+                reason: 'codigo_ya_validado',
+              },
+            })
           } else {
             const base = extractBaseCode(code)
             if (base && tarimaNum) {
@@ -2055,9 +2095,14 @@ export default function ValidacionRecepcion() {
         }
       >
         <div className="space-y-3">
-          <p className="text-sm text-warm-700">{t('rec.val.dup.body')}</p>
+          <p className="text-sm text-warm-700">{dupModal.entry?.message || t('rec.val.dup.body')}</p>
           <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 space-y-1.5">
             <p className="font-mono font-bold text-warning-800 text-base break-all">{dupModal.code}</p>
+            {dupModal.entry?.reason && (
+              <p className="text-[11px] font-semibold text-warning-700 uppercase tracking-wide">
+                {dupModal.entry.reason}
+              </p>
+            )}
             {dupModal.entry?.scannedAt && (
               <p className="text-xs text-warning-700">
                 <span className="font-semibold">{t('rec.val.dup.time')}:</span>{' '}
@@ -2298,22 +2343,27 @@ export default function ValidacionRecepcion() {
       {/* ── Rejection blocking modal ── */}
       <Modal
         isOpen={rejectModal.open}
-        onClose={() => { setRejectModal({ open: false, code: null }); refocus() }}
+        onClose={() => { setRejectModal({ open: false, code: null, message: null, reason: null }); refocus() }}
         title={t('rec.val.reject.title')}
         icon={XCircle}
         size="sm"
         footer={
           <div className="flex justify-end w-full">
-            <button onClick={() => { setRejectModal({ open: false, code: null }); refocus() }} className="btn-danger">
+            <button onClick={() => { setRejectModal({ open: false, code: null, message: null, reason: null }); refocus() }} className="btn-danger">
               {t('rec.val.reject.confirm')}
             </button>
           </div>
         }
       >
         <div className="space-y-3">
-          <p className="text-sm text-warm-700">{t('rec.val.reject.body')}</p>
-          <div className="rounded-xl border border-danger-200 bg-danger-50 p-3">
+          <p className="text-sm text-warm-700">{rejectModal.message || t('rec.val.reject.body')}</p>
+          <div className="rounded-xl border border-danger-200 bg-danger-50 p-3 space-y-1.5">
             <p className="font-mono font-bold text-danger-800 text-base break-all">{rejectModal.code}</p>
+            {rejectModal.reason && (
+              <p className="text-[11px] font-semibold text-danger-700 uppercase tracking-wide">
+                {rejectModal.reason}
+              </p>
+            )}
           </div>
           <p className="text-xs text-warm-500 leading-relaxed">{t('rec.val.reject.hint')}</p>
         </div>

@@ -260,7 +260,7 @@ export default function RecepcionDetalle() {
   const canValidate = hasPermission('recepcion.recibir', 'actualizar')
   const canEdit = hasPermission('recepcion.recibir', 'actualizar')
   const canCreate = hasPermission('recepcion.recibir', 'crear')
-  const canDeleteEvents = hasPermission('recepcion.recibir', 'eliminar')
+  const canDeleteEvents = hasPermission('recepcion.validacion', 'eliminar')
 
   const submitNuevaNovedad = () => {
     if (!nuevoTipo || createNovedadMut.isPending) return
@@ -875,16 +875,6 @@ export default function RecepcionDetalle() {
                                 type="button"
                                 onClick={() => deleteScanEventMut.mutate(ev.id)}
                                 disabled={deleteScanEventMut.isPending}
-                                className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-30"
-                                title={t('rec.val.delete.tooltip')}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            ) : canValidate ? (
-                              <button
-                                type="button"
-                                onClick={() => setConfirmDeleteOpen(true)}
-                                disabled={i !== 0 || ev.resultado !== 'correcto' || deleteLastMut.isPending}
                                 className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-30"
                                 title={t('rec.val.delete.tooltip')}
                               >

@@ -181,8 +181,10 @@ router.post('/orders/:id/scan',
       if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
       const previousSuccess = previousSuccessRes.rows[0] || null
 
-      if (previousSuccess) {
-        const line = lineRes.rows.find((entry) => entry.id === previousSuccess.line_id) || null
+      let line = lineRes.rows[0] || null
+      let matchField = line ? 'custom_box_barcode' : null
+
+      if (!line && previousSuccess) {
         const eventRes = await req.tQuery(
           `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
            VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
@@ -203,6 +205,8 @@ router.post('/orders/:id/scan',
           codigo: normalizedCode || rawCode,
           line,
           event: eventRes.rows[0],
+          motivo: 'codigo_ya_validado',
+          mensaje: 'Todas las cajas esperadas para este código ya fueron validadas.',
           previous_event: {
             id: previousSuccess.id,
             codigo_escaneado: previousSuccess.codigo_escaneado,
@@ -211,9 +215,6 @@ router.post('/orders/:id/scan',
           },
         })
       }
-
-      let line = lineRes.rows[0] || null
-      let matchField = line ? 'custom_box_barcode' : null
 
       if (!line) {
         const eventRes = await req.tQuery(
@@ -226,6 +227,8 @@ router.post('/orders/:id/scan',
           resultado: 'no_encontrado',
           codigo: normalizedCode || rawCode,
           event: eventRes.rows[0],
+          motivo: 'codigo_no_pertenece_orden',
+          mensaje: 'El código no existe en las líneas esperadas de esta orden de recepción.',
         })
       }
 
@@ -241,6 +244,14 @@ router.post('/orders/:id/scan',
           codigo: normalizedCode || rawCode,
           line,
           event: eventRes.rows[0],
+          motivo: 'codigo_ya_validado',
+          mensaje: 'Todas las cajas esperadas para este código ya fueron validadas.',
+          previous_event: previousSuccess ? {
+            id: previousSuccess.id,
+            codigo_escaneado: previousSuccess.codigo_escaneado,
+            scanned_at: previousSuccess.scanned_at,
+            scanned_by_nombre: previousSuccess.scanned_by_nombre || null,
+          } : null,
         })
       }
 
@@ -291,7 +302,10 @@ router.post('/orders/:id/scan',
         const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
         console.info(`[recepcion] scan ${req.params.id} failed after ${elapsedMs.toFixed(1)}ms`)
       }
-      res.status(500).json({ error: 'Error al procesar escaneo' })
+      res.status(500).json({
+        error: 'Error al procesar escaneo',
+        detalle: err.message || 'Error interno no especificado',
+      })
     }
   }
 )
@@ -362,7 +376,7 @@ router.patch('/orders/:id/scan-events/relocate',
 
 router.delete('/orders/:id/scan-events/last-validation',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'eliminar'),
   async (req, res) => {
     try {
       const eventRes = await req.tQuery(
@@ -439,10 +453,10 @@ router.delete('/orders/:id/scan-events/last-validation',
   }
 )
 
-// DELETE /orders/:id/scan-events/:eventId — delete scan event (editar = crear+ level)
+// DELETE /orders/:id/scan-events/:eventId — delete scan event
 router.delete('/orders/:id/scan-events/:eventId',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'editar'),
+  requirePermission('recepcion.validacion', 'eliminar'),
   async (req, res) => {
     try {
       const eventRes = await req.tQuery(
