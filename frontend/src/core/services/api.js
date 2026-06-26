@@ -47,6 +47,17 @@ const BACKEND_COOLDOWN_MS = 15000
 const rateLimitCooldowns = new Map()
 const RATE_LIMIT_COOLDOWN_MS = 30000
 
+function parseRetryAfterMs(value) {
+  if (!value) return null
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000
+
+  const retryAt = Date.parse(value)
+  if (!Number.isNaN(retryAt)) return Math.max(retryAt - Date.now(), 0)
+
+  return null
+}
+
 // Callback registered by authStore to sync backendOnline Zustand state.
 // Using a callback avoids circular imports (authStore imports api.js).
 let _onBackendStatus = null
@@ -130,9 +141,11 @@ api.interceptors.response.use(
     // 429: set a per-endpoint cooldown so subsequent GET requests are blocked immediately
     if (error.response?.status === 429 && error.config?.url) {
       const urlKey = String(error.config.url).split('?')[0]
-      rateLimitCooldowns.set(urlKey, Date.now() + RATE_LIMIT_COOLDOWN_MS)
+      const retryAfterMs = parseRetryAfterMs(error.response.headers?.['retry-after'])
+      const cooldownMs = retryAfterMs ?? RATE_LIMIT_COOLDOWN_MS
+      rateLimitCooldowns.set(urlKey, Date.now() + cooldownMs)
       // Auto-clear after cooldown so the endpoint becomes usable again
-      setTimeout(() => rateLimitCooldowns.delete(urlKey), RATE_LIMIT_COOLDOWN_MS)
+      setTimeout(() => rateLimitCooldowns.delete(urlKey), cooldownMs)
     }
 
     if (error.response?.status === 401) {

@@ -116,12 +116,24 @@ app.use(cors({
 // Rate limiting — global (all /api routes)
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.API_RATE_LIMIT_MAX, 10) || 240,
+  max: parseInt(process.env.API_RATE_LIMIT_MAX, 10) || 1200,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.originalUrl?.startsWith('/api/recepcion'),
   message: { error: 'Demasiadas solicitudes, intenta más tarde' }
 })
 app.use('/api', generalLimiter)
+
+// Recepcion validation screens poll and scan continuously during active work.
+// Keep this separate from the general API limit so normal scanner usage does not
+// exhaust the shared 15-minute bucket for the whole application.
+const recepcionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.RECEPCION_RATE_LIMIT_MAX, 10) || 5000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas solicitudes en Recepción, intenta más tarde' }
+})
 
 // Rate limiting — stricter for login
 const loginLimiter = rateLimit({
@@ -204,6 +216,7 @@ app.use('/api/despacho/folios', tenantContext, tenantDB, moduleGuard('despacho')
 app.use('/api/despacho/dashboard', tenantContext, tenantDB, moduleGuard('despacho'), despachoDashboardRoutes)
 
 // Recepcion module
+app.use('/api/recepcion', recepcionLimiter)
 app.use('/api/recepcion', tenantContext, tenantDB, moduleGuard('recepcion'), recepcionRoutes)
 app.use('/api/recepcion', tenantContext, tenantDB, moduleGuard('recepcion'), recepcionValidacionRoutes)
 app.use('/api/recepcion', tenantContext, tenantDB, moduleGuard('recepcion'), recepcionReporteRoutes)

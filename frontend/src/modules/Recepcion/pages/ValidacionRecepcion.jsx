@@ -19,6 +19,7 @@ import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteScanEvent, getScanEvents, relocateScanEvents } from '../services/recepcionService'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
+import { STALE } from '../../../core/constants/queryConfig'
 
 function parseTarimaNumber(value) {
   const normalized = String(value ?? '').trim().toUpperCase().replace(/^T\s*/, '')
@@ -221,7 +222,9 @@ export default function ValidacionRecepcion() {
     queryFn: () => getOrder(id),
     enabled: canQueryRecepcion,
     retry: false,
-    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 4000 : false,
+    staleTime: STALE.LIVE,
+    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 30000 : false,
+    refetchIntervalInBackground: false,
   })
 
   const { data: eventsData } = useQuery({
@@ -229,7 +232,9 @@ export default function ValidacionRecepcion() {
     queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1 }),
     enabled: canQueryRecepcion,
     retry: false,
-    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 6000 : false,
+    staleTime: STALE.LIVE,
+    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 45000 : false,
+    refetchIntervalInBackground: false,
   })
   const serverEvents = eventsData?.events ?? []
 
