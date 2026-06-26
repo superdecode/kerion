@@ -16,7 +16,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
-import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, getScanEvents, relocateScanEvents } from '../services/recepcionService'
+import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteScanEvent, getScanEvents, relocateScanEvents } from '../services/recepcionService'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 
@@ -145,7 +145,7 @@ export default function ValidacionRecepcion() {
   const toast = useToastStore()
   const qc = useQueryClient()
   const { hasPermission, isAuthenticated } = useAuthStore()
-  const canDeleteScan = hasPermission('recepcion.recibir', 'actualizar')
+  const canDeleteScan = hasPermission('recepcion.validacion', 'editar')
 
   const scanRefDesktop = useRef(null)
   const scanRefMobile  = useRef(null)
@@ -164,6 +164,7 @@ export default function ValidacionRecepcion() {
   const [historySortKey, setHistorySortKey] = useState('scannedAt')
   const [historySortDir, setHistorySortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [pendingDeleteEventId, setPendingDeleteEventId] = useState(null)
   const [dupModal, setDupModal] = useState({ open: false, code: null, entry: null })
   const [rejectModal, setRejectModal] = useState({ open: false, code: null })
   const [showTarimaConfirm, setShowTarimaConfirm] = useState(false)
@@ -604,10 +605,11 @@ export default function ValidacionRecepcion() {
     onSettled: () => refocus(),
   })
 
-  const deleteLastMut = useMutation({
-    mutationFn: () => deleteLastValidationRecord(id),
+  const deleteScanEventMut = useMutation({
+    mutationFn: (eventId) => deleteScanEvent(id, eventId),
     onSuccess: (data) => {
-      setHistory(prev => prev.filter(item => item.id !== data.removedEvent?.id))
+      const removedId = data.removedEvent?.id
+      setHistory(prev => prev.filter(item => item.id !== removedId))
       qc.setQueryData(['recepcion-order', id], (cur) => {
         if (!cur) return cur
         return {
@@ -618,8 +620,10 @@ export default function ValidacionRecepcion() {
             : l),
         }
       })
-      toast.success('Último registro eliminado')
+      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
+      toast.success('Registro eliminado')
       setConfirmDeleteOpen(false)
+      setPendingDeleteEventId(null)
       refocus()
     },
     onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar'),
@@ -696,9 +700,15 @@ export default function ValidacionRecepcion() {
       const code = e.target.value.trim()
       e.target.value = ''
       const existing = history.find(h => codesMatch(h.code, code))
+        || serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
       if (existing) {
         playSound('duplicate')
-        setDupModal({ open: true, code, entry: existing })
+        setDupModal({
+          open: true, code,
+          entry: existing.scannedAt
+            ? existing
+            : { scannedAt: existing.scanned_at || null, scannedBy: existing.scanned_by_nombre || '—' },
+        })
         refocus()
         return
       }
@@ -1608,11 +1618,11 @@ export default function ValidacionRecepcion() {
                                           </span>
                                         </td>
                                         <td className="px-2 py-1.5 text-right">
-                                          {canDeleteScan && (
+                                          {canDeleteScan && h.result === 'correcto' && (
                                             <button
                                               type="button"
-                                              onClick={() => setConfirmDeleteOpen(true)}
-                                              disabled={i !== 0 || h.result !== 'correcto' || deleteLastMut.isPending}
+                                              onClick={() => { setPendingDeleteEventId(h.id); setConfirmDeleteOpen(true) }}
+                                              disabled={deleteScanEventMut.isPending}
                                               className="p-1 rounded-md text-danger-500 hover:bg-danger-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                                               title={t('rec.val.delete.tooltip')}
                                             >
@@ -1697,11 +1707,11 @@ export default function ValidacionRecepcion() {
                               </td>
                             )}
                             <td className="px-3 py-2 text-right">
-                              {canDeleteScan && (
+                              {canDeleteScan && h.result === 'correcto' && (
                                 <button
                                   type="button"
-                                  onClick={() => setConfirmDeleteOpen(true)}
-                                  disabled={i !== 0 || deleteLastMut.isPending}
+                                  onClick={() => { setPendingDeleteEventId(h.id); setConfirmDeleteOpen(true) }}
+                                  disabled={deleteScanEventMut.isPending}
                                   className="p-1.5 rounded-lg text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed"
                                   title={t('rec.val.delete.tooltip')}
                                 >
@@ -2067,15 +2077,19 @@ export default function ValidacionRecepcion() {
       {/* ── Delete confirm modal ── */}
       <Modal
         isOpen={confirmDeleteOpen}
-        onClose={() => setConfirmDeleteOpen(false)}
+        onClose={() => { setConfirmDeleteOpen(false); setPendingDeleteEventId(null) }}
         title={t('rec.val.delete.title')}
         icon={AlertCircle}
         size="sm"
         footer={
           <div className="flex gap-2 justify-end w-full">
-            <button onClick={() => setConfirmDeleteOpen(false)} className="btn-ghost">{t('common.cancel')}</button>
-            <button onClick={() => deleteLastMut.mutate()} disabled={deleteLastMut.isPending} className="btn-danger disabled:opacity-50">
-              {deleteLastMut.isPending ? t('common.loading') : t('rec.val.delete.btn')}
+            <button onClick={() => { setConfirmDeleteOpen(false); setPendingDeleteEventId(null) }} className="btn-ghost">{t('common.cancel')}</button>
+            <button
+              onClick={() => pendingDeleteEventId && deleteScanEventMut.mutate(pendingDeleteEventId)}
+              disabled={deleteScanEventMut.isPending || !pendingDeleteEventId}
+              className="btn-danger disabled:opacity-50"
+            >
+              {deleteScanEventMut.isPending ? t('common.loading') : t('rec.val.delete.btn')}
             </button>
           </div>
         }

@@ -439,10 +439,10 @@ router.delete('/orders/:id/scan-events/last-validation',
   }
 )
 
-// DELETE /orders/:id/scan-events/:eventId — delete any scan event (eliminar perm only)
+// DELETE /orders/:id/scan-events/:eventId — delete scan event (editar = crear+ level)
 router.delete('/orders/:id/scan-events/:eventId',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'eliminar'),
+  requirePermission('recepcion.validacion', 'editar'),
   async (req, res) => {
     try {
       const eventRes = await req.tQuery(
