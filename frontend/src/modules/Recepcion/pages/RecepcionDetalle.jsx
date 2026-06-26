@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useDeferredValue, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -147,8 +147,11 @@ export default function RecepcionDetalle() {
   const { hasPermission, isAuthenticated } = useAuthStore()
 
   const [activeTab, setActiveTab] = useState('detalle')
+  const [lineSearchInput, setLineSearchInput] = useState('')
   const [lineSearch, setLineSearch] = useState('')
+  const [eventSearchInput, setEventSearchInput] = useState('')
   const [eventSearch, setEventSearch] = useState('')
+  const [novedadSearchInput, setNovedadSearchInput] = useState('')
   const [novedadSearch, setNovedadSearch] = useState('')
   const [lineStatusModal, setLineStatusModal] = useState(null)
   const [pendingStatus, setPendingStatus] = useState('')
@@ -170,11 +173,18 @@ export default function RecepcionDetalle() {
   const [nuevoTipo, setNuevoTipo] = useState('')
   const [nuevoCodigo, setNuevoCodigo] = useState('')
   const [nuevaUbicacion, setNuevaUbicacion] = useState('')
-  const deferredLineSearch = useDeferredValue(lineSearch)
-  const deferredEventSearch = useDeferredValue(eventSearch)
-  const deferredNovedadSearch = useDeferredValue(novedadSearch)
 
   useEffect(() => {
+    setActiveTab('detalle')
+    setLineSearchInput('')
+    setLineSearch('')
+    setEventSearchInput('')
+    setEventSearch('')
+    setNovedadSearchInput('')
+    setNovedadSearch('')
+    setLinePage(1)
+    setEventPage(1)
+    setNovPage(1)
     setNuevoTipo('')
     setNuevoCodigo('')
     setNuevaUbicacion('')
@@ -184,10 +194,10 @@ export default function RecepcionDetalle() {
   const orderQueryParams = useMemo(() => ({
     lines_page: linePage,
     lines_limit: linePageSize,
-    lines_q: deferredLineSearch.trim() || undefined,
+    lines_q: lineSearch.trim() || undefined,
     lines_sort_key: lineSortKey,
     lines_sort_dir: lineSortDir,
-  }), [linePage, linePageSize, deferredLineSearch, lineSortKey, lineSortDir])
+  }), [linePage, linePageSize, lineSearch, lineSortKey, lineSortDir])
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
     queryKey: ['recepcion-order', id, orderQueryParams],
@@ -349,20 +359,53 @@ export default function RecepcionDetalle() {
     setEventPage(1)
   }
 
+  const handleApplyLineSearch = useCallback(() => {
+    setLineSearch(lineSearchInput.trim())
+    setLinePage(1)
+  }, [lineSearchInput])
+
+  const handleClearLineSearch = useCallback(() => {
+    setLineSearchInput('')
+    setLineSearch('')
+    setLinePage(1)
+  }, [])
+
+  const handleApplyEventSearch = useCallback(() => {
+    setEventSearch(eventSearchInput.trim())
+    setEventPage(1)
+  }, [eventSearchInput])
+
+  const handleClearEventSearch = useCallback(() => {
+    setEventSearchInput('')
+    setEventSearch('')
+    setEventPage(1)
+  }, [])
+
+  const handleApplyNovedadSearch = useCallback(() => {
+    setNovedadSearch(novedadSearchInput.trim())
+    setNovPage(1)
+  }, [novedadSearchInput])
+
+  const handleClearNovedadSearch = useCallback(() => {
+    setNovedadSearchInput('')
+    setNovedadSearch('')
+    setNovPage(1)
+  }, [])
+
   const filteredLines = lines
   const sortedLines = lines
 
   const filteredEvents = useMemo(() => {
-    const q = deferredEventSearch.trim().toLowerCase()
+    const q = eventSearch.trim().toLowerCase()
     if (!q) return events
     return events.filter((e) => [e.codigo_escaneado, e.sku_asociado, e.resultado, e.scanned_by_nombre].some((v) => String(v || '').toLowerCase().includes(q)))
-  }, [events, deferredEventSearch])
+  }, [events, eventSearch])
 
   const filteredNovedades = useMemo(() => {
-    const q = deferredNovedadSearch.trim().toLowerCase()
+    const q = novedadSearch.trim().toLowerCase()
     if (!q) return novedades
     return novedades.filter((n) => [n.tipo, n.codigo, n.ubicacion, n.created_by_nombre].some((v) => String(v || '').toLowerCase().includes(q)))
-  }, [novedades, deferredNovedadSearch])
+  }, [novedades, novedadSearch])
 
   const sortedEvents = useMemo(() => {
     const collator = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
@@ -665,15 +708,25 @@ export default function RecepcionDetalle() {
               ? 'border-danger-200 bg-danger-50 text-danger-700'
               : 'border-warning-200 bg-warning-50 text-warning-700'
           const currentSearch = activeTab === 'detalle'
-            ? lineSearch
+              ? lineSearchInput
             : activeTab === 'validacion'
-              ? eventSearch
-              : novedadSearch
+              ? eventSearchInput
+              : novedadSearchInput
           const setCurrentSearch = activeTab === 'detalle'
-            ? (v) => { setLineSearch(v); setLinePage(1) }
+            ? (v) => setLineSearchInput(v)
             : activeTab === 'validacion'
-              ? (v) => { setEventSearch(v); setEventPage(1) }
-              : (v) => { setNovedadSearch(v); setNovPage(1) }
+              ? (v) => setEventSearchInput(v)
+              : (v) => setNovedadSearchInput(v)
+          const handleCurrentSearchApply = activeTab === 'detalle'
+            ? handleApplyLineSearch
+            : activeTab === 'validacion'
+              ? handleApplyEventSearch
+              : handleApplyNovedadSearch
+          const handleCurrentSearchClear = activeTab === 'detalle'
+            ? handleClearLineSearch
+            : activeTab === 'validacion'
+              ? handleClearEventSearch
+              : handleClearNovedadSearch
           const handleInlineExport = activeTab === 'detalle'
             ? handleExportDetalle
             : activeTab === 'validacion'
@@ -720,11 +773,26 @@ export default function RecepcionDetalle() {
                   <input
                     value={currentSearch}
                     onChange={e => setCurrentSearch(e.target.value)}
+                    onBlur={() => {
+                      handleCurrentSearchApply()
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleCurrentSearchApply()
+                      }
+                    }}
                     placeholder={`${t('common.search')}...`}
                     className="pl-8 pr-8 py-1.5 rounded-lg border border-warm-200 text-sm focus:outline-none focus:border-sky-400 w-44 sm:w-52"
                   />
                   {currentSearch && (
-                    <button onClick={() => setCurrentSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCurrentSearchClear()
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-warm-300"
+                    >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}

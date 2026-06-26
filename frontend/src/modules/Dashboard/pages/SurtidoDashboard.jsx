@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -132,13 +132,19 @@ export default function SurtidoDashboard({ dateRange }) {
   const { t } = useI18nStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
   const [centerDate, setCenterDate] = useState(() => getToday())
+  const dashboardStart = dateRange?.from || getToday()
+  const dashboardEnd = dateRange?.to || getToday()
+
+  useEffect(() => {
+    setCenterDate(dateRange?.to || getToday())
+  }, [dateRange?.to])
 
   const fiveDayFrom = subtractDays(centerDate, 2)
   const fiveDayTo = subtractDays(centerDate, -2)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['dash-surtido', dateRange],
-    queryFn: () => getSurtidoDashboard({ fecha_inicio: dateRange.from, fecha_fin: dateRange.to }),
+    queryKey: ['dash-surtido', dashboardStart, dashboardEnd],
+    queryFn: () => getSurtidoDashboard({ fecha_inicio: dashboardStart, fecha_fin: dashboardEnd }),
     enabled: backendOnline,
   })
 
@@ -155,19 +161,19 @@ export default function SurtidoDashboard({ dateRange }) {
     staleTime: 5 * 60_000,
   })
 
-  const yearStart = `${getToday().slice(0, 4)}-01-01`
-  const prevYearStart = `${Number(getToday().slice(0, 4)) - 1}-01-01`
+  const yearStart = `${dashboardEnd.slice(0, 4)}-01-01`
+  const prevYearStart = `${Number(dashboardEnd.slice(0, 4)) - 1}-01-01`
 
   const { data: weeklyData } = useQuery({
-    queryKey: ['dash-surtido-weekly', yearStart],
-    queryFn: () => getSurtidoDashboard({ fecha_inicio: yearStart, fecha_fin: getToday(), bucket: 'week' }),
+    queryKey: ['dash-surtido-weekly', yearStart, dashboardEnd],
+    queryFn: () => getSurtidoDashboard({ fecha_inicio: yearStart, fecha_fin: dashboardEnd, bucket: 'week' }),
     enabled: backendOnline,
     staleTime: 10 * 60_000,
   })
 
   const { data: monthlyData } = useQuery({
-    queryKey: ['dash-surtido-monthly', prevYearStart],
-    queryFn: () => getSurtidoDashboard({ fecha_inicio: prevYearStart, fecha_fin: getToday(), bucket: 'month' }),
+    queryKey: ['dash-surtido-monthly', prevYearStart, dashboardEnd],
+    queryFn: () => getSurtidoDashboard({ fecha_inicio: prevYearStart, fecha_fin: dashboardEnd, bucket: 'month' }),
     enabled: backendOnline,
     staleTime: 10 * 60_000,
   })

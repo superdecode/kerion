@@ -371,8 +371,12 @@ router.get('/orders/:id',
           l.box_type ILIKE ${p}
           OR l.custom_box_barcode ILIKE ${p}
           OR l.sku ILIKE ${p}
+          OR l.id::text ILIKE ${p}
+          OR l.qty_per_box::text ILIKE ${p}
           OR l.estado_validacion ILIKE ${p}
           OR u.nombre_completo ILIKE ${p}
+          OR COALESCE(l.validated_at::text, '') ILIKE ${p}
+          OR COALESCE(l.created_at::text, '') ILIKE ${p}
         )`)
       }
       const whereClause = where.join(' AND ')
