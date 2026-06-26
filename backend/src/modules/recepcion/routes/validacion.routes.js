@@ -149,12 +149,18 @@ router.post('/orders/:id/scan',
       const rawCode = String(codigo_escaneado).trim()
       const normalizedCode = normalizeScanCode(rawCode)
       const scanVariations = generateCodeVariations(rawCode, true)
-      const [orderRes, lineRes, previousSuccessRes] = await Promise.all([
-        req.tQuery(
+      const payload = await req.tTransaction(async (client) => {
+        const orderRes = await client.query(
           `SELECT id, estado FROM inbound_orders WHERE id=$1 AND tenant_id=$2`,
           [req.params.id, req.tenantId]
-        ),
-        req.tQuery(
+        )
+        if (orderRes.rows.length === 0) {
+          const error = new Error('Orden no encontrada')
+          error.status = 404
+          throw error
+        }
+
+        const lineRes = await client.query(
           `SELECT l.*, u.nombre_completo AS validated_by_nombre
            FROM inbound_lines l
            LEFT JOIN usuarios u ON u.id = l.validated_by
@@ -162,10 +168,12 @@ router.post('/orders/:id/scan',
              AND l.tenant_id=$2
              AND ${normalizedCodeSql('l.custom_box_barcode')} = ANY($3::text[])
            ORDER BY CASE WHEN l.estado_validacion = 'pendiente' THEN 0 ELSE 1 END, l.created_at ASC
-           LIMIT 1`,
+           LIMIT 1
+           FOR UPDATE OF l`,
           [req.params.id, req.tenantId, scanVariations]
-        ),
-        req.tQuery(
+        )
+
+        const previousSuccessRes = await client.query(
           `SELECT e.*, u.nombre_completo AS scanned_by_nombre
            FROM inbound_scan_events e
            LEFT JOIN usuarios u ON u.id = e.scanned_by
@@ -176,121 +184,117 @@ router.post('/orders/:id/scan',
            ORDER BY e.scanned_at DESC, e.id DESC
            LIMIT 1`,
           [req.params.id, req.tenantId, scanVariations]
-        ),
-      ])
-      if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
-      const previousSuccess = previousSuccessRes.rows[0] || null
-
-      let line = lineRes.rows[0] || null
-      let matchField = line ? 'custom_box_barcode' : null
-
-      if (!line && previousSuccess) {
-        const eventRes = await req.tQuery(
-          `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
-           VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
-           RETURNING *`,
-          [
-            req.tenantId,
-            req.params.id,
-            previousSuccess.line_id || null,
-            normalizedCode || rawCode,
-            previousSuccess.match_field || null,
-            previousSuccess.sku_asociado || line?.sku || null,
-            req.user.id,
-            ubicacion || null,
-          ]
         )
-        return res.json({
-          resultado: 'duplicado',
-          codigo: normalizedCode || rawCode,
-          line,
-          event: eventRes.rows[0],
-          motivo: 'codigo_ya_validado',
-          mensaje: 'Todas las cajas esperadas para este código ya fueron validadas.',
-          previous_event: {
-            id: previousSuccess.id,
-            codigo_escaneado: previousSuccess.codigo_escaneado,
-            scanned_at: previousSuccess.scanned_at,
-            scanned_by_nombre: previousSuccess.scanned_by_nombre || null,
-          },
-        })
-      }
+        const previousSuccess = previousSuccessRes.rows[0] || null
 
-      if (!line) {
-        const eventRes = await req.tQuery(
-          `INSERT INTO inbound_scan_events (tenant_id, order_id, codigo_escaneado, resultado, scanned_by, ubicacion)
-           VALUES ($1,$2,$3,'no_encontrado',$4,$5)
-           RETURNING *`,
-          [req.tenantId, req.params.id, normalizedCode || rawCode, req.user.id, ubicacion || null]
+        const line = lineRes.rows[0] || null
+        const matchField = line ? 'custom_box_barcode' : null
+
+        if (!line && previousSuccess) {
+          const eventRes = await client.query(
+            `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
+             VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
+             RETURNING *`,
+            [
+              req.tenantId,
+              req.params.id,
+              previousSuccess.line_id || null,
+              normalizedCode || rawCode,
+              previousSuccess.match_field || null,
+              previousSuccess.sku_asociado || null,
+              req.user.id,
+              ubicacion || null,
+            ]
+          )
+          return {
+            resultado: 'duplicado',
+            codigo: normalizedCode || rawCode,
+            line,
+            event: eventRes.rows[0],
+            motivo: 'codigo_ya_validado',
+            mensaje: 'Todas las cajas esperadas para este código ya fueron validadas.',
+            previous_event: {
+              id: previousSuccess.id,
+              codigo_escaneado: previousSuccess.codigo_escaneado,
+              scanned_at: previousSuccess.scanned_at,
+              scanned_by_nombre: previousSuccess.scanned_by_nombre || null,
+            },
+          }
+        }
+
+        if (!line) {
+          const eventRes = await client.query(
+            `INSERT INTO inbound_scan_events (tenant_id, order_id, codigo_escaneado, resultado, scanned_by, ubicacion)
+             VALUES ($1,$2,$3,'no_encontrado',$4,$5)
+             RETURNING *`,
+            [req.tenantId, req.params.id, normalizedCode || rawCode, req.user.id, ubicacion || null]
+          )
+          return {
+            resultado: 'no_encontrado',
+            codigo: normalizedCode || rawCode,
+            event: eventRes.rows[0],
+            motivo: 'codigo_no_pertenece_orden',
+            mensaje: 'El código no existe en las líneas esperadas de esta orden de recepción.',
+          }
+        }
+
+        if (line.estado_validacion === 'validada') {
+          const eventRes = await client.query(
+            `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
+             VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
+             RETURNING *`,
+            [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
+          )
+          return {
+            resultado: 'duplicado',
+            codigo: normalizedCode || rawCode,
+            line,
+            event: eventRes.rows[0],
+            motivo: 'codigo_ya_validado',
+            mensaje: 'Todas las cajas esperadas para este código ya fueron validadas.',
+            previous_event: previousSuccess ? {
+              id: previousSuccess.id,
+              codigo_escaneado: previousSuccess.codigo_escaneado,
+              scanned_at: previousSuccess.scanned_at,
+              scanned_by_nombre: previousSuccess.scanned_by_nombre || null,
+            } : null,
+          }
+        }
+
+        await client.query(
+          `UPDATE inbound_lines SET estado_validacion='validada', validated_by=$3, validated_at=now()
+           WHERE id=$1 AND tenant_id=$2`,
+          [line.id, req.tenantId, req.user.id]
         )
-        return res.json({
-          resultado: 'no_encontrado',
-          codigo: normalizedCode || rawCode,
-          event: eventRes.rows[0],
-          motivo: 'codigo_no_pertenece_orden',
-          mensaje: 'El código no existe en las líneas esperadas de esta orden de recepción.',
-        })
-      }
-
-      if (line.estado_validacion === 'validada') {
-        const eventRes = await req.tQuery(
-          `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
-           VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
-           RETURNING *`,
-          [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
-        )
-        return res.json({
-          resultado: 'duplicado',
-          codigo: normalizedCode || rawCode,
-          line,
-          event: eventRes.rows[0],
-          motivo: 'codigo_ya_validado',
-          mensaje: 'Todas las cajas esperadas para este código ya fueron validadas.',
-          previous_event: previousSuccess ? {
-            id: previousSuccess.id,
-            codigo_escaneado: previousSuccess.codigo_escaneado,
-            scanned_at: previousSuccess.scanned_at,
-            scanned_by_nombre: previousSuccess.scanned_by_nombre || null,
-          } : null,
-        })
-      }
-
-      // Mark validated, then fire event INSERT + stats COUNT in parallel
-      await req.tQuery(
-        `UPDATE inbound_lines SET estado_validacion='validada', validated_by=$3, validated_at=now()
-         WHERE id=$1 AND tenant_id=$2`,
-        [line.id, req.tenantId, req.user.id]
-      )
-      const [eventRes, statsRes] = await Promise.all([
-        req.tQuery(
+        const eventRes = await client.query(
           `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
            VALUES ($1,$2,$3,$4,$5,$6,'correcto',$7,$8)
            RETURNING *`,
           [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
-        ),
-        req.tQuery(
+        )
+        const statsRes = await client.query(
           `SELECT COUNT(*) FILTER (WHERE estado_validacion='validada') AS validadas, COUNT(*) AS total
            FROM inbound_lines WHERE order_id=$1 AND tenant_id=$2`,
           [req.params.id, req.tenantId]
-        ),
-      ])
-      const validadas = parseInt(statsRes.rows[0].validadas)
-      const total = parseInt(statsRes.rows[0].total)
-      const newEstado = validadas === total ? 'completo' : 'en_validacion'
+        )
+        const validadas = parseInt(statsRes.rows[0].validadas)
+        const total = parseInt(statsRes.rows[0].total)
+        const newEstado = validadas === total ? 'completo' : 'en_validacion'
 
-      await req.tQuery(
-        `UPDATE inbound_orders SET cajas_validadas=$3, estado=$4, updated_at=now() WHERE id=$1 AND tenant_id=$2`,
-        [req.params.id, req.tenantId, validadas, newEstado]
-      )
+        await client.query(
+          `UPDATE inbound_orders SET cajas_validadas=$3, estado=$4, updated_at=now() WHERE id=$1 AND tenant_id=$2`,
+          [req.params.id, req.tenantId, validadas, newEstado]
+        )
 
-      const payload = {
-        resultado: 'correcto',
-        codigo: normalizedCode || rawCode,
-        line,
-        cajas_validadas: validadas,
-        estado: newEstado,
-        event: eventRes.rows[0],
-      }
+        return {
+          resultado: 'correcto',
+          codigo: normalizedCode || rawCode,
+          line,
+          cajas_validadas: validadas,
+          estado: newEstado,
+          event: eventRes.rows[0],
+        }
+      })
       if (timingEnabled && startedAt) {
         const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
         console.info(`[recepcion] scan ${req.params.id} ${elapsedMs.toFixed(1)}ms`)
@@ -302,7 +306,7 @@ router.post('/orders/:id/scan',
         const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
         console.info(`[recepcion] scan ${req.params.id} failed after ${elapsedMs.toFixed(1)}ms`)
       }
-      res.status(500).json({
+      res.status(err.status || 500).json({
         error: 'Error al procesar escaneo',
         detalle: err.message || 'Error interno no especificado',
       })

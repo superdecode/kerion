@@ -139,6 +139,28 @@ function codesMatch(left, right) {
   return generateCodeVariations(normalizeScanCode(right), false).some((variant) => leftVars.has(variant))
 }
 
+function applyLocalValidationsToLines(lines, localScans) {
+  if (!localScans.length) return lines
+  const consumed = new Set()
+
+  return lines.map((line) => {
+    if (line.estado_validacion === 'validada' || !line.custom_box_barcode) return line
+    const localIndex = localScans.findIndex((scan, index) =>
+      !consumed.has(index) && codesMatch(line.custom_box_barcode, scan.code)
+    )
+    if (localIndex === -1) return line
+
+    consumed.add(localIndex)
+    const scan = localScans[localIndex]
+    return {
+      ...line,
+      estado_validacion: 'validada',
+      validated_at: scan.scannedAt,
+      validated_by_nombre: scan.scannedBy || line.validated_by_nombre,
+    }
+  })
+}
+
 function getScanErrorMessage(err) {
   const data = err?.response?.data
   const parts = [data?.error, data?.detalle].filter(Boolean)
@@ -216,6 +238,7 @@ export default function ValidacionRecepcion() {
 
   const canQueryRecepcion = isAuthenticated
   const isOffline = useOfflineStore((s) => s.status === 'offline')
+  const moduleQueue = useOfflineStore((s) => s.moduleQueue)
 
   const { data: orderData, isLoading } = useQuery({
     queryKey: ['recepcion-order', id],
@@ -240,6 +263,19 @@ export default function ValidacionRecepcion() {
 
   const order    = orderData?.order ?? null
   const lines    = orderData?.lines ?? []
+  const pendingRecepcionScans = useMemo(() =>
+    moduleQueue
+      .filter((item) => item.type === 'recepcion_scan' && String(item.payload?.orderId) === String(id))
+      .map((item) => ({
+        id: item.payload?.local_id || item.id,
+        code: item.payload?.codigo_escaneado,
+        ubicacion: item.payload?.ubicacion || null,
+        scannedAt: item.ts,
+        scannedBy: 'Pendiente local',
+      }))
+      .filter((item) => item.code),
+    [moduleQueue, id]
+  )
   const savedValidationConfig = order?.validation_config ?? null
   const tarimaConfigLocked = savedValidationConfig?.mode === 'tarimas' && savedValidationConfig?.locked === true
   const isTarimaMode = withTarimas
@@ -252,10 +288,23 @@ export default function ValidacionRecepcion() {
     [savedValidationConfig?.emptyTarimas]
   )
   const correctHistory = useMemo(() => history.filter((h) => h.result === 'correcto'), [history])
+  const localValidationScans = useMemo(() => {
+    const seen = new Set()
+    return [...correctHistory, ...pendingRecepcionScans].filter((scan) => {
+      const key = `${scan.id || ''}:${normalizeScanCode(scan.code)}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [correctHistory, pendingRecepcionScans])
+  const effectiveLines = useMemo(
+    () => applyLocalValidationsToLines(lines, localValidationScans),
+    [lines, localValidationScans]
+  )
   const correctHistoryCount = correctHistory.length
-  const total    = Math.max(Number(order?.total_cajas || 0), lines.length)
-  const validadas  = Math.max(lines.filter(l => l.estado_validacion === 'validada').length, Number(order?.cajas_validadas || 0))
-  const faltantes  = lines.filter(l => l.estado_validacion === 'faltante').length
+  const total    = Math.max(Number(order?.total_cajas || 0), effectiveLines.length)
+  const validadas  = Math.max(effectiveLines.filter(l => l.estado_validacion === 'validada').length, Number(order?.cajas_validadas || 0))
+  const faltantes  = effectiveLines.filter(l => l.estado_validacion === 'faltante').length
   const pendientes = Math.max(total - validadas - faltantes, 0)
   const progressPct = total > 0 ? Math.min(100, Math.round((validadas / total) * 100)) : 0
 
@@ -293,12 +342,12 @@ export default function ValidacionRecepcion() {
         return new Map()
       }
       return buildTarimaMap(
-        lines,
+        effectiveLines,
         lockedTarimaMap,
         groupSmallCodes ? { enabled: true, minCajas: minCajasParaAgrupar, maxCajas: maxCajasEnGrupo } : null
       )
     },
-    [lines, lockedTarimaMap, groupSmallCodes, minCajasParaAgrupar, maxCajasEnGrupo, isTarimaMode, hasLockedTarimaAssignments, sectionMode]
+    [effectiveLines, lockedTarimaMap, groupSmallCodes, minCajasParaAgrupar, maxCajasEnGrupo, isTarimaMode, hasLockedTarimaAssignments, sectionMode]
   )
   const effectiveTarimaMap = baseTarimaMap
   const totalTarimas = useMemo(
@@ -320,7 +369,7 @@ export default function ValidacionRecepcion() {
     if (!isTarimaMode) return []
     // Build linesByBase for O(n) lookup
     const linesByBase = new Map()
-    for (const l of lines) {
+    for (const l of effectiveLines) {
       const base = extractBaseCode(l.custom_box_barcode)
       if (!base) continue
       if (!linesByBase.has(base)) linesByBase.set(base, [])
@@ -349,7 +398,7 @@ export default function ValidacionRecepcion() {
       }
       return a.num - b.num
     })
-  }, [isTarimaMode, effectiveTarimaMap, lines, sortTarimasByCountDesc, savedEmptyTarimas])
+  }, [isTarimaMode, effectiveTarimaMap, effectiveLines, sortTarimasByCountDesc, savedEmptyTarimas])
 
   const tarimaCounts = useMemo(() => ({
     completo:   tarimaStats.filter(ts => ts.validated === ts.total && ts.total > 0).length,
@@ -424,12 +473,21 @@ export default function ValidacionRecepcion() {
       }
       map.set(key, existing)
     }
+    for (const pending of pendingRecepcionScans) {
+      const key = pending.ubicacion ?? ''
+      const existing = map.get(key) ?? { ubicacion: pending.ubicacion, codes: [] }
+      const existingIds = new Set(existing.codes.map(c => c.id))
+      if (!existingIds.has(pending.id)) {
+        existing.codes.push({ id: pending.id, code: pending.code, scannedAt: pending.scannedAt })
+      }
+      map.set(key, existing)
+    }
     return Array.from(map.values()).sort((a, b) => {
       if (!a.ubicacion) return 1
       if (!b.ubicacion) return -1
       return a.ubicacion.localeCompare(b.ubicacion)
     })
-  }, [serverEvents, correctHistory, selectedUbicacion, isTarimaMode])
+  }, [serverEvents, correctHistory, pendingRecepcionScans, selectedUbicacion, isTarimaMode])
 
   const filteredUbicacionGroups = useMemo(() => {
     if (isTarimaMode) return []
@@ -695,7 +753,7 @@ export default function ValidacionRecepcion() {
 
   async function activateTarimaMode() {
     const frozenTarimaMap = buildTarimaMap(
-      lines,
+      effectiveLines,
       new Map(),
       groupSmallCodes ? { enabled: true, minCajas: minCajasParaAgrupar, maxCajas: maxCajasEnGrupo } : null
     )
@@ -719,7 +777,7 @@ export default function ValidacionRecepcion() {
     if (e.key === 'Enter' && e.target.value.trim()) {
       const code = e.target.value.trim()
       e.target.value = ''
-      const matchingLines = lines.filter(l => l.custom_box_barcode && codesMatch(l.custom_box_barcode, code))
+      const matchingLines = effectiveLines.filter(l => l.custom_box_barcode && codesMatch(l.custom_box_barcode, code))
       const hasPendingMatchingLine = matchingLines.some(l => l.estado_validacion !== 'validada')
       const existing = history.find(h => codesMatch(h.code, code))
         || serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
@@ -756,6 +814,7 @@ export default function ValidacionRecepcion() {
       const ubicacion = withTarimas ? formatTarimaLocation(tarimaNum) : selectedUbicacion
       if (isOffline) {
         const matchedLine = matchingLines.find(l => l.estado_validacion !== 'validada') || matchingLines[0]
+        const offlineId = `offline-${Date.now()}`
         const offlineResult = !matchedLine
           ? 'no_encontrado'
           : matchedLine.estado_validacion === 'validada'
@@ -769,6 +828,7 @@ export default function ValidacionRecepcion() {
             session_id: sessionId !== 'local' ? sessionId : null,
             tarimas_enabled: withTarimas,
             ubicacion: ubicacion || null,
+            local_id: offlineId,
           },
         })
         startTransition(() => {
@@ -797,7 +857,6 @@ export default function ValidacionRecepcion() {
             if (base && tarimaNum) {
               setTarimaOverrides(prev => { const next = new Map(prev); next.set(base, tarimaNum); return next })
             }
-            const offlineId = `offline-${Date.now()}`
             setHistory(prev => [{
               id: offlineId, result: 'correcto', code, sku: null,
               scannedAt: new Date().toISOString(), scannedBy: '—', ubicacion: ubicacion || null,
