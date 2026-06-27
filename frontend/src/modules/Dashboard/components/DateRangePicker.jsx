@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { Calendar, ChevronDown } from 'lucide-react'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getToday, subtractDays } from '../../../core/utils/dateFormat'
@@ -33,7 +33,16 @@ function calcRange(preset, customFrom, customTo) {
   }
 }
 
-export function DateRangePicker({ onChange }) {
+function findPresetForRange(range) {
+  if (!range?.from || !range?.to) return null
+  for (const preset of ['today', 'yesterday', 'thisWeek', 'thisMonth', 'last7', 'last30']) {
+    const presetRange = calcRange(preset)
+    if (presetRange.from === range.from && presetRange.to === range.to) return preset
+  }
+  return null
+}
+
+export function DateRangePicker({ value, onChange }) {
   const { t } = useI18nStore()
   const presets = PRESETS(t)
   const [active, setActive] = useState('today')
@@ -41,7 +50,18 @@ export function DateRangePicker({ onChange }) {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
 
-  const range = useMemo(() => calcRange(active, customFrom, customTo), [active, customFrom, customTo])
+  useEffect(() => {
+    if (!value?.from || !value?.to) return
+    const preset = findPresetForRange(value)
+    if (preset) {
+      setActive(preset)
+      setShowCustom(false)
+      return
+    }
+    setActive('custom')
+    setCustomFrom(value.from)
+    setCustomTo(value.to)
+  }, [value?.from, value?.to])
 
   const handlePreset = (key) => {
     setActive(key)

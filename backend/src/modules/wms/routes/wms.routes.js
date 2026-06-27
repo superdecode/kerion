@@ -217,6 +217,32 @@ function buildPickOrderTrackingSelect(columns) {
   return selected.map((column) => `ot.${column}`).join(', ')
 }
 
+function buildPickOrderTrackingSelectWithStats(columns) {
+  const preferred = [
+    'id', 'tenant_id', 'outbound_order_no', 'third_order_no',
+    'surtidor_id', 'surtidor_nombre', 'status', 'notes',
+    'assigned_at', 'assigned_by',
+    'sorting_started_at', 'sorting_completed_at',
+    'validation_started_at', 'validation_completed_at', 'validated_by',
+    'tiene_faltantes', 'tiene_anormalidades', 'tiene_reparacion', 'tiene_rastreo',
+    'created_at', 'updated_at',
+  ]
+  const selected = preferred.filter((column) => columns.has(column))
+  if (selected.length === 0) {
+    return 'ot.*, stats.tenant_id AS tenant_id, stats.outbound_order_no AS outbound_order_no'
+  }
+  return selected.map((column) => {
+    if (column === 'tenant_id') return 'COALESCE(ot.tenant_id, stats.tenant_id) AS tenant_id'
+    if (column === 'outbound_order_no') return 'COALESCE(ot.outbound_order_no, stats.outbound_order_no) AS outbound_order_no'
+    if (column === 'third_order_no') return 'COALESCE(ot.third_order_no, stats.third_order_no) AS third_order_no'
+    if (column === 'status') return `COALESCE(ot.status, CASE WHEN COALESCE(stats.total_scanned, 0) >= COALESCE(stats.total_expected, 0) AND COALESCE(stats.total_expected, 0) > 0 THEN 'complete' ELSE 'validating' END) AS status`
+    if (column === 'validation_completed_at') return 'COALESCE(ot.validation_completed_at, stats.last_session_at) AS validation_completed_at'
+    if (column === 'updated_at') return 'COALESCE(ot.updated_at, stats.last_session_at) AS updated_at'
+    if (column === 'created_at') return 'COALESCE(ot.created_at, stats.first_session_at) AS created_at'
+    return `ot.${column}`
+  }).join(', ')
+}
+
 function buildPickSessionsStatsSubquery(sessionColumns, includeSessionCount = false) {
   const aggregates = []
   if (includeSessionCount) aggregates.push('COUNT(*) as session_count')
@@ -230,6 +256,9 @@ function buildPickSessionsStatsSubquery(sessionColumns, includeSessionCount = fa
       ? 'MAX(COALESCE(total_expected, 0)) as total_expected'
       : '0::bigint as total_expected'
   )
+  aggregates.push(sessionColumns.has('third_order_no') ? 'MAX(third_order_no) as third_order_no' : 'NULL::text as third_order_no')
+  aggregates.push(sessionColumns.has('started_at') ? 'MIN(started_at) as first_session_at' : 'NULL as first_session_at')
+  aggregates.push(sessionColumns.has('updated_at') ? 'MAX(updated_at) as last_session_at' : sessionColumns.has('completed_at') ? 'MAX(completed_at) as last_session_at' : 'NULL as last_session_at')
   return `
     SELECT outbound_order_no, tenant_id,
            ${aggregates.join(',\n           ')}
@@ -1926,16 +1955,17 @@ router.get('/order-tracking',
         getPublicTableColumns(req, 'pick_sessions'),
       ])
       const rows = await req.tQuery(
-        `SELECT ${buildPickOrderTrackingSelect(trackingColumns)}, s.nombre as surtidor_nombre_actual,
+        `WITH stats AS (${buildPickSessionsStatsSubquery(sessionColumns, true)})
+         SELECT ${buildPickOrderTrackingSelectWithStats(trackingColumns)}, s.nombre as surtidor_nombre_actual,
                 COALESCE(stats.session_count, 0) as session_count,
                 COALESCE(stats.total_scanned, 0) as total_scanned,
                 COALESCE(stats.total_expected, 0) as total_expected
-         FROM pick_order_tracking ot
-         LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id
-         LEFT JOIN (${buildPickSessionsStatsSubquery(sessionColumns, true)}) stats
+         FROM stats
+         FULL JOIN pick_order_tracking ot
            ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
-         WHERE ot.tenant_id = $1
-         ORDER BY ot.updated_at DESC`,
+         LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id
+         WHERE COALESCE(ot.tenant_id, stats.tenant_id) = $1
+         ORDER BY COALESCE(ot.updated_at, stats.last_session_at, stats.first_session_at) DESC NULLS LAST`,
         [req.tenantId]
       )
       res.json({ success: true, data: rows.rows })
@@ -1955,23 +1985,18 @@ router.get('/order-tracking/:obc',
         getPublicTableColumns(req, 'pick_order_tracking'),
         getPublicTableColumns(req, 'pick_sessions'),
       ])
-      const detailStatsSubquery = `
-        SELECT outbound_order_no, tenant_id,
-               ${sessionColumns.has('total_scanned') ? 'SUM(COALESCE(total_scanned, 0))' : '0::bigint'} as total_scanned,
-               ${sessionColumns.has('total_expected') ? 'MAX(COALESCE(total_expected, 0))' : '0::bigint'} as total_expected
-        FROM pick_sessions
-        WHERE tenant_id = $1 AND outbound_order_no = $2
-        GROUP BY outbound_order_no, tenant_id
-      `
       const row = await req.tQuery(
-        `SELECT ${buildPickOrderTrackingSelect(trackingColumns)}, s.nombre as surtidor_nombre_actual,
+        `WITH stats AS (${buildPickSessionsStatsSubquery(sessionColumns, true)})
+         SELECT ${buildPickOrderTrackingSelectWithStats(trackingColumns)}, s.nombre as surtidor_nombre_actual,
+                COALESCE(stats.session_count, 0) as session_count,
                 COALESCE(stats.total_scanned, 0) as total_scanned,
                 COALESCE(stats.total_expected, 0) as total_expected
-         FROM pick_order_tracking ot
-         LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id
-         LEFT JOIN (${detailStatsSubquery}) stats
+         FROM stats
+         FULL JOIN pick_order_tracking ot
            ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
-         WHERE ot.tenant_id = $1 AND ot.outbound_order_no = $2`,
+         LEFT JOIN pick_surtidores s ON s.id = ot.surtidor_id
+         WHERE COALESCE(ot.tenant_id, stats.tenant_id) = $1
+           AND COALESCE(ot.outbound_order_no, stats.outbound_order_no) = $2`,
         [req.tenantId, req.params.obc]
       )
       res.json({ success: true, data: row.rows[0] || null })

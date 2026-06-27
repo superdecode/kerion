@@ -16,6 +16,7 @@ import { KpiCard } from '../components/KpiCard'
 import { ChartCard, NoData } from '../components/ChartCard'
 import { fmtDateString, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
 import { getOutboundList } from '../../WmsHub/services/googleSheetsService'
+import { getOrderTracking, getRecords } from '../../Surtido/services/surtidoService'
 
 const ESTADO_COLORS = {
   completado:   '#22c55e',
@@ -139,25 +140,22 @@ export default function SurtidoDashboard({ dateRange }) {
     setCenterDate(dateRange?.to || getToday())
   }, [dateRange?.to])
 
-  const fiveDayFrom = subtractDays(centerDate, 2)
-  const fiveDayTo = subtractDays(centerDate, -2)
-
   const { data, isLoading } = useQuery({
     queryKey: ['dash-surtido', dashboardStart, dashboardEnd],
     queryFn: () => getSurtidoDashboard({ fecha_inicio: dashboardStart, fecha_fin: dashboardEnd }),
     enabled: backendOnline,
   })
 
-  const { data: fiveDayData } = useQuery({
-    queryKey: ['dash-surtido-5day', fiveDayFrom, fiveDayTo],
-    queryFn: () => getSurtidoDashboard({ fecha_inicio: fiveDayFrom, fecha_fin: fiveDayTo }),
-    enabled: backendOnline,
-    staleTime: 60_000,
-  })
-
-  const { data: outboundListData } = useQuery({
+  const { data: outboundListData, isLoading: outboundLoading, isFetching: outboundFetching } = useQuery({
     queryKey: ['wms-outbound'],
     queryFn: getOutboundList,
+    staleTime: 5 * 60_000,
+  })
+
+  const { data: trackingData, isLoading: trackingLoading, isFetching: trackingFetching } = useQuery({
+    queryKey: ['wms-order-tracking'],
+    queryFn: getOrderTracking,
+    enabled: backendOnline,
     staleTime: 5 * 60_000,
   })
 
@@ -193,6 +191,7 @@ export default function SurtidoDashboard({ dateRange }) {
     }))
   const tendenciaBucket = graficas.tendencia_bucket || 'week'
   const fiveDates = Array.from({ length: 5 }, (_, i) => subtractDays(centerDate, 2 - i))
+  const fiveDayLoading = outboundLoading || outboundFetching || trackingLoading || trackingFetching || !outboundListData || !trackingData
 
   const cajasPorSemana = (weeklyData?.data?.graficas?.tendencia || [])
     .map(r => ({ ...r, sem: weekNum(r.periodo), cajas: Number(r.cajas ?? 0) }))
@@ -201,14 +200,15 @@ export default function SurtidoDashboard({ dateRange }) {
   const cajasPorMes = (monthlyData?.data?.graficas?.tendencia || [])
     .map(r => ({ ...r, mes: monthShort(r.periodo), cajas: Number(r.cajas ?? 0) }))
   const today = getToday()
-
-  const validatedByDay = {}
-  for (const item of (fiveDayData?.data?.graficas?.tendencia || [])) {
-    const key = String(item.periodo || '').split('T')[0]
-    if (key) validatedByDay[key] = { ordenes: Number(item.ordenes ?? 0), cajas: Number(item.cajas ?? 0) }
-  }
+  const centerDateLabel = centerDate === today ? 'Hoy' : fmtDateString(centerDate)
 
   const expectedByDay = {}
+  const validatedByDay = {}
+  const trackingMap = getRecords(trackingData).reduce((map, tracking) => {
+    if (tracking?.outbound_order_no) map[tracking.outbound_order_no] = tracking
+    return map
+  }, {})
+
   for (const r of (outboundListData?.data?.records || [])) {
     if (!r.outboundTime) continue
     const key = toDateKey(r.outboundTime)
@@ -216,6 +216,14 @@ export default function SurtidoDashboard({ dateRange }) {
     if (!expectedByDay[key]) expectedByDay[key] = { ordenes: 0, cajas: 0 }
     expectedByDay[key].ordenes += 1
     expectedByDay[key].cajas += Number(r.outboundBoxCount || r.quantity || 0)
+
+    const tracking = trackingMap[r.outboundOrderNo]
+    const scanned = Number(tracking?.total_scanned || 0)
+    if (scanned > 0) {
+      if (!validatedByDay[key]) validatedByDay[key] = { ordenes: 0, cajas: 0 }
+      validatedByDay[key].ordenes += 1
+      validatedByDay[key].cajas += scanned
+    }
   }
 
   return (
@@ -361,7 +369,7 @@ export default function SurtidoDashboard({ dateRange }) {
               onClick={() => setCenterDate(getToday())}
               className="text-xs px-2.5 py-1 rounded-lg border border-warm-200 text-warm-600 hover:bg-warm-50 transition-colors font-medium"
             >
-              Hoy
+              {centerDateLabel}
             </button>
             <button
               type="button"
@@ -373,6 +381,11 @@ export default function SurtidoDashboard({ dateRange }) {
           </div>
         </div>
         <div className="overflow-x-auto">
+          {fiveDayLoading ? (
+            <div className="flex min-h-[190px] items-center justify-center">
+              <LoadingSpinner size="md" text="Cargando datos..." />
+            </div>
+          ) : (
           <table className="w-full">
             <thead>
               <tr className="bg-warm-50 border-b border-warm-100">
@@ -413,6 +426,7 @@ export default function SurtidoDashboard({ dateRange }) {
               })}
             </tbody>
           </table>
+          )}
         </div>
       </div>
     </div>

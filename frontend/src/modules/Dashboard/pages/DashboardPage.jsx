@@ -330,7 +330,7 @@ export default function DashboardPage() {
 
         {/* Date filter bar */}
         <div className="flex-shrink-0 sticky top-0 z-[5] bg-white/90 backdrop-blur-lg border-b border-warm-100 px-5 py-2.5">
-          <DateRangePicker onChange={handleRangeChange} />
+          <DateRangePicker value={dateRange} onChange={handleRangeChange} />
         </div>
 
         {/* Dashboard content */}
