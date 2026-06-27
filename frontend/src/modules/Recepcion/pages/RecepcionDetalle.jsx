@@ -16,7 +16,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos } from '../services/recepcionService'
+import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos, markScanEventAsNovedad } from '../services/recepcionService'
 import { STALE } from '../../../core/constants/queryConfig'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
@@ -210,7 +210,7 @@ export default function RecepcionDetalle() {
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
     queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1 }),
-    enabled: canQueryRecepcion && Boolean(data?.order) && activeTab === 'validacion',
+    enabled: canQueryRecepcion && Boolean(data?.order),
     retry: false,
     staleTime: STALE.SHORT,
   })
@@ -218,7 +218,7 @@ export default function RecepcionDetalle() {
   const { data: novedadesData } = useQuery({
     queryKey: ['recepcion-novedades', id],
     queryFn: () => getNovedades(id),
-    enabled: canQueryRecepcion && Boolean(data?.order) && activeTab === 'otros',
+    enabled: canQueryRecepcion && Boolean(data?.order),
     retry: false,
     staleTime: STALE.SHORT,
   })
@@ -226,7 +226,7 @@ export default function RecepcionDetalle() {
   const { data: tiposData } = useQuery({
     queryKey: ['recepcion-novedad-tipos'],
     queryFn: getNovedadTipos,
-    enabled: canQueryRecepcion && Boolean(data?.order) && activeTab === 'otros',
+    enabled: canQueryRecepcion && Boolean(data?.order),
     retry: false,
     staleTime: STALE.MEDIUM,
   })
@@ -264,6 +264,19 @@ export default function RecepcionDetalle() {
     onError: (err) => toast.error(err.response?.data?.error || t('rec.toast.deleteError')),
   })
 
+  const markScanEventAsNovedadMut = useMutation({
+    mutationFn: ({ eventId, tipo, ubicacion }) => markScanEventAsNovedad(id, eventId, { tipo, ubicacion }),
+    onSuccess: () => {
+      toast.success(t('rec.val.markAnormalidad.success'))
+      qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
+      setMoveToOtrosModal({ open: false, event: null, tipo: '', ubicacion: '' })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
   const createNovedadMut = useMutation({
     mutationFn: (payload) => createNovedad(id, payload),
     onSuccess: () => {
@@ -287,7 +300,9 @@ export default function RecepcionDetalle() {
   const canValidate = hasPermission('recepcion.recibir', 'actualizar')
   const canEdit = hasPermission('recepcion.recibir', 'actualizar')
   const canCreate = hasPermission('recepcion.recibir', 'crear')
+  const canMoveValidatedToOtros = hasPermission('recepcion.validacion', 'actualizar')
   const canDeleteEvents = hasPermission('recepcion.validacion', 'eliminar')
+  const [moveToOtrosModal, setMoveToOtrosModal] = useState({ open: false, event: null, tipo: '', ubicacion: '' })
 
   const submitNuevaNovedad = () => {
     if (!nuevoTipo || createNovedadMut.isPending) return
@@ -957,16 +972,31 @@ export default function RecepcionDetalle() {
                             </span>
                           </td>
                           <td className="px-3 py-2.5 text-right">
-                            {canDeleteEvents ? (
-                              <button
-                                type="button"
-                                onClick={() => deleteScanEventMut.mutate(ev.id)}
-                                disabled={deleteScanEventMut.isPending}
-                                className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-30"
-                                title={t('rec.val.delete.tooltip')}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                            {(canMoveValidatedToOtros || canDeleteEvents) ? (
+                              <div className="inline-flex items-center justify-end gap-1">
+                                {canMoveValidatedToOtros ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setMoveToOtrosModal({ open: true, event: ev, tipo: '', ubicacion: ev.ubicacion || '' })}
+                                    disabled={markScanEventAsNovedadMut.isPending}
+                                    className="inline-flex rounded-lg p-1.5 text-warning-600 hover:bg-warning-50 disabled:cursor-not-allowed disabled:opacity-30"
+                                    title={t('rec.val.markAnormalidad.tooltip')}
+                                  >
+                                    <AlertTriangle className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : null}
+                                {canDeleteEvents ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteScanEventMut.mutate(ev.id)}
+                                    disabled={deleteScanEventMut.isPending}
+                                    className="inline-flex rounded-lg p-1.5 text-danger-600 hover:bg-danger-50 disabled:cursor-not-allowed disabled:opacity-30"
+                                    title={t('rec.val.delete.tooltip')}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : null}
+                              </div>
                             ) : null}
                           </td>
                         </tr>
@@ -1187,6 +1217,71 @@ export default function RecepcionDetalle() {
         }
       >
         <p className="text-sm text-warm-700">{t('rec.val.delete.desc')}</p>
+      </Modal>
+
+      <Modal
+        isOpen={moveToOtrosModal.open}
+        onClose={() => setMoveToOtrosModal({ open: false, event: null, tipo: '', ubicacion: '' })}
+        title={t('rec.val.markAnormalidad.title')}
+        icon={AlertTriangle}
+        size="sm"
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <button
+              onClick={() => setMoveToOtrosModal({ open: false, event: null, tipo: '', ubicacion: '' })}
+              className="btn-ghost"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={() => moveToOtrosModal.event?.id && markScanEventAsNovedadMut.mutate({
+                eventId: moveToOtrosModal.event.id,
+                tipo: moveToOtrosModal.tipo,
+                ubicacion: moveToOtrosModal.ubicacion || null,
+              })}
+              disabled={!moveToOtrosModal.tipo || markScanEventAsNovedadMut.isPending || !moveToOtrosModal.event?.id}
+              className="btn-primary disabled:opacity-50"
+            >
+              {markScanEventAsNovedadMut.isPending ? t('common.loading') : t('rec.val.markAnormalidad.confirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">{t('rec.val.markAnormalidad.helper')}</p>
+          <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-warning-700">{t('rec.val.markAnormalidad.match')}</p>
+            <p className="font-mono font-bold text-warning-900 break-all">{moveToOtrosModal.event?.codigo_escaneado || '—'}</p>
+            {moveToOtrosModal.event?.match_field && (
+              <p className="text-xs text-warning-700">
+                <span className="font-semibold">{t('rec.scan.col.match_field')}:</span>{' '}
+                {moveToOtrosModal.event.match_field}
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-warm-600">{t('rec.val.forceEntry.tipo')}</label>
+            <select
+              value={moveToOtrosModal.tipo}
+              onChange={e => setMoveToOtrosModal(prev => ({ ...prev, tipo: e.target.value }))}
+              className="w-full rounded-xl border border-warm-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">{t('rec.otros.select_tipo')}</option>
+              {(tiposData?.tipos || []).map((tipo) => (
+                <option key={tipo.id} value={tipo.nombre}>{tipo.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-warm-600">{t('rec.val.forceEntry.ubicacion')}</label>
+            <input
+              value={moveToOtrosModal.ubicacion}
+              onChange={e => setMoveToOtrosModal(prev => ({ ...prev, ubicacion: e.target.value.toUpperCase() }))}
+              className="w-full rounded-xl border border-warm-200 bg-white px-3 py-2 text-sm font-mono"
+              placeholder={t('rec.val.forceEntry.ubicacion_placeholder')}
+            />
+          </div>
+        </div>
       </Modal>
     </div>
   )

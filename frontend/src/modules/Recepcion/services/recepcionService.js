@@ -14,6 +14,8 @@ export const scanCode = (orderId, payload) => api.post(`/recepcion/orders/${orde
 export const getScanEvents = (orderId, params = {}) => api.get(`/recepcion/orders/${orderId}/scan-events`, { params }).then(r => r.data)
 export const deleteLastValidationRecord = (orderId) => api.delete(`/recepcion/orders/${orderId}/scan-events/last-validation`).then(r => r.data)
 export const deleteScanEvent = (orderId, eventId) => api.delete(`/recepcion/orders/${orderId}/scan-events/${eventId}`).then(r => r.data)
+export const markScanEventAsNovedad = (orderId, eventId, payload) =>
+  api.post(`/recepcion/orders/${orderId}/scan-events/${eventId}/anormalidad`, payload).then(r => r.data)
 export const relocateScanEvents = (orderId, from_ubicacion, to_ubicacion) =>
   api.patch(`/recepcion/orders/${orderId}/scan-events/relocate`, { from_ubicacion, to_ubicacion }).then(r => r.data)
 export const getListaRecepcion = (orderId) => api.get(`/recepcion/orders/${orderId}/lista-recepcion`).then(r => r.data)

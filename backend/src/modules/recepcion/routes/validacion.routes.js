@@ -466,6 +466,88 @@ router.delete('/orders/:id/scan-events/:eventId',
   }
 )
 
+// POST /orders/:id/scan-events/:eventId/anormalidad — move a validated scan to novedades
+router.post('/orders/:id/scan-events/:eventId/anormalidad',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'editar'),
+  async (req, res) => {
+    try {
+      const { tipo, ubicacion } = req.body
+      if (!tipo) return res.status(400).json({ error: 'Tipo requerido' })
+
+      const eventRes = await req.tQuery(
+        `SELECT * FROM inbound_scan_events WHERE id=$1 AND order_id=$2 AND tenant_id=$3`,
+        [req.params.eventId, req.params.id, req.tenantId]
+      )
+      if (eventRes.rows.length === 0) return res.status(404).json({ error: 'Evento no encontrado' })
+
+      const event = eventRes.rows[0]
+      if (event.resultado !== 'correcto') {
+        return res.status(400).json({ error: 'Solo se pueden mover a anomalías registros validados' })
+      }
+
+      const tipoRes = await req.tQuery(
+        `SELECT id, nombre
+         FROM inbound_novedad_tipos
+         WHERE tenant_id=$1 AND activo=true AND LOWER(nombre)=LOWER($2)
+         LIMIT 1`,
+        [req.tenantId, String(tipo).trim()]
+      )
+      if (!tipoRes.rows.length) {
+        return res.status(400).json({ error: 'Tipo de anomalía inválido para este tenant' })
+      }
+
+      const normalizedCodigo = normalizeScanCode(event.codigo_escaneado)
+      const novedadRes = await req.tQuery(
+        `INSERT INTO inbound_novedades (tenant_id, order_id, tipo, codigo, ubicacion, created_by, es_forzada, cuenta_conteo)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         RETURNING *`,
+        [
+          req.tenantId,
+          req.params.id,
+          tipoRes.rows[0].nombre,
+          normalizedCodigo || null,
+          ubicacion?.trim() || event.ubicacion || null,
+          req.user.id,
+          true,
+          true,
+        ]
+      )
+
+      await req.tQuery(
+        `DELETE FROM inbound_scan_events WHERE id=$1 AND tenant_id=$2`,
+        [event.id, req.tenantId]
+      )
+
+      if (event.line_id) {
+        await req.tQuery(
+          `UPDATE inbound_lines
+           SET estado_validacion='pendiente', validated_by=NULL, validated_at=NULL
+           WHERE id=$1 AND tenant_id=$2`,
+          [event.line_id, req.tenantId]
+        )
+      }
+
+      const orderState = await refreshRecepcionOrderState(req, req.tenantId, req.params.id)
+
+      res.status(201).json({
+        ok: true,
+        novedad: novedadRes.rows[0],
+        removedEvent: event,
+        lineId: event.line_id,
+        cajas_validadas: orderState?.cajas_validadas || 0,
+        cajas_forzadas: orderState?.cajas_forzadas || 0,
+        cajas_registradas: orderState?.cajas_registradas || 0,
+        estado: orderState?.estado || 'pendiente_validacion',
+        order: orderState?.order || null,
+      })
+    } catch (err) {
+      console.error('[recepcion] move scan event to novedad:', err.message)
+      res.status(500).json({ error: 'Error al mover registro a anomalías' })
+    }
+  }
+)
+
 // GET /orders/:id/novedades
 router.get('/orders/:id/novedades',
   authenticateToken, loadFullUser,
