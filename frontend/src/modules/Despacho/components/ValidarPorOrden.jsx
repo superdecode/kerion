@@ -137,8 +137,27 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       setOrderDetail(cached)
       return
     }
-    setOrderDetail(null)
-    setDetailLoading(false)
+    let cancelled = false
+    if (!order.outbound_order_no) {
+      setOrderDetail(null)
+      setDetailLoading(false)
+      return () => { cancelled = true }
+    }
+    setDetailLoading(true)
+    getOutboundDetail(order.outbound_order_no)
+      .then((detail) => {
+        if (cancelled) return
+        const resolved = detail?.data ?? null
+        setOrderDetail(resolved)
+        if (detailCache?.current) detailCache.current.set(order.outbound_order_no, resolved)
+      })
+      .catch(() => {
+        if (!cancelled) setOrderDetail(null)
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false)
+      })
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.outbound_order_no])
 
@@ -168,7 +187,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     })
     return scanned
   }, [scans])
-  const expected = order.bultos_esperados ?? orderDetail?.outboundBoxCount ?? null
+  const expected = order.bultos_esperados ?? orderDetail?.outboundBoxCount ?? order.bultos ?? null
 
   const { mutate: doAddScan, isPending: scanning } = useMutation({
     mutationFn: ({ code, tarimaRef }) => addOrderScan(folioId, order.id, { codigo_caja: code, tarima_ref: tarimaRef }),
@@ -177,7 +196,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       onUpdate(data)
       const updatedOrder = data?.orders?.find(o => o.id === order.id)
       const newScansCount = updatedOrder?.scans?.length ?? 0
-      const expectedCount = Number(order.bultos_esperados ?? orderDetail?.outboundBoxCount)
+      const expectedCount = Number(order.bultos_esperados ?? orderDetail?.outboundBoxCount ?? order.bultos)
       if (expectedCount > 0 && newScansCount >= expectedCount) {
         setCompleted(true)
         onAutoConfirm({ bultos: newScansCount, estado: 'cargado' })
@@ -307,8 +326,8 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
         </p>
       </div>
     </Modal>
-    <div className="bg-primary-50/60 border-t border-primary-100 px-5 py-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="bg-primary-50/60 border-t border-primary-100 px-5 py-4">
+        <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-primary-600" />
           <span className="text-xs font-semibold text-primary-700">Validación · {order.outbound_order_no}</span>
@@ -377,6 +396,17 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
 
       {!detailLoading && orderDetail && !orderDetail.packageList?.length && (
         <p className="text-[11px] text-warm-400 mb-2">{t('desp.validar.orden.sinDetalle')}</p>
+      )}
+
+      {!detailLoading && !orderDetail && (
+        <div className="mb-2 rounded-xl border border-warm-100 bg-warm-50 px-3 py-2 text-[11px] text-warm-500">
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            <span className="font-mono font-semibold text-warm-700">{order.outbound_order_no}</span>
+            {order.destinatario ? <span>{order.destinatario}</span> : null}
+            {order.bultos_esperados != null ? <span>{t('desp.validar.destino.esperadas')}: {order.bultos_esperados}</span> : null}
+            {order.bultos != null ? <span>{t('desp.validar.destino.escaneadas')}: {order.bultos}</span> : null}
+          </div>
+        </div>
       )}
 
       {pendingOfflineScans.length > 0 && (

@@ -19,6 +19,7 @@ import {
   getFolio, getFolioScans, addFolioScan, deleteFolioScan,
   moveFolioScanTarima, cerrarFolio, cancelarFolio, getOutboundList, removeDestinationOrder,
 } from '../services/despachoService'
+import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
 function genTarimaRef(num) {
@@ -262,7 +263,9 @@ export default function ValidarPorDestino({ folioId }) {
   const [moveModal, setMoveModal] = useState({ open: false, scan: null, target: '' })
   const [removeOrderModal, setRemoveOrderModal] = useState({ open: false, order: null })
   const [pendingOfflineScans, setPendingOfflineScans] = useState([])
+  const [orderDetailsByNo, setOrderDetailsByNo] = useState({})
   const isOffline = useOfflineStore((s) => s.status === 'offline')
+  const detailsFetchingRef = useRef(new Set())
 
   const { data: folioData, isLoading: loadingFolio } = useQuery({
     queryKey: ['despacho-folio', folioId],
@@ -314,18 +317,48 @@ export default function ValidarPorDestino({ folioId }) {
 
   const outboundRecords = outboundCacheData?.data?.records ?? []
 
+  useEffect(() => {
+    let cancelled = false
+    const orderNos = orders.map(order => order.outbound_order_no).filter(Boolean)
+    orderNos.forEach((orderNo) => {
+      if (orderDetailsByNo[orderNo] !== undefined) return
+      if (detailsFetchingRef.current.has(orderNo)) return
+      detailsFetchingRef.current.add(orderNo)
+      getOutboundDetail(orderNo)
+        .then((detail) => {
+          if (cancelled) return
+          setOrderDetailsByNo(prev => ({
+            ...prev,
+            [orderNo]: detail?.data ?? null,
+          }))
+        })
+        .catch(() => {
+          if (cancelled) return
+          setOrderDetailsByNo(prev => ({
+            ...prev,
+            [orderNo]: null,
+          }))
+        })
+        .finally(() => {
+          detailsFetchingRef.current.delete(orderNo)
+        })
+    })
+    return () => { cancelled = true }
+  }, [orders, orderDetailsByNo])
+
   const orderMetaByNo = useMemo(() => {
     const cachedByOrder = new Map(outboundRecords.map(record => [record.outboundOrderNo, record]))
     const map = new Map()
     orders.forEach((order) => {
       const savedMeta = parseOrderMeta(order)
-      const cached = cachedByOrder.get(order.outbound_order_no) || {}
+      const cached = orderDetailsByNo[order.outbound_order_no] || cachedByOrder.get(order.outbound_order_no) || {}
       map.set(order.outbound_order_no, {
         logisticsTrackNo: savedMeta.logisticsTrackNo || cached.logisticsTrackNo || null,
         thirdOrderNo: savedMeta.thirdOrderNo || cached.thirdOrderNo || null,
         logisticsChannel: savedMeta.logisticsChannel || cached.logisticsChannel || null,
         destino: savedMeta.destino || getDestinoName(cached) || order.destinatario || folio?.destino || '',
         outboundDate: savedMeta.outbound_date || getOrderDateKey(cached),
+        outboundBoxCount: savedMeta.outboundBoxCount || cached.outboundBoxCount || null,
         allCustomizeCodes: Array.isArray(savedMeta.allCustomizeCodes)
           ? savedMeta.allCustomizeCodes
           : Array.isArray(cached.allCustomizeCodes)
@@ -334,7 +367,7 @@ export default function ValidarPorDestino({ folioId }) {
       })
     })
     return map
-  }, [orders, outboundRecords, folio?.destino])
+  }, [orders, outboundRecords, orderDetailsByNo, folio?.destino])
 
   const orderCodeLookup = useMemo(() => {
     const variants = new Map()
@@ -681,7 +714,10 @@ export default function ValidarPorDestino({ folioId }) {
   }, [doRemoveDestinationOrder, removeOrderModal.order, removingDestinationOrder])
 
   // KPI counts
-  const totalEsperadas = orders.reduce((s, o) => s + (o.bultos_esperados || 0), 0)
+  const totalEsperadas = orders.reduce((s, o) => {
+    const meta = orderMetaByNo.get(o.outbound_order_no) || {}
+    return s + Number(o.bultos_esperados ?? meta.outboundBoxCount ?? o.bultos ?? 0)
+  }, 0)
   const totalScaneadas = scans.length
   const pendientes = Math.max(0, totalEsperadas - totalScaneadas)
 
@@ -731,20 +767,36 @@ export default function ValidarPorDestino({ folioId }) {
 
   const statusCounts = useMemo(() => ({
     all: searchedOrders.length,
-    pending: searchedOrders.filter(order => isOrderPending(order, validatedCountByOrderNo[order.outbound_order_no] || 0)).length,
-    complete: searchedOrders.filter(order => isOrderComplete(order, validatedCountByOrderNo[order.outbound_order_no] || 0)).length,
-  }), [searchedOrders, validatedCountByOrderNo])
+    pending: searchedOrders.filter(order => {
+      const meta = orderMetaByNo.get(order.outbound_order_no) || {}
+      const expected = Number(order.bultos_esperados ?? meta.outboundBoxCount ?? order.bultos ?? 0)
+      return (validatedCountByOrderNo[order.outbound_order_no] || 0) < (expected || 1)
+    }).length,
+    complete: searchedOrders.filter(order => {
+      const meta = orderMetaByNo.get(order.outbound_order_no) || {}
+      const expected = Number(order.bultos_esperados ?? meta.outboundBoxCount ?? order.bultos ?? 0)
+      return expected > 0 && (validatedCountByOrderNo[order.outbound_order_no] || 0) >= expected
+    }).length,
+  }), [searchedOrders, validatedCountByOrderNo, orderMetaByNo])
 
   // Filtered orders for panel
   const filteredOrders = useMemo(() => {
     if (statusFilter === 'complete') {
-      return searchedOrders.filter(order => isOrderComplete(order, validatedCountByOrderNo[order.outbound_order_no] || 0))
+      return searchedOrders.filter(order => {
+        const meta = orderMetaByNo.get(order.outbound_order_no) || {}
+        const expected = Number(order.bultos_esperados ?? meta.outboundBoxCount ?? order.bultos ?? 0)
+        return expected > 0 && (validatedCountByOrderNo[order.outbound_order_no] || 0) >= expected
+      })
     }
     if (statusFilter === 'pending') {
-      return searchedOrders.filter(order => isOrderPending(order, validatedCountByOrderNo[order.outbound_order_no] || 0))
+      return searchedOrders.filter(order => {
+        const meta = orderMetaByNo.get(order.outbound_order_no) || {}
+        const expected = Number(order.bultos_esperados ?? meta.outboundBoxCount ?? order.bultos ?? 0)
+        return (validatedCountByOrderNo[order.outbound_order_no] || 0) < (expected || 1)
+      })
     }
     return searchedOrders
-  }, [searchedOrders, statusFilter, validatedCountByOrderNo])
+  }, [searchedOrders, statusFilter, validatedCountByOrderNo, orderMetaByNo])
 
   if (loadingFolio && !isOffline) {
     return <div className="flex justify-center py-16"><LoadingSpinner /></div>
@@ -1075,11 +1127,12 @@ export default function ValidarPorDestino({ folioId }) {
               ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredOrders.map(order => {
-                const validadas = validatedCountByOrderNo[order.outbound_order_no] || 0
-                const esperadas = order.bultos_esperados ?? 0
-                const pct = esperadas > 0 ? Math.min(100, Math.round((validadas / esperadas) * 100)) : null
-                const complete = isOrderComplete(order, validadas)
-                const enrich = orderMetaByNo.get(order.outbound_order_no) || {}
+      const validadas = validatedCountByOrderNo[order.outbound_order_no] || 0
+      const meta = orderMetaByNo.get(order.outbound_order_no) || {}
+      const esperadas = Number(order.bultos_esperados ?? meta.outboundBoxCount ?? order.bultos ?? 0)
+      const pct = esperadas > 0 ? Math.min(100, Math.round((validadas / esperadas) * 100)) : null
+      const enrich = meta
+      const complete = esperadas > 0 && validadas >= esperadas
 
                 return (
                   <div key={order.id} className={`p-3.5 rounded-2xl border transition-all shadow-[0_10px_24px_-18px_rgba(15,23,42,0.28)] ${

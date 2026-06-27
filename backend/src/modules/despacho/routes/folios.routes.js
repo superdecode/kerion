@@ -483,6 +483,28 @@ router.post('/:id/scans',
         return res.status(409).json({ error: 'Código ya escaneado en este folio', code: 'DUPLICATE_IN_FOLIO' })
       }
 
+      let ensuredOrderId = null
+      if (matched_order_no) {
+        const orderRes = await req.tQuery(
+          `SELECT id FROM dispatch_folio_orders
+           WHERE tenant_id = $1 AND folio_id = $2 AND outbound_order_no = $3`,
+          [req.tenantId, req.params.id, matched_order_no.trim()]
+        )
+        if (orderRes.rows.length > 0) {
+          ensuredOrderId = orderRes.rows[0].id
+        } else {
+          const insertedOrder = await req.tQuery(
+            `INSERT INTO dispatch_folio_orders
+               (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas, outbound_date, estado)
+             VALUES ($1,$2,$3,NULL,0,NULL,$4,NULL,'pendiente')
+             ON CONFLICT (tenant_id, folio_id, outbound_order_no) DO UPDATE SET updated_at = now()
+             RETURNING id`,
+            [req.tenantId, req.params.id, matched_order_no.trim(), JSON.stringify({ fallback_manual: true })]
+          )
+          ensuredOrderId = insertedOrder.rows[0]?.id || null
+        }
+      }
+
       // Cross-folio same-day dedup (excluding cancelled folios)
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       const crossFolioRes = await req.tQuery(
@@ -515,6 +537,9 @@ router.post('/:id/scans',
 
       if (matched_order_no) {
         await syncOrderProgressByOrderNo(req, req.params.id, matched_order_no)
+        if (ensuredOrderId) {
+          await syncOrderProgressById(req, ensuredOrderId)
+        }
       }
 
       await req.tQuery(
