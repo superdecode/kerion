@@ -57,14 +57,14 @@ function normalizeScanCode(rawCode) {
   const idMatch = upper.match(/^ID(\d+[-/]\d+)/i)
   if (idMatch) return idMatch[1]
 
-  return upper.replace(/[^A-Z0-9-/]/g, '')
+  return upper.replace(/[^A-Z0-9_\/-]/g, '')
 }
 
 function normalizeCodeFast(rawCode) {
   if (!rawCode) return ''
   let code = String(rawCode).trim()
   code = code.replace(/／/g, '/').replace(/[－‒–—―]/g, '-')
-  return code.toUpperCase().replace(/[^A-Z0-9-/]/g, '')
+  return code.toUpperCase().replace(/[^A-Z0-9_\/-]/g, '')
 }
 
 function generateCodeVariations(rawCode, normalize = true) {
@@ -80,10 +80,15 @@ function generateCodeVariations(rawCode, normalize = true) {
 function normalizedCodeSql(column) {
   return `UPPER(REGEXP_REPLACE(
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(${column}, ''), '／', '/'), '－', '-'), '‒', '-'), '–', '-'), '—', '-'), '―', '-'),
-    '[^A-Z0-9\\-/]',
+    '[^A-Z0-9_\\-/]',
     '',
     'g'
   ))`
+}
+
+function getStoredMatchedCode(line, fallbackCode) {
+  const lineCode = normalizeCodeFast(line?.custom_box_barcode)
+  return lineCode || fallbackCode
 }
 
 // POST /orders/:id/sessions — start validation session
@@ -190,6 +195,7 @@ router.post('/orders/:id/scan',
 
         const line = lineRes.rows[0] || null
         const matchField = line ? 'custom_box_barcode' : null
+        const matchedStoredCode = getStoredMatchedCode(line, normalizedCode || rawCode)
 
         if (!line && previousSuccess) {
           return {
@@ -231,11 +237,11 @@ router.post('/orders/:id/scan',
         if (line.estado_validacion === 'validada') {
           return {
             resultado: 'duplicado',
-            codigo: normalizedCode || rawCode,
+            codigo: matchedStoredCode,
             line,
             event: {
               resultado: 'duplicado',
-              codigo_escaneado: normalizedCode || rawCode,
+              codigo_escaneado: matchedStoredCode,
               ubicacion: ubicacion || null,
               scanned_by_nombre: req.fullUser?.nombre_completo || null,
             },
@@ -259,13 +265,13 @@ router.post('/orders/:id/scan',
           `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
            VALUES ($1,$2,$3,$4,$5,$6,'correcto',$7,$8)
            RETURNING *`,
-          [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
+          [req.tenantId, req.params.id, line.id, matchedStoredCode, matchField, line.sku, req.user.id, ubicacion || null]
         )
         const orderState = await refreshRecepcionOrderState(client, req.tenantId, req.params.id)
 
         return {
           resultado: 'correcto',
-          codigo: normalizedCode || rawCode,
+          codigo: matchedStoredCode,
           line,
           cajas_validadas: orderState?.cajas_validadas || 0,
           cajas_forzadas: orderState?.cajas_forzadas || 0,

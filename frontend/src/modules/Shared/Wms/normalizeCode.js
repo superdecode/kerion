@@ -20,7 +20,7 @@ function extractFromJson(raw) {
     // No strict box-code match — return first non-empty string value as fallback
     for (const val of candidates) {
       if (typeof val === 'string' && val.trim()) {
-        return val.trim().toUpperCase().replace(/[^A-Z0-9\-\/]/g, '')
+        return val.trim().toUpperCase().replace(/[^A-Z0-9_\/-]/g, '')
       }
     }
   } catch { /* not valid JSON */ }
@@ -98,7 +98,7 @@ export function normalizeCode(rawCode) {
   const idMatch = upper.match(idPattern)
   if (idMatch) return idMatch[1]
 
-  return upper.replace(/[^A-Z0-9\-\/]/g, '')
+  return upper.replace(/[^A-Z0-9_\/-]/g, '')
 }
 
 /**
@@ -168,7 +168,7 @@ export function normalizeScanCode(rawCode) {
   const idMatch = upper.match(/^ID(\d+[-\/]\d+)/i)
   if (idMatch) return idMatch[1]
 
-  const fallback = upper.replace(/[^A-Z0-9\-\/]/g, '')
+  const fallback = upper.replace(/[^A-Z0-9_\/-]/g, '')
   // Purely-alphabetic strings (no digits) are label field names, not product codes.
   // e.g. SELLERCONTAINERTYPEBOX from Amazon FBA labels.
   if (fallback.length > 4 && !/\d/.test(fallback)) return ''
@@ -186,7 +186,7 @@ export function normalizeCodeFast(rawCode) {
   code = code.replace(/／/g, '/').replace(/[－‒–—―]/g, '-')
   const jsonExtracted = extractFromJson(code)
   if (jsonExtracted) return jsonExtracted
-  return code.toUpperCase().replace(/[^A-Z0-9\-\/]/g, '')
+  return code.toUpperCase().replace(/[^A-Z0-9_\/-]/g, '')
 }
 
 /**
