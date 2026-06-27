@@ -870,23 +870,11 @@ export default function ValidacionRecepcion() {
       const ubicacion = withTarimas ? formatTarimaLocation(tarimaNum) : selectedUbicacion
       if (isOffline) {
         const matchedLine = matchingLines.find(l => l.estado_validacion !== 'validada') || matchingLines[0]
-        const offlineId = `offline-${Date.now()}`
         const offlineResult = !matchedLine
           ? 'no_encontrado'
           : matchedLine.estado_validacion === 'validada'
             ? 'duplicado'
             : 'correcto'
-        useOfflineStore.getState().enqueueModule({
-          type: 'recepcion_scan',
-          payload: {
-            orderId: id,
-            codigo_escaneado: code,
-            session_id: sessionId !== 'local' ? sessionId : null,
-            tarimas_enabled: withTarimas,
-            ubicacion: ubicacion || null,
-            local_id: offlineId,
-          },
-        })
         startTransition(() => {
           setLastResult({ result: offlineResult, code, sku: null, tarimaNum })
           if (offlineResult === 'no_encontrado') {
@@ -909,6 +897,18 @@ export default function ValidacionRecepcion() {
               },
             })
           } else {
+            const offlineId = `offline-${Date.now()}`
+            useOfflineStore.getState().enqueueModule({
+              type: 'recepcion_scan',
+              payload: {
+                orderId: id,
+                codigo_escaneado: code,
+                session_id: sessionId !== 'local' ? sessionId : null,
+                tarimas_enabled: withTarimas,
+                ubicacion: ubicacion || null,
+                local_id: offlineId,
+              },
+            })
             const base = extractBaseCode(code)
             if (base && tarimaNum) {
               setTarimaOverrides(prev => { const next = new Map(prev); next.set(base, tarimaNum); return next })

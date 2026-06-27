@@ -229,17 +229,16 @@ router.post('/orders/:id/scan',
         }
 
         if (line.estado_validacion === 'validada') {
-          const eventRes = await client.query(
-            `INSERT INTO inbound_scan_events (tenant_id, order_id, line_id, codigo_escaneado, match_field, sku_asociado, resultado, scanned_by, ubicacion)
-             VALUES ($1,$2,$3,$4,$5,$6,'duplicado',$7,$8)
-             RETURNING *`,
-            [req.tenantId, req.params.id, line.id, normalizedCode || rawCode, matchField, line.sku, req.user.id, ubicacion || null]
-          )
           return {
             resultado: 'duplicado',
             codigo: normalizedCode || rawCode,
             line,
-            event: eventRes.rows[0],
+            event: {
+              resultado: 'duplicado',
+              codigo_escaneado: normalizedCode || rawCode,
+              ubicacion: ubicacion || null,
+              scanned_by_nombre: req.fullUser?.nombre_completo || null,
+            },
             motivo: 'codigo_ya_validado',
             mensaje: 'Todas las cajas esperadas para este código ya fueron validadas.',
             previous_event: previousSuccess ? {
