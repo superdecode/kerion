@@ -48,10 +48,23 @@ async function syncOrderProgressByOrderNo(req, folioId, orderNo) {
 async function syncOrderProgressById(req, folioOrderId) {
   if (!folioOrderId) return
   await req.tQuery(
-    `WITH counts AS (
+    `WITH target AS (
+       SELECT id, folio_id, outbound_order_no
+       FROM dispatch_folio_orders
+       WHERE id = $1 AND tenant_id = $2
+     ),
+     counts AS (
        SELECT COUNT(*)::int AS scanned
-       FROM dispatch_order_scans
-       WHERE tenant_id = $2 AND folio_order_id = $1
+       FROM dispatch_order_scans s
+       JOIN target t ON true
+       WHERE s.tenant_id = $2
+         AND (
+           s.folio_order_id = t.id
+           OR (
+             s.folio_id = t.folio_id
+             AND s.matched_order_no = t.outbound_order_no
+           )
+         )
      )
      UPDATE dispatch_folio_orders o
      SET bultos = counts.scanned,
@@ -561,10 +574,23 @@ router.post('/:id/scans',
           )
           if (ensuredOrderId) {
             await client.query(
-              `WITH counts AS (
+              `WITH target AS (
+                 SELECT id, folio_id, outbound_order_no
+                 FROM dispatch_folio_orders
+                 WHERE id = $1 AND tenant_id = $2
+               ),
+               counts AS (
                  SELECT COUNT(*)::int AS scanned
-                 FROM dispatch_order_scans
-                 WHERE tenant_id = $2 AND folio_order_id = $1
+                 FROM dispatch_order_scans s
+                 JOIN target t ON true
+                 WHERE s.tenant_id = $2
+                   AND (
+                     s.folio_order_id = t.id
+                     OR (
+                       s.folio_id = t.folio_id
+                       AND s.matched_order_no = t.outbound_order_no
+                     )
+                   )
                )
                UPDATE dispatch_folio_orders o
                SET bultos = counts.scanned,
@@ -630,14 +656,18 @@ router.delete('/:id/scans/:scanId',
       const delRes = await req.tQuery(
         `DELETE FROM dispatch_order_scans
          WHERE id = $1 AND folio_id = $2 AND tenant_id = $3
-         RETURNING matched_order_no`,
+         RETURNING matched_order_no, folio_order_id`,
         [req.params.scanId, req.params.id, req.tenantId]
       )
       if (delRes.rows.length === 0) return res.status(404).json({ error: 'Escaneo no encontrado' })
 
       const matchedOrderNo = delRes.rows[0].matched_order_no
+      const folioOrderId = delRes.rows[0].folio_order_id
       if (matchedOrderNo) {
         await syncOrderProgressByOrderNo(req, req.params.id, matchedOrderNo)
+      }
+      if (folioOrderId) {
+        await syncOrderProgressById(req, folioOrderId)
       }
       const scansRes = await req.tQuery(
         `SELECT s.*, u.nombre_completo AS validated_by_nombre

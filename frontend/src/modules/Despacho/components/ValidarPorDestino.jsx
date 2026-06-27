@@ -372,11 +372,12 @@ export default function ValidarPorDestino({ folioId }) {
 
   const validatedCountByOrderNo = useMemo(() => (
     scans.reduce((acc, scan) => {
-      if (!scan.matched_order_no) return acc
-      acc[scan.matched_order_no] = (acc[scan.matched_order_no] || 0) + 1
+      const orderNo = scan.matched_order_no || orders.find(order => order.id === scan.folio_order_id)?.outbound_order_no
+      if (!orderNo) return acc
+      acc[orderNo] = (acc[orderNo] || 0) + 1
       return acc
     }, {})
-  ), [scans])
+  ), [orders, scans])
 
   const getOrderExpectedCount = useCallback((order) => {
     const meta = orderMetaByNo.get(order.outbound_order_no) || {}

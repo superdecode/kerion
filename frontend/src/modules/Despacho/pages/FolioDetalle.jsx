@@ -234,16 +234,18 @@ export default function FolioDetalle() {
   const canDeleteFolio = !!isCancelled && canDelete('despacho.folios')
 
   const estadoMeta = folio ? (FOLIO_ESTADO_META[folio.estado] ?? FOLIO_ESTADO_META.borrador) : null
-  const totalBultos    = orders.reduce((s, o) => s + (o.bultos || 0), 0)
-  const totalEsperadas = orders.reduce((s, o) => s + (o.bultos_esperados || 0), 0)
-  const progresoPct    = totalEsperadas > 0 ? Math.min(100, Math.round((totalBultos / totalEsperadas) * 100)) : 0
-
   const ordersWithProgress = useMemo(() => orders.map(o => {
     const orderScans = folio?.tipo === 'por_destino'
-      ? scans.filter(s => s.matched_order_no === o.outbound_order_no)
+      ? scans.filter(s => s.folio_order_id === o.id || s.matched_order_no === o.outbound_order_no)
       : (o.scans ?? [])
-    return { ...o, _scanCount: orderScans.length }
+    const scanCount = orderScans.length
+    const dispatchedCount = folio?.tipo === 'por_destino' ? scanCount : (o.bultos || scanCount)
+    return { ...o, _scanCount: scanCount, _dispatchCount: dispatchedCount }
   }), [orders, scans, folio?.tipo])
+
+  const totalBultos    = ordersWithProgress.reduce((s, o) => s + (o._dispatchCount || 0), 0)
+  const totalEsperadas = orders.reduce((s, o) => s + (o.bultos_esperados || 0), 0)
+  const progresoPct    = totalEsperadas > 0 ? Math.min(100, Math.round((totalBultos / totalEsperadas) * 100)) : 0
 
   const validatedOrdersCount = useMemo(
     () => orders.filter(o => o.estado !== 'pendiente').length,
@@ -286,7 +288,7 @@ export default function FolioDetalle() {
       ['#', 'Orden', 'Destinatario', 'Esperadas', 'Escaneadas', 'Despachadas', 'Estado'],
       ...ordersWithProgress.map((o, i) => [
         i + 1, o.outbound_order_no || '', o.destinatario || '',
-        o.bultos_esperados ?? '', o._scanCount, o.bultos ?? '',
+        o.bultos_esperados ?? '', o._scanCount, o._dispatchCount ?? '',
         ORDER_ESTADO_META[o.estado]?.label ?? 'Pendiente',
       ]),
     ])
@@ -633,7 +635,7 @@ export default function FolioDetalle() {
                               </div>
                             </td>
                             <td className="px-3 py-2.5 text-center">
-                              <span className="text-xs font-semibold text-warm-800 tabular-nums">{order.bultos ?? '—'}</span>
+                              <span className="text-xs font-semibold text-warm-800 tabular-nums">{order._dispatchCount ?? '—'}</span>
                             </td>
                             <td className="px-3 py-2.5">
                               <StatusPill className={ORDER_ESTADO_META[order.estado]?.cls ?? ORDER_ESTADO_META.pendiente.cls}>
