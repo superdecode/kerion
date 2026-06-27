@@ -473,90 +473,138 @@ router.post('/:id/scans',
         return res.status(409).json({ error: 'Folio no editable' })
       }
 
-      // Duplicate within this folio
-      const folioDedupeRes = await req.tQuery(
-        `SELECT id FROM dispatch_order_scans
-         WHERE tenant_id = $1 AND folio_id = $2 AND codigo_caja = $3`,
-        [req.tenantId, req.params.id, codigo_caja.trim()]
-      )
-      if (folioDedupeRes.rows.length > 0) {
-        return res.status(409).json({ error: 'Código ya escaneado en este folio', code: 'DUPLICATE_IN_FOLIO' })
-      }
-
-      let ensuredOrderId = null
-      if (matched_order_no) {
-        const orderRes = await req.tQuery(
-          `SELECT id FROM dispatch_folio_orders
-           WHERE tenant_id = $1 AND folio_id = $2 AND outbound_order_no = $3`,
-          [req.tenantId, req.params.id, matched_order_no.trim()]
-        )
-        if (orderRes.rows.length > 0) {
-          ensuredOrderId = orderRes.rows[0].id
-        } else {
-          const insertedOrder = await req.tQuery(
-            `INSERT INTO dispatch_folio_orders
-               (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas, outbound_date, estado)
-             VALUES ($1,$2,$3,NULL,0,NULL,$4,NULL,'pendiente')
-             ON CONFLICT (tenant_id, folio_id, outbound_order_no) DO UPDATE SET updated_at = now()
-             RETURNING id`,
-            [req.tenantId, req.params.id, matched_order_no.trim(), JSON.stringify({ fallback_manual: true })]
-          )
-          ensuredOrderId = insertedOrder.rows[0]?.id || null
-        }
-      }
-
-      // Cross-folio same-day dedup (excluding cancelled folios)
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
-      const crossFolioRes = await req.tQuery(
-        `SELECT f.folio_numero FROM dispatch_order_scans s
-         JOIN dispatch_folios f ON f.id = s.folio_id
-         WHERE s.tenant_id = $1 AND s.codigo_caja = $2
-           AND s.folio_id != $3
-           AND f.estado != 'cancelado'
-           AND f.deleted_at IS NULL
-           AND date_trunc('day', s.validated_at AT TIME ZONE $4) =
-               date_trunc('day', now() AT TIME ZONE $4)
-         LIMIT 1`,
-        [req.tenantId, codigo_caja.trim(), req.params.id, tz]
-      )
-      if (crossFolioRes.rows.length > 0) {
+      const codigoCaja = codigo_caja.trim()
+      const normalizedOrderNo = matched_order_no ? String(matched_order_no).trim() : null
+
+      const scan = await req.tTransaction(async (client) => {
+        const folioDedupeRes = await client.query(
+          `SELECT id FROM dispatch_order_scans
+           WHERE tenant_id = $1 AND folio_id = $2 AND codigo_caja = $3`,
+          [req.tenantId, req.params.id, codigoCaja]
+        )
+        if (folioDedupeRes.rows.length > 0) {
+          const error = new Error('Código ya escaneado en este folio')
+          error.status = 409
+          error.code = 'DUPLICATE_IN_FOLIO'
+          throw error
+        }
+
+        const crossFolioRes = await client.query(
+          `SELECT f.folio_numero FROM dispatch_order_scans s
+           JOIN dispatch_folios f ON f.id = s.folio_id
+           WHERE s.tenant_id = $1 AND s.codigo_caja = $2
+             AND s.folio_id != $3
+             AND f.estado != 'cancelado'
+             AND f.deleted_at IS NULL
+             AND date_trunc('day', s.validated_at AT TIME ZONE $4) =
+                 date_trunc('day', now() AT TIME ZONE $4)
+           LIMIT 1`,
+          [req.tenantId, codigoCaja, req.params.id, tz]
+        )
+        if (crossFolioRes.rows.length > 0) {
+          const error = new Error(`Caja ya escaneada hoy en folio ${crossFolioRes.rows[0].folio_numero}`)
+          error.status = 409
+          error.code = 'DUPLICATE_CROSS_FOLIO'
+          error.folio_numero = crossFolioRes.rows[0].folio_numero
+          throw error
+        }
+
+        let ensuredOrderId = null
+        if (normalizedOrderNo) {
+          const orderRes = await client.query(
+            `SELECT id FROM dispatch_folio_orders
+             WHERE tenant_id = $1 AND folio_id = $2 AND outbound_order_no = $3
+             FOR UPDATE`,
+            [req.tenantId, req.params.id, normalizedOrderNo]
+          )
+          if (orderRes.rows.length > 0) {
+            ensuredOrderId = orderRes.rows[0].id
+          } else {
+            const insertedOrder = await client.query(
+              `INSERT INTO dispatch_folio_orders
+                 (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas, outbound_date, estado)
+               VALUES ($1,$2,$3,NULL,0,NULL,$4,NULL,'pendiente')
+               ON CONFLICT (tenant_id, folio_id, outbound_order_no) DO UPDATE SET updated_at = now()
+               RETURNING id`,
+              [req.tenantId, req.params.id, normalizedOrderNo, JSON.stringify({ fallback_manual: true })]
+            )
+            ensuredOrderId = insertedOrder.rows[0]?.id || null
+          }
+        }
+
+        const insertRes = await client.query(
+          `INSERT INTO dispatch_order_scans
+             (tenant_id, folio_id, folio_order_id, codigo_caja, tarima_ref, matched_order_no, validated_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           RETURNING id`,
+          [req.tenantId, req.params.id, ensuredOrderId, codigoCaja, tarima_ref || null, normalizedOrderNo || null, req.user.id]
+        )
+
+        if (normalizedOrderNo) {
+          await client.query(
+            `WITH counts AS (
+               SELECT COUNT(*)::int AS scanned
+               FROM dispatch_order_scans
+               WHERE tenant_id = $3 AND folio_id = $1 AND matched_order_no = $2
+             )
+             UPDATE dispatch_folio_orders o
+             SET bultos = counts.scanned,
+                 estado = CASE
+                   WHEN o.estado IN ('entregado', 'devolucion') THEN o.estado
+                   WHEN COALESCE(o.bultos_esperados, 0) > 0 AND counts.scanned >= o.bultos_esperados THEN 'cargado'
+                   ELSE 'pendiente'
+                 END
+             FROM counts
+             WHERE o.folio_id = $1 AND o.outbound_order_no = $2 AND o.tenant_id = $3`,
+            [req.params.id, normalizedOrderNo, req.tenantId]
+          )
+          if (ensuredOrderId) {
+            await client.query(
+              `WITH counts AS (
+                 SELECT COUNT(*)::int AS scanned
+                 FROM dispatch_order_scans
+                 WHERE tenant_id = $2 AND folio_order_id = $1
+               )
+               UPDATE dispatch_folio_orders o
+               SET bultos = counts.scanned,
+                   estado = CASE
+                     WHEN o.estado IN ('entregado', 'devolucion') THEN o.estado
+                     WHEN COALESCE(o.bultos_esperados, 0) > 0 AND counts.scanned >= o.bultos_esperados THEN 'cargado'
+                     ELSE 'pendiente'
+                   END
+               FROM counts
+               WHERE o.id = $1 AND o.tenant_id = $2`,
+              [ensuredOrderId, req.tenantId]
+            )
+          }
+        }
+
+        await client.query(
+          `UPDATE dispatch_folios SET estado = 'en_proceso', updated_at = now()
+           WHERE id = $1 AND tenant_id = $2 AND estado = 'borrador'`,
+          [req.params.id, req.tenantId]
+        )
+
+        const scanRes = await client.query(
+          `SELECT s.*, u.nombre_completo AS validated_by_nombre
+           FROM dispatch_order_scans s
+           LEFT JOIN usuarios u ON u.id = s.validated_by
+           WHERE s.tenant_id = $1 AND s.id = $2`,
+          [req.tenantId, insertRes.rows[0].id]
+        )
+        return scanRes.rows[0] || null
+      })
+
+      res.json({ scan })
+    } catch (error) {
+      if (error.status === 409) {
         return res.status(409).json({
-          error: `Caja ya escaneada hoy en folio ${crossFolioRes.rows[0].folio_numero}`,
-          code: 'DUPLICATE_CROSS_FOLIO',
-          folio_numero: crossFolioRes.rows[0].folio_numero,
+          error: error.message,
+          code: error.code,
+          folio_numero: error.folio_numero || undefined,
         })
       }
-
-      const insertRes = await req.tQuery(
-        `INSERT INTO dispatch_order_scans
-           (tenant_id, folio_id, codigo_caja, tarima_ref, matched_order_no, validated_by)
-         VALUES ($1,$2,$3,$4,$5,$6)
-         RETURNING id`,
-        [req.tenantId, req.params.id, codigo_caja.trim(), tarima_ref || null, matched_order_no || null, req.user.id]
-      )
-
-      if (matched_order_no) {
-        await syncOrderProgressByOrderNo(req, req.params.id, matched_order_no)
-        if (ensuredOrderId) {
-          await syncOrderProgressById(req, ensuredOrderId)
-        }
-      }
-
-      await req.tQuery(
-        `UPDATE dispatch_folios SET estado = 'en_proceso', updated_at = now()
-         WHERE id = $1 AND tenant_id = $2 AND estado = 'borrador'`,
-        [req.params.id, req.tenantId]
-      )
-
-      const scanRes = await req.tQuery(
-        `SELECT s.*, u.nombre_completo AS validated_by_nombre
-         FROM dispatch_order_scans s
-         LEFT JOIN usuarios u ON u.id = s.validated_by
-         WHERE s.tenant_id = $1 AND s.id = $2`,
-        [req.tenantId, insertRes.rows[0].id]
-      )
-      res.json({ scan: scanRes.rows[0] })
-    } catch (error) {
       if (error.code === '23505') {
         return res.status(409).json({ error: 'Código ya escaneado en este folio', code: 'DUPLICATE_IN_FOLIO' })
       }

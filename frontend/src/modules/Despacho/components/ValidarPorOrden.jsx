@@ -135,6 +135,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     const cached = detailCache?.current?.get(order.outbound_order_no)
     if (cached !== undefined) {
       setOrderDetail(cached)
+      setDetailLoading(false)
       return
     }
     let cancelled = false
@@ -187,7 +188,10 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     })
     return scanned
   }, [scans])
-  const expected = order.bultos_esperados ?? orderDetail?.outboundBoxCount ?? order.bultos ?? null
+  const expected = Math.max(
+    Number(order.bultos_esperados ?? orderDetail?.outboundBoxCount ?? order.bultos ?? 0),
+    scans.length
+  ) || null
 
   const { mutate: doAddScan, isPending: scanning } = useMutation({
     mutationFn: ({ code, tarimaRef }) => addOrderScan(folioId, order.id, { codigo_caja: code, tarima_ref: tarimaRef }),
@@ -196,7 +200,11 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       onUpdate(data)
       const updatedOrder = data?.orders?.find(o => o.id === order.id)
       const newScansCount = updatedOrder?.scans?.length ?? 0
-      const expectedCount = Number(order.bultos_esperados ?? orderDetail?.outboundBoxCount ?? order.bultos)
+      const baseExpectedCount = Number(order.bultos_esperados ?? orderDetail?.outboundBoxCount ?? order.bultos ?? 0)
+      const expectedCount = Math.max(
+        baseExpectedCount,
+        newScansCount
+      )
       if (expectedCount > 0 && newScansCount >= expectedCount) {
         setCompleted(true)
         onAutoConfirm({ bultos: newScansCount, estado: 'cargado' })
