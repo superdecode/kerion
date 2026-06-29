@@ -196,6 +196,7 @@ export default function ValidacionRecepcion() {
   const locationRef    = useRef(null)
   const sessionBootOrderRef = useRef(null)
   const scanStartRef = useRef(null)
+  const refocusRef = useRef(null)
 
   const [sessionId, setSessionId] = useState(null)
   const [withTarimas, setWithTarimas] = useState(false)
@@ -632,6 +633,7 @@ export default function ValidacionRecepcion() {
       ref.current?.focus()
     }, 50)
   }, [withTarimas, ubicacionConfirmed])
+  useEffect(() => { refocusRef.current = refocus }, [refocus])
 
   useEffect(() => { if (scanning) refocus() }, [scanning, refocus])
 
@@ -693,7 +695,7 @@ export default function ValidacionRecepcion() {
           setSessionId('local')
           setScanning(true)
           setBootingSession(false)
-          refocus()
+          refocusRef.current?.()
         }
         return
       }
@@ -702,7 +704,7 @@ export default function ValidacionRecepcion() {
         if (cancelled) return
         setSessionId(res.session?.id ?? 'local')
         setScanning(true)
-        refocus()
+        refocusRef.current?.()
       } catch {
         if (!cancelled) toast.error('Error al iniciar sesión de validación')
       } finally {
@@ -711,7 +713,7 @@ export default function ValidacionRecepcion() {
     }
     boot()
     return () => { cancelled = true }
-  }, [id, order, refocus, toast])
+  }, [id, order, toast])
 
   const endSession = async () => {
     if (sessionId && sessionId !== 'local') {
