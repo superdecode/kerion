@@ -23,6 +23,9 @@ function normalizeScanCode(rawCode) {
   code = code.replace(/ñ/g, ':')
   code = code.replace(/\^/g, '')
   code = code.replace(/¨/g, '"')
+  // Some scanners emit GS1 AIs with square brackets in their human-readable form.
+  // We normalize [ and ] to " so the downstream JSON/ID regex patterns match correctly.
+  // Note: this transform is intentional and specific to the scanner hardware in use.
   code = code.replace(/\[/g, '"')
   code = code.replace(/\]/g, '"')
   code = code.replace(/\'/g, '/')
@@ -126,7 +129,7 @@ router.patch('/orders/:id/sessions/:sid',
          WHERE id=$1 AND tenant_id=$2 RETURNING *`,
         [req.params.sid, req.tenantId, total_escaneado || null, ubicacion_nota || null]
       )
-      if (result.rows.length === 0) return res.json({ session: null })
+      if (result.rows.length === 0) return res.json({ session: null, reason: 'already_closed' })
       res.json({ session: result.rows[0] })
     } catch (err) {
       res.status(500).json({ error: 'Error al cerrar sesión' })
@@ -321,10 +324,11 @@ router.get('/orders/:id/scan-events',
          FROM inbound_scan_events e
          LEFT JOIN usuarios u ON u.id = e.scanned_by
          WHERE ${where.join(' AND ')}
-         ORDER BY e.scanned_at DESC`,
+         ORDER BY e.scanned_at DESC
+         LIMIT 5000`,
         params
       )
-      res.json({ events: result.rows })
+      res.json({ events: result.rows, truncated: result.rows.length === 5000 })
     } catch (err) {
       res.status(500).json({ error: 'Error al obtener eventos de escaneo' })
     }
@@ -462,7 +466,7 @@ router.delete('/orders/:id/scan-events/:eventId',
 // POST /orders/:id/scan-events/:eventId/anormalidad — move a validated scan to novedades
 router.post('/orders/:id/scan-events/:eventId/anormalidad',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'editar'),
+  requirePermission('recepcion.validacion', 'actualizar'),
   async (req, res) => {
     try {
       const { tipo, ubicacion } = req.body

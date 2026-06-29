@@ -72,6 +72,14 @@ export const useRecepcionEscanearStore = create(
         return get().tabs.find(t => t.orderId === String(orderId)) ?? null
       },
     }),
-    { name: 'kirion-recepcion-escanear' }
+    {
+      name: 'kirion-recepcion-escanear',
+      // Exclude orderSnapshot from persistence: it may contain PII (cliente, tracking, references)
+      // and can grow large. Restore it from React Query cache on mount instead.
+      partialize: (state) => ({
+        ...state,
+        tabs: state.tabs.map(({ orderSnapshot: _snap, ...rest }) => rest),
+      }),
+    }
   )
 )

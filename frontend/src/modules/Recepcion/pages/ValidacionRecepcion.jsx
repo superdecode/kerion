@@ -1003,6 +1003,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     },
     onSuccess: (data) => {
       qc.setQueryData(orderQueryKey, (cur) => cur ? { ...cur, order: data.order } : cur)
+      qc.setQueryData(orderSummaryQueryKey, (cur) => cur ? { ...cur, order: data.order } : cur)
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })

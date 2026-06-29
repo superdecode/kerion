@@ -341,7 +341,12 @@ export default function Recibir() {
       setSelected(new Set())
       setBulkDelOpen(false)
     },
-    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+    onError: (err) => {
+      // Partial deletes may have succeeded — re-sync list to reflect actual server state
+      qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
+      qc.invalidateQueries({ queryKey: ['recepcion-orders-active'] })
+      toast.error(err.response?.data?.error || t('toast.error'))
+    },
   })
 
   const { data: tiposData } = useQuery({

@@ -730,7 +730,7 @@ router.post('/sessions/:id/end',
 
       if (result.rows.length === 0) {
         // Session already ended or not found — idempotent success
-        return res.json({ success: true, sesion: null })
+        return res.json({ success: true, sesion: null, reason: 'already_closed' })
       }
 
       const sesion = result.rows[0]

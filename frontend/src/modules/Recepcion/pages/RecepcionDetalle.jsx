@@ -408,8 +408,9 @@ export default function RecepcionDetalle() {
     setNovPage(1)
   }, [])
 
-  const filteredLines = lines
-  const sortedLines = lines
+  // Filtering and sorting happen server-side via orderQueryParams (lines_q, lines_sort_*)
+  const displayLines = lines
+  const exportLines = lines
 
   const filteredEvents = useMemo(() => {
     const q = eventSearch.trim().toLowerCase()
@@ -535,7 +536,7 @@ export default function RecepcionDetalle() {
       ['#', 'Box Type', 'Custom Box Barcode', 'SKU', 'Qty/Caja',
        'Length (OMS)', 'Width (OMS)', 'Height (OMS)', 'Dim Unit', 'Weight (OMS)', 'Weight Unit',
        'Estado', 'Ubicación', 'Validado por', 'Hora validación'],
-      ...sortedLines.map((l, i) => [
+      ...exportLines.map((l, i) => [
         i + 1, l.box_type || '', l.custom_box_barcode || '', l.sku || '',
         l.qty_per_box || '',
         l.length_oms || '', l.width_oms || '', l.height_oms || '', l.dimension_unit || '',

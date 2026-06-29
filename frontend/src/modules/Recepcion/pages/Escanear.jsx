@@ -281,17 +281,19 @@ export default function EscanearRecepcion() {
   }
 
   const handleSelectTab = useCallback((tabId) => {
-    const tab = tabs.find(t => t.id === tabId)
+    // Read from store state directly to avoid stale closure in concurrent mode
+    const tab = useRecepcionEscanearStore.getState().tabs.find(t => t.id === tabId)
     if (tab?.orderId && tab.lastActiveAt) {
       const inactive = Date.now() - new Date(tab.lastActiveAt).getTime()
       if (inactive > INACTIVITY_MS) {
+        // 2-element prefix invalidates both validation-summary and validation-lines
+        qc.invalidateQueries({ queryKey: ['recepcion-order', tab.orderId] })
         qc.invalidateQueries({ queryKey: ['recepcion-scan-events', tab.orderId] })
-        qc.invalidateQueries({ queryKey: ['recepcion-order', tab.orderId, 'validation-summary'] })
       }
     }
     touchTab(tabId)
     setActiveTab(tabId)
-  }, [tabs, qc, touchTab, setActiveTab])
+  }, [qc, touchTab, setActiveTab])
 
   const subtitle = activeTab?.folio
     ? `${t('nav.recepcion')} · ${activeTab.folio}`
