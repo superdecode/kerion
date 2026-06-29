@@ -1674,7 +1674,7 @@ export default function Escaneo() {
       return
     }
 
-    playSound('warning')
+    playSound('duplicate')
     setLastScan({ status: 'duplicate', code: displayCode })
     setDuplicatePending({ code: displayCode, conflicts, onConfirm: onAccept })
   }, [buildSessionDuplicateConflicts, t, toast])
@@ -1936,7 +1936,7 @@ export default function Escaneo() {
     const inv = inventorySnapshot instanceof Map ? inventorySnapshot : new Map()
     const code2Result = findCodeInInventory(rawCode2, inv)
     if (pendingCode1.code === code2Result.code) {
-      toast.warning(t('inventario.escaneo.same_codes')); playSound('warning'); return
+      toast.warning(t('inventario.escaneo.same_codes')); playSound('error'); return
     }
     const newItem = { ...resolveSwap(pendingCode1, code2Result, rawCode2), groupAssignment: 'auto' }
     await confirmPotentialDuplicate({

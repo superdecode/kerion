@@ -383,7 +383,7 @@ export default function SurtidoDashboard({ dateRange }) {
         <div className="overflow-x-auto">
           {fiveDayLoading ? (
             <div className="flex min-h-[190px] items-center justify-center">
-              <LoadingSpinner size="md" text="Cargando datos..." />
+              <LoadingSpinner size="md" text={t('common.loadingData')} />
             </div>
           ) : (
           <table className="w-full">

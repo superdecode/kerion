@@ -729,7 +729,8 @@ router.post('/sessions/:id/end',
       )
 
       if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Sesión no encontrada' })
+        // Session already ended or not found — idempotent success
+        return res.json({ success: true, sesion: null })
       }
 
       const sesion = result.rows[0]

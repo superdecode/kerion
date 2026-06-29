@@ -300,13 +300,31 @@ router.get('/orders/search-by-code',
       }
       const c = String(code).trim()
       const result = await req.tQuery(
-        `SELECT DISTINCT o.id, o.folio, o.cliente, o.estado, o.total_cajas, o.cajas_validadas, o.cajas_forzadas, o.cajas_registradas, o.created_at
+        `SELECT
+           o.id,
+           o.folio,
+           o.cliente,
+           o.estado,
+           o.total_cajas,
+           o.cajas_validadas,
+           o.cajas_forzadas,
+           o.cajas_registradas,
+           o.created_at,
+           COUNT(*)::int AS matching_lines,
+           COUNT(*) FILTER (WHERE l.estado_validacion = 'pendiente')::int AS pending_lines,
+           COUNT(*) FILTER (
+             WHERE l.estado_validacion = 'pendiente'
+               AND (l.custom_box_barcode ILIKE $2 OR l.sku ILIKE $2)
+           )::int AS pending_exact_lines,
+           COUNT(*) FILTER (WHERE l.estado_validacion = 'validada')::int AS validated_lines,
+           COUNT(*) FILTER (WHERE l.estado_validacion = 'faltante')::int AS missing_lines
          FROM inbound_orders o
          JOIN inbound_lines l ON l.order_id = o.id AND l.tenant_id = o.tenant_id
          WHERE o.tenant_id = $1 AND (
            l.custom_box_barcode = $2 OR l.sku = $2
            OR l.custom_box_barcode ILIKE $3 OR l.sku ILIKE $3
          )
+         GROUP BY o.id, o.folio, o.cliente, o.estado, o.total_cajas, o.cajas_validadas, o.cajas_forzadas, o.cajas_registradas, o.created_at
          ORDER BY o.created_at DESC
          LIMIT 10`,
         [req.tenantId, c, `%${c}%`]
@@ -345,6 +363,7 @@ router.get('/orders/:id',
         created_at: 'l.created_at',
       }
       const sortColumn = sortColumns[sortKey] || sortColumns.created_at
+      const includeLines = req.query.include_lines !== '0'
 
       client = await req.tGetClient()
 
@@ -400,6 +419,26 @@ router.get('/orders/:id',
           )).rows[0]?.total || 0)
         : Number(statsRes.rows[0]?.total || 0)
 
+      if (!includeLines) {
+        await client.query('COMMIT')
+        return res.json({
+          order: orderRes.rows[0],
+          lines: [],
+          lines_meta: {
+            page,
+            limit: 0,
+            total: filteredTotal,
+            total_all: Number(statsRes.rows[0]?.total || 0),
+            lines_loaded: false,
+            status_counts: {
+              validada: Number(statsRes.rows[0]?.validada || 0),
+              faltante: Number(statsRes.rows[0]?.faltante || 0),
+              pendiente: Number(statsRes.rows[0]?.pendiente || 0),
+            },
+          },
+        })
+      }
+
       const linesParams = [...params, limit, offset]
       const linesRes = await client.query(
         `SELECT l.*, u.nombre_completo AS validated_by_nombre
@@ -420,6 +459,7 @@ router.get('/orders/:id',
           limit,
           total: filteredTotal,
           total_all: Number(statsRes.rows[0]?.total || 0),
+          lines_loaded: true,
           status_counts: {
             validada: Number(statsRes.rows[0]?.validada || 0),
             faltante: Number(statsRes.rows[0]?.faltante || 0),
@@ -480,8 +520,21 @@ router.patch('/orders/:id',
         if (currentRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
         const currentConfig = currentRes.rows[0]?.validation_config || null
         const nextConfig = sanitizeValidationConfig(validation_config)
+        if (currentConfig?.mode !== 'tarimas' && nextConfig.mode === 'tarimas') {
+          const validationRecords = await getRecepcionValidationRecordCount(req, req.tenantId, req.params.id)
+          if (validationRecords > 0) {
+            return res.status(409).json({ error: 'La clasificación de tarimas no se puede activar porque ya hay registros en modo normal' })
+          }
+        }
         if (currentConfig?.mode === 'tarimas' && currentConfig?.locked === true) {
           const reconfigureRequested = reconfigure_tarimas === true
+          const disablingTarimas = nextConfig.mode !== 'tarimas'
+          if (disablingTarimas) {
+            const validationRecords = await getRecepcionValidationRecordCount(req, req.tenantId, req.params.id)
+            if (validationRecords > 0) {
+              return res.status(409).json({ error: 'La clasificación de tarimas no se puede desactivar porque ya hay registros de validación' })
+            }
+          }
           const sameLockedConfig =
             nextConfig.mode === 'tarimas' &&
             nextConfig.locked === true &&
@@ -492,7 +545,7 @@ router.patch('/orders/:id',
             parseInt(currentConfig.maxCajasEnGrupo || 10, 10) === nextConfig.maxCajasEnGrupo &&
             Boolean(currentConfig.sortTarimasByCountDesc) === nextConfig.sortTarimasByCountDesc
 
-          if (!sameLockedConfig && (!reconfigureRequested || !canUpdateValidation)) {
+          if (!disablingTarimas && !sameLockedConfig && (!reconfigureRequested || !canUpdateValidation)) {
             return res.status(409).json({ error: 'La configuración de tarimas ya está bloqueada para esta orden' })
           }
           shouldResetTarimaNumbering = reconfigureRequested && canUpdateValidation && nextConfig.mode === 'tarimas'

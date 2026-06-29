@@ -1169,7 +1169,7 @@ export default function Escaneo() {
             title={planLimitReached ? t('plan.limit_reached_btn') : t('scan.addPallet')}
           >
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline text-xs">Nueva tab</span>
+            <span className="hidden sm:inline text-xs">{t('scan.addPallet')}</span>
           </button>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import {
   ArrowLeft, Copy, Check, PackageCheck, ScanBarcode, Printer,
   Download, Trash2, CheckCircle2, Clock, Search, X,
@@ -449,7 +450,7 @@ export default function RecepcionDetalle() {
   const loadingOrder = canQueryRecepcion && (isLoading || (isFetching && !data))
 
   if (loadingOrder) {
-    return <div className="flex items-center justify-center h-full"><LoadingSpinner size="lg" text="Cargando datos..." /></div>
+    return <div className="flex items-center justify-center h-full"><LoadingSpinner size="lg" text={t('common.loadingData')} delayMs={1000} /></div>
   }
   if (isError || !data) return (
     <div className="flex flex-col h-full">
@@ -642,7 +643,10 @@ export default function RecepcionDetalle() {
             </button>
             {canValidate && (
               <button
-                onClick={() => navigate(`/recepcion/recibir/${id}/validar`)}
+                onClick={() => {
+                  useRecepcionEscanearStore.getState().openOrderTab(id, order.folio, order.cliente, order)
+                  navigate('/recepcion/escanear')
+                }}
                 className="btn-primary flex items-center gap-1.5 text-sm"
               >
                 <ScanBarcode className="w-4 h-4" />

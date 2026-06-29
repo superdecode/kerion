@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
@@ -150,7 +151,7 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
 
         {isLoading ? (
           <div className="flex min-h-[360px] items-center justify-center">
-            <LoadingSpinner size="lg" text="Cargando datos..." />
+            <LoadingSpinner size="lg" text={t('common.loadingData')} delayMs={1000} />
           </div>
         ) : orders.length === 0 ? null : (
           <div className="overflow-x-auto table-scroll">
@@ -211,7 +212,10 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
                         </button>
                         {canValidate && (
                           <button
-                            onClick={() => navigate(`/recepcion/recibir/${order.id}/validar`)}
+                            onClick={() => {
+                              useRecepcionEscanearStore.getState().openOrderTab(order.id, order.folio, order.cliente, order)
+                              navigate('/recepcion/escanear')
+                            }}
                             className="p-1.5 rounded-lg hover:bg-sky-50 text-warm-400 hover:text-sky-600 transition-colors"
                             title={t('rec.btn.validar')}
                           >

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ScanBarcode, X, XCircle, PackageCheck, CheckCircle2,
@@ -7,6 +8,7 @@ import {
 import { searchByCode } from '../services/recepcionService'
 import { fmtDate } from '../../../core/utils/dateFormat'
 import StatusPill from '../../../core/components/common/StatusPill'
+import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 
 const ESTADO_META = {
   pendiente_validacion: { cls: 'bg-warm-100 text-warm-600' },
@@ -224,7 +226,7 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
 
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <div className="w-6 h-6 border-2 border-sky-300 border-t-sky-600 rounded-full animate-spin" />
+            <LoadingSpinner size="sm" text={t('common.loading')} className="py-0" />
           </div>
         ) : orders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-14 text-warm-400">
@@ -237,7 +239,10 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
             order={order}
             t={t}
             onView={() => navigate(`/recepcion/recibir/${order.id}`)}
-            onValidate={() => navigate(`/recepcion/recibir/${order.id}/validar`)}
+            onValidate={() => {
+              useRecepcionEscanearStore.getState().openOrderTab(order.id, order.folio, order.cliente, order)
+              navigate('/recepcion/escanear')
+            }}
           />
         ))}
 
@@ -297,7 +302,11 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
                     t={t}
                     highlight
                     onView={() => { closeSheet(); navigate(`/recepcion/recibir/${order.id}`) }}
-                    onValidate={() => { closeSheet(); navigate(`/recepcion/recibir/${order.id}/validar`) }}
+                    onValidate={() => {
+                      closeSheet()
+                      useRecepcionEscanearStore.getState().openOrderTab(order.id, order.folio, order.cliente, order)
+                      navigate('/recepcion/escanear')
+                    }}
                   />
                 ))}
               </div>

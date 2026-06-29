@@ -71,7 +71,8 @@ const getNavItems = (t) => [
     label: t('nav.recepcion'),
     icon: Download,
     items: [
-      { path: '/recepcion/recibir', tourId: 'nav-rec-recibir', label: t('nav.rec.recibir'), icon: PackagePlus, permission: 'recepcion.recibir' },
+      { path: '/recepcion/recibir',   tourId: 'nav-rec-recibir',   label: t('nav.rec.recibir'),   icon: PackagePlus, permission: 'recepcion.recibir' },
+      { path: '/recepcion/escanear',  tourId: 'nav-rec-escanear',  label: t('nav.rec.escanear'),  icon: ScanBarcode, permission: 'recepcion.recibir' },
     ],
   },
   {

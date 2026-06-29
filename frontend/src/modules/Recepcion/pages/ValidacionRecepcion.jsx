@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, startTransition } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -6,17 +7,19 @@ import {
   ArrowLeft, ScanBarcode, CheckCircle2, XCircle, AlertCircle, AlertTriangle,
   Layers, PackageCheck, X, Square, ArrowUp, ArrowDown, ArrowUpDown, Trash2,
   ChevronDown, PanelRightClose, PanelRightOpen, Search, LayoutList, MapPin, Check, Edit3,
-  ToggleLeft, ToggleRight, ArrowRightLeft, WifiOff,
+  ToggleLeft, ToggleRight, ArrowRightLeft, WifiOff, Loader2,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
+import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
-import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteScanEvent, getScanEvents, relocateScanEvents, getNovedadTipos, createNovedad, markScanEventAsNovedad } from '../services/recepcionService'
+import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteScanEvent, getScanEvents, relocateScanEvents, getNovedadTipos, createNovedad, markScanEventAsNovedad, searchByCode } from '../services/recepcionService'
+import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { STALE } from '../../../core/constants/queryConfig'
@@ -180,9 +183,14 @@ function getScanErrorMessage(err) {
   return 'Error al procesar escaneo'
 }
 
-export default function ValidacionRecepcion() {
-  const { id } = useParams()
+export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder = null, embedded = false, onBack, headerActionsSlot = null } = {}) {
+  const { id: paramId } = useParams()
+  const id = propOrderId ?? paramId
   const navigate = useNavigate()
+  const goBack = () => {
+    if (embedded && onBack) { onBack(); return }
+    navigate('/recepcion/recibir')
+  }
   const { t } = useI18nStore()
   const toast = useToastStore()
   const qc = useQueryClient()
@@ -213,6 +221,7 @@ export default function ValidacionRecepcion() {
   const [markAnormalidadModal, setMarkAnormalidadModal] = useState({ open: false, event: null, tipo: '', ubicacion: '' })
   const [dupModal, setDupModal] = useState({ open: false, code: null, entry: null })
   const [rejectModal, setRejectModal] = useState({ open: false, code: null, message: null, reason: null })
+  const [crossOrderModal, setCrossOrderModal] = useState({ open: false, code: null, order: null })
   const [forceModal, setForceModal] = useState({ open: false, code: '', tipo: '', ubicacion: '' })
   const [showTarimaConfirm, setShowTarimaConfirm] = useState(false)
   const [tarimaConfirmMode, setTarimaConfirmMode] = useState('activate')
@@ -256,24 +265,73 @@ export default function ValidacionRecepcion() {
   const canQueryRecepcion = isAuthenticated
   const isOffline = useOfflineStore((s) => s.status === 'offline')
   const moduleQueue = useOfflineStore((s) => s.moduleQueue)
-  const orderQueryKey = useMemo(() => ['recepcion-order', id, 'validation'], [id])
+  const orderSummaryQueryKey = useMemo(() => ['recepcion-order', id, 'validation-summary'], [id])
+  const orderQueryKey = useMemo(() => ['recepcion-order', id, 'validation-lines'], [id])
+  const initialOrderData = useMemo(() => {
+    if (!initialOrder || String(initialOrder.id) !== String(id)) return undefined
+    const totalCajas = Number(initialOrder.total_cajas || 0)
+    const registradas = Number(initialOrder.cajas_registradas ?? initialOrder.cajas_validadas ?? 0)
+    const faltantes = Number(initialOrder.cajas_error ?? initialOrder.missing_lines ?? 0)
+    return {
+      order: initialOrder,
+      lines: [],
+      lines_meta: {
+        page: 1,
+        limit: 0,
+        total: totalCajas,
+        total_all: totalCajas,
+        lines_loaded: false,
+        status_counts: {
+          validada: registradas,
+          faltante: faltantes,
+          pendiente: Math.max(totalCajas - registradas - faltantes, 0),
+        },
+      },
+    }
+  }, [initialOrder, id])
 
-  const { data: orderData, isLoading, isError: isOrderError, error: orderError } = useQuery({
+  const {
+    data: orderSummaryData,
+    isLoading: isSummaryLoading,
+    isError: isSummaryError,
+    error: summaryError,
+  } = useQuery({
+    queryKey: orderSummaryQueryKey,
+    queryFn: () => getOrder(id, { validation_mode: 1, include_lines: 0 }),
+    enabled: canQueryRecepcion,
+    placeholderData: initialOrderData,
+    retry: false,
+    staleTime: STALE.FROZEN,
+  })
+
+  const {
+    data: orderLinesData,
+    isLoading: isLinesLoading,
+    isFetching: isLinesFetching,
+    isError: isLinesError,
+    error: linesError,
+  } = useQuery({
     queryKey: orderQueryKey,
     queryFn: () => getOrder(id, { validation_mode: 1, lines_limit: 10000, lines_sort_key: 'created_at', lines_sort_dir: 'asc' }),
     enabled: canQueryRecepcion,
     retry: false,
-    staleTime: STALE.LIVE,
+    staleTime: STALE.FROZEN,
     refetchInterval: canQueryRecepcion && scanning && !isOffline ? 30000 : false,
     refetchIntervalInBackground: false,
   })
+  const orderData = orderLinesData?.order ? orderLinesData : orderSummaryData
+  const isLoading = !orderData?.order && (isSummaryLoading || isLinesLoading)
+  const isOrderError = !orderData?.order && (isSummaryError || isLinesError)
+  const orderError = summaryError || linesError
+  const linesLoading = !orderLinesData?.lines_meta?.lines_loaded && (isLinesLoading || isLinesFetching)
+  const linesReady = orderLinesData?.lines_meta?.lines_loaded === true
 
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
     queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1 }),
     enabled: canQueryRecepcion,
     retry: false,
-    staleTime: STALE.LIVE,
+    staleTime: STALE.DEFAULT,
     refetchInterval: canQueryRecepcion && scanning && !isOffline ? 45000 : false,
     refetchIntervalInBackground: false,
   })
@@ -290,7 +348,7 @@ export default function ValidacionRecepcion() {
   const order    = orderData?.order ?? null
   const lines    = orderData?.lines ?? []
   const linesMeta = orderData?.lines_meta ?? {}
-  const hasCompleteLineSet = Number(linesMeta.total_all ?? lines.length) <= lines.length
+  const hasCompleteLineSet = linesReady && Number(linesMeta.total_all ?? lines.length) <= lines.length
   const pendingRecepcionScans = useMemo(() =>
     moduleQueue
       .filter((item) => item.type === 'recepcion_scan' && String(item.payload?.orderId) === String(id))
@@ -333,6 +391,16 @@ export default function ValidacionRecepcion() {
   const total = Math.max(Number(order?.total_cajas || 0), effectiveLines.length)
   const totalRegistradas = Number(order?.cajas_registradas ?? order?.cajas_validadas ?? 0)
   const totalForzadas = Number(order?.cajas_forzadas ?? 0)
+  const serverCorrectScanCount = serverEvents.filter((ev) => ev.resultado === 'correcto').length
+  const validationRecordsCount = Math.max(
+    totalRegistradas,
+    totalForzadas,
+    serverCorrectScanCount + totalForzadas,
+    correctHistory.length,
+    pendingRecepcionScans.length
+  )
+  const hasValidationRecords = validationRecordsCount > 0
+  const hasStartedNormalMode = !withTarimas && (ubicacionConfirmed || locationBatches.length > 0 || hasValidationRecords)
   const validadas = Math.max(totalRegistradas, effectiveLines.filter(l => l.estado_validacion === 'validada').length)
   const faltantes  = effectiveLines.filter(l => l.estado_validacion === 'faltante').length
   const pendientes = Math.max(total - validadas - faltantes, 0)
@@ -395,6 +463,7 @@ export default function ValidacionRecepcion() {
     [effectiveLines, groupSmallCodes, minCajasParaAgrupar, maxCajasEnGrupo]
   )
   const tarimaPreviewCount = useMemo(() => new Set(tarimaPreviewMap.values()).size, [tarimaPreviewMap])
+  const canDisableTarimaMode = withTarimas && !hasValidationRecords
 
   const lastTarimaNum = useMemo(() => {
     if (!withTarimas || !lastResult?.code) return null
@@ -689,6 +758,7 @@ export default function ValidacionRecepcion() {
     let cancelled = false
     async function boot() {
       if (!order || sessionBootOrderRef.current === id) return
+      if (order.validation_config === undefined && !orderLinesData?.order) return
       sessionBootOrderRef.current = id
       if (useOfflineStore.getState().status === 'offline') {
         if (!cancelled) {
@@ -713,7 +783,7 @@ export default function ValidacionRecepcion() {
     }
     boot()
     return () => { cancelled = true }
-  }, [id, order, toast])
+  }, [id, order, orderLinesData?.order, toast])
 
   const endSession = async () => {
     if (sessionId && sessionId !== 'local') {
@@ -726,13 +796,39 @@ export default function ValidacionRecepcion() {
       qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] }),
       qc.invalidateQueries({ queryKey: ['recepcion-orders'] }),
     ])
-    navigate(`/recepcion/recibir/${id}`)
+    goBack()
   }
+
+  const findPendingCrossOrder = useCallback(async (code) => {
+    if (isOffline) return null
+    try {
+      const result = await searchByCode(code)
+      const orders = Array.isArray(result?.orders) ? result.orders : []
+      return orders.find((candidate) =>
+        String(candidate.id) !== String(id) &&
+        Number(candidate.pending_exact_lines ?? candidate.pending_lines ?? 0) > 0 &&
+        !['cancelado', 'completo'].includes(candidate.estado)
+      ) || null
+    } catch {
+      return null
+    }
+  }, [id, isOffline])
+
+  const openCrossOrder = useCallback(() => {
+    const orderToOpen = crossOrderModal.order
+    if (!orderToOpen?.id) return
+    setCrossOrderModal({ open: false, code: null, order: null })
+    useRecepcionEscanearStore.getState().openOrderTab(orderToOpen.id, orderToOpen.folio, orderToOpen.cliente, orderToOpen)
+    if (!embedded) navigate('/recepcion/escanear')
+  }, [crossOrderModal.order, embedded, navigate])
 
   const scanMut = useMutation({
     mutationFn: ({ codigo, ubicacion }) => scanCode(id, { codigo_escaneado: codigo, session_id: sessionId, tarimas_enabled: withTarimas, ubicacion: ubicacion || null }),
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
       const ev = data.event
+      const crossOrder = ev.resultado === 'no_encontrado'
+        ? await findPendingCrossOrder(variables.codigo)
+        : null
       if (import.meta.env.DEV && scanStartRef.current != null) {
         const elapsed = performance.now() - scanStartRef.current
         console.debug(`[recepcion] scan client ${elapsed.toFixed(1)}ms`)
@@ -741,15 +837,18 @@ export default function ValidacionRecepcion() {
       startTransition(() => {
         setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado, tarimaNum: parseTarimaNumber(ev.ubicacion || variables.ubicacion) })
         if (ev.resultado === 'no_encontrado') {
-          setRejectModal({
-            open: true,
-            code: ev.codigo_escaneado,
-            message: data.mensaje || 'El código no existe en las líneas esperadas de esta orden de recepción.',
-            reason: data.motivo || 'codigo_no_pertenece_orden',
-          })
+          if (crossOrder) {
+            setCrossOrderModal({ open: true, code: ev.codigo_escaneado, order: crossOrder })
+          } else {
+            setRejectModal({
+              open: true,
+              code: ev.codigo_escaneado,
+              message: data.mensaje || 'El código no existe en las líneas esperadas de esta orden de recepción.',
+              reason: data.motivo || 'codigo_no_pertenece_orden',
+            })
+          }
         }
         if (ev.resultado === 'duplicado') {
-          playSound('duplicate')
           setDupModal({
             open: true,
             code: ev.codigo_escaneado,
@@ -798,6 +897,7 @@ export default function ValidacionRecepcion() {
       })
       if (ev.resultado === 'correcto' && !variables.optimisticFeedback) playSound('success')
       else if (ev.resultado === 'duplicado') playSound('duplicate')
+      else if (crossOrder) playSound('warning')
       else playSound('error')
     },
     onError: (err) => {
@@ -806,6 +906,7 @@ export default function ValidacionRecepcion() {
         console.debug(`[recepcion] scan client failed ${elapsed.toFixed(1)}ms`)
         scanStartRef.current = null
       }
+      playSound('error')
       toast.error(getScanErrorMessage(err))
     },
     onSettled: () => refocus(),
@@ -880,7 +981,7 @@ export default function ValidacionRecepcion() {
       toast.success(t('rec.val.forceClose.success'))
       qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
       setForceCloseOpen(false)
-      navigate('/recepcion/recibir')
+      goBack()
     },
     onError: () => toast.error(t('toast.error')),
   })
@@ -897,7 +998,7 @@ export default function ValidacionRecepcion() {
     onSuccess: (data) => {
       qc.setQueryData(orderQueryKey, (cur) => cur ? { ...cur, order: data.order } : cur)
     },
-    onError: () => toast.error(t('toast.error')),
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
 
   const relocateUbicacionMut = useMutation({
@@ -949,6 +1050,10 @@ export default function ValidacionRecepcion() {
   }
 
   async function activateTarimaMode({ reconfigure = false } = {}) {
+    if (!reconfigure && hasStartedNormalMode) {
+      toast.error(t('rec.tarimas.activate.blocked'))
+      return
+    }
     const frozenTarimaMap = buildTarimaMap(
       effectiveLines,
       new Map(),
@@ -976,6 +1081,29 @@ export default function ValidacionRecepcion() {
     refocus()
   }
 
+  async function disableTarimaMode() {
+    if (hasValidationRecords) {
+      toast.error(t('rec.tarimas.disable.blocked'))
+      return
+    }
+    const nextConfig = {
+      ...buildValidationConfig(),
+      mode: 'ubicacion',
+      locked: false,
+      tarimaAssignments: [],
+      emptyTarimas: [],
+    }
+    await saveValidationConfigMut.mutateAsync(nextConfig)
+    setWithTarimas(false)
+    setTarimaOverrides(new Map())
+    setExpandedTarimas(new Set())
+    setShowTarimaConfirm(false)
+    setTarimaConfirmMode('activate')
+    setUbicacionConfirmed(false)
+    setMobilePanelOpen(false)
+    refocus()
+  }
+
   const openForceEntryModal = useCallback((code) => {
     const tipos = tiposData?.tipos || []
     setForceModal({
@@ -987,9 +1115,13 @@ export default function ValidacionRecepcion() {
   }, [tiposData?.tipos])
 
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = async (e) => {
     if (!withTarimas && !ubicacionConfirmed) return
     if (e.key === 'Enter' && e.target.value.trim()) {
+      if (!linesReady) {
+        toast.info(t('rec.val.loadingLines'))
+        return
+      }
       const code = e.target.value.trim()
       e.target.value = ''
       const matchingLines = effectiveLines.filter(l => l.custom_box_barcode && codesMatch(l.custom_box_barcode, code))
@@ -1021,6 +1153,14 @@ export default function ValidacionRecepcion() {
         return
       }
       if (matchingLines.length === 0 && hasCompleteLineSet) {
+        const crossOrder = await findPendingCrossOrder(code)
+        if (crossOrder) {
+          playSound('warning')
+          setLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null })
+          setCrossOrderModal({ open: true, code, order: crossOrder })
+          refocus()
+          return
+        }
         playSound('error')
         setLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null })
         setRejectModal({
@@ -1065,7 +1205,6 @@ export default function ValidacionRecepcion() {
               reason: 'codigo_no_pertenece_orden',
             })
           } else if (offlineResult === 'duplicado') {
-            playSound('duplicate')
             setDupModal({
               open: true,
               code: matchedStoredCode || code,
@@ -1117,6 +1256,9 @@ export default function ValidacionRecepcion() {
             }
           }
         })
+        if (offlineResult === 'correcto') playSound('success')
+        else if (offlineResult === 'duplicado') playSound('duplicate')
+        else playSound('error')
         refocus()
         return
       }
@@ -1659,14 +1801,14 @@ export default function ValidacionRecepcion() {
         : (orderError?.response?.data?.error || orderError?.message || 'No se pudo cargar la orden de recepción.')
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('rec.scan.title')} icon={PackageCheck} />
+        {!embedded && (<Header title={t('rec.scan.title')} icon={PackageCheck} />)}
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-md rounded-2xl border border-danger-100 bg-danger-50/70 p-5 text-center shadow-sm">
             <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-danger-500" />
             <p className="text-sm font-semibold text-danger-800">{message}</p>
             <button
               type="button"
-              onClick={() => status === 401 ? navigate('/login', { replace: true }) : navigate('/recepcion/recibir')}
+              onClick={() => status === 401 ? navigate('/login', { replace: true }) : goBack()}
               className="btn-primary mt-4"
             >
               {status === 401 ? 'Iniciar sesión' : 'Volver'}
@@ -1677,19 +1819,23 @@ export default function ValidacionRecepcion() {
     )
   }
 
-  if (isLoading || bootingSession || !order) return (
+  if (isLoading || !order) return (
     <div className="flex flex-col h-full">
-      <Header title={t('rec.scan.title')} icon={PackageCheck} />
-      <div className="flex-1 flex items-center justify-center text-warm-400 text-sm">{t('common.loading')}</div>
+      {!embedded && (<Header title={t('rec.scan.title')} icon={PackageCheck} />)}
+      <div className="flex-1 flex items-center justify-center">
+        <LoadingSpinner size="lg" text={t('common.loading')} delayMs={1000} />
+      </div>
       <OfflineBlockedModal isBlocked={isOffline && !order} />
     </div>
   )
 
+  const scanReady = linesReady && !linesLoading
   const scanInputProps = {
     type: 'text',
     className: 'w-full pl-12 pr-4 py-3.5 text-lg bg-white border-2 border-warm-200 rounded-2xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide',
-    placeholder: t('rec.scan.placeholder') || 'Escanear código...',
+    placeholder: scanReady ? (t('rec.scan.placeholder') || 'Escanear código...') : t('rec.val.loadingLines'),
     onKeyDown: handleKeyDown,
+    disabled: !scanReady || (!withTarimas && !ubicacionConfirmed),
     autoComplete: 'off',
     autoCorrect: 'off',
     spellCheck: false,
@@ -1697,9 +1843,10 @@ export default function ValidacionRecepcion() {
   }
 
   return (
-    <div className="flex flex-col bg-warm-50 overflow-hidden" style={{ height: '100dvh' }}>
+    <div className={`flex flex-col bg-warm-50 overflow-hidden${embedded ? ' flex-1' : ''}`} style={embedded ? undefined : { height: '100dvh' }}>
 
       {/* ── Header ── */}
+      {!embedded && (
       <Header
         title={
           <div className="flex items-center gap-2">
@@ -1717,21 +1864,20 @@ export default function ValidacionRecepcion() {
             {/* Hub navigation — go back to main scan list */}
             <button
               type="button"
-              onClick={() => navigate('/recepcion/recibir')}
+              onClick={() => goBack()}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 text-warm-500 hover:bg-warm-50 hover:text-sky-600 transition-colors"
               title="Lista de órdenes"
             >
               <LayoutList className="w-3.5 h-3.5" />
             </button>
-            {/* Tarimas toggle — on mobile when active: opens panel; on desktop: toggles off */}
+            {/* Tarimas mode and configuration */}
             <button
               data-tour="rec-tarimas-toggle"
               type="button"
               onClick={() => {
                 if (withTarimas) {
-                  if (window.innerWidth < 1024) setMobilePanelOpen(true)
-                  else if (!sidebarVisible) setSidebarVisible(true)
-                  else if (canReconfigureTarimas) {
+                  if (!sidebarVisible && window.innerWidth >= 1024) setSidebarVisible(true)
+                  if (canReconfigureTarimas) {
                     setTarimaConfirmMode('reconfigure')
                     setShowTarimaConfirm(true)
                   } else toast.error(t('rec.tarimas.locked'))
@@ -1739,6 +1885,8 @@ export default function ValidacionRecepcion() {
                   if (tarimaConfigLocked) {
                     setWithTarimas(true)
                     refocus()
+                  } else if (hasStartedNormalMode) {
+                    toast.error(t('rec.tarimas.activate.blocked'))
                   } else {
                     setTarimaConfirmMode('activate')
                     setShowTarimaConfirm(true)
@@ -1756,16 +1904,14 @@ export default function ValidacionRecepcion() {
               <span className="hidden sm:inline">{withTarimas ? t('rec.tarimas.n_tarimas').replace('{n}', totalTarimas) : t('rec.tarimas.toggle')}</span>
               {withTarimas && <span className="sm:hidden">{totalTarimas}T</span>}
             </button>
-            {withTarimas && canReconfigureTarimas && (
+            {withTarimas && (
               <button
                 type="button"
-                onClick={() => { setTarimaConfirmMode('reconfigure'); setShowTarimaConfirm(true) }}
-                disabled={saveValidationConfigMut.isPending}
-                className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 bg-warning-50 text-warning-700 text-xs font-semibold transition-colors hover:bg-warning-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={t('rec.tarimas.reconfigure.btn')}
+                onClick={() => setMobilePanelOpen(true)}
+                className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-xs font-semibold text-primary-700 transition-colors"
               >
-                <Edit3 className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">{t('rec.tarimas.reconfigure.btn')}</span>
+                <Layers className="w-3.5 h-3.5" />
+                <span>{totalTarimas}</span>
               </button>
             )}
             {/* Ubicacion panel button (when not in tarimas mode) */}
@@ -1812,6 +1958,64 @@ export default function ValidacionRecepcion() {
           </div>
         }
       />
+      )}
+
+      {/* ── Portal: beam action buttons into the top Header when embedded ── */}
+      {embedded && headerActionsSlot && createPortal(
+        <>
+          <button onClick={goBack} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 text-warm-500 hover:bg-warm-50 hover:text-sky-600 transition-colors" title={t('common.back')}>
+            <ArrowLeft className="w-3.5 h-3.5" />
+          </button>
+          <div className="w-px h-5 bg-warm-200 mx-0.5" />
+          <button
+            data-tour="rec-tarimas-toggle"
+            type="button"
+            onClick={() => {
+              if (withTarimas) {
+                if (!sidebarVisible && window.innerWidth >= 1024) setSidebarVisible(true)
+                if (canReconfigureTarimas) { setTarimaConfirmMode('reconfigure'); setShowTarimaConfirm(true) }
+                else toast.error(t('rec.tarimas.locked'))
+              } else {
+                if (tarimaConfigLocked) { setWithTarimas(true); refocus() }
+                else if (hasStartedNormalMode) toast.error(t('rec.tarimas.activate.blocked'))
+                else { setTarimaConfirmMode('activate'); setShowTarimaConfirm(true) }
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+              withTarimas ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-warm-200 text-warm-500 hover:bg-warm-50'
+            }`}
+          >
+            {withTarimas ? <ToggleRight className="w-4 h-4 text-primary-600 shrink-0" /> : <ToggleLeft className="w-4 h-4 text-warm-400 shrink-0" />}
+            <span className="hidden sm:inline">{withTarimas ? t('rec.tarimas.n_tarimas').replace('{n}', totalTarimas) : t('rec.tarimas.toggle')}</span>
+            {withTarimas && <span className="sm:hidden">{totalTarimas}T</span>}
+          </button>
+          {withTarimas && (
+            <button type="button" onClick={() => setMobilePanelOpen(true)} className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-xs font-semibold text-primary-700 transition-colors">
+              <Layers className="w-3.5 h-3.5" /><span>{totalTarimas}</span>
+            </button>
+          )}
+          {!withTarimas && allUbicacionGroups.length > 0 && (
+            <button type="button" onClick={() => setMobileUbicacionPanelOpen(true)} className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-xs font-semibold text-primary-700 transition-colors">
+              <MapPin className="w-3.5 h-3.5" /><span>{allUbicacionGroups.length}</span>
+            </button>
+          )}
+          {!withTarimas && ubicacionConfirmed && correctHistoryCount > 0 && (
+            <button type="button" onClick={completarUbicacion} className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-primary-300 bg-primary-600 text-xs font-semibold text-white hover:bg-primary-700 transition-colors">
+              <Check className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{t('rec.val.btn.completar')}</span>
+              <span className="sm:hidden">OK</span>
+            </button>
+          )}
+          <button type="button" onClick={() => setForceCloseOpen(true)} className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors" title={t('rec.val.forceClose.title')}>
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
+          </button>
+          <button onClick={endSession} className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 transition-colors">
+            <Square className="w-3.5 h-3.5" /><span>{t('rec.val.btn.terminar')}</span>
+          </button>
+        </>,
+        headerActionsSlot
+      )}
 
       {/* ── Offline banner ── */}
       {isOffline && (
@@ -1882,9 +2086,10 @@ export default function ValidacionRecepcion() {
             </div>
 
             {/* ── Desktop scan input ── */}
-            <div className={`hidden sm:block card p-3 sm:p-4 sticky top-0 z-[11] bg-gradient-to-br from-sky-50/40 via-white to-white border-sky-100 shadow-[0_6px_22px_-12px_rgba(14,165,233,0.22)] backdrop-blur-sm ${!withTarimas && !ubicacionConfirmed ? 'opacity-40 pointer-events-none' : ''}`}>
+            <div className={`hidden sm:block card p-3 sm:p-4 sticky top-0 z-[11] bg-gradient-to-br from-sky-50/40 via-white to-white border-sky-100 shadow-[0_6px_22px_-12px_rgba(14,165,233,0.22)] backdrop-blur-sm ${(!withTarimas && !ubicacionConfirmed) || !scanReady ? 'opacity-60' : ''}`}>
               <div className="relative">
                 <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-sky-500 pointer-events-none" />
+                {!scanReady && <Loader2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary-500" />}
                 <input ref={scanRefDesktop} {...scanInputProps} className="w-full pl-12 pr-4 py-3.5 text-lg bg-sky-50/30 border-2 border-sky-100 rounded-2xl focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-warm-900" />
               </div>
               <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
@@ -2291,8 +2496,9 @@ export default function ValidacionRecepcion() {
           </div>
         )}
 
-        <div className={`relative ${!withTarimas && !ubicacionConfirmed ? 'opacity-40 pointer-events-none' : ''}`}>
+        <div className={`relative ${(!withTarimas && !ubicacionConfirmed) || !scanReady ? 'opacity-60' : ''}`}>
           <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-sky-500 pointer-events-none" />
+          {!scanReady && <Loader2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary-500" />}
           <input ref={scanRefMobile} {...scanInputProps} className="w-full pl-12 pr-4 py-3.5 text-lg bg-sky-50/30 border-2 border-sky-100 rounded-2xl focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-warm-900" />
         </div>
         <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
@@ -2390,11 +2596,25 @@ export default function ValidacionRecepcion() {
         icon={Layers}
         size="lg"
         footer={
-          <div className="flex gap-2 justify-end w-full">
-            <button onClick={() => { setShowTarimaConfirm(false); setTarimaConfirmMode('activate') }} className="btn-ghost">{t('common.cancel')}</button>
-            <button onClick={() => activateTarimaMode({ reconfigure: isTarimaReconfigure })} disabled={saveValidationConfigMut.isPending || (isTarimaReconfigure && !canReconfigureTarimas)} className="btn-primary disabled:opacity-50">
-              {isTarimaReconfigure ? t('rec.tarimas.reconfigure.confirm') : t('rec.tarimas.activar')} ({tarimaPreviewCount})
-            </button>
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between w-full">
+            <div>
+              {isTarimaReconfigure && canDisableTarimaMode && (
+                <button
+                  type="button"
+                  onClick={() => { void disableTarimaMode() }}
+                  disabled={saveValidationConfigMut.isPending}
+                  className="btn-danger disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {t('rec.tarimas.disable.confirm')}
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setShowTarimaConfirm(false); setTarimaConfirmMode('activate') }} className="btn-ghost">{t('common.cancel')}</button>
+              <button onClick={() => { void activateTarimaMode({ reconfigure: isTarimaReconfigure }) }} disabled={saveValidationConfigMut.isPending || (isTarimaReconfigure && !canReconfigureTarimas)} className="btn-primary disabled:opacity-50">
+                {isTarimaReconfigure ? t('rec.tarimas.reconfigure.confirm') : t('rec.tarimas.activar')} ({tarimaPreviewCount})
+              </button>
+            </div>
           </div>
         }
       >
@@ -2405,6 +2625,16 @@ export default function ValidacionRecepcion() {
             <div className="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-xs font-semibold text-warning-800">
               <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
               {t('rec.tarimas.reconfigure.warning')}
+            </div>
+          )}
+          {isTarimaReconfigure && canDisableTarimaMode && (
+            <div className="rounded-xl border border-danger-100 bg-danger-50 px-3 py-2 text-xs font-semibold text-danger-700">
+              {t('rec.tarimas.disable.available')}
+            </div>
+          )}
+          {isTarimaReconfigure && !canDisableTarimaMode && hasValidationRecords && (
+            <div className="rounded-xl border border-warm-200 bg-warm-50 px-3 py-2 text-xs font-semibold text-warm-600">
+              {t('rec.tarimas.disable.blocked')}
             </div>
           )}
           <div className="grid grid-cols-3 gap-1.5">
@@ -2570,6 +2800,54 @@ export default function ValidacionRecepcion() {
               </p>
             )}
           </div>
+        </div>
+      </Modal>
+
+      {/* ── Code belongs to another inbound order ── */}
+      <Modal
+        isOpen={crossOrderModal.open}
+        onClose={() => { setCrossOrderModal({ open: false, code: null, order: null }); refocus() }}
+        title={t('rec.val.crossOrder.title')}
+        icon={AlertTriangle}
+        size="sm"
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <button
+              onClick={() => { setCrossOrderModal({ open: false, code: null, order: null }); refocus() }}
+              className="btn-ghost"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={openCrossOrder}
+              className="btn-primary"
+              disabled={!crossOrderModal.order?.id}
+            >
+              {t('rec.val.crossOrder.open')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">{t('rec.val.crossOrder.body')}</p>
+          <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 space-y-2">
+            <p className="font-mono font-bold text-warning-800 text-base break-all">{crossOrderModal.code}</p>
+            {crossOrderModal.order && (
+              <div className="rounded-lg bg-white/80 border border-warning-100 px-3 py-2 space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-mono text-sm font-black text-warm-900 truncate">{crossOrderModal.order.folio}</p>
+                  <span className="rounded-full bg-warning-100 px-2 py-0.5 text-[10px] font-bold uppercase text-warning-700">
+                    {t(`rec.status.${crossOrderModal.order.estado}`) || crossOrderModal.order.estado}
+                  </span>
+                </div>
+                <p className="text-xs text-warm-500 truncate">{crossOrderModal.order.cliente || '—'}</p>
+                <p className="text-[11px] font-semibold text-warning-700">
+                  {t('rec.val.crossOrder.pending').replace('{n}', Number(crossOrderModal.order.pending_exact_lines ?? crossOrderModal.order.pending_lines ?? 0))}
+                </p>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-warm-500 leading-relaxed">{t('rec.val.crossOrder.hint')}</p>
         </div>
       </Modal>
 

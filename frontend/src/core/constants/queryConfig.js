@@ -15,4 +15,6 @@ export const STALE = {
   DEFAULT: 5 * 60_000,
   /** Stable master data that almost never changes (10 min). */
   LONG: 10 * 60_000,
+  /** Truly static data — structure fixed after upload, never changes mid-session (30 min). */
+  FROZEN: 30 * 60_000,
 }

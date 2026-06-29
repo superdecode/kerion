@@ -1327,7 +1327,7 @@ const { data: reasonsData } = useQuery({
     if (!norm) return
     const isDup = scannedOkCodesRef.current.has(norm)
     if (isDup) {
-      playSound('warning')
+      playSound('duplicate')
       setLastScan({ code: norm, result: 'duplicate' })
       setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h].slice(0, 500))
       toast.warning(t('surtido.validacion.duplicate') + ': ' + norm)
@@ -1336,7 +1336,7 @@ const { data: reasonsData } = useQuery({
     }
     const matched = findMatchedItem(norm, packageMap, productMap)
     if (!matched) {
-      playSound('reject')
+      playSound('error')
       setLastScan({ code: norm, result: 'rejected' })
       setHistory(h => [{ code: norm, result: 'rejected', ts: Date.now() }, ...h].slice(0, 500))
       setCounts(c => ({ ...c, rejected: c.rejected + 1 }))

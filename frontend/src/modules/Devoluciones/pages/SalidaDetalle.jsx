@@ -11,6 +11,7 @@ import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
 import StatusPill from '../../../core/components/common/StatusPill'
+import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import SalidaImportModal from '../components/SalidaImportModal'
 import SurtidoConfirmModal from '../components/SurtidoConfirmModal'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -486,7 +487,7 @@ export default function SalidaDetalle() {
     setPrintExtraCols(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id])
   }
 
-  if (salidaQuery.isLoading) return <div className="p-8 text-sm text-warm-400">{t('dev.salida_detalle.loading')}</div>
+  if (salidaQuery.isLoading) return <div className="flex h-full items-center justify-center"><LoadingSpinner size="lg" text={t('dev.salida_detalle.loading')} /></div>
   if (!salida) return <div className="p-8 text-sm text-warm-400">{t('dev.salida_detalle.not_found')}</div>
 
   const hasExtraCols = isCompleted

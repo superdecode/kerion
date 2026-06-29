@@ -11,6 +11,7 @@ import {
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
+import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -341,7 +342,7 @@ export default function EntradaDetalle() {
     setPage(1)
   }, [search, filterAdjunto, sortField, sortDir, pageSize])
 
-  if (isLoading) return <div className="p-8 text-sm text-warm-400">{t('dev.entrada_detalle.loading')}</div>
+  if (isLoading) return <div className="flex h-full items-center justify-center"><LoadingSpinner size="lg" text={t('dev.entrada_detalle.loading')} /></div>
   if (!sesion) return <div className="p-8 text-sm text-warm-400">{t('dev.entrada_detalle.not_found')}</div>
 
   const colSpan = isEditable && (canEdit || canDelete) ? 10 : 9

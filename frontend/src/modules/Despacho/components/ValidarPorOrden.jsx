@@ -15,6 +15,7 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
 import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
+import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import {
   getFolio, addOrder, updateOrder, removeOrder,
   cerrarFolio, cancelarFolio, findOrderByBarcode,
@@ -208,14 +209,17 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       if (expectedCount > 0 && newScansCount >= expectedCount) {
         setCompleted(true)
         onAutoConfirm({ bultos: newScansCount, estado: 'cargado' })
+        playSound('complete')
         addToast(`Validación completa — ${newScansCount} cajas confirmadas`, 'success')
         setTimeout(() => onClose(), 2000)
       } else {
+        playSound('success')
         scanRef.current?.focus()
       }
     },
     onError: (err, { code }) => {
       pendingOnlineRef.current.delete(code)
+      playSound('error')
       addToast(err?.response?.data?.error || 'Error registrando escaneo', 'error')
       scanRef.current?.focus()
     },
@@ -232,6 +236,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     if (!code) return
     const allScannedCodes = new Set([...Array.from(alreadyScanned), ...pendingOfflineScans])
     if (allScannedCodes.has(code) || pendingOnlineRef.current.has(code)) {
+      playSound('duplicate')
       addToast('Código ya escaneado en esta orden', 'warning')
       scanRef.current?.focus()
       return
@@ -506,6 +511,12 @@ export default function ValidarPorOrden({ folioId }) {
   const [folioCerradoNum, setFolioCerradoNum] = useState(null)
   const isOfflineMain = useOfflineStore((s) => s.status === 'offline')
 
+  useEffect(() => {
+    const handler = () => initAudio()
+    document.addEventListener('click', handler, { once: true })
+    return () => document.removeEventListener('click', handler)
+  }, [])
+
   const { data, isLoading } = useQuery({
     queryKey: ['despacho-folio', folioId],
     queryFn: () => getFolio(folioId),
@@ -665,11 +676,13 @@ export default function ValidarPorOrden({ folioId }) {
       rawCodes.push(lookupDetail.thirdOrderNo, lookupDetail.logisticsTrackNo)
       const codes = buildLookupCodeSet(rawCodes)
       if (codes.size > 0 && !codes.has(code)) {
+        playSound('error')
         addToast('Código no corresponde a esta orden — rechazado', 'error')
         inlineScanRef.current?.focus()
         return
       }
     }
+    playSound('success')
     setLocalScans(prev => [...prev, code])
     inlineScanRef.current?.focus()
   }, [localScans, lookupDetail, addToast])

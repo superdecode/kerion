@@ -6,6 +6,10 @@
 let audioContext = null
 
 export function initAudio() {
+  if (audioContext) {
+    if (audioContext.state === 'suspended') audioContext.resume()
+    return
+  }
   try {
     audioContext = new (window.AudioContext || window.webkitAudioContext)()
     document.addEventListener('click', () => {
@@ -29,15 +33,24 @@ export function playSound(type) {
     const t = audioContext.currentTime
 
     if (type === 'success' || type === 'ok') {
-      gain.gain.setValueAtTime(0.3, t)
-      osc.frequency.setValueAtTime(880, t)
-      osc.start(); osc.stop(t + 0.15)
+      // Correct scan: clean ascending two-note chime.
+      osc.type = 'sine'
+      gain.gain.setValueAtTime(0.0001, t)
+      gain.gain.exponentialRampToValueAtTime(0.24, t + 0.01)
+      osc.frequency.setValueAtTime(740, t)
+      osc.frequency.setValueAtTime(988, t + 0.09)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22)
+      osc.start(t); osc.stop(t + 0.24)
 
     } else if (type === 'error') {
-      gain.gain.setValueAtTime(0.3, t)
-      osc.frequency.setValueAtTime(300, t)
-      osc.frequency.exponentialRampToValueAtTime(150, t + 0.3)
-      osc.start(); osc.stop(t + 0.35)
+      // Error/rejected scan: lower descending buzz.
+      osc.type = 'sawtooth'
+      gain.gain.setValueAtTime(0.0001, t)
+      gain.gain.exponentialRampToValueAtTime(0.32, t + 0.01)
+      osc.frequency.setValueAtTime(260, t)
+      osc.frequency.exponentialRampToValueAtTime(95, t + 0.34)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.36)
+      osc.start(t); osc.stop(t + 0.38)
 
     } else if (type === 'warning') {
       gain.gain.setValueAtTime(0.3, t)
@@ -52,11 +65,15 @@ export function playSound(type) {
       osc.start(); osc.stop(t + 0.45)
 
     } else if (type === 'duplicate') {
-      // 330 Hz sawtooth brief pulse — distinct from warning, used for barcode duplicates
-      osc.type = 'sawtooth'
-      gain.gain.setValueAtTime(0.2, t)
-      osc.frequency.setValueAtTime(330, t)
-      osc.start(); osc.stop(t + 0.25)
+      // Duplicate scan: short double beep, separate from success and error.
+      osc.type = 'square'
+      gain.gain.setValueAtTime(0.0001, t)
+      gain.gain.setValueAtTime(0.2, t + 0.01)
+      gain.gain.setValueAtTime(0.0001, t + 0.08)
+      gain.gain.setValueAtTime(0.2, t + 0.15)
+      gain.gain.setValueAtTime(0.0001, t + 0.23)
+      osc.frequency.setValueAtTime(520, t)
+      osc.start(t); osc.stop(t + 0.25)
 
     } else if (type === 'complete') {
       // Ascending two-tone — "tarima completa" celebration

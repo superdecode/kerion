@@ -82,7 +82,7 @@ import DespachoValidar from './modules/Despacho/pages/Validar'
 // Recepcion Module
 import RecepcionRecibir from './modules/Recepcion/pages/Recibir'
 import RecepcionDetalle from './modules/Recepcion/pages/RecepcionDetalle'
-import ValidacionRecepcion from './modules/Recepcion/pages/ValidacionRecepcion'
+import RecepcionEscanear from './modules/Recepcion/pages/Escanear'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,7 +94,7 @@ const queryClient = new QueryClient({
         return failureCount < 1
       },
       staleTime: 5 * 60 * 1000,
-      gcTime: 10 * 60 * 1000,
+      gcTime: 35 * 60 * 1000,
       refetchOnWindowFocus: false,
     },
   },
@@ -294,8 +294,9 @@ function AppRoutes() {
         <Route path="recepcion/recibir/:id" element={
           <PermissionRoute module="recepcion.recibir"><ErrorBoundary><RecepcionDetalle /></ErrorBoundary></PermissionRoute>
         } />
-        <Route path="recepcion/recibir/:id/validar" element={
-          <PermissionRoute module="recepcion.recibir"><ErrorBoundary><ValidacionRecepcion /></ErrorBoundary></PermissionRoute>
+        <Route path="recepcion/recibir/:id/validar" element={<Navigate to="/recepcion/escanear" replace />} />
+        <Route path="recepcion/escanear" element={
+          <PermissionRoute module="recepcion.recibir"><ErrorBoundary><RecepcionEscanear /></ErrorBoundary></PermissionRoute>
         } />
         <Route path="recepcion" element={<Navigate to="/recepcion/recibir" replace />} />
 

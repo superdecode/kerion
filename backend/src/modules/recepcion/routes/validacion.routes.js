@@ -126,7 +126,7 @@ router.patch('/orders/:id/sessions/:sid',
          WHERE id=$1 AND tenant_id=$2 RETURNING *`,
         [req.params.sid, req.tenantId, total_escaneado || null, ubicacion_nota || null]
       )
-      if (result.rows.length === 0) return res.status(404).json({ error: 'Sesión no encontrada' })
+      if (result.rows.length === 0) return res.json({ session: null })
       res.json({ session: result.rows[0] })
     } catch (err) {
       res.status(500).json({ error: 'Error al cerrar sesión' })
