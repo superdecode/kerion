@@ -257,7 +257,7 @@ export default function ValidacionRecepcion() {
   const moduleQueue = useOfflineStore((s) => s.moduleQueue)
   const orderQueryKey = useMemo(() => ['recepcion-order', id, 'validation'], [id])
 
-  const { data: orderData, isLoading } = useQuery({
+  const { data: orderData, isLoading, isError: isOrderError, error: orderError } = useQuery({
     queryKey: orderQueryKey,
     queryFn: () => getOrder(id, { validation_mode: 1, lines_limit: 10000, lines_sort_key: 'created_at', lines_sort_dir: 'asc' }),
     enabled: canQueryRecepcion,
@@ -644,6 +644,23 @@ export default function ValidacionRecepcion() {
       window.removeEventListener('click', handler)
     }
   }, [])
+
+  useEffect(() => {
+    if (!canQueryRecepcion) {
+      setBootingSession(false)
+      setScanning(false)
+      setSessionId(null)
+      navigate('/login', { replace: true })
+    }
+  }, [canQueryRecepcion, navigate])
+
+  useEffect(() => {
+    if (isOrderError) {
+      setBootingSession(false)
+      setScanning(false)
+      setSessionId(null)
+    }
+  }, [isOrderError])
 
   useEffect(() => {
     const cfg = order?.validation_config
@@ -1630,6 +1647,33 @@ export default function ValidacionRecepcion() {
       </div>
     </>
   )
+
+  if (isOrderError) {
+    const status = orderError?.response?.status
+    const message = status === 401
+      ? 'Sesión vencida o no autorizada. Inicia sesión nuevamente.'
+      : status === 403
+        ? 'No tienes permisos para abrir esta validación.'
+        : (orderError?.response?.data?.error || orderError?.message || 'No se pudo cargar la orden de recepción.')
+    return (
+      <div className="flex flex-col h-full">
+        <Header title={t('rec.scan.title')} icon={PackageCheck} />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="max-w-md rounded-2xl border border-danger-100 bg-danger-50/70 p-5 text-center shadow-sm">
+            <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-danger-500" />
+            <p className="text-sm font-semibold text-danger-800">{message}</p>
+            <button
+              type="button"
+              onClick={() => status === 401 ? navigate('/login', { replace: true }) : navigate('/recepcion/recibir')}
+              className="btn-primary mt-4"
+            >
+              {status === 401 ? 'Iniciar sesión' : 'Volver'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (isLoading || bootingSession || !order) return (
     <div className="flex flex-col h-full">
