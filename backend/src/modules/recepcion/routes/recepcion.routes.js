@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
-import { getPermissionLevel, requirePermission } from '../../../shared/middleware/permissions.js'
+import { getPermissionLevel, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { checkModuleLimit } from '../../middleware/usageGuard.js'
 import { getRecepcionValidationRecordCount, refreshRecepcionOrderState } from '../utils/orderState.js'
 
@@ -49,6 +49,13 @@ function sanitizeValidationConfig(input = {}) {
     tarimaAssignments: mode === 'tarimas' ? sanitizeTarimaAssignments(input?.tarimaAssignments) : [],
     emptyTarimas: mode === 'tarimas' ? sanitizeEmptyTarimas(input?.emptyTarimas) : [],
   }
+}
+
+function hasModulePermission(user, modulePath, action) {
+  const isAdmin = user?.es_admin_tenant === true ||
+    (user?.es_admin_tenant === undefined && user?.rol_nombre === 'Administrador')
+  if (isAdmin) return true
+  return resolvePermission(getPermissionLevel(user?.permisos, modulePath), action)
 }
 
 async function generateFolioNumero(req) {
@@ -320,7 +327,9 @@ router.get('/orders/:id',
     let client
     try {
       const page = Math.max(1, parseInt(req.query.lines_page, 10) || 1)
-      const limit = Math.min(500, Math.max(25, parseInt(req.query.lines_limit, 10) || 100))
+      const requestedLimit = parseInt(req.query.lines_limit, 10) || 100
+      const maxLimit = req.query.validation_mode === '1' ? 10000 : 500
+      const limit = Math.min(maxLimit, Math.max(25, requestedLimit))
       const offset = (page - 1) * limit
       const q = String(req.query.lines_q || '').trim()
       const sortKey = String(req.query.lines_sort_key || 'created_at')
@@ -431,15 +440,32 @@ router.get('/orders/:id',
 // PATCH /orders/:id — update order state
 router.patch('/orders/:id',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.recibir', 'actualizar'),
   async (req, res) => {
+    let client
     try {
-      const { estado, validation_config } = req.body
+      const { estado, validation_config, reconfigure_tarimas } = req.body
       const allowed = ['pendiente_validacion', 'en_validacion', 'completo', 'parcial', 'cancelado', 'anormal']
       if (estado && !allowed.includes(estado)) return res.status(400).json({ error: 'Estado inválido' })
+      const updatingState = estado !== undefined
+      const updatingValidationConfig = validation_config !== undefined
+      const canUpdateRecepcion = hasModulePermission(req.fullUser, 'recepcion.recibir', 'actualizar')
+      const canUpdateValidation = hasModulePermission(req.fullUser, 'recepcion.validacion', 'actualizar')
+      if (updatingState && !canUpdateRecepcion) {
+        return res.status(403).json({ error: 'No tienes permisos para actualizar la orden' })
+      }
+      if (updatingValidationConfig && !canUpdateValidation && !canUpdateRecepcion) {
+        return res.status(403).json({ error: 'No tienes permisos para actualizar la configuración de validación' })
+      }
+      if (reconfigure_tarimas === true && !canUpdateValidation) {
+        return res.status(403).json({ error: 'No tienes permisos para reconfigurar tarimas' })
+      }
+      if (!updatingState && !updatingValidationConfig) {
+        return res.status(400).json({ error: 'No hay cambios para actualizar' })
+      }
 
       const updates = ['updated_at=now()']
       const params = [req.params.id, req.tenantId]
+      let shouldResetTarimaNumbering = false
 
       if (estado !== undefined) {
         params.push(estado || null)
@@ -455,6 +481,7 @@ router.patch('/orders/:id',
         const currentConfig = currentRes.rows[0]?.validation_config || null
         const nextConfig = sanitizeValidationConfig(validation_config)
         if (currentConfig?.mode === 'tarimas' && currentConfig?.locked === true) {
+          const reconfigureRequested = reconfigure_tarimas === true
           const sameLockedConfig =
             nextConfig.mode === 'tarimas' &&
             nextConfig.locked === true &&
@@ -465,23 +492,46 @@ router.patch('/orders/:id',
             parseInt(currentConfig.maxCajasEnGrupo || 10, 10) === nextConfig.maxCajasEnGrupo &&
             Boolean(currentConfig.sortTarimasByCountDesc) === nextConfig.sortTarimasByCountDesc
 
-          if (!sameLockedConfig) {
+          if (!sameLockedConfig && (!reconfigureRequested || !canUpdateValidation)) {
             return res.status(409).json({ error: 'La configuración de tarimas ya está bloqueada para esta orden' })
           }
+          shouldResetTarimaNumbering = reconfigureRequested && canUpdateValidation && nextConfig.mode === 'tarimas'
         }
         params.push(JSON.stringify(nextConfig))
         updates.push(`validation_config=$${params.length}::jsonb`)
       }
 
-      const result = await req.tQuery(
+      client = await req.tGetClient()
+      const result = await client.query(
         `UPDATE inbound_orders SET ${updates.join(', ')}
          WHERE id=$1 AND tenant_id=$2 RETURNING *`,
         params
       )
-      if (result.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
-      res.json({ order: result.rows[0] })
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return res.status(404).json({ error: 'Orden no encontrada' })
+      }
+      let tarimaNumberingCleared = 0
+      if (shouldResetTarimaNumbering) {
+        const clearRes = await client.query(
+          `UPDATE inbound_scan_events
+           SET ubicacion = NULL
+           WHERE order_id=$1
+             AND tenant_id=$2
+             AND resultado='correcto'
+             AND ubicacion IS NOT NULL`,
+          [req.params.id, req.tenantId]
+        )
+        tarimaNumberingCleared = clearRes.rowCount || 0
+      }
+      await client.query('COMMIT')
+      res.json({ order: result.rows[0], tarima_numbering_cleared: tarimaNumberingCleared })
     } catch (err) {
+      if (client) try { await client.query('ROLLBACK') } catch {}
+      console.error('[recepcion] update order:', err.message)
       res.status(500).json({ error: 'Error al actualizar orden' })
+    } finally {
+      if (client) client.release()
     }
   }
 )

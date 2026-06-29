@@ -60,13 +60,6 @@ function normalizeScanCode(rawCode) {
   return upper.replace(/[^A-Z0-9_\/-]/g, '')
 }
 
-function normalizeCodeFast(rawCode) {
-  if (!rawCode) return ''
-  let code = String(rawCode).trim()
-  code = code.replace(/／/g, '/').replace(/[－‒–—―]/g, '-')
-  return code.toUpperCase().replace(/[^A-Z0-9_\/-]/g, '')
-}
-
 function generateCodeVariations(rawCode, normalize = true) {
   const code = normalize ? normalizeScanCode(rawCode) : String(rawCode || '').toUpperCase()
   if (!code) return []
@@ -87,7 +80,7 @@ function normalizedCodeSql(column) {
 }
 
 function getStoredMatchedCode(line, fallbackCode) {
-  const lineCode = normalizeCodeFast(line?.custom_box_barcode)
+  const lineCode = String(line?.custom_box_barcode || '').trim()
   return lineCode || fallbackCode
 }
 
