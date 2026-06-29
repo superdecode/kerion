@@ -690,6 +690,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     if (isTarimaMode) return 0
     return allUbicacionGroups.reduce((s, g) => s + g.codes.length, 0)
   }, [allUbicacionGroups, isTarimaMode])
+  const activeUbicacionGroup = useMemo(() => {
+    if (isTarimaMode || !ubicacionConfirmed) return null
+    const activeKey = selectedUbicacion ?? ''
+    return allUbicacionGroups.find(g => (g.ubicacion ?? '') === activeKey) ?? null
+  }, [allUbicacionGroups, selectedUbicacion, ubicacionConfirmed, isTarimaMode])
+  const activeUbicacionScanCount = activeUbicacionGroup?.codes.length ?? 0
 
   const refocus = useCallback(() => {
     setTimeout(() => {
@@ -1355,7 +1361,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   {selectedUbicacion || <span className="text-primary-400 font-semibold">{t('rec.val.ubicacion.panel.sin_ub')}</span>}
                 </p>
                 <p className="text-[10px] text-primary-400 mt-0.5 tabular-nums">
-                  {correctHistoryCount} {t('rec.val.ubicacion.lote_actual')}
+                  {activeUbicacionScanCount} {t('rec.val.ubicacion.lote_actual')}
                 </p>
               </div>
               <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">{t('rec.val.ubicacion.badge')}</span>
@@ -1368,7 +1374,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 <Edit3 size={12} />
               </button>
             </div>
-            {correctHistoryCount > 0 && (
+            {activeUbicacionScanCount > 0 && (
               <div className="px-3 pb-2.5">
                 <button
                   type="button"
@@ -1926,7 +1932,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               </button>
             )}
             {/* Completar ubicacion (when confirmed and has scans) */}
-            {!withTarimas && ubicacionConfirmed && correctHistoryCount > 0 && (
+            {!withTarimas && ubicacionConfirmed && activeUbicacionScanCount > 0 && (
               <button
                 type="button"
                 onClick={completarUbicacion}
@@ -1999,7 +2005,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               <MapPin className="w-3.5 h-3.5" /><span>{allUbicacionGroups.length}</span>
             </button>
           )}
-          {!withTarimas && ubicacionConfirmed && correctHistoryCount > 0 && (
+          {!withTarimas && ubicacionConfirmed && activeUbicacionScanCount > 0 && (
             <button type="button" onClick={completarUbicacion} className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-primary-300 bg-primary-600 text-xs font-semibold text-white hover:bg-primary-700 transition-colors">
               <Check className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{t('rec.val.btn.completar')}</span>
@@ -2148,7 +2154,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
             {/* ── Ubicación — unified card: input → summary in one block ── */}
             {!withTarimas && (() => {
-              const batchCount = correctHistoryCount
+              const batchCount = activeUbicacionScanCount
               return (
                 <div className="hidden sm:block card overflow-hidden border border-accent-100 z-[10] bg-white/97 backdrop-blur-sm">
                   {!ubicacionConfirmed ? (

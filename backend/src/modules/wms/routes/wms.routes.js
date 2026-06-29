@@ -619,12 +619,16 @@ router.post('/scan-session',
 
       if (existing.rows.length > 0) {
         const s = existing.rows[0]
+        if (Number(s.operator_id) === Number(req.user.id)) {
+          return res.json({ success: true, data: s, reused: true })
+        }
         if (!force) {
           return res.status(409).json({
             success: false,
             error: 'Esta orden ya está siendo validada',
             details: {
               session_id: s.id,
+              operator_id: s.operator_id,
               operator: s.operator_nombre || 'Desconocido',
               started_at: s.started_at,
               status: s.status

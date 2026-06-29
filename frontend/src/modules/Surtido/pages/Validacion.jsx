@@ -1090,7 +1090,10 @@ const { data: reasonsData } = useQuery({
         const details = err.response.data?.details
         const existingSid = details?.session_id
         // Same operator reconnect: reuse the existing open session
-        if (existingSid && details?.operator === user?.nombre_completo) {
+        const sameOperator = details?.operator_id != null
+          ? Number(details.operator_id) === Number(user?.id)
+          : details?.operator === user?.nombre_completo
+        if (existingSid && sameOperator) {
           const now = new Date()
           setConflictDetails(null)
           setSessionId(existingSid); setSessionStart(now); setStep('session')
