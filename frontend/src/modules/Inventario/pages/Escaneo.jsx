@@ -1742,6 +1742,7 @@ export default function Escaneo() {
       })
     },
     onSuccess: (_, vars) => {
+      playSound('complete')
       const saveVars = typeof vars === 'string' ? { group: vars } : (vars || {})
       const clasifGroup = saveVars.group || null
       setShowSummaryModal(false)

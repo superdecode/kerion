@@ -1414,6 +1414,7 @@ const { data: reasonsData } = useQuery({
     onSuccess: (_, vars) => {
       const orderStatus = totalExpected > 0 && counts.ok >= totalExpected ? 'complete' : 'partial'
       upsertOrderTracking(obc, { status: orderStatus }).catch(() => {})
+      playSound('complete')
       toast.success(t('surtido.escaneo.session_saved'))
       qc.invalidateQueries({ queryKey: ['wms-scan-sessions'] })
       autoFinalizeLockRef.current = true

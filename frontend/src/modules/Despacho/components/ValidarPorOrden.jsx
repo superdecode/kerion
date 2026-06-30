@@ -541,6 +541,7 @@ export default function ValidarPorOrden({ folioId }) {
   const { mutate: doCerrar, isPending: cerrando } = useMutation({
     mutationFn: () => cerrarFolio(folioId),
     onSuccess: () => {
+      playSound('complete')
       invalidate()
       setShowConfirmCerrar(false)
       setFolioCerradoNum(folio?.folio_numero ?? folio?.folio ?? folioId)

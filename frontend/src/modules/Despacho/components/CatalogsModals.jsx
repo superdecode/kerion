@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { playSound } from '../../Shared/Wms/playSound'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Truck, Users, Loader2, Edit3, Trash2, Check, FileText,
@@ -273,6 +274,7 @@ export function FolioFormModal({ isOpen, onClose, onCreated, conductores = [], u
   const { mutate: crear, isPending } = useMutation({
     mutationFn: createFolio,
     onSuccess: (data) => {
+      playSound('complete')
       qc.invalidateQueries({ queryKey: ['despacho-folios'] })
       addToast(t('desp.toast.folioCreado'), 'success')
       setForm({ conductor_id: '', unidad_id: '', fecha_salida: '', notas: '' })

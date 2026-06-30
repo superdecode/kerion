@@ -205,6 +205,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const sessionBootOrderRef = useRef(null)
   const scanStartRef = useRef(null)
   const refocusRef = useRef(null)
+  const inFlightCodes = useRef(new Set())
 
   const [sessionId, setSessionId] = useState(null)
   const [withTarimas, setWithTarimas] = useState(false)
@@ -797,6 +798,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     }
     setSessionId(null)
     setScanning(false)
+    playSound('complete')
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['recepcion-order', id] }),
       qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] }),
@@ -915,7 +917,10 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       playSound('error')
       toast.error(getScanErrorMessage(err))
     },
-    onSettled: () => refocus(),
+    onSettled: (data, error, variables) => {
+      inFlightCodes.current.delete(variables.codigo?.toLowerCase())
+      refocus()
+    },
   })
 
   const deleteScanEventMut = useMutation({
@@ -1190,6 +1195,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         const tarimaNum = base ? effectiveTarimaMap.get(base) : null
         if (tarimaNum && !activeTarimaSet.has(tarimaNum)) {
           setFueraSectionModal({ open: true, code, base, tarimaNum })
+          playSound('suspicious')
           refocus()
           return
         }
@@ -1271,9 +1277,15 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       }
       if (import.meta.env.DEV) scanStartRef.current = performance.now()
       if (matchedLineForScan) {
-        setLastResult({ result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null, tarimaNum })
-        playSound('success')
-        scanMut.mutate({ codigo: code, ubicacion, optimisticFeedback: true })
+        const codeKey = code.toLowerCase()
+        if (!inFlightCodes.current.has(codeKey)) {
+          inFlightCodes.current.add(codeKey)
+          setLastResult({ result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null, tarimaNum })
+          playSound('success')
+          scanMut.mutate({ codigo: code, ubicacion, optimisticFeedback: true })
+        } else {
+          scanMut.mutate({ codigo: code, ubicacion })
+        }
       } else {
         scanMut.mutate({ codigo: code, ubicacion })
       }
