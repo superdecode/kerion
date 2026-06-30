@@ -70,14 +70,13 @@ export function parseDateValue(value) {
   // Normalize: strip AM/PM suffix (Google Sheets 12-hour format) before D/M/Y matching
   const normalized = raw.replace(/\s*[AaPp][Mm]$/, '').trim()
 
-  // D/M/Y with slash, hyphen, or dot separators (always first=day, second=month for es-MX)
+  // Google Sheets exports M/D/Y (US locale). Default: first=month, second=day.
+  // Exception: if first > 12 it can't be a month, so format is D/M/Y (day first).
   const dmy = normalized.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
   if (dmy) {
     const first = Number(dmy[1])
     const second = Number(dmy[2])
-    // Unambiguous: if second > 12 it can only be the day (months cap at 12), so format is M/D/Y.
-    // Otherwise (first > 12 or both ≤ 12) treat as D/M/Y — the standard for es-MX.
-    const [day, month] = second > 12 ? [second, first] : [first, second]
+    const [day, month] = first > 12 ? [first, second] : [second, first]
     return parseDateParts(dmy[3], month, day, dmy[4] || 0, dmy[5] || 0, dmy[6] || 0)
   }
 
