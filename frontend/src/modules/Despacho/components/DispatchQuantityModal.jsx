@@ -42,7 +42,7 @@ export default function DispatchQuantityModal({ isOpen, onClose, order, conducto
 
   useEffect(() => {
     if (!isOpen) return
-    setMode(existingDispatch ? 'cancel' : 'dispatch')
+    setMode('dispatch')
     setBultos('')
     setSelectedFolioId('')
     setCreateNew(false)
