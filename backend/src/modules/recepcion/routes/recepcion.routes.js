@@ -5,6 +5,7 @@ import { checkModuleLimit } from '../../middleware/usageGuard.js'
 import { getRecepcionValidationRecordCount, refreshRecepcionOrderState } from '../utils/orderState.js'
 
 const router = Router()
+let inboundLineColumnsCache = null
 
 function sanitizeValidationConfig(input = {}) {
   const toPositiveInt = (value, fallback) => {
@@ -58,14 +59,51 @@ function hasModulePermission(user, modulePath, action) {
   return resolvePermission(getPermissionLevel(user?.permisos, modulePath), action)
 }
 
-async function generateFolioNumero(req) {
+async function generateFolioNumero(req, db = null) {
+  const runner = db || { query: (text, params) => req.tQuery(text, params) }
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-  const countRes = await req.tQuery(
+  const countRes = await runner.query(
     `SELECT COUNT(*) FROM inbound_orders WHERE tenant_id=$1 AND folio LIKE $2`,
     [req.tenantId, `INB-${dateStr}-%`]
   )
   const seq = String(parseInt(countRes.rows[0].count) + 1).padStart(4, '0')
   return `INB-${dateStr}-${seq}`
+}
+
+async function getInboundLineColumns(db) {
+  if (inboundLineColumnsCache) return inboundLineColumnsCache
+  const result = await db.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'inbound_lines'`
+  )
+  inboundLineColumnsCache = new Set(result.rows.map((row) => row.column_name))
+  return inboundLineColumnsCache
+}
+
+function buildInboundLinesInsertPayload(lines, availableColumns, ctx) {
+  const specs = [
+    { column: 'tenant_id', type: 'uuid[]', values: (_, ctx) => ctx.tenantId },
+    { column: 'order_id', type: 'uuid[]', values: (_, ctx) => ctx.orderId },
+    { column: 'box_type', type: 'text[]', values: (line) => line.box_type || null },
+    { column: 'custom_box_barcode', type: 'text[]', values: (line) => line.custom_box_barcode || null },
+    { column: 'sku', type: 'text[]', values: (line) => line.sku || null },
+    { column: 'qty_per_box', type: 'numeric[]', values: (line) => line.qty_per_box ?? null },
+    { column: 'length_oms', type: 'numeric[]', values: (line) => line.length_oms ?? null },
+    { column: 'width_oms', type: 'numeric[]', values: (line) => line.width_oms ?? null },
+    { column: 'height_oms', type: 'numeric[]', values: (line) => line.height_oms ?? null },
+    { column: 'dimension_unit', type: 'text[]', values: (line) => line.dimension_unit || null },
+    { column: 'weight_oms', type: 'numeric[]', values: (line) => line.weight_oms ?? null },
+    { column: 'weight_unit', type: 'text[]', values: (line) => line.weight_unit || null },
+  ]
+
+  const activeSpecs = specs.filter((spec) => availableColumns.has(spec.column))
+  const columnsSql = activeSpecs.map((spec) => spec.column).join(', ')
+  const unnestSql = activeSpecs.map((spec, index) => `$${index + 1}::${spec.type}`).join(', ')
+  const params = activeSpecs.map((spec) => lines.map((line) => spec.values(line, ctx)))
+
+  return { columnsSql, unnestSql, params, activeColumns: activeSpecs.map((spec) => spec.column) }
 }
 
 // GET /orders/clientes — distinct client list for filter dropdown (must be before /orders/:id)
@@ -197,42 +235,54 @@ router.post('/orders',
         }
       }
 
-      const folio = await generateFolioNumero(req)
-      const orderRes = await req.tQuery(
-        `INSERT INTO inbound_orders (tenant_id, folio, cliente, inbound_order_no, tracking_no, reference_no, total_cajas, responsable_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-        [req.tenantId, folio, cliente || null, inboundOrderNo || null, tracking_no || null, reference_no || null, lines.length, req.user.id]
-      )
-      const order = orderRes.rows[0]
+      const order = await req.tTransaction(async (client) => {
+        const availableColumns = await getInboundLineColumns(client)
+        const folio = await generateFolioNumero(req, client)
+        const orderRes = await client.query(
+          `INSERT INTO inbound_orders (tenant_id, folio, cliente, inbound_order_no, tracking_no, reference_no, total_cajas, responsable_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+          [req.tenantId, folio, cliente || null, inboundOrderNo || null, tracking_no || null, reference_no || null, lines.length, req.user.id]
+        )
+        const createdOrder = orderRes.rows[0]
+        const { columnsSql, unnestSql, params, activeColumns } = buildInboundLinesInsertPayload(
+          lines,
+          availableColumns,
+          { tenantId: req.tenantId, orderId: createdOrder.id }
+        )
 
-      // Bulk INSERT via UNNEST — 12 array params regardless of row count, no pg 65535-param limit
-      await req.tQuery(
-        `INSERT INTO inbound_lines (tenant_id, order_id, box_type, custom_box_barcode, sku, qty_per_box, length_oms, width_oms, height_oms, dimension_unit, weight_oms, weight_unit)
-         SELECT * FROM UNNEST(
-           $1::uuid[], $2::uuid[], $3::text[], $4::text[], $5::text[],
-           $6::numeric[], $7::numeric[], $8::numeric[], $9::numeric[],
-           $10::text[], $11::numeric[], $12::text[]
-         )`,
-        [
-          lines.map(() => req.tenantId),
-          lines.map(() => order.id),
-          lines.map(l => l.box_type || null),
-          lines.map(l => l.custom_box_barcode || null),
-          lines.map(l => l.sku || null),
-          lines.map(l => l.qty_per_box ?? null),
-          lines.map(l => l.length_oms ?? null),
-          lines.map(l => l.width_oms ?? null),
-          lines.map(l => l.height_oms ?? null),
-          lines.map(l => l.dimension_unit || null),
-          lines.map(l => l.weight_oms ?? null),
-          lines.map(l => l.weight_unit || null),
-        ]
-      )
+        await client.query(
+          `INSERT INTO inbound_lines (${columnsSql})
+           SELECT * FROM UNNEST(${unnestSql})`,
+          params
+        )
 
-      auditLog(req, 'RECEPCION_ORDER_CREATE', 'inbound_orders', order.id, { folio, total_cajas: lines.length })
+        const skippedColumns = [
+          'length_oms',
+          'width_oms',
+          'height_oms',
+          'dimension_unit',
+          'weight_oms',
+          'weight_unit',
+        ].filter((column) => !activeColumns.includes(column))
+        if (skippedColumns.length > 0) {
+          console.warn('[recepcion] create: inbound_lines missing optional columns, imported with fallback schema', {
+            skippedColumns,
+          })
+        }
+
+        return createdOrder
+      })
+
+      auditLog(req, 'RECEPCION_ORDER_CREATE', 'inbound_orders', order.id, { folio: order.folio, total_cajas: lines.length })
       res.status(201).json({ order })
     } catch (err) {
-      console.error('[recepcion] create:', err.message)
+      console.error('[recepcion] create:', {
+        message: err.message,
+        code: err.code,
+        detail: err.detail,
+        hint: err.hint,
+        stack: err.stack,
+      })
       res.status(500).json({ error: 'Error al crear orden de recepción' })
     }
   }
