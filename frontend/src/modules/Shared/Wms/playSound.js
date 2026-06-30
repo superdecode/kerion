@@ -27,6 +27,8 @@ export function playSound(type) {
   if (!audioContext) return
   try {
     const t = audioContext.currentTime
+
+    // Plain tone with optional pitch glide
     const tone = ({
       start = 0,
       duration = 0.1,
@@ -53,19 +55,54 @@ export function playSound(type) {
       osc.stop(end + 0.02)
     }
 
+    // Warbling alarm tone: LFO modulates carrier frequency (nuclear/earthquake alarm pattern)
+    const alarm = ({
+      start = 0,
+      duration = 0.35,
+      frequency = 800,
+      lfoRate = 9,
+      lfoDepth = 180,
+      wave = 'sine',
+      volume = 0.25,
+    } = {}) => {
+      const at = t + start
+      const end = at + duration
+      const osc = audioContext.createOscillator()
+      const lfo = audioContext.createOscillator()
+      const lfoGain = audioContext.createGain()
+      const gainNode = audioContext.createGain()
+      lfo.type = 'sine'
+      lfo.frequency.value = lfoRate
+      lfoGain.gain.value = lfoDepth
+      lfo.connect(lfoGain)
+      lfoGain.connect(osc.frequency)
+      osc.type = wave
+      osc.frequency.value = frequency
+      gainNode.gain.setValueAtTime(0.0001, at)
+      gainNode.gain.exponentialRampToValueAtTime(volume, at + 0.012)
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, end)
+      osc.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      lfo.start(at)
+      osc.start(at)
+      lfo.stop(end + 0.05)
+      osc.stop(end + 0.05)
+    }
+
     if (type === 'success' || type === 'ok') {
-      // Single clean high beep — industrial scanner confirmation (1760 Hz = A6).
-      tone({ start: 0, duration: 0.085, frequency: 1760, wave: 'sine', volume: 0.21, attack: 0.002, release: 0.018 })
+      // Two-note ascending "di-DING" — playful but tight: C6 → A6.
+      tone({ start: 0,    duration: 0.07, frequency: 1047, wave: 'sine', volume: 0.19, attack: 0.002, release: 0.02 })
+      tone({ start: 0.09, duration: 0.14, frequency: 1760, wave: 'sine', volume: 0.22, attack: 0.002, release: 0.04 })
 
     } else if (type === 'error' || type === 'reject') {
-      // Two descending clear tones — unmistakeable rejection, no buzzer harshness.
-      tone({ start: 0,    duration: 0.10, frequency: 440, wave: 'sine', volume: 0.26, attack: 0.002, release: 0.02 })
-      tone({ start: 0.14, duration: 0.13, frequency: 277, wave: 'sine', volume: 0.27, attack: 0.002, release: 0.025 })
+      // Triangle wave descending — buzzer texture without wah or harshness.
+      tone({ start: 0,    duration: 0.12, frequency: 600, wave: 'triangle', volume: 0.25, attack: 0.002, release: 0.018 })
+      tone({ start: 0.16, duration: 0.14, frequency: 400, wave: 'triangle', volume: 0.26, attack: 0.002, release: 0.022 })
 
     } else if (type === 'duplicate') {
-      // Two identical mid-pitch chirps — "already scanned this", clearly different from error.
-      tone({ start: 0,    duration: 0.055, frequency: 1047, wave: 'sine', volume: 0.19, attack: 0.002, release: 0.015 })
-      tone({ start: 0.09, duration: 0.055, frequency: 1047, wave: 'sine', volume: 0.19, attack: 0.002, release: 0.015 })
+      // Two equal mid-tone beeps — "boop-boop", clearly wrong, less urgent than error.
+      tone({ start: 0,    duration: 0.09, frequency: 520, wave: 'triangle', volume: 0.21, attack: 0.002, release: 0.015 })
+      tone({ start: 0.12, duration: 0.09, frequency: 520, wave: 'triangle', volume: 0.21, attack: 0.002, release: 0.015 })
 
     } else if (type === 'warning') {
       // Single mid-tone — neutral advisory, less urgent than error.
