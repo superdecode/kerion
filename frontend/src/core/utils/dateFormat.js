@@ -9,6 +9,81 @@
 let _tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City'
 const LOCALE = 'es-MX'
 
+const EMPTY_DATE_VALUES = new Set(['', '-', '--', '—', 'n/a', 'na', 'null', 'undefined', 'invalid date', '0000-00-00'])
+const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30)
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function parseExcelSerialDate(value) {
+  const wholeDays = Math.floor(value)
+  const day = new Date(EXCEL_EPOCH_MS + wholeDays * DAY_MS)
+  const seconds = Math.round((value - wholeDays) * DAY_MS / 1000)
+  return new Date(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 0, 0, seconds)
+}
+
+function parseDateParts(year, month, day, hour = 0, minute = 0, second = 0) {
+  const y = Number(year)
+  const m = Number(month)
+  const d = Number(day)
+  const hh = Number(hour)
+  const mm = Number(minute)
+  const ss = Number(second)
+  if (![y, m, d, hh, mm, ss].every(Number.isFinite)) return null
+  if (y < 1000 || m < 1 || m > 12 || d < 1 || d > 31 || hh < 0 || hh > 23 || mm < 0 || mm > 59 || ss < 0 || ss > 59) return null
+
+  const date = new Date(y, m - 1, d, hh, mm, ss)
+  if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null
+  return date
+}
+
+export function parseDateValue(value) {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+  if (value === null || value === undefined) return null
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null
+    if (value > 25569 && value < 60000) return parseExcelSerialDate(value)
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  const raw = String(value).trim()
+  if (EMPTY_DATE_VALUES.has(raw.toLowerCase())) return null
+
+  const numeric = Number(raw)
+  if (Number.isFinite(numeric) && raw.length >= 5 && raw.length <= 13) {
+    if (numeric > 25569 && numeric < 60000) return parseExcelSerialDate(numeric)
+    if (raw.length >= 10) {
+      const date = new Date(numeric)
+      if (!Number.isNaN(date.getTime())) return date
+    }
+  }
+
+  const isoLike = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/)
+  if (isoLike) {
+    if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+      const date = new Date(raw)
+      return Number.isNaN(date.getTime()) ? null : date
+    }
+    return parseDateParts(isoLike[1], isoLike[2], isoLike[3], isoLike[4] || 0, isoLike[5] || 0, isoLike[6] || 0)
+  }
+
+  const dmy = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
+  if (dmy) return parseDateParts(dmy[3], dmy[2], dmy[1], dmy[4] || 0, dmy[5] || 0, dmy[6] || 0)
+
+  const date = new Date(raw)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatDateValue(value, formatter) {
+  const date = parseDateValue(value)
+  if (!date) return '—'
+  try {
+    return formatter(date)
+  } catch {
+    return '—'
+  }
+}
+
 /** Set the active timezone for all formatting functions. */
 export const setTimezone = (tz) => { _tz = tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Mexico_City' }
 
@@ -17,15 +92,15 @@ export const getTimezone = () => _tz
 
 /** "HH:MM:SS" */
 export const fmtTime = (date) =>
-  new Date(date).toLocaleTimeString(LOCALE, { timeZone: _tz })
+  formatDateValue(date, d => d.toLocaleTimeString(LOCALE, { timeZone: _tz }))
 
 /** "HH:MM" */
 export const fmtTimeShort = (date) =>
-  new Date(date).toLocaleTimeString(LOCALE, { timeZone: _tz, hour: '2-digit', minute: '2-digit' })
+  formatDateValue(date, d => d.toLocaleTimeString(LOCALE, { timeZone: _tz, hour: '2-digit', minute: '2-digit' }))
 
 /** "DD/MM/YYYY" */
 export const fmtDate = (date) =>
-  new Date(date).toLocaleDateString(LOCALE, { timeZone: _tz, day: '2-digit', month: '2-digit', year: 'numeric' })
+  formatDateValue(date, d => d.toLocaleDateString(LOCALE, { timeZone: _tz, day: '2-digit', month: '2-digit', year: 'numeric' }))
 
 /**
  * Format a date string that's already in the user's timezone (from backend).
@@ -77,15 +152,15 @@ export const fmtDateStringShort = (input) => {
 
 /** "lun. 1 ene." */
 export const fmtDateShort = (date) =>
-  new Date(date).toLocaleDateString(LOCALE, { timeZone: _tz, weekday: 'short', day: 'numeric', month: 'short' })
+  formatDateValue(date, d => d.toLocaleDateString(LOCALE, { timeZone: _tz, weekday: 'short', day: 'numeric', month: 'short' }))
 
 /** "DD/MM/YYYY, HH:MM:SS" */
 export const fmtDateTime = (date) =>
-  new Date(date).toLocaleString(LOCALE, { timeZone: _tz, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  formatDateValue(date, d => d.toLocaleString(LOCALE, { timeZone: _tz, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }))
 
 /** "DD/MM, HH:MM" */
 export const fmtDateTimeMini = (date) =>
-  new Date(date).toLocaleString(LOCALE, { timeZone: _tz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  formatDateValue(date, d => d.toLocaleString(LOCALE, { timeZone: _tz, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))
 
 /** Returns today as 'YYYY-MM-DD' in the active timezone. */
 export const getToday = () =>
@@ -93,7 +168,7 @@ export const getToday = () =>
 
 /** Returns a date as 'YYYY-MM-DD' in the active timezone. */
 export const toDateKey = (date = new Date()) =>
-  new Intl.DateTimeFormat('en-CA', { timeZone: _tz }).format(new Date(date))
+  formatDateValue(date, d => new Intl.DateTimeFormat('en-CA', { timeZone: _tz }).format(d))
 
 /** @deprecated Use getToday() */
 export const getTodayMX = getToday
@@ -107,6 +182,8 @@ export const subtractDays = (dateStr, days) => {
   d.setUTCDate(d.getUTCDate() - days)
   return new Intl.DateTimeFormat('en-CA', { timeZone: _tz }).format(d)
 }
+
+export const addDays = (dateStr, days) => subtractDays(dateStr, -days)
 
 /** @deprecated Use subtractDays() */
 export const subtractDaysMX = subtractDays

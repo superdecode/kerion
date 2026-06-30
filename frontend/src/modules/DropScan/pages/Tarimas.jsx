@@ -678,7 +678,7 @@ export default function Tarimas() {
                 <div className="p-16 text-center text-sm text-warm-400">{t('history.noPalletsFound')}</div>
               ) : (
                 <div className="overflow-x-auto table-scroll">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[1120px] text-sm whitespace-nowrap">
                     <thead>
                       <tr className="bg-warm-50 border-b border-warm-100">
                         {selectMode && (
@@ -687,28 +687,28 @@ export default function Tarimas() {
                               onChange={toggleSelectAll} className="cb" />
                           </th>
                         )}
-                        <th className="table-header" onClick={() => handleSort('codigo')}>
+                        <th className="table-header whitespace-nowrap" onClick={() => handleSort('codigo')}>
                           <span className="flex items-center gap-1.5">{t('history.palletCode')} <SortIcon col="codigo" /></span>
                         </th>
-                        <th className="table-header" onClick={() => handleSort('empresa_nombre')}>
+                        <th className="table-header whitespace-nowrap" onClick={() => handleSort('empresa_nombre')}>
                           <span className="flex items-center gap-1.5">{t('history.company')} <SortIcon col="empresa_nombre" /></span>
                         </th>
-                        <th className="table-header" onClick={() => handleSort('canal_nombre')}>
+                        <th className="table-header whitespace-nowrap" onClick={() => handleSort('canal_nombre')}>
                           <span className="flex items-center gap-1.5">{t('history.channel')} <SortIcon col="canal_nombre" /></span>
                         </th>
-                        <th className="table-header" onClick={() => handleSort('operador_nombre')}>
+                        <th className="table-header whitespace-nowrap" onClick={() => handleSort('operador_nombre')}>
                           <span className="flex items-center gap-1.5">{t('history.operator')} <SortIcon col="operador_nombre" /></span>
                         </th>
-                        <th className="table-header text-center" onClick={() => handleSort('cantidad_guias')}>
+                        <th className="table-header text-center whitespace-nowrap" onClick={() => handleSort('cantidad_guias')}>
                           <span className="flex items-center justify-center gap-1.5">{t('history.guides')} <SortIcon col="cantidad_guias" /></span>
                         </th>
-                        <th className="table-header text-center" onClick={() => handleSort('estado')}>
+                        <th className="table-header text-center whitespace-nowrap" onClick={() => handleSort('estado')}>
                           <span className="flex items-center justify-center gap-1.5">{t('common.status')} <SortIcon col="estado" /></span>
                         </th>
-                        <th className="table-header" onClick={() => handleSort('fecha_inicio')}>
+                        <th className="table-header whitespace-nowrap" onClick={() => handleSort('fecha_inicio')}>
                           <span className="flex items-center gap-1.5">{t('history.date')} <SortIcon col="fecha_inicio" /></span>
                         </th>
-                        <th className="table-header text-center">{t('common.actions')}</th>
+                        <th className="table-header text-center whitespace-nowrap">{t('common.actions')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warm-50">
@@ -742,7 +742,7 @@ export default function Tarimas() {
                             <span className="text-warm-400">/100</span>
                           </td>
                           <td className="table-cell text-center">
-                            <div className="flex items-center justify-center gap-1 flex-wrap">
+                            <div className="flex items-center justify-center gap-1">
                               <StatusPill size="xs" className={estadoColors[getDisplayEstado(row)] || 'bg-warm-100 text-warm-600'}>
                                 {estadoLabels[getDisplayEstado(row)] || getDisplayEstado(row)}
                               </StatusPill>
@@ -755,7 +755,7 @@ export default function Tarimas() {
                           </td>
                           <td className="table-cell text-warm-500 text-xs">
                             {fmtDate(row.fecha_inicio)}
-                            <br /><span className="text-warm-400">{fmtTimeShort(row.fecha_inicio)}</span>
+                            <span className="ml-1 text-warm-400">{fmtTimeShort(row.fecha_inicio)}</span>
                           </td>
                           <td className="table-cell" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">

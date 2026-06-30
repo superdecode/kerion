@@ -36,7 +36,7 @@ import ModuleLimitBanner from '../../../core/components/common/ModuleLimitBanner
 import StatusPill from '../../../core/components/common/StatusPill'
 import { useModuleUsage } from '../../../core/hooks/useModuleUsage'
 import { refreshSheet, getCacheTimestamp, subscribeSheetCache } from '../../WmsHub/services/googleSheetsService'
-import { fmtDateTime as formatDateTimeTz, fmtDate as formatDateTz, fmtTimeShort, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
+import { fmtDateTime as formatDateTimeTz, fmtDate as formatDateTz, fmtTimeShort, getToday, subtractDays, addDays, toDateKey } from '../../../core/utils/dateFormat'
 
 const STATUS_META = {
   pending_assignment: { labelKey: 'surtido.ordenes.status.pending_assignment', cls: 'bg-warm-100 text-warm-600' },
@@ -56,6 +56,11 @@ const CLOSED_ORDER_STATUSES = new Set(['complete', 'partial'])
 const CANCEL_NOTE_REQUIRED_STATUSES = new Set(['complete'])
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
+
+function getDefaultDateWindow(anchorDate = getToday()) {
+  const to = addDays(anchorDate, 7)
+  return { from: subtractDays(to, 30), to }
+}
 
 function getStatusMeta(status) {
   return STATUS_META[status] ?? STATUS_META.pending_assignment
@@ -997,8 +1002,8 @@ export default function Ordenes() {
   const [filterSurtidor, setFilterSurtidor] = useState([])
   const [destinationDraft, setDestinationDraft] = useState('')
   const [filterDestination, setFilterDestination] = useState('')
-  const [dateFromDraft, setDateFromDraft] = useState(() => subtractDays(getToday(), 30))
-  const [dateToDraft, setDateToDraft] = useState(() => getToday())
+  const [dateFromDraft, setDateFromDraft] = useState(() => getDefaultDateWindow().from)
+  const [dateToDraft, setDateToDraft] = useState(() => getDefaultDateWindow().to)
   const [dateFrom, setDateFrom] = useState(dateFromDraft)
   const [dateTo, setDateTo] = useState(dateToDraft)
   const [dateMode, setDateMode] = useState('entrega')
@@ -1040,7 +1045,7 @@ export default function Ordenes() {
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
   const timeFilterKey = `kirion_surtido_ordenes_time_${user?.id || 'guest'}`
   const destinationFilterKey = `kirion_surtido_destination_${user?.id || 'guest'}`
-  const filtersKey = `kirion_surtido_ordenes_filters_${user?.id || 'guest'}`
+  const filtersKey = `kirion_surtido_ordenes_filters_v2_${user?.id || 'guest'}`
 
   useEffect(() => {
     try {
@@ -1095,10 +1100,12 @@ export default function Ordenes() {
       const today = getToday()
       if (today === autoDateAnchor) return
 
-      const previousAutoTo = autoDateAnchor
-      const previousAutoFrom = subtractDays(previousAutoTo, 30)
-      const nextAutoTo = today
-      const nextAutoFrom = subtractDays(nextAutoTo, 30)
+      const previousWindow = getDefaultDateWindow(autoDateAnchor)
+      const nextWindow = getDefaultDateWindow(today)
+      const previousAutoTo = previousWindow.to
+      const previousAutoFrom = previousWindow.from
+      const nextAutoTo = nextWindow.to
+      const nextAutoFrom = nextWindow.from
 
       const draftMatchesPreviousAuto = dateFromDraft === previousAutoFrom && dateToDraft === previousAutoTo
       const appliedMatchesPreviousAuto = dateFrom === previousAutoFrom && dateTo === previousAutoTo
@@ -1242,6 +1249,7 @@ export default function Ordenes() {
   function matchesDateFilter(dateStr, requireDate = false) {
     if (!dateStr) return !(requireDate && (dateFrom || dateTo))
     const d = toDateKey(dateStr)
+    if (!d || d === '—') return !(requireDate || dateFrom || dateTo)
     if (dateFrom && d < dateFrom) return false
     if (dateTo   && d > dateTo)   return false
     return true
@@ -1551,12 +1559,12 @@ export default function Ordenes() {
     setDestinationDraft('')
     setFilterDestination('')
     const today = getToday()
+    const defaultWindow = getDefaultDateWindow(today)
     setAutoDateAnchor(today)
-    setDateToDraft(today)
-    setDateTo(today)
-    const baseDate = subtractDays(today, 30)
-    setDateFromDraft(baseDate)
-    setDateFrom(baseDate)
+    setDateToDraft(defaultWindow.to)
+    setDateTo(defaultWindow.to)
+    setDateFromDraft(defaultWindow.from)
+    setDateFrom(defaultWindow.from)
     setTimeFromDraft('')
     setTimeToDraft('')
     setTimeFrom('')
