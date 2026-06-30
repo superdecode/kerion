@@ -27,6 +27,7 @@ import { useAdminAuthStore } from './modules/SuperAdmin/stores/adminAuthStore'
 // Landing page
 import Landing from './pages/Landing'
 import NotFound from './pages/NotFound'
+import SoundTest from './pages/SoundTest'
 
 // Pages
 import GlobalDashboard from './pages/GlobalDashboard'
@@ -132,6 +133,7 @@ function AppRoutes() {
 
       {/* Landing page */}
       <Route path="/landing" element={<Landing />} />
+      <Route path="/sound-test" element={<SoundTest />} />
 
       {/* Super Admin Login — Completely public, no auth required */}
       <Route path="/super-admin/login" element={<AdminLogin />} />

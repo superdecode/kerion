@@ -9,6 +9,7 @@ import { searchByCode } from '../services/recepcionService'
 import { fmtDate } from '../../../core/utils/dateFormat'
 import StatusPill from '../../../core/components/common/StatusPill'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import { initAudio, playSound } from '../../Shared/Wms/playSound'
 
 const ESTADO_META = {
   pendiente_validacion: { cls: 'bg-warm-100 text-warm-600' },
@@ -118,22 +119,9 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
   const [matchSheet, setMatchSheet] = useState({ open: false, orders: [], code: '' })
 
   useEffect(() => {
+    initAudio()
     const tid = setTimeout(() => inputRef.current?.focus(), 300)
     return () => clearTimeout(tid)
-  }, [])
-
-  const playAudio = useCallback((type) => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.frequency.value = type === 'found' ? 880 : 220
-      gain.gain.value = 0.18
-      osc.start()
-      osc.stop(ctx.currentTime + (type === 'found' ? 0.12 : 0.22))
-    } catch { /* audio not available */ }
   }, [])
 
   const refocus = useCallback(() => setTimeout(() => inputRef.current?.focus(), 80), [])
@@ -149,19 +137,19 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
       const result = await searchByCode(val)
       if (result.count === 0) {
         setScanState('not_found')
-        playAudio('error')
+        playSound('error')
       } else {
-        playAudio('found')
+        playSound('success')
         setMatchSheet({ open: true, orders: result.orders, code: val })
       }
     } catch {
       setScanState('not_found')
-      playAudio('error')
+      playSound('error')
     } finally {
       setScanning(false)
       refocus()
     }
-  }, [code, scanning, playAudio, refocus])
+  }, [code, scanning, refocus])
 
   const closeSheet = useCallback(() => {
     setMatchSheet({ open: false, orders: [], code: '' })

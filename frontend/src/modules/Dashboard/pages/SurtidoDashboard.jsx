@@ -30,19 +30,18 @@ const ESTADO_COLORS = {
 }
 const PIE_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4']
 
-const ESTADO_LABEL_MAP = {
-  completado:   'Completado',
-  asignado:     'Asignado',
-  por_asignar:  'Por asignar',
-  con_faltante: 'Con faltante',
-  cancelled:    'Cancelado',
-  complete:     'Completado',
-  open:         'Por asignar',
-  with_discrepancies: 'Con discrepancias',
-}
-
-function estadoLabel(s) {
-  return ESTADO_LABEL_MAP[s] || s
+function estadoLabel(s, t) {
+  const map = {
+    completado:         t('dashboard.status.complete'),
+    asignado:           t('dashboard.surtido.status.asignado'),
+    por_asignar:        t('dashboard.surtido.status.por_asignar'),
+    con_faltante:       t('dashboard.surtido.status.con_faltante'),
+    cancelled:          t('dashboard.status.cancelled'),
+    complete:           t('dashboard.status.complete'),
+    open:               t('dashboard.surtido.status.por_asignar'),
+    with_discrepancies: t('dashboard.status.withDiscrepancies'),
+  }
+  return map[s] || s
 }
 
 function SvgDonut({ data }) {
@@ -250,7 +249,7 @@ export default function SurtidoDashboard({ dateRange }) {
                 {graficas.ordenes_por_estado.map((e, i) => (
                   <div key={e.status} className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: ESTADO_COLORS[e.status] || PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="text-xs text-warm-600 flex-1">{estadoLabel(e.status)}</span>
+                    <span className="text-xs text-warm-600 flex-1">{estadoLabel(e.status, t)}</span>
                     <span className="text-xs font-bold text-warm-800">{e.cantidad}</span>
                   </div>
                 ))}
@@ -280,7 +279,7 @@ export default function SurtidoDashboard({ dateRange }) {
 
       {/* Surtidor Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Top surtidores — cajas" icon={Users}>
+        <ChartCard title={t('dashboard.surtido.chart.topOperadoresCajas')} icon={Users}>
           {graficas.top_operadores.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={graficas.top_operadores} layout="vertical" margin={{ left: 4, right: 20 }}>
@@ -294,7 +293,7 @@ export default function SurtidoDashboard({ dateRange }) {
           ) : <NoData height={200} />}
         </ChartCard>
 
-        <ChartCard title="Top surtidores — órdenes" icon={Users}>
+        <ChartCard title={t('dashboard.surtido.chart.topOperadoresOrdenes')} icon={Users}>
           {graficas.top_operadores.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={[...graficas.top_operadores].sort((a, b) => b.ordenes - a.ordenes)} layout="vertical" margin={{ left: 4, right: 20 }}>
@@ -310,7 +309,7 @@ export default function SurtidoDashboard({ dateRange }) {
       </div>
 
       {/* Cajas surtidas por semana — área */}
-      <ChartCard title="Cajas surtidas por semana (año actual)" icon={TrendingUp}>
+      <ChartCard title={t('dashboard.surtido.chart.cajasSemana')} icon={TrendingUp}>
         {cajasPorSemana.length > 0 ? (
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={cajasPorSemana} margin={{ top: 20, right: 16, left: 0, bottom: 0 }}>
@@ -333,7 +332,7 @@ export default function SurtidoDashboard({ dateRange }) {
       </ChartCard>
 
       {/* Cajas surtidas por mes — barras */}
-      <ChartCard title="Cajas surtidas por mes" icon={Activity}>
+      <ChartCard title={t('dashboard.surtido.chart.cajasMes')} icon={Activity}>
         {cajasPorMes.length > 0 ? (
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={cajasPorMes} margin={{ top: 24, right: 16, left: 0, bottom: 0 }}>
@@ -354,7 +353,7 @@ export default function SurtidoDashboard({ dateRange }) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-warm-100">
           <div className="flex items-center gap-2">
             <CalendarDays className="w-4 h-4 text-warm-400" />
-            <span className="text-sm font-semibold text-warm-800">Ventana de 5 dias</span>
+            <span className="text-sm font-semibold text-warm-800">{t('dashboard.surtido.chart.ventana5dias')}</span>
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -389,11 +388,11 @@ export default function SurtidoDashboard({ dateRange }) {
           <table className="w-full">
             <thead>
               <tr className="bg-warm-50 border-b border-warm-100">
-                <th className="table-header text-left w-24">Fecha</th>
-                <th className="table-header text-center">Órd. esperadas</th>
-                <th className="table-header text-center">Cajas esperadas</th>
-                <th className="table-header text-center">Órd. validadas</th>
-                <th className="table-header text-center">Cajas validadas</th>
+                <th className="table-header text-left w-24">{t('dashboard.surtido.col.fecha')}</th>
+                <th className="table-header text-center">{t('dashboard.surtido.col.ordenesEsperadas')}</th>
+                <th className="table-header text-center">{t('dashboard.surtido.col.cajasEsperadas')}</th>
+                <th className="table-header text-center">{t('dashboard.surtido.col.ordenesValidadas')}</th>
+                <th className="table-header text-center">{t('dashboard.surtido.col.cajasValidadas')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-warm-50">
@@ -407,7 +406,7 @@ export default function SurtidoDashboard({ dateRange }) {
                   <tr key={day} className={rowCls}>
                     <td className="px-3 py-2.5 text-xs font-semibold text-warm-700 whitespace-nowrap">
                       {shortDay(day)}
-                      {isToday && <span className="ml-1.5 text-[9px] bg-primary-100 text-primary-600 rounded px-1 py-0.5 font-bold">HOY</span>}
+                      {isToday && <span className="ml-1.5 text-[9px] bg-primary-100 text-primary-600 rounded px-1 py-0.5 font-bold">{t('common.today').toUpperCase()}</span>}
                     </td>
                     <td className={`px-3 py-2.5 text-center text-sm font-semibold ${exp?.ordenes > 0 ? 'text-warm-800' : 'text-warm-300'}`}>
                       {exp?.ordenes || '—'}

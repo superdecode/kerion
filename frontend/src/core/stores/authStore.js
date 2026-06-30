@@ -92,7 +92,7 @@ function isTenantAdmin(user) {
 
 function clearPersistedAuth() {
   Object.keys(localStorage)
-    .filter(k => k === 'wms-auth' || k.startsWith('kirion_'))
+    .filter(k => k === 'wms-auth' || k.startsWith('kirion-') || k.startsWith('kirion_'))
     .forEach(k => localStorage.removeItem(k))
 }
 
