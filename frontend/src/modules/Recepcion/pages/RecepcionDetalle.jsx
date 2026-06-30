@@ -910,7 +910,7 @@ export default function RecepcionDetalle() {
                 total={linesTotal}
                 onPageChange={setLinePage}
                 onPageSizeChange={(s) => { setLinePageSize(s); setLinePage(1) }}
-                itemLabel={t('rec.line.items') || 'líneas'}
+                itemLabel={t('rec.line.items')}
               />
             )}
           </div>

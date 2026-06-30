@@ -7,6 +7,7 @@ import { Settings2, ChevronDown, Check } from 'lucide-react'
 // Renders dropdown via portal into document.body so position:fixed is
 // truly viewport-relative, unaffected by framer-motion transforms on ancestors.
 function MappingSelect({ value, options, onChange }) {
+  const { t } = useI18nStore()
   const [open, setOpen] = useState(false)
   const btnRef = useRef(null)
   const dropRef = useRef(null)
@@ -48,7 +49,7 @@ function MappingSelect({ value, options, onChange }) {
         className="w-full text-left px-3 py-2 text-xs text-warm-400 hover:bg-warm-50 transition-colors"
         onClick={() => { onChange(''); setOpen(false) }}
       >
-        — No mapear —
+        {t('rec.import.no_mapear')}
       </button>
       {options.map(o => (
         <button
@@ -80,7 +81,7 @@ function MappingSelect({ value, options, onChange }) {
             : 'border-warm-200 bg-white text-warm-400 hover:border-warm-300'
         }`}
       >
-        <span className="truncate">{selected ? selected.label : '— No mapear —'}</span>
+        <span className="truncate">{selected ? selected.label : t('rec.import.no_mapear')}</span>
         <ChevronDown size={12} className="shrink-0 opacity-50" />
       </button>
 
@@ -115,7 +116,7 @@ export default function ColumnMappingModal({ isOpen, fileHeaders, currentMapping
       footer={
         <div className="flex items-center gap-2 w-full">
           <span className="text-xs text-warm-500 flex-1">
-            {mappedCount} / {fileHeaders.length} {t('rec.import.mapping.fileCol').toLowerCase()} mapeadas
+            {mappedCount} / {fileHeaders.length} {t('rec.import.mapping.fileCol').toLowerCase()} {t('rec.import.mapping.mapped')}
           </span>
           <button onClick={onClose} className="btn-ghost">{t('common.cancel')}</button>
           <button onClick={() => onConfirm(mapping)} className="btn-primary">{t('common.confirm')}</button>

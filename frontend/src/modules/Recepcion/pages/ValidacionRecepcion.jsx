@@ -2628,6 +2628,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         <div className="space-y-4 text-sm text-warm-700">
           <p>{t('rec.tarimas.confirm.desc1').replace('{n}', tarimaPreviewCount)}</p>
           <p>{t('rec.tarimas.confirm.desc2').replace('{n}', tarimaPreviewCount)}</p>
+          {!isTarimaReconfigure && (
+            <div className="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-xs font-semibold text-warning-800">
+              <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
+              {t('rec.tarimas.confirm.irreversible')}
+            </div>
+          )}
           {isTarimaReconfigure && (
             <div className="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-xs font-semibold text-warning-800">
               <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
@@ -2697,7 +2703,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
           {/* ── CÓDIGOS: how codes/boxes are packed into tarimas ── */}
           <div className="rounded-xl border border-warm-100 bg-warm-50 p-3 space-y-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-warm-400">{t('rec.tarimas.group.codes_label') || 'Códigos'}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-warm-400">{t('rec.tarimas.group.codes_label')}</p>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-warm-800">{t('rec.tarimas.group.enable')}</p>
