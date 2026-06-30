@@ -12,6 +12,9 @@ export const findAllOrdersByBarcode = (barcode) => findAllOrdersByBarcodeFromShe
 export const getOrdenesDispatch = () =>
   api.get('/despacho/folios/ordenes-dispatch').then(r => r.data)
 
+export const cancelDispatchOrder = (body) =>
+  api.post('/despacho/folios/ordenes/cancelar', body).then(r => r.data)
+
 export const getFolios = (params) =>
   api.get('/despacho/folios', { params }).then(r => r.data)
 

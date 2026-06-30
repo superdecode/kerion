@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -609,40 +609,53 @@ export default function FolioDetalle() {
                           ? Math.round((order._scanCount / order.bultos_esperados) * 100)
                           : null
                         return (
-                          <tr key={`${order.id || order.outbound_order_no}`} className="table-row">
-                            <td className="px-3 py-2.5">
-                              <CopyInline value={order.outbound_order_no} mono />
-                            </td>
-                            <td className="px-3 py-2.5">
-                              {order.destinatario ? (
-                                <div className="flex items-center gap-1.5">
-                                  <MapPin className="w-3 h-3 text-warm-300 shrink-0" />
-                                  <span className="text-xs text-warm-700 font-medium truncate max-w-[160px]">{order.destinatario}</span>
+                          <Fragment key={`${order.id || order.outbound_order_no}-row`}>
+                            <tr key={`${order.id || order.outbound_order_no}`} className="table-row">
+                              <td className="px-3 py-2.5">
+                                <CopyInline value={order.outbound_order_no} mono />
+                              </td>
+                              <td className="px-3 py-2.5">
+                                {order.destinatario ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <MapPin className="w-3 h-3 text-warm-300 shrink-0" />
+                                    <span className="text-xs text-warm-700 font-medium truncate max-w-[160px]">{order.destinatario}</span>
+                                  </div>
+                                ) : <span className="text-xs text-warm-300">—</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-center">
+                                <span className="text-xs text-warm-500 tabular-nums">{order.bultos_esperados ?? '—'}</span>
+                              </td>
+                              <td className="px-3 py-2.5 text-center">
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <span className={`text-xs font-semibold tabular-nums ${order._scanCount > 0 ? 'text-success-600' : 'text-warm-300'}`}>
+                                    {order._scanCount}
+                                  </span>
+                                  {pct !== null && (
+                                    <span className="text-[10px] text-warm-400">{pct}%</span>
+                                  )}
                                 </div>
-                              ) : <span className="text-xs text-warm-300">—</span>}
-                            </td>
-                            <td className="px-3 py-2.5 text-center">
-                              <span className="text-xs text-warm-500 tabular-nums">{order.bultos_esperados ?? '—'}</span>
-                            </td>
-                            <td className="px-3 py-2.5 text-center">
-                              <div className="flex flex-col items-center gap-0.5">
-                                <span className={`text-xs font-semibold tabular-nums ${order._scanCount > 0 ? 'text-success-600' : 'text-warm-300'}`}>
-                                  {order._scanCount}
-                                </span>
-                                {pct !== null && (
-                                  <span className="text-[10px] text-warm-400">{pct}%</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2.5 text-center">
-                              <span className="text-xs font-semibold text-warm-800 tabular-nums">{order._dispatchCount ?? '—'}</span>
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <StatusPill className={ORDER_ESTADO_META[order.estado]?.cls ?? ORDER_ESTADO_META.pendiente.cls}>
-                                {ORDER_ESTADO_META[order.estado]?.label ?? 'Pendiente'}
-                              </StatusPill>
-                            </td>
-                          </tr>
+                              </td>
+                              <td className="px-3 py-2.5 text-center">
+                                <span className="text-xs font-semibold text-warm-800 tabular-nums">{order._dispatchCount ?? '—'}</span>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <StatusPill className={ORDER_ESTADO_META[order.estado]?.cls ?? ORDER_ESTADO_META.pendiente.cls}>
+                                  {ORDER_ESTADO_META[order.estado]?.label ?? 'Pendiente'}
+                                </StatusPill>
+                              </td>
+                            </tr>
+                            {order.notas && (
+                              <tr key={`${order.id || order.outbound_order_no}-notas`} className="bg-danger-50/45">
+                                <td colSpan={6} className="px-3 py-2 border-t border-danger-100">
+                                  <div className="flex items-start gap-2 text-xs text-danger-700">
+                                    <StickyNote className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                                    <span className="font-semibold shrink-0">Nota:</span>
+                                    <span className="leading-relaxed whitespace-pre-wrap break-words">{order.notas}</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
                         )
                       })}
                       {filteredOrders.length === 0 && (

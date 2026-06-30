@@ -200,17 +200,133 @@ router.get('/ordenes-dispatch',
   async (req, res) => {
     try {
       const result = await req.tQuery(
-        `SELECT fo.outbound_order_no, fo.estado AS order_estado, fo.folio_id,
-                f.folio_numero, f.estado AS folio_estado
+        `SELECT DISTINCT ON (fo.outbound_order_no)
+                fo.outbound_order_no, fo.estado AS order_estado, fo.folio_id,
+                fo.notas, f.folio_numero, f.estado AS folio_estado
          FROM dispatch_folio_orders fo
-         JOIN dispatch_folios f ON f.id = fo.folio_id
-         WHERE fo.tenant_id = $1 AND f.estado IN ('borrador','en_proceso','cerrado') AND f.deleted_at IS NULL`,
+         LEFT JOIN dispatch_folios f ON f.id = fo.folio_id
+         WHERE fo.tenant_id = $1
+           AND (
+             (fo.folio_id IS NULL AND fo.estado = 'devolucion')
+             OR (f.estado IN ('borrador','en_proceso','cerrado') AND f.deleted_at IS NULL)
+           )
+         ORDER BY fo.outbound_order_no,
+                  CASE WHEN fo.folio_id IS NOT NULL THEN 1 ELSE 2 END,
+                  fo.created_at DESC`,
         [req.tenantId]
       )
       res.json({ dispatch: result.rows })
     } catch (error) {
       console.error('Ordenes dispatch status error:', error)
       res.status(500).json({ error: 'Error obteniendo estado de despacho' })
+    }
+  }
+)
+
+// Mark an outbound order as cancelled/not shipped in dispatch tracking.
+router.post('/ordenes/cancelar',
+  authenticateToken, loadFullUser,
+  requireDespachoValidar('actualizar'),
+  async (req, res) => {
+    try {
+      const {
+        outbound_order_no,
+        destinatario = null,
+        bultos_esperados = null,
+        outbound_date = null,
+        nota = '',
+      } = req.body
+
+      const orderNo = String(outbound_order_no || '').trim()
+      const cleanNota = String(nota || '').trim()
+
+      if (!orderNo) return res.status(400).json({ error: 'outbound_order_no es requerido' })
+      if (!cleanNota) return res.status(400).json({ error: 'La nota de cancelación es requerida' })
+
+      const result = await req.tTransaction(async (client) => {
+        const existingRes = await client.query(
+          `SELECT fo.id, fo.folio_id, f.folio_numero, f.estado AS folio_estado
+           FROM dispatch_folio_orders fo
+           LEFT JOIN dispatch_folios f ON f.id = fo.folio_id
+           WHERE fo.tenant_id = $1
+             AND fo.outbound_order_no = $2
+             AND (
+               fo.folio_id IS NULL
+               OR (f.estado != 'cancelado' AND f.deleted_at IS NULL)
+             )
+           ORDER BY
+             CASE f.estado
+               WHEN 'en_proceso' THEN 1
+               WHEN 'borrador' THEN 2
+               WHEN 'cerrado' THEN 3
+               ELSE 4
+             END,
+             fo.created_at DESC
+           LIMIT 1
+           FOR UPDATE OF fo`,
+          [req.tenantId, orderNo]
+        )
+
+        if (existingRes.rows.length > 0) {
+          const existing = existingRes.rows[0]
+          const orderUpdate = await client.query(
+            `UPDATE dispatch_folio_orders
+             SET estado = 'devolucion',
+                 folio_id = NULL,
+                 bultos = 0,
+                 notas = $1,
+                 destinatario = COALESCE($2, destinatario),
+                 bultos_esperados = COALESCE($3, bultos_esperados),
+                 outbound_date = COALESCE($4, outbound_date)
+             WHERE id = $5 AND tenant_id = $6
+             RETURNING *`,
+            [cleanNota, destinatario || null, bultos_esperados, outbound_date || null, existing.id, req.tenantId]
+          )
+          if (existing.folio_id) {
+            await client.query(
+              `DELETE FROM dispatch_order_scans
+               WHERE tenant_id = $1
+                 AND (
+                   folio_order_id = $2
+                   OR (folio_id = $3 AND matched_order_no = $4)
+                 )`,
+              [req.tenantId, existing.id, existing.folio_id, orderNo]
+            )
+            await client.query(
+              `UPDATE dispatch_folios SET updated_at = now()
+               WHERE id = $1 AND tenant_id = $2`,
+              [existing.folio_id, req.tenantId]
+            )
+          }
+          return {
+            folio: null,
+            order: orderUpdate.rows[0],
+            created_folio: false,
+          }
+        }
+
+        const orderInsert = await client.query(
+          `INSERT INTO dispatch_folio_orders
+             (tenant_id, folio_id, outbound_order_no, destinatario, bultos, bultos_esperados, notas, outbound_date, estado)
+           VALUES ($1,NULL,$2,$3,0,$4,$5,$6,'devolucion')
+           RETURNING *`,
+          [req.tenantId, orderNo, destinatario || null, bultos_esperados, cleanNota, outbound_date || null]
+        )
+
+        return { folio: null, order: orderInsert.rows[0], created_folio: false }
+      })
+
+      auditLog(req, 'DESPACHO_ORDER_CANCEL', 'dispatch_folio_order', result.order.id, {
+        outbound_order_no: orderNo,
+        folio_id: null,
+        folio_numero: null,
+        created_folio: false,
+      })
+
+      res.json(result)
+    } catch (error) {
+      console.error('Cancel dispatch order error:', error)
+      res.status(500).json({ error: 'Error cancelando orden de despacho' })
     }
   }
 )

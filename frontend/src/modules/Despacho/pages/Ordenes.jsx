@@ -478,12 +478,6 @@ export default function Ordenes() {
     setShowDispatchQty(true)
   }
   function handleTruckClick(order) {
-    const orderNo = order.outboundOrderNo || order.order_no || ''
-    const existing = dispatchMap.get(orderNo)
-    if (existing?.folio_numero) {
-      setConflictModal({ open: true, orderNo, dispatch: existing })
-      return
-    }
     setDispatchOrder(order)
     setShowDispatchQty(true)
   }
@@ -928,7 +922,7 @@ export default function Ordenes() {
                         <td className="px-4 py-3">{statusBadge(status)}</td>
                         {/* Folio número */}
                         <td className="px-4 py-3">
-                          {dispatch ? (
+                          {dispatch?.folio_numero ? (
                             <div className="flex items-center gap-1.5">
                               <Truck className="w-3 h-3 text-warm-400" />
                               {getDispatchFolioPath(dispatch) ? (
@@ -1017,6 +1011,7 @@ export default function Ordenes() {
         conductores={conductores}
         unidades={unidades}
         dateFrom={dateFrom}
+        existingDispatch={dispatchOrder ? dispatchMap.get(dispatchOrder.outboundOrderNo || dispatchOrder.order_no || '') : null}
       />
 
       {/* Scan resolution modal — out-of-range and multi-match cases */}
