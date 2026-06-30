@@ -92,7 +92,7 @@ function trendTitle(bucket, t) {
   return map[bucket] || t('dashboard.trend.title')
 }
 
-function trendLabel(value, bucket) {
+function trendLabel(value, bucket, t) {
   if (!value) return ''
   const [year, month] = String(value).split('T')[0].split('-')
 
@@ -102,7 +102,7 @@ function trendLabel(value, bucket) {
       .toLocaleDateString('es-MX', { month: 'short', year: 'numeric', timeZone: 'UTC' })
     return monthName.replace('.', '')
   }
-  if (bucket === 'week') return `Sem. ${fmtDateString(value)}`
+  if (bucket === 'week') return `${t('common.weekShort')} ${fmtDateString(value)}`
   return fmtDateString(value)
 }
 
@@ -188,18 +188,20 @@ export default function SurtidoDashboard({ dateRange }) {
       cajas: item.cajas ?? item.total ?? 0,
       ordenes: item.ordenes ?? item.completadas ?? 0,
     }))
+    .filter(item => item.cajas > 0 || item.ordenes > 0)
   const tendenciaBucket = graficas.tendencia_bucket || 'week'
   const fiveDates = Array.from({ length: 5 }, (_, i) => subtractDays(centerDate, 2 - i))
   const fiveDayLoading = outboundLoading || outboundFetching || trackingLoading || trackingFetching || !outboundListData || !trackingData
 
   const cajasPorSemana = (weeklyData?.data?.graficas?.tendencia || [])
     .map(r => ({ ...r, sem: weekNum(r.periodo), cajas: Number(r.cajas ?? 0) }))
-    .filter(r => r.cajas > 0 || true)
+    .filter(r => r.cajas > 0)
 
   const cajasPorMes = (monthlyData?.data?.graficas?.tendencia || [])
     .map(r => ({ ...r, mes: monthShort(r.periodo), cajas: Number(r.cajas ?? 0) }))
+    .filter(r => r.cajas > 0)
   const today = getToday()
-  const centerDateLabel = centerDate === today ? 'Hoy' : fmtDateString(centerDate)
+  const centerDateLabel = centerDate === today ? t('common.today') : fmtDateString(centerDate)
 
   const expectedByDay = {}
   const validatedByDay = {}
@@ -263,11 +265,11 @@ export default function SurtidoDashboard({ dateRange }) {
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={tendencia} margin={{ left: 0, right: 20, top: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0ece8" />
-                <XAxis dataKey="periodo" tick={{ fontSize: 10 }} tickFormatter={v => trendLabel(v, tendenciaBucket)} />
+                <XAxis dataKey="periodo" tick={{ fontSize: 10 }} tickFormatter={v => trendLabel(v, tendenciaBucket, t)} />
                 <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
                 <Tooltip
                   contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                  labelFormatter={v => trendLabel(v, tendenciaBucket)}
+                  labelFormatter={v => trendLabel(v, tendenciaBucket, t)}
                 />
                 <Line type="monotone" dataKey="cajas" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.cajas')} connectNulls />
                 <Line type="monotone" dataKey="ordenes" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} name={t('dashboard.metric.ordenes')} strokeDasharray="4 2" connectNulls />
@@ -284,10 +286,10 @@ export default function SurtidoDashboard({ dateRange }) {
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={graficas.top_operadores} layout="vertical" margin={{ left: 4, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0ece8" />
-                <XAxis type="number" tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
+                <XAxis type="number" tick={{ fontSize: 11 }} domain={[0, 'auto']} allowDecimals={false} />
                 <YAxis type="category" dataKey="operador" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Bar dataKey="cajas" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Cajas" />
+                <Bar dataKey="cajas" fill="#8b5cf6" radius={[0, 4, 4, 0]} name={t('dashboard.metric.cajas')} />
               </BarChart>
             </ResponsiveContainer>
           ) : <NoData height={200} />}
@@ -298,10 +300,10 @@ export default function SurtidoDashboard({ dateRange }) {
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={[...graficas.top_operadores].sort((a, b) => b.ordenes - a.ordenes)} layout="vertical" margin={{ left: 4, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0ece8" />
-                <XAxis type="number" tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
+                <XAxis type="number" tick={{ fontSize: 11 }} domain={[0, 'auto']} allowDecimals={false} />
                 <YAxis type="category" dataKey="operador" width={90} tick={{ fontSize: 11 }} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Bar dataKey="ordenes" fill="#06b6d4" radius={[0, 4, 4, 0]} name="Ordenes" />
+                <Bar dataKey="ordenes" fill="#06b6d4" radius={[0, 4, 4, 0]} name={t('dashboard.metric.ordenes')} />
               </BarChart>
             </ResponsiveContainer>
           ) : <NoData height={200} />}
@@ -320,9 +322,9 @@ export default function SurtidoDashboard({ dateRange }) {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0ece8" />
-              <XAxis dataKey="sem" tick={{ fontSize: 10 }} label={{ value: 'SEM', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#a8a29e' }} height={28} />
-              <YAxis tick={{ fontSize: 10 }} domain={['auto', 'auto']} width={45} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={v => [v.toLocaleString(), 'Cajas']} labelFormatter={v => `Semana ${v}`} />
+              <XAxis dataKey="sem" tick={{ fontSize: 10 }} label={{ value: t('common.weekShort'), position: 'insideBottom', offset: -2, fontSize: 10, fill: '#a8a29e' }} height={28} />
+              <YAxis tick={{ fontSize: 10 }} domain={[0, 'auto']} width={45} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={v => [v.toLocaleString(), t('dashboard.metric.cajas')]} labelFormatter={v => t('common.weekLabel').replace('{n}', v)} />
               <Area type="monotone" dataKey="cajas" stroke="#3b82f6" strokeWidth={2} fill="url(#gradCajas)" dot={{ r: 3, fill: '#3b82f6' }} connectNulls>
                 <LabelList dataKey="cajas" position="top" style={{ fontSize: 9, fill: '#3b82f6', fontWeight: 600 }} formatter={v => v > 0 ? v.toLocaleString() : ''} />
               </Area>
@@ -339,8 +341,8 @@ export default function SurtidoDashboard({ dateRange }) {
               <CartesianGrid strokeDasharray="3 3" stroke="#f0ece8" vertical={false} />
               <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 10 }} domain={[0, 'auto']} width={45} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={v => [v.toLocaleString(), 'Cajas']} />
-              <Bar dataKey="cajas" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Cajas">
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={v => [v.toLocaleString(), t('dashboard.metric.cajas')]} />
+              <Bar dataKey="cajas" fill="#3b82f6" radius={[4, 4, 0, 0]} name={t('dashboard.metric.cajas')}>
                 <LabelList dataKey="cajas" position="top" style={{ fontSize: 10, fill: '#3b82f6', fontWeight: 600 }} formatter={v => v > 0 ? v.toLocaleString() : ''} />
               </Bar>
             </BarChart>
