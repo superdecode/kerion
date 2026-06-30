@@ -12,7 +12,7 @@ import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { fmtDateTime } from '../../../core/utils/dateFormat'
+import { fmtDateTime, toDateKey } from '../../../core/utils/dateFormat'
 import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import {
@@ -93,18 +93,17 @@ function getOrderDateKey(order) {
   const isoLike = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
   if (isoLike) return `${isoLike[1]}-${String(isoLike[2]).padStart(2, '0')}-${String(isoLike[3]).padStart(2, '0')}`
 
-  const slashDate = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  const slashDate = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/)
   if (slashDate) {
     const first = Number(slashDate[1])
     const second = Number(slashDate[2])
-    const day = first > 12 ? first : second
-    const month = first > 12 ? second : first
+    // D/M/Y default (es-MX standard). Only treat second as day when second > 12.
+    const day   = second > 12 ? second : first
+    const month = second > 12 ? first  : second
     return `${slashDate[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
-  const date = new Date(str)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toISOString().slice(0, 10)
+  try { return toDateKey(str) } catch { return '' }
 }
 
 function CopyMetaPill({ label, value, tone = 'primary' }) {

@@ -8,6 +8,7 @@ import CopyableCell from '../../../core/components/common/CopyableCell'
 import { buscarCaja } from '../../../core/services/rastreoService'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getInventoryList, getOutboundList } from '../../WmsHub/services/googleSheetsService'
+import { fmtDateTime } from '../../../core/utils/dateFormat'
 import { normalizeCodeFast, extractBaseCode } from '../../Shared/Wms/normalizeCode'
 
 const BOX_STATUS_LABELS = {
@@ -186,7 +187,7 @@ function SurtidoSection({ records, open, onToggle }) {
                         <td className="px-3 py-2.5 text-warm-600">{r.customerCode || '—'}</td>
                         <td className="px-3 py-2.5 text-warm-500">
                           {r.expectedTime || r.outboundTime
-                            ? new Date(r.expectedTime || r.outboundTime).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+                            ? fmtDateTime(r.expectedTime || r.outboundTime)
                             : '—'}
                         </td>
                         <td className="px-3 py-2.5 font-mono text-warm-500">{r.thirdOrderNo || '—'}</td>

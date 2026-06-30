@@ -206,6 +206,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const scanStartRef = useRef(null)
   const refocusRef = useRef(null)
   const inFlightCodes = useRef(new Set())
+  const lastResultSeqRef = useRef(0)
 
   const [sessionId, setSessionId] = useState(null)
   const [withTarimas, setWithTarimas] = useState(false)
@@ -473,9 +474,6 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     return base ? (effectiveTarimaMap.get(base) ?? null) : null
   }, [withTarimas, lastResult, effectiveTarimaMap])
 
-  const lastTarimaBase  = lastResult?.code ? extractBaseCode(lastResult.code) : null
-  const lastTarimaColor = lastTarimaNum ? getTarimaColor(lastTarimaNum) : null
-
   const tarimaStats = useMemo(() => {
     if (!isTarimaMode) return []
     // Build linesByBase for O(n) lookup
@@ -516,6 +514,19 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     pendiente:  tarimaStats.filter(ts => ts.validated === 0).length,
     en_proceso: tarimaStats.filter(ts => ts.validated > 0 && ts.validated < ts.total).length,
   }), [tarimaStats])
+
+  const activeTarimaStat = useMemo(
+    () => (lastTarimaNum ? tarimaStats.find((ts) => ts.num === lastTarimaNum) ?? null : null),
+    [lastTarimaNum, tarimaStats]
+  )
+  const lastTarimaBase = activeTarimaStat?.bases?.[0] ?? (lastResult?.code ? extractBaseCode(lastResult.code) : null)
+  const lastTarimaColor = activeTarimaStat?.color ?? (lastTarimaNum ? getTarimaColor(lastTarimaNum) : null)
+  const activeTarimaPct = activeTarimaStat?.total > 0
+    ? Math.round((activeTarimaStat.validated / activeTarimaStat.total) * 100)
+    : 0
+  const activeTarimaCountLabel = activeTarimaStat
+    ? (activeTarimaStat.empty ? t('rec.tarimas.empty.desc') : `${activeTarimaStat.validated}/${activeTarimaStat.total}`)
+    : '—'
 
   const tarimaScanEventsByNum = useMemo(() => {
     if (!isTarimaMode) return new Map()
@@ -698,6 +709,15 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   }, [allUbicacionGroups, selectedUbicacion, ubicacionConfirmed, isTarimaMode])
   const activeUbicacionScanCount = activeUbicacionGroup?.codes.length ?? 0
 
+  const publishLastResult = useCallback((payload) => {
+    lastResultSeqRef.current += 1
+    setLastResult({
+      ...payload,
+      at: payload.at || new Date().toISOString(),
+      seq: lastResultSeqRef.current,
+    })
+  }, [])
+
   const refocus = useCallback(() => {
     setTimeout(() => {
       if (!withTarimas && !ubicacionConfirmed) {
@@ -843,7 +863,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         scanStartRef.current = null
       }
       startTransition(() => {
-        setLastResult({ result: ev.resultado, code: ev.codigo_escaneado, sku: ev.sku_asociado, tarimaNum: parseTarimaNumber(ev.ubicacion || variables.ubicacion) })
+        publishLastResult({
+          result: ev.resultado,
+          code: ev.codigo_escaneado,
+          sku: ev.sku_asociado,
+          tarimaNum: parseTarimaNumber(ev.ubicacion || variables.ubicacion),
+          at: ev.scanned_at,
+        })
         if (ev.resultado === 'no_encontrado') {
           if (crossOrder) {
             setCrossOrderModal({ open: true, code: ev.codigo_escaneado, order: crossOrder })
@@ -1168,13 +1194,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         const crossOrder = await findPendingCrossOrder(code)
         if (crossOrder) {
           playSound('warning')
-          setLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null })
+          publishLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null })
           setCrossOrderModal({ open: true, code, order: crossOrder })
           refocus()
           return
         }
         playSound('error')
-        setLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null })
+        publishLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null })
         setRejectModal({
           open: true,
           code,
@@ -1209,7 +1235,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             ? 'duplicado'
             : 'correcto'
         startTransition(() => {
-          setLastResult({ result: offlineResult, code: offlineResult === 'correcto' ? matchedStoredCode : code, sku: matchedLineForScan?.sku || null, tarimaNum })
+          publishLastResult({
+            result: offlineResult,
+            code: offlineResult === 'correcto' ? matchedStoredCode : code,
+            sku: matchedLineForScan?.sku || null,
+            tarimaNum,
+          })
           if (offlineResult === 'no_encontrado') {
             setRejectModal({
               open: true,
@@ -1280,7 +1311,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         const codeKey = code.toLowerCase()
         if (!inFlightCodes.current.has(codeKey)) {
           inFlightCodes.current.add(codeKey)
-          setLastResult({ result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null, tarimaNum })
+          publishLastResult({ result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null, tarimaNum })
           playSound('success')
           scanMut.mutate({ codigo: code, ubicacion, optimisticFeedback: true })
         } else {
@@ -1567,8 +1598,20 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wide opacity-70">{t('rec.tarimas.panel.activa')}</p>
                 <p className="font-mono text-xs font-black truncate">{lastTarimaBase || '—'}</p>
+                <p className="text-[11px] font-bold mt-1 tabular-nums opacity-80">{activeTarimaCountLabel}</p>
               </div>
+              {activeTarimaStat && !activeTarimaStat.empty && (
+                <div className="shrink-0 text-right">
+                  <p className="text-lg font-black tabular-nums leading-none">{activeTarimaPct}%</p>
+                  <p className="text-[9px] font-semibold uppercase tracking-wide opacity-70">{t('rec.cajas_validadas')}</p>
+                </div>
+              )}
             </div>
+            {activeTarimaStat && !activeTarimaStat.empty && (
+              <div className="mt-2.5 h-1.5 rounded-full bg-white/20 overflow-hidden">
+                <div className="h-full rounded-full bg-white/80 transition-all duration-500" style={{ width: `${activeTarimaPct}%` }} />
+              </div>
+            )}
           </div>
         )}
 
@@ -2121,7 +2164,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 const Icon = cfg.icon
                 return (
                   <motion.div
-                    key={lastResult.code + lastResult.result}
+                    key={lastResult.seq || `${lastResult.code}-${lastResult.result}-${lastResult.at || ''}`}
                     initial={{ opacity: 0, y: -8, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8 }}
@@ -2132,6 +2175,15 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">{t('rec.tarimas.label')}</p>
                         <p className="text-[80px] sm:text-[96px] font-black text-white leading-none tabular-nums">{lastTarimaNum}</p>
                         <p className="text-xs font-mono text-white/60 mt-1">{lastTarimaBase}</p>
+                        <p className="text-sm font-black text-white mt-2 tabular-nums">{activeTarimaCountLabel}</p>
+                        {activeTarimaStat && !activeTarimaStat.empty && (
+                          <div className="mt-2 w-32 max-w-full">
+                            <div className="h-1.5 rounded-full bg-white/20 overflow-hidden">
+                              <div className="h-full rounded-full bg-white/80 transition-all duration-500" style={{ width: `${activeTarimaPct}%` }} />
+                            </div>
+                            <p className="mt-1 text-[10px] font-semibold text-white/70 text-center">{activeTarimaPct}%</p>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className={`p-4 rounded-2xl flex items-center gap-3 border backdrop-blur-sm ${cfg.bg}`}>

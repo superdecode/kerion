@@ -14,18 +14,14 @@ Este documento describe cómo configurar y migrar la base de datos de Kirion a S
    - Database Password
    - API URL (host de PostgreSQL)
 
-### 2. Ejecutar Migración en Supabase
+### 2. Ejecutar Migraciones en Supabase
 
-#### Opción A: Via SQL Editor en Supabase Dashboard
+> Estado actual: este repo todavía usa el layout legado `backend/migrations/` con
+> `backend/scripts/run-migration.js`. No agregues migraciones permanentes desde el
+> SQL Editor del dashboard. Para migrar al flujo Supabase CLI, sigue
+> `docs/supabase-migrations.md`.
 
-1. Ve al proyecto de Supabase
-2. En el sidebar, haz clic en "SQL Editor"
-3. Crea un "New query"
-4. Copia el contenido de `backend/migrations/007_wms_inventory_supabase.sql`
-5. Pégalo en el editor
-6. Haz clic en "Run"
-
-#### Opción B: Via CLI de Supabase (recomendado para desarrollo)
+#### Via CLI de Supabase
 
 ```bash
 # Instalar Supabase CLI si no está instalado
@@ -37,17 +33,16 @@ supabase login
 # Conectar al proyecto
 supabase link --project-ref YOUR_PROJECT_ID
 
-# Ejecutar migración
+# Ejecutar migraciones gestionadas por CLI despues del cutover
 supabase db push
 ```
 
-#### Opción C: Via psql (desde tu máquina local)
+#### Via runner legado actual
 
 ```bash
-psql -h db.xxxxxxxxxxxx.supabase.co -U postgres -d postgres
+cd backend
+npm run db:migrate
 ```
-
-Luego copia y pega el contenido del archivo SQL.
 
 ### 3. Configurar Variables de Entorno
 

@@ -16,12 +16,14 @@ export function getOrderDateKey(order) {
     return `${isoLike[1]}-${String(isoLike[2]).padStart(2, '0')}-${String(isoLike[3]).padStart(2, '0')}`
   }
 
-  const slashDate = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  const slashDate = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/)
   if (slashDate) {
     const first  = Number(slashDate[1])
     const second = Number(slashDate[2])
-    const day    = first > 12 ? first : second
-    const month  = first > 12 ? second : first
+    // D/M/Y default (es-MX standard). Only treat second as day when second > 12
+    // (months can't exceed 12, so first must be the month in that case).
+    const day   = second > 12 ? second : first
+    const month = second > 12 ? first  : second
     return `${slashDate[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
