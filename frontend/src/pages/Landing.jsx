@@ -11,11 +11,11 @@ function track(eventType, payload) {
 }
 import {
   Check, ChevronRight, ArrowRight,
-  ScanLine, Package, FileText, BarChart3, ShieldCheck,
-  AlertTriangle, X, Layers,
-  RotateCcw, Boxes, Truck, TrendingUp,
+  ScanLine, Package, FileText, ShieldCheck,
+  AlertTriangle, X, Layers, Search,
+  RotateCcw, TrendingUp,
   Volume2, UserCheck, Zap, RefreshCw, MessageSquare, FileSpreadsheet,
-  Eye, Settings, DollarSign,
+  Eye, Settings, DollarSign, Tag, ListChecks,
 } from 'lucide-react'
 import { MODULE_CATALOG } from '../core/constants/moduleCatalog'
 
@@ -31,7 +31,7 @@ const FEATURES = [
     border: 'border-blue-500/20',
     module: 'DropScan',
     title: 'Escaneo con feedback auditivo y visual',
-    desc: 'Cada scan dispara confirmacion sonora y visual inmediata. El operador sabe en el momento si la guia es valida, duplicada o fuera de lugar. Sin revisar pantallas: el sistema habla.',
+    desc: 'Cada scan dispara confirmacion sonora y visual inmediata. El operador sabe si la guia es valida, duplicada o fuera de lugar sin revisar la pantalla. El sistema habla antes de que el error se propague.',
   },
   {
     icon: UserCheck,
@@ -40,25 +40,7 @@ const FEATURES = [
     border: 'border-indigo-500/20',
     module: 'DropScan',
     title: 'Control de operadores con PIN individual',
-    desc: 'Cada operador entra con su PIN. Kirion registra quien escaneo que guia, en que tarima y a que hora. Auditoria completa sin pasos extra: si hubo un error, sabes exactamente quien y cuando.',
-  },
-  {
-    icon: Truck,
-    color: 'text-purple-400',
-    bg: 'bg-purple-500/10',
-    border: 'border-purple-500/20',
-    module: 'Surtido WMS',
-    title: 'Ordenes desde tu hoja de calculo, sin migracion',
-    desc: 'Se conecta a tu Google Sheets actual. Asigna ordenes por surtidor, valida cada OBC por escaneo y detecta discrepancias antes del despacho. Trazabilidad desde la orden hasta la caja.',
-  },
-  {
-    icon: Boxes,
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-500/20',
-    module: 'Inventario',
-    title: 'Stock por ubicacion, no solo por cantidad',
-    desc: 'Conteos con escaneo de barcodes organizados por celda. Sabes cuantos bultos hay y exactamente donde estan. Localizacion rapida, sin recorridos innecesarios y sin desactualizacion.',
+    desc: 'Cada operador entra con su PIN. Kirion registra quien escaneo que guia, en que tarima y a que hora. Auditoria completa sin pasos extra: si hay un error, sabes exactamente quien y cuando.',
   },
   {
     icon: RotateCcw,
@@ -79,6 +61,33 @@ const FEATURES = [
     desc: 'Lista de recepcion con validaciones por scan. Novedades registradas por ubicacion dentro del flujo, sin salir de la operacion. El operador no necesita papel ni criterio propio.',
   },
   {
+    icon: Tag,
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/10',
+    border: 'border-emerald-500/20',
+    module: 'Inventario',
+    title: 'Clasificacion inteligente por estado',
+    desc: 'Cada unidad se clasifica por estado: disponible, dañado, en revision o bloqueado. Control granular de registros individuales con historial de movimientos y funciones de ayuda para validar diferencias contra el WMS al instante.',
+  },
+  {
+    icon: Search,
+    color: 'text-teal-400',
+    bg: 'bg-teal-500/10',
+    border: 'border-teal-500/20',
+    module: 'Inventario',
+    title: 'Rastreo de unidades por ubicacion y codigo',
+    desc: 'Localiza cualquier caja, SKU o codigo en segundos. Busqueda por codigo de barras, celda o referencia WMS con historial completo de donde ha estado cada unidad, quien la movio y cuando.',
+  },
+  {
+    icon: ListChecks,
+    color: 'text-purple-400',
+    bg: 'bg-purple-500/10',
+    border: 'border-purple-500/20',
+    module: 'Surtido WMS',
+    title: 'Auxiliar de WMS: control de ordenes por surtidor',
+    desc: 'Pantalla profesional por surtidor con feedback auditivo en cada scan. Valida OBCs en tiempo real, detecta faltantes al instante y permite bloquear o ingresar entradas manuales. Conectado a tu WMS sin migracion.',
+  },
+  {
     icon: FileText,
     color: 'text-fuchsia-400',
     bg: 'bg-fuchsia-500/10',
@@ -86,15 +95,6 @@ const FEATURES = [
     module: 'Despacho',
     title: 'Despacho sin retrabajo de ultima hora',
     desc: 'Folios consolidados con validacion final por destino. El sistema alerta diferencias antes de que el camion salga. Cierre documentado con historial completo de lo que fue y quien lo valido.',
-  },
-  {
-    icon: BarChart3,
-    color: 'text-rose-400',
-    bg: 'bg-rose-500/10',
-    border: 'border-rose-500/20',
-    module: 'Todos',
-    title: 'Metricas reales por modulo y por operador',
-    desc: 'Productividad, tiempos de proceso y tasas de error desde cada flujo. Identifica donde se pierde tiempo, quien comete mas errores y que proceso necesita ajuste. Sin suponer: con datos.',
   },
   {
     icon: AlertTriangle,
@@ -264,7 +264,7 @@ function HeroSection() {
       <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-medium mb-6">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-          WMS integral para logistica y paqueteria
+          Auxiliar de WMS — rapido, eficiente, sin migracion
         </div>
 
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-tight mb-6">
@@ -520,7 +520,7 @@ function BenefitsSection() {
             </div>
             <h3 className="text-white font-bold mb-2">Control centralizado</h3>
             <p className="text-gray-400 text-sm leading-relaxed">
-              DropScan, Recepcion, Surtido, Inventario, Despacho, Devoluciones y Anormalidades. Un sistema, una base de datos, reportes unificados para toda la operacion.
+              DropScan, Recepcion, Surtido WMS, Inventario, Despacho, Devoluciones y Anormalidades. Un auxiliar de WMS completo: una base de datos, reportes unificados y trazabilidad total.
             </p>
           </div>
           <div className="bg-gray-900 border border-amber-500/20 rounded-2xl p-6">
@@ -826,7 +826,7 @@ function Footer() {
               <span className="text-white font-bold">Kirion</span>
             </div>
             <p className="text-gray-500 text-sm leading-relaxed">
-              Plataforma WMS para logistica moderna: DropScan, Recepcion, Surtido, Inventario, Despacho, Devoluciones y Anormalidades integrados en un solo sistema.
+              Auxiliar de WMS para logistica moderna: DropScan, Recepcion, Surtido, Inventario, Despacho, Devoluciones y Anormalidades. Rapido, eficiente y sin migracion.
             </p>
           </div>
           <div>
