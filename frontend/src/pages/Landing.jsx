@@ -223,7 +223,7 @@ function NavBar() {
           <span className="text-blue-400 text-xs font-semibold bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">WMS</span>
         </div>
         <div className="hidden md:flex items-center gap-6 text-sm text-gray-400">
-          {[['funcionalidades', 'Funciones'], ['precios', 'Precios'], ['contacto', 'Contacto']].map(([id, label]) => (
+          {[['como-trabajamos', 'Como trabajamos'], ['funcionalidades', 'Funciones'], ['precios', 'Precios'], ['contacto', 'Contacto']].map(([id, label]) => (
             <button key={id} onClick={() => scrollTo(id)} className="hover:text-white transition-colors">{label}</button>
           ))}
         </div>
@@ -264,19 +264,21 @@ function HeroSection() {
       <div className="relative z-10 max-w-4xl mx-auto px-4 text-center">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-medium mb-6">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-          Auxiliar de WMS — rapido, eficiente, sin migracion
+          Optimizacion de procesos logisticos
         </div>
 
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-tight mb-6">
-          Deja el Excel.{' '}
+          No mas parches.{' '}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-blue-300 to-cyan-400">
-            Opera con control real.
+            Procesos que funcionan.
           </span>
         </h1>
 
-        <p className="text-lg sm:text-xl text-gray-400 leading-relaxed mb-10 max-w-2xl mx-auto">
-          Kirion reemplaza hojas de calculo, mensajes de WhatsApp y registros en papel con un sistema diseñado desde adentro de la operacion:{' '}
-          <span className="text-white font-medium">trazabilidad completa, escaneo con feedback auditivo y visual, control por operador y datos en tiempo real.</span>
+        <p className="text-lg sm:text-xl text-gray-400 leading-relaxed mb-4 max-w-2xl mx-auto">
+          No vendemos software. Optimizamos tu operacion logistica: diagnosticamos los puntos de falla, rediseñamos los flujos y los implementamos con tecnologia propia.
+        </p>
+        <p className="text-base text-gray-500 leading-relaxed mb-10 max-w-xl mx-auto">
+          <span className="text-blue-400 font-medium">Kirion</span> es la plataforma que hace posible el cambio: trazabilidad completa, escaneo con feedback auditivo y visual, control por operador y datos en tiempo real.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
@@ -284,19 +286,19 @@ function HeroSection() {
             onClick={() => { track('cta_click', { location: 'hero' }); scrollTo('contacto') }}
             className="flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all hover:shadow-lg hover:shadow-blue-600/25 text-base"
           >
-            Empezar prueba de 30 dias gratis
+            Hablar con un especialista
             <ArrowRight className="w-4 h-4" />
           </button>
           <button
             onClick={() => scrollTo('funcionalidades')}
             className="flex items-center justify-center gap-2 px-8 py-4 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white font-medium rounded-xl transition-colors border border-gray-700 text-base"
           >
-            Ver funciones
+            Ver como funciona
           </button>
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
-          {['Sin tarjeta de credito', 'Setup en menos de 10 min', '7 modulos integrados'].map(t => (
+          {['Diagnostico incluido', 'Implementacion acompanada', '7 modulos integrados'].map(t => (
             <span key={t} className="flex items-center gap-1.5">
               <Check className="w-3.5 h-3.5 text-emerald-500" />
               {t}
@@ -432,6 +434,91 @@ function DifferentiatorSection() {
               Kirion no te pide que cambies como operas para adaptarte al software. Se conecta a tu Google Sheets actual, respeta tus flujos existentes y agrega validacion, trazabilidad y control sin reemplazar todo desde cero. El equipo empieza a usarlo el mismo dia: sin curva de aprendizaje larga, sin resistencia al cambio y sin integraciones costosas.
             </p>
           </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ProcessSection() {
+  const steps = [
+    {
+      number: '01',
+      icon: Search,
+      color: 'text-blue-400',
+      bg: 'bg-blue-500/10',
+      border: 'border-blue-500/20',
+      title: 'Diagnostico operativo',
+      desc: 'Mapeamos tu operacion actual: flujos, puntos de falla, cuellos de botella y perdidas de informacion. No asumimos, observamos. El diagnostico define exactamente donde esta el costo oculto.',
+    },
+    {
+      number: '02',
+      icon: Settings,
+      color: 'text-purple-400',
+      bg: 'bg-purple-500/10',
+      border: 'border-purple-500/20',
+      title: 'Diseño de procesos',
+      desc: 'Rediseñamos los flujos con base en la operacion real, no en plantillas genericas. Cada ajuste responde a un problema especifico identificado en campo: nada que no tenga razon de estar.',
+    },
+    {
+      number: '03',
+      icon: Zap,
+      color: 'text-emerald-400',
+      bg: 'bg-emerald-500/10',
+      border: 'border-emerald-500/20',
+      title: 'Implementacion con Kirion',
+      desc: 'Desplegamos Kirion como la infraestructura digital que hace funcionar los nuevos procesos. El equipo empieza a operar el mismo dia: sin curva larga, sin resistencia y con acompanamiento directo.',
+    },
+    {
+      number: '04',
+      icon: TrendingUp,
+      color: 'text-amber-400',
+      bg: 'bg-amber-500/10',
+      border: 'border-amber-500/20',
+      title: 'Mejora continua',
+      desc: 'Medimos con datos reales de cada modulo: productividad, errores y tiempos. Identificamos donde optimizar y ejecutamos ajustes rapidos. La operacion no se congela: se afina.',
+    },
+  ]
+
+  return (
+    <section id="como-trabajamos" className="py-20 bg-gray-950">
+      <div className="max-w-5xl mx-auto px-4">
+        <div className="text-center mb-14">
+          <p className="text-blue-400 text-sm font-semibold uppercase tracking-wider mb-3">Como trabajamos</p>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            Un servicio, no solo un sistema
+          </h2>
+          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+            La tecnologia sin proceso es solo ruido. Nuestro modelo combina consultoria operativa con implementacion de Kirion: el resultado es una operacion que funciona diferente, no solo una que tiene nuevo software.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
+          {steps.map(({ number, icon: Icon, color, bg, border, title, desc }) => (
+            <div key={number} className={`bg-gray-900 border rounded-2xl p-6 flex gap-5 ${border} hover:border-opacity-60 transition-colors`}>
+              <div className="flex-shrink-0">
+                <div className={`w-12 h-12 rounded-xl ${bg} border ${border} flex items-center justify-center`}>
+                  <Icon className={`w-5 h-5 ${color}`} />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`text-xs font-bold ${color} opacity-60`}>{number}</span>
+                  <h3 className="text-white font-bold">{title}</h3>
+                </div>
+                <p className="text-gray-400 text-sm leading-relaxed">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-gradient-to-r from-blue-500/10 via-purple-500/5 to-blue-500/10 border border-blue-500/20 rounded-2xl p-6 text-center">
+          <p className="text-white font-semibold mb-2">
+            El objetivo no es que uses Kirion. Es que tu operacion funcione mejor.
+          </p>
+          <p className="text-gray-400 text-sm max-w-2xl mx-auto">
+            Si el problema es de proceso, lo resolvemos con proceso. Kirion es la herramienta que lo hace sostenible, medible y escalable. Pero el punto de partida siempre es la operacion, no el software.
+          </p>
         </div>
       </div>
     </section>
@@ -807,7 +894,7 @@ function ContactSection({ form, setForm, loading, success, error, onSubmit }) {
             Enviando...
           </>
         ) : (
-          <>Empezar prueba de 30 días gratis <ArrowRight className="w-4 h-4" /></>
+          <>Solicitar diagnostico gratuito <ArrowRight className="w-4 h-4" /></>
         )}
       </button>
       <p className="text-center text-gray-500 text-xs">Sin compromiso. Sin tarjeta de credito. Cancelacion inmediata.</p>
@@ -893,6 +980,7 @@ export default function Landing() {
       <HeroSection />
       <StatsSection />
       <ProblemSection />
+      <ProcessSection />
       <DifferentiatorSection />
       <FeaturesSection />
       <BenefitsSection />
@@ -902,22 +990,22 @@ export default function Landing() {
       <section id="contacto" className="py-20 bg-gray-900/40">
         <div className="max-w-4xl mx-auto px-4">
           <div className="text-center mb-12">
-            <p className="text-blue-400 text-sm font-semibold uppercase tracking-wider mb-3">Empezar ahora</p>
+            <p className="text-blue-400 text-sm font-semibold uppercase tracking-wider mb-3">Hablemos de tu operacion</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              30 días gratis, sin riesgos
+              El primer paso es el diagnostico
             </h2>
             <p className="text-gray-400 text-lg max-w-xl mx-auto">
-              Completa el formulario y nuestro equipo te configura el sistema en menos de 10 minutos.
+              Cuéntanos donde esta el problema. Nuestro equipo analiza tu operacion y propone un plan concreto. Sin compromiso, sin costo inicial.
             </p>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
             <div className="lg:col-span-2 space-y-4">
               {[
-                { title: 'Trial de 30 días', desc: 'Acceso completo sin restricciones. Sin tarjeta de credito.' },
-                { title: 'Setup rapido', desc: 'Tu sistema configurado en menos de 10 minutos.' },
-                { title: 'Soporte incluido', desc: 'Te acompanamos durante todo el proceso de adopcion.' },
-                { title: 'Sin contratos', desc: 'Paga mes a mes. Cancela cuando quieras.' },
+                { title: 'Diagnostico sin costo', desc: 'Mapeamos tu operacion actual e identificamos los puntos de mejora antes de proponer nada.' },
+                { title: 'Implementacion acompanada', desc: 'No te dejamos con un manual. Estamos en campo contigo hasta que el equipo opera con soltura.' },
+                { title: '30 dias de prueba', desc: 'Acceso completo a Kirion sin restricciones. Sin tarjeta de credito.' },
+                { title: 'Ajustes rapidos incluidos', desc: 'La operacion cambia. Los ajustes de configuracion no tienen costo extra.' },
               ].map(({ title, desc }) => (
                 <div key={title} className="flex items-start gap-3">
                   <div className="w-6 h-6 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
