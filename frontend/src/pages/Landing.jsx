@@ -11,9 +11,11 @@ function track(eventType, payload) {
 }
 import {
   Check, ChevronRight, ArrowRight,
-  ScanLine, Package, FileText, BarChart3, Users, ShieldCheck,
-  AlertTriangle, X, Layers, Clock, Smartphone,
+  ScanLine, Package, FileText, BarChart3, ShieldCheck,
+  AlertTriangle, X, Layers,
   RotateCcw, Boxes, Truck, TrendingUp,
+  Volume2, UserCheck, Zap, RefreshCw, MessageSquare, FileSpreadsheet,
+  Eye, Settings, DollarSign,
 } from 'lucide-react'
 import { MODULE_CATALOG } from '../core/constants/moduleCatalog'
 
@@ -28,8 +30,17 @@ const FEATURES = [
     bg: 'bg-blue-500/10',
     border: 'border-blue-500/20',
     module: 'DropScan',
-    title: 'Escaneo y control de guias',
-    desc: 'Registra guias en tiempo real con validacion automatica de duplicados y alerta sonora. Control de tarimas, auditoria de operadores y cero guias perdidas.',
+    title: 'Escaneo con feedback auditivo y visual',
+    desc: 'Cada scan dispara confirmacion sonora y visual inmediata. El operador sabe en el momento si la guia es valida, duplicada o fuera de lugar. Sin revisar pantallas: el sistema habla.',
+  },
+  {
+    icon: UserCheck,
+    color: 'text-indigo-400',
+    bg: 'bg-indigo-500/10',
+    border: 'border-indigo-500/20',
+    module: 'DropScan',
+    title: 'Control de operadores con PIN individual',
+    desc: 'Cada operador entra con su PIN. Kirion registra quien escaneo que guia, en que tarima y a que hora. Auditoria completa sin pasos extra: si hubo un error, sabes exactamente quien y cuando.',
   },
   {
     icon: Truck,
@@ -37,8 +48,8 @@ const FEATURES = [
     bg: 'bg-purple-500/10',
     border: 'border-purple-500/20',
     module: 'Surtido WMS',
-    title: 'Gestion de ordenes de salida',
-    desc: 'Asigna, rastrea y valida ordenes (OBCs) desde Google Sheets hasta el cierre. Detecta discrepancias y controla surtidores en tiempo real.',
+    title: 'Ordenes desde tu hoja de calculo, sin migracion',
+    desc: 'Se conecta a tu Google Sheets actual. Asigna ordenes por surtidor, valida cada OBC por escaneo y detecta discrepancias antes del despacho. Trazabilidad desde la orden hasta la caja.',
   },
   {
     icon: Boxes,
@@ -46,8 +57,8 @@ const FEATURES = [
     bg: 'bg-emerald-500/10',
     border: 'border-emerald-500/20',
     module: 'Inventario',
-    title: 'Control de stock en bodega',
-    desc: 'Sesiones de conteo con escaneo de barcodes, localizacion de cajas por celda y reportes de disponibilidad. Stock siempre actualizado y exportable a Excel.',
+    title: 'Stock por ubicacion, no solo por cantidad',
+    desc: 'Conteos con escaneo de barcodes organizados por celda. Sabes cuantos bultos hay y exactamente donde estan. Localizacion rapida, sin recorridos innecesarios y sin desactualizacion.',
   },
   {
     icon: RotateCcw,
@@ -55,8 +66,8 @@ const FEATURES = [
     bg: 'bg-amber-500/10',
     border: 'border-amber-500/20',
     module: 'Devoluciones',
-    title: 'Gestion de retornos y devoluciones',
-    desc: 'Registra y clasifica mercancia devuelta con trazabilidad completa: SKU, embalaje, evidencia fotografica y movimientos de inventario en cada entrada.',
+    title: 'Retornos con evidencia y trazabilidad completa',
+    desc: 'Cada devolucion captura SKU, estado de embalaje, fotografia y movimiento de inventario. Nada entra sin registro. Fin a las cajas devueltas sin origen y a los reclamos sin respuesta.',
   },
   {
     icon: Package,
@@ -64,8 +75,8 @@ const FEATURES = [
     bg: 'bg-cyan-500/10',
     border: 'border-cyan-500/20',
     module: 'Recepcion',
-    title: 'Recepcion inbound con validacion',
-    desc: 'Administra ordenes inbound, lineas, listas de recepcion, validaciones por escaneo y novedades por ubicacion sin salir del flujo operativo.',
+    title: 'Inbound validado por escaneo, no por conteo manual',
+    desc: 'Lista de recepcion con validaciones por scan. Novedades registradas por ubicacion dentro del flujo, sin salir de la operacion. El operador no necesita papel ni criterio propio.',
   },
   {
     icon: FileText,
@@ -73,17 +84,8 @@ const FEATURES = [
     bg: 'bg-fuchsia-500/10',
     border: 'border-fuchsia-500/20',
     module: 'Despacho',
-    title: 'Despacho y cierre de folios',
-    desc: 'Consolida folios de salida, agenda operativa, validacion final y seguimiento del cierre para despachar con menos retrabajo.',
-  },
-  {
-    icon: Smartphone,
-    color: 'text-indigo-400',
-    bg: 'bg-indigo-500/10',
-    border: 'border-indigo-500/20',
-    module: 'DropScan',
-    title: 'Operadores con PIN y auditoria',
-    desc: 'Cada operador accede con PIN unico. Registro completo de quien escaneo que, cuando y en que tarima. Control de equipo y auditoria sin pasos adicionales.',
+    title: 'Despacho sin retrabajo de ultima hora',
+    desc: 'Folios consolidados con validacion final por destino. El sistema alerta diferencias antes de que el camion salga. Cierre documentado con historial completo de lo que fue y quien lo valido.',
   },
   {
     icon: BarChart3,
@@ -91,47 +93,57 @@ const FEATURES = [
     bg: 'bg-rose-500/10',
     border: 'border-rose-500/20',
     module: 'Todos',
-    title: 'Reportes y metricas unificados',
-    desc: 'Productividad por operador, tasa de error y tiempos por proceso desde todos los modulos. Exportacion a Excel y filtros avanzados incluidos en cada plan.',
+    title: 'Metricas reales por modulo y por operador',
+    desc: 'Productividad, tiempos de proceso y tasas de error desde cada flujo. Identifica donde se pierde tiempo, quien comete mas errores y que proceso necesita ajuste. Sin suponer: con datos.',
   },
   {
     icon: AlertTriangle,
-    color: 'text-rose-400',
-    bg: 'bg-rose-500/10',
-    border: 'border-rose-500/20',
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/10',
+    border: 'border-orange-500/20',
     module: 'Anormalidades',
-    title: 'Incidencias con SLA y mejora continua',
-    desc: 'Centraliza anormalidades, responsables, niveles criticos y mejoras vinculadas para cerrar problemas operativos con trazabilidad.',
+    title: 'Incidencias con responsable y SLA',
+    desc: 'Centraliza problemas operativos, asigna responsables y hace seguimiento hasta el cierre. Historial de mejoras vinculadas para no repetir los mismos errores. Mejora continua con evidencia.',
   },
 ]
 
 const PAIN_POINTS = [
   {
-    icon: AlertTriangle,
-    problem: 'Sin trazabilidad, sin responsabilidad',
-    solution: 'Sin un registro digital, no sabes quien movio que, cuando ni por que. Kirion registra cada operacion con usuario, timestamp y contexto. Auditoria total desde bodega hasta entrega.',
+    icon: FileSpreadsheet,
+    problem: 'El Excel se convirtio en tu sistema de control',
+    solution: 'Archivos compartidos que se sobreescriben, versiones sin nombre, formulas rotas y datos que desaparecen. El Excel no tiene auditoria, no tiene alertas y no valida nada. Cada error se descubre tarde y cuesta rehacer horas de trabajo.',
+  },
+  {
+    icon: Eye,
+    problem: 'No sabes que paso ni quien lo hizo',
+    solution: 'Sin trazabilidad por usuario, cuando hay un error no hay responsable. Se busca en WhatsApp, en correos o de voz en voz. Kirion registra cada operacion con usuario, timestamp y contexto. Auditoria total sin investigar.',
+  },
+  {
+    icon: Volume2,
+    problem: 'Scan a ciegas: el error ya escalo cuando lo notas',
+    solution: 'Sin confirmacion auditiva ni visual en cada escaneo, los operadores duplican guias o escanan en la tarima equivocada sin darse cuenta. El problema se descubre en el despacho, cuando el costo de corregirlo es maximo.',
+  },
+  {
+    icon: RefreshCw,
+    problem: 'Reproceso continuo que consume tiempo y dinero',
+    solution: 'Guias duplicadas, inventario desactualizado, devoluciones sin registro. Cada error mal capturado se convierte en retrabajo: reconteos, reconciliaciones y llamadas que no deberian existir. Kirion valida antes de que el error ocurra.',
+  },
+  {
+    icon: MessageSquare,
+    problem: 'Datos criticos dispersos en WhatsApp, correo y papel',
+    solution: 'Las ordenes llegan por chat, el inventario esta en un Excel y las novedades se reportan de palabra. No hay una sola fuente de verdad. Kirion unifica todo en un flujo digital: lo que no esta registrado en el sistema, no sucedio.',
   },
   {
     icon: X,
-    problem: 'Errores que cuestan dinero',
-    solution: 'Guias duplicadas, inventario desactualizado, devoluciones sin registro. Cada error es costo operativo y cliente perdido. Kirion valida y alerta antes de que el error ocurra.',
-  },
-  {
-    icon: Clock,
-    problem: 'Procesos lentos y fragmentados',
-    solution: 'Escaneo en papel, ordenes por WhatsApp, stock en Excel, devoluciones sin registro. Kirion atiende cada uno de esos flujos con herramientas especializadas y datos en tiempo real.',
-  },
-  {
-    icon: BarChart3,
-    problem: 'Sin metricas, sin capacidad de mejorar',
-    solution: 'Si no mides, no optimizas. Kirion captura datos de cada modulo: productividad, tiempos de proceso y tasas de error. Toma decisiones con datos reales.',
+    problem: 'Sin control de acceso, cualquiera puede modificar todo',
+    solution: 'Cuando todos tienen acceso a todo, nadie es responsable de nada. Kirion asigna roles por modulo y registra cada accion por operador. El supervisor ve quien hizo que, cuando y con que resultado, sin preguntar.',
   },
 ]
 
 const STATS = [
   { value: '12+', label: 'Empresas activas' },
   { value: '500K+', label: 'Guias procesadas' },
-  { value: '99.9%', label: 'Uptime garantizado' },
+  { value: '0', label: 'Hojas de Excel requeridas' },
   { value: '< 10 min', label: 'Tiempo de setup' },
 ]
 
@@ -256,15 +268,15 @@ function HeroSection() {
         </div>
 
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-tight mb-6">
-          Tu operacion logistica{' '}
+          Deja el Excel.{' '}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-blue-300 to-cyan-400">
-            bajo control total
+            Opera con control real.
           </span>
         </h1>
 
         <p className="text-lg sm:text-xl text-gray-400 leading-relaxed mb-10 max-w-2xl mx-auto">
-          Kirion cubre los vacios operativos que los sistemas generales no atienden: escaneo de guias, recepcion inbound, surtido, inventario, despacho, devoluciones y gestion de anormalidades.
-          <span className="text-white font-medium"> Procesos mas rapidos, trazabilidad completa, mejor control.</span>
+          Kirion reemplaza hojas de calculo, mensajes de WhatsApp y registros en papel con un sistema diseñado desde adentro de la operacion:{' '}
+          <span className="text-white font-medium">trazabilidad completa, escaneo con feedback auditivo y visual, control por operador y datos en tiempo real.</span>
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
@@ -272,7 +284,7 @@ function HeroSection() {
             onClick={() => { track('cta_click', { location: 'hero' }); scrollTo('contacto') }}
             className="flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all hover:shadow-lg hover:shadow-blue-600/25 text-base"
           >
-            Empezar prueba de 30 días gratis
+            Empezar prueba de 30 dias gratis
             <ArrowRight className="w-4 h-4" />
           </button>
           <button
@@ -316,30 +328,110 @@ function StatsSection() {
 function ProblemSection() {
   return (
     <section className="py-20 bg-gray-950">
-      <div className="max-w-5xl mx-auto px-4">
+      <div className="max-w-6xl mx-auto px-4">
         <div className="text-center mb-14">
-          <p className="text-blue-400 text-sm font-semibold uppercase tracking-wider mb-3">El problema</p>
+          <p className="text-red-400 text-sm font-semibold uppercase tracking-wider mb-3">Puntos de dolor reales</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Sin control, pierdes dinero y credibilidad
+            Lo que cuesta operar sin un sistema real
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Entregar 100+ paquetes diarios sin un sistema robusto genera errores, demoras y perdidas. Cada guia duplicada o mal registrada es un cliente perdido.
+            El Excel no es un WMS. WhatsApp no es trazabilidad. El papel no es auditoria. Cada dia que operas sin control digital, pagas el costo en reproceso, errores y tiempo perdido.
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {PAIN_POINTS.map(({ icon: Icon, problem, solution }) => (
-            <div key={problem} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-blue-500/30 transition-colors">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Icon className="w-4 h-4 text-red-400" />
-                </div>
-                <div>
-                  <p className="text-white font-semibold mb-1">{problem}</p>
-                  <p className="text-gray-400 text-sm leading-relaxed">{solution}</p>
-                </div>
+            <div key={problem} className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-red-500/30 transition-colors group">
+              <div className="w-9 h-9 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4 group-hover:bg-red-500/15 transition-colors">
+                <Icon className="w-4 h-4 text-red-400" />
               </div>
+              <p className="text-white font-semibold mb-2 text-sm">{problem}</p>
+              <p className="text-gray-400 text-sm leading-relaxed">{solution}</p>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function DifferentiatorSection() {
+  return (
+    <section className="py-20 bg-gray-900/30">
+      <div className="max-w-5xl mx-auto px-4">
+        <div className="text-center mb-14">
+          <p className="text-emerald-400 text-sm font-semibold uppercase tracking-wider mb-3">No es un sistema generico</p>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            Construido desde adentro de la operacion
+          </h2>
+          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+            No es un ERP adaptado ni un modulo de inventario de proposito general. Kirion fue diseñado con conocimiento directo del campo: cada pantalla, cada flujo y cada detalle responde a como funciona realmente una bodega.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
+          <div className="bg-gray-900 border border-emerald-500/20 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                <Volume2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <h3 className="text-white font-bold">Feedback que el operador entiende sin mirar</h3>
+            </div>
+            <p className="text-gray-400 text-sm leading-relaxed mb-3">
+              Cada escaneo genera una confirmacion sonora y visual inmediata. Guia valida: beep corto + verde. Duplicada: beep largo + rojo. El operador no necesita leer la pantalla: el sistema le avisa con sonido y color antes de seguir.
+            </p>
+            <p className="text-emerald-400 text-xs font-medium">Los errores se previenen en el momento, no se descubren en el despacho.</p>
+          </div>
+
+          <div className="bg-gray-900 border border-blue-500/20 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                <UserCheck className="w-5 h-5 text-blue-400" />
+              </div>
+              <h3 className="text-white font-bold">Control por operador, no por equipo</h3>
+            </div>
+            <p className="text-gray-400 text-sm leading-relaxed mb-3">
+              El PIN individual no es solo acceso: es auditoria. Cada accion queda vinculada a una persona. Si hay un error, sabes quien, cuando y en que contexto. El supervisor tiene visibilidad completa sin preguntar ni buscar en grupos de WhatsApp.
+            </p>
+            <p className="text-blue-400 text-xs font-medium">Rendicion de cuentas integrada, sin formularios adicionales.</p>
+          </div>
+
+          <div className="bg-gray-900 border border-purple-500/20 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-purple-400" />
+              </div>
+              <h3 className="text-white font-bold">Ajustes rapidos sin IT ni configuracion compleja</h3>
+            </div>
+            <p className="text-gray-400 text-sm leading-relaxed mb-3">
+              Los procesos cambian. Kirion esta disenado para adaptarse: nuevos surtidores, cambio de rutas, ajuste de limites de guias por tarima. Cambios que antes requeriran un programador o una hoja de calculo nueva se hacen desde el panel en minutos.
+            </p>
+            <p className="text-purple-400 text-xs font-medium">Flexibilidad operativa sin depender de soporte tecnico.</p>
+          </div>
+
+          <div className="bg-gray-900 border border-amber-500/20 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-amber-400" />
+              </div>
+              <h3 className="text-white font-bold">Reduccion directa de costos de reproceso</h3>
+            </div>
+            <p className="text-gray-400 text-sm leading-relaxed mb-3">
+              Cada guia duplicada detectada, cada discrepancia interceptada antes del despacho y cada devolucion correctamente registrada elimina una hora de trabajo reactive. El ROI de Kirion se mide en retrabajo que ya no sucede y en errores que se previenen antes de costar.
+            </p>
+            <p className="text-amber-400 text-xs font-medium">Menos reproceso. Menos reclamos. Menos costos ocultos.</p>
+          </div>
+        </div>
+
+        <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 flex flex-col sm:flex-row items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center flex-shrink-0">
+            <Settings className="w-5 h-5 text-gray-400" />
+          </div>
+          <div>
+            <h3 className="text-white font-bold mb-2">Un sistema que se integra en tus procesos, no al reves</h3>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              Kirion no te pide que cambies como operas para adaptarte al software. Se conecta a tu Google Sheets actual, respeta tus flujos existentes y agrega validacion, trazabilidad y control sin reemplazar todo desde cero. El equipo empieza a usarlo el mismo dia: sin curva de aprendizaje larga, sin resistencia al cambio y sin integraciones costosas.
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -353,10 +445,10 @@ function FeaturesSection() {
         <div className="text-center mb-14">
           <p className="text-blue-400 text-sm font-semibold uppercase tracking-wider mb-3">Funcionalidades</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Todo lo que necesitas para operar sin errores
+            Cada modulo diseñado para resolver un problema real
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            Siete modulos especializados que cubren cada etapa de tu operacion logistica: desde la recepcion inbound hasta el despacho final y la mejora continua.
+            No son pantallas genericas. Cada flujo fue pensado para como trabaja un operador en campo: rapido, sin fricciones y con la informacion que necesita en el momento exacto que la necesita.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -381,17 +473,17 @@ function FeaturesSection() {
 function BenefitsSection() {
   return (
     <section className="py-20 bg-gray-950">
-      <div className="max-w-5xl mx-auto px-4">
+      <div className="max-w-6xl mx-auto px-4">
         <div className="text-center mb-12">
           <p className="text-emerald-400 text-sm font-semibold uppercase tracking-wider mb-3">Por que Kirion</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Mas velocidad, trazabilidad y control desde el primer dia
+            Trazabilidad, eficiencia y control desde el primer escaneo
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            No es solo software. Es el sistema operativo de tu bodega. Cada proceso digitalizado, cada movimiento registrado.
+            No es solo software. Es el sistema operativo de tu bodega. Cada proceso digitalizado, cada movimiento registrado, cada operador identificado.
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           <div className="bg-gray-900 border border-blue-500/20 rounded-2xl p-6">
             <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-5">
               <TrendingUp className="w-6 h-6 text-blue-400" />
@@ -402,7 +494,7 @@ function BenefitsSection() {
             </div>
             <h3 className="text-white font-bold mb-2">Eficiencia operativa</h3>
             <p className="text-gray-400 text-sm leading-relaxed">
-              Reemplaza hojas de calculo, mensajes y registros en papel con flujos digitales integrados. Menos tiempo por operacion, mas entregas completadas al dia.
+              Flujos digitales integrados que reemplazan Excel, WhatsApp y papel. Menos tiempo por operacion, mas capacidad al dia sin aumentar personal.
             </p>
           </div>
           <div className="bg-gray-900 border border-emerald-500/20 rounded-2xl p-6">
@@ -415,7 +507,7 @@ function BenefitsSection() {
             </div>
             <h3 className="text-white font-bold mb-2">Registro de cada movimiento</h3>
             <p className="text-gray-400 text-sm leading-relaxed">
-              Guias, ordenes, escaneos y devoluciones con usuario, fecha y contexto completo. Sabe exactamente que paso, cuando y quien lo hizo en cualquier momento.
+              Usuario, timestamp y contexto en cada accion. Sabes que paso, cuando y quien lo hizo. Sin preguntar, sin buscar: la respuesta ya esta en el sistema.
             </p>
           </div>
           <div className="bg-gray-900 border border-purple-500/20 rounded-2xl p-6">
@@ -428,7 +520,20 @@ function BenefitsSection() {
             </div>
             <h3 className="text-white font-bold mb-2">Control centralizado</h3>
             <p className="text-gray-400 text-sm leading-relaxed">
-              DropScan, Recepcion, Surtido WMS, Inventario, Despacho, Devoluciones y Anormalidades en una sola plataforma. Un login, una base de datos y reportes unificados para toda la operacion.
+              DropScan, Recepcion, Surtido, Inventario, Despacho, Devoluciones y Anormalidades. Un sistema, una base de datos, reportes unificados para toda la operacion.
+            </p>
+          </div>
+          <div className="bg-gray-900 border border-amber-500/20 rounded-2xl p-6">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-5">
+              <DollarSign className="w-6 h-6 text-amber-400" />
+            </div>
+            <div className="mb-3">
+              <span className="text-4xl font-black text-amber-400">0</span>
+              <span className="text-sm font-medium text-amber-400 ml-1.5">reprocesos evitables</span>
+            </div>
+            <h3 className="text-white font-bold mb-2">Reduccion de costos ocultos</h3>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              Guias duplicadas detectadas antes del despacho, devoluciones registradas al instante y discrepancias resueltas en campo. El costo que no ves es el que mas duele.
             </p>
           </div>
         </div>
@@ -788,6 +893,7 @@ export default function Landing() {
       <HeroSection />
       <StatsSection />
       <ProblemSection />
+      <DifferentiatorSection />
       <FeaturesSection />
       <BenefitsSection />
       <PricingSection />
