@@ -18,7 +18,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
-import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteScanEvent, getScanEvents, relocateScanEvents, getNovedadTipos, createNovedad, markScanEventAsNovedad, searchByCode } from '../services/recepcionService'
+import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, deleteScanEvent, getScanEvents, relocateScanEvents, getNovedadTipos, createNovedad, markScanEventAsNovedad, markScanEventsAsNovedadBulk, searchByCode } from '../services/recepcionService'
 import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
@@ -196,6 +196,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const qc = useQueryClient()
   const { hasPermission, isAuthenticated } = useAuthStore()
   const canMarkAnormalidad = hasPermission('recepcion.validacion', 'editar')
+  const canUndoLastValidation = hasPermission('recepcion.validacion', 'crear')
   const canDeleteScan = hasPermission('recepcion.validacion', 'eliminar')
   const canReconfigureTarimas = hasPermission('recepcion.validacion', 'actualizar')
 
@@ -207,6 +208,8 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const refocusRef = useRef(null)
   const inFlightCodes = useRef(new Set())
   const lastResultSeqRef = useRef(0)
+  const scanFeedbackSeqRef = useRef(0)
+  const lastPublishedFeedbackSeqRef = useRef(0)
 
   const [sessionId, setSessionId] = useState(null)
   const [withTarimas, setWithTarimas] = useState(false)
@@ -220,7 +223,10 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const [historySortDir, setHistorySortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [pendingDeleteEventId, setPendingDeleteEventId] = useState(null)
-  const [markAnormalidadModal, setMarkAnormalidadModal] = useState({ open: false, event: null, tipo: '', ubicacion: '' })
+  const [pendingDeleteMode, setPendingDeleteMode] = useState('event')
+  const [markAnormalidadModal, setMarkAnormalidadModal] = useState({
+    open: false, mode: 'single', event: null, eventIds: [], count: 0, scopeLabel: '', tipo: '', ubicacion: '',
+  })
   const [dupModal, setDupModal] = useState({ open: false, code: null, entry: null })
   const [rejectModal, setRejectModal] = useState({ open: false, code: null, message: null, reason: null })
   const [crossOrderModal, setCrossOrderModal] = useState({ open: false, code: null, order: null })
@@ -708,13 +714,83 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     return allUbicacionGroups.find(g => (g.ubicacion ?? '') === activeKey) ?? null
   }, [allUbicacionGroups, selectedUbicacion, ubicacionConfirmed, isTarimaMode])
   const activeUbicacionScanCount = activeUbicacionGroup?.codes.length ?? 0
+  const latestPersistedValidationEvent = useMemo(() => {
+    const events = [...correctHistory, ...serverEvents]
+      .filter((event) => event.result === 'correcto' || event.resultado === 'correcto')
+      .filter((event) => event.line_id || event.id)
+      .filter((event) => isPersistedScanEventId(event.id))
+      .sort((a, b) => new Date(b.scannedAt || b.scanned_at || 0) - new Date(a.scannedAt || a.scanned_at || 0))
+    return events[0] ?? null
+  }, [correctHistory, serverEvents])
+  const latestPersistedValidationId = latestPersistedValidationEvent?.id ?? null
+  const activeTarimaPersistedEventIds = useMemo(
+    () => (
+      activeTarimaStat
+        ? (tarimaScanEventsByNum.get(activeTarimaStat.num) || [])
+          .filter((event) => isPersistedScanEventId(event.id))
+          .map((event) => event.id)
+        : []
+    ),
+    [activeTarimaStat, tarimaScanEventsByNum]
+  )
+  const activeUbicacionPersistedEventIds = useMemo(
+    () => (
+      activeUbicacionGroup?.codes
+        ?.filter((event) => isPersistedScanEventId(event.id))
+        ?.map((event) => event.id) || []
+    ),
+    [activeUbicacionGroup]
+  )
 
-  const publishLastResult = useCallback((payload) => {
+  const publishLastResult = useCallback((payload, feedbackSeq = null) => {
+    if (feedbackSeq != null) {
+      if (feedbackSeq < scanFeedbackSeqRef.current) return
+      if (feedbackSeq < lastPublishedFeedbackSeqRef.current) return
+      lastPublishedFeedbackSeqRef.current = feedbackSeq
+    }
     lastResultSeqRef.current += 1
     setLastResult({
       ...payload,
       at: payload.at || new Date().toISOString(),
       seq: lastResultSeqRef.current,
+    })
+  }, [])
+
+  const resetDeleteModal = useCallback(() => {
+    setConfirmDeleteOpen(false)
+    setPendingDeleteEventId(null)
+    setPendingDeleteMode('event')
+  }, [])
+
+  const closeMarkAnormalidadModal = useCallback(() => {
+    setMarkAnormalidadModal({
+      open: false, mode: 'single', event: null, eventIds: [], count: 0, scopeLabel: '', tipo: '', ubicacion: '',
+    })
+  }, [])
+
+  const openSingleMarkAnormalidad = useCallback((event, ubicacion = '') => {
+    setMarkAnormalidadModal({
+      open: true,
+      mode: 'single',
+      event,
+      eventIds: event?.id ? [event.id] : [],
+      count: event?.id ? 1 : 0,
+      scopeLabel: event?.code || '',
+      tipo: '',
+      ubicacion: ubicacion || event?.ubicacion || '',
+    })
+  }, [])
+
+  const openBulkMarkAnormalidad = useCallback(({ eventIds, count, scopeLabel, ubicacion }) => {
+    setMarkAnormalidadModal({
+      open: true,
+      mode: 'bulk',
+      event: null,
+      eventIds,
+      count,
+      scopeLabel,
+      tipo: '',
+      ubicacion: ubicacion || '',
     })
   }, [])
 
@@ -869,7 +945,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
           sku: ev.sku_asociado,
           tarimaNum: parseTarimaNumber(ev.ubicacion || variables.ubicacion),
           at: ev.scanned_at,
-        })
+        }, variables.feedbackSeq)
         if (ev.resultado === 'no_encontrado') {
           if (crossOrder) {
             setCrossOrderModal({ open: true, code: ev.codigo_escaneado, order: crossOrder })
@@ -949,64 +1025,92 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     },
   })
 
+  const applyRemovedScanEffects = useCallback((data) => {
+    const removedIds = Array.from(new Set(
+      [
+        ...(Array.isArray(data?.removedEventIds) ? data.removedEventIds : []),
+        data?.removedEvent?.id,
+      ].filter(Boolean)
+    ))
+    const lineIds = new Set(
+      [
+        ...(Array.isArray(data?.lineIds) ? data.lineIds : []),
+        data?.lineId,
+      ].filter(Boolean)
+    )
+
+    if (removedIds.length > 0) {
+      setHistory((prev) => prev.filter((item) => !removedIds.includes(item.id)))
+    }
+
+    qc.setQueryData(orderQueryKey, (cur) => {
+      if (!cur) return cur
+      const nextOrder = data.order ? { ...cur.order, ...data.order } : {
+        ...cur.order,
+        cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0,
+        cajas_forzadas: data.cajas_forzadas ?? cur.order?.cajas_forzadas ?? 0,
+        cajas_registradas: data.cajas_registradas ?? cur.order?.cajas_registradas ?? cur.order?.cajas_validadas ?? 0,
+        estado: data.estado || cur.order?.estado,
+      }
+      return {
+        ...cur,
+        order: nextOrder,
+        lines: (cur.lines || []).map((line) => lineIds.has(line.id)
+          ? { ...line, estado_validacion: 'pendiente', validated_at: null, validated_by_nombre: null }
+          : line),
+      }
+    })
+  }, [orderQueryKey, qc])
+
   const deleteScanEventMut = useMutation({
     mutationFn: (eventId) => deleteScanEvent(id, eventId),
     onSuccess: (data) => {
-      const removedId = data.removedEvent?.id
-      setHistory(prev => prev.filter(item => item.id !== removedId))
-      qc.setQueryData(orderQueryKey, (cur) => {
-        if (!cur) return cur
-        return {
-          ...cur,
-          order: {
-            ...cur.order,
-            cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0,
-            cajas_forzadas: data.cajas_forzadas ?? cur.order?.cajas_forzadas ?? 0,
-            cajas_registradas: data.cajas_registradas ?? cur.order?.cajas_registradas ?? cur.order?.cajas_validadas ?? 0,
-            estado: data.estado || cur.order?.estado,
-          },
-          lines: (cur.lines || []).map(l => l.id === data.lineId
-            ? { ...l, estado_validacion: 'pendiente', validated_at: null, validated_by_nombre: null }
-            : l),
-        }
-      })
+      applyRemovedScanEffects(data)
       qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
       toast.success('Registro eliminado')
-      setConfirmDeleteOpen(false)
-      setPendingDeleteEventId(null)
+      resetDeleteModal()
       refocus()
     },
     onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar'),
   })
 
+  const deleteLastValidationMut = useMutation({
+    mutationFn: () => deleteLastValidationRecord(id),
+    onSuccess: (data) => {
+      applyRemovedScanEffects(data)
+      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
+      toast.success('Último registro eliminado')
+      resetDeleteModal()
+      refocus()
+    },
+    onError: (err) => toast.error(err.response?.data?.error || 'Error al eliminar el último registro'),
+  })
+
   const markScanEventAsNovedadMut = useMutation({
     mutationFn: ({ eventId, tipo, ubicacion }) => markScanEventAsNovedad(id, eventId, { tipo, ubicacion }),
     onSuccess: (data) => {
-      const removedId = data.removedEvent?.id
-      setHistory(prev => prev.filter(item => item.id !== removedId))
-      qc.setQueryData(orderQueryKey, (cur) => {
-        if (!cur) return cur
-        const nextOrder = data.order ? { ...cur.order, ...data.order } : {
-          ...cur.order,
-          cajas_validadas: data.cajas_validadas ?? cur.order?.cajas_validadas ?? 0,
-          cajas_forzadas: data.cajas_forzadas ?? cur.order?.cajas_forzadas ?? 0,
-          cajas_registradas: data.cajas_registradas ?? cur.order?.cajas_registradas ?? 0,
-          estado: data.estado || cur.order?.estado,
-        }
-        return {
-          ...cur,
-          order: nextOrder,
-          lines: (cur.lines || []).map(l => l.id === data.lineId
-            ? { ...l, estado_validacion: 'pendiente', validated_at: null, validated_by_nombre: null }
-            : l),
-        }
-      })
+      applyRemovedScanEffects(data)
       qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
       qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
       qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
       qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
       toast.success(t('rec.val.markAnormalidad.success'))
-      setMarkAnormalidadModal({ open: false, event: null, tipo: '', ubicacion: '' })
+      closeMarkAnormalidadModal()
+      refocus()
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  const markScanEventsAsNovedadBulkMut = useMutation({
+    mutationFn: ({ eventIds, tipo, ubicacion }) => markScanEventsAsNovedadBulk(id, { event_ids: eventIds, tipo, ubicacion }),
+    onSuccess: (data) => {
+      applyRemovedScanEffects(data)
+      qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-novedades', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
+      toast.success(`Se enviaron ${data.movedCount || 0} registros a anormalidad`)
+      closeMarkAnormalidadModal()
       refocus()
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
@@ -1161,6 +1265,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         return
       }
       const code = e.target.value.trim()
+      const feedbackSeq = ++scanFeedbackSeqRef.current
       e.target.value = ''
       const matchingLines = effectiveLines.filter(l => l.custom_box_barcode && codesMatch(l.custom_box_barcode, code))
       const pendingMatchingLine = matchingLines.find(l => l.estado_validacion !== 'validada') || null
@@ -1172,6 +1277,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         || serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
       if (matchingLines.length > 0 && !hasPendingMatchingLine) {
         playSound('duplicate')
+        publishLastResult({
+          result: 'duplicado',
+          code: matchedStoredCode || code,
+          sku: matchedLineForScan?.sku || null,
+          tarimaNum: withTarimas ? effectiveTarimaMap.get(extractBaseCode(matchedStoredCode || code)) : null,
+        }, feedbackSeq)
         setDupModal({
           open: true, code: matchedStoredCode || code,
           entry: existing?.scannedAt
@@ -1194,13 +1305,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         const crossOrder = await findPendingCrossOrder(code)
         if (crossOrder) {
           playSound('warning')
-          publishLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null })
+          publishLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null }, feedbackSeq)
           setCrossOrderModal({ open: true, code, order: crossOrder })
           refocus()
           return
         }
         playSound('error')
-        publishLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null })
+        publishLastResult({ result: 'no_encontrado', code, sku: null, tarimaNum: null }, feedbackSeq)
         setRejectModal({
           open: true,
           code,
@@ -1220,6 +1331,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         const base = extractBaseCode(matchedTarimaCode)
         const tarimaNum = base ? effectiveTarimaMap.get(base) : null
         if (tarimaNum && !activeTarimaSet.has(tarimaNum)) {
+          publishLastResult({
+            result: 'fuera_seccion',
+            code: matchedStoredCode || code,
+            sku: matchedLineForScan?.sku || null,
+            tarimaNum,
+          }, feedbackSeq)
           setFueraSectionModal({ open: true, code, base, tarimaNum })
           playSound('suspicious')
           refocus()
@@ -1240,7 +1357,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             code: offlineResult === 'correcto' ? matchedStoredCode : code,
             sku: matchedLineForScan?.sku || null,
             tarimaNum,
-          })
+          }, feedbackSeq)
           if (offlineResult === 'no_encontrado') {
             setRejectModal({
               open: true,
@@ -1311,14 +1428,15 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         const codeKey = code.toLowerCase()
         if (!inFlightCodes.current.has(codeKey)) {
           inFlightCodes.current.add(codeKey)
-          publishLastResult({ result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null, tarimaNum })
+          publishLastResult({ result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null, tarimaNum }, feedbackSeq)
           playSound('success')
-          scanMut.mutate({ codigo: code, ubicacion, optimisticFeedback: true })
+          scanMut.mutate({ codigo: code, ubicacion, optimisticFeedback: true, feedbackSeq })
         } else {
-          scanMut.mutate({ codigo: code, ubicacion })
+          publishLastResult({ result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null, tarimaNum }, feedbackSeq)
+          scanMut.mutate({ codigo: code, ubicacion, feedbackSeq })
         }
       } else {
-        scanMut.mutate({ codigo: code, ubicacion })
+        scanMut.mutate({ codigo: code, ubicacion, feedbackSeq })
       }
     }
   }
@@ -1409,6 +1527,21 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 </p>
               </div>
               <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">{t('rec.val.ubicacion.badge')}</span>
+              {canMarkAnormalidad && activeUbicacionPersistedEventIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => openBulkMarkAnormalidad({
+                    eventIds: activeUbicacionPersistedEventIds,
+                    count: activeUbicacionPersistedEventIds.length,
+                    scopeLabel: selectedUbicacion || t('rec.val.ubicacion.panel.sin_ub'),
+                    ubicacion: selectedUbicacion || '',
+                  })}
+                  className="p-1.5 rounded-lg text-warning-600 hover:text-warning-700 hover:bg-warning-50 transition-colors"
+                  title={t('rec.val.markAnormalidad.tooltip')}
+                >
+                  <AlertTriangle size={12} />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
@@ -1527,6 +1660,23 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-primary-400' : 'text-warm-300'}`} />
                 </button>
                 {g.ubicacion && (
+                  isActive && canMarkAnormalidad && activeUbicacionPersistedEventIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openBulkMarkAnormalidad({
+                        eventIds: activeUbicacionPersistedEventIds,
+                        count: activeUbicacionPersistedEventIds.length,
+                        scopeLabel: g.ubicacion || t('rec.val.ubicacion.panel.sin_ub'),
+                        ubicacion: g.ubicacion || '',
+                      })}
+                      className="p-2 rounded-lg transition-colors shrink-0 text-warning-500 hover:bg-warning-50 hover:text-warning-700"
+                      title={t('rec.val.markAnormalidad.tooltip')}
+                    >
+                      <AlertTriangle size={11} />
+                    </button>
+                  )
+                )}
+                {g.ubicacion && (
                   <button
                     type="button"
                     onClick={() => { setEditUbicacionModal({ from: g.ubicacion }); setEditUbicacionValue(g.ubicacion) }}
@@ -1605,6 +1755,21 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   <p className="text-lg font-black tabular-nums leading-none">{activeTarimaPct}%</p>
                   <p className="text-[9px] font-semibold uppercase tracking-wide opacity-70">{t('rec.cajas_validadas')}</p>
                 </div>
+              )}
+              {canMarkAnormalidad && activeTarimaPersistedEventIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => openBulkMarkAnormalidad({
+                    eventIds: activeTarimaPersistedEventIds,
+                    count: activeTarimaPersistedEventIds.length,
+                    scopeLabel: `T${lastTarimaNum}`,
+                    ubicacion: formatTarimaLocation(lastTarimaNum) || '',
+                  })}
+                  className="shrink-0 p-1.5 rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors"
+                  title={t('rec.val.markAnormalidad.tooltip')}
+                >
+                  <AlertTriangle size={12} />
+                </button>
               )}
             </div>
             {activeTarimaStat && !activeTarimaStat.empty && (
@@ -1734,6 +1899,23 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-white/60' : 'text-warm-300'}`} />
                 </button>
                 {withTarimas && (
+                  isActive && canMarkAnormalidad && activeTarimaPersistedEventIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => openBulkMarkAnormalidad({
+                        eventIds: activeTarimaPersistedEventIds,
+                        count: activeTarimaPersistedEventIds.length,
+                        scopeLabel: `T${ts.num}`,
+                        ubicacion: formatTarimaLocation(ts.num) || '',
+                      })}
+                      className={`p-2 rounded-lg transition-colors shrink-0 ${isActive ? 'text-white/70 hover:bg-white/20 hover:text-white' : 'text-warning-500 hover:text-warning-700 hover:bg-warning-50'}`}
+                      title={t('rec.val.markAnormalidad.tooltip')}
+                    >
+                      <AlertTriangle size={11} />
+                    </button>
+                  )
+                )}
+                {withTarimas && (
                   <button
                     type="button"
                     onClick={() => { setTarimaTransferModal({ open: true, fromNum: ts.num, fromBases: ts.bases }); setTransferToTarima('') }}
@@ -1813,24 +1995,28 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                                   {item.scannedAt ? new Date(item.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
                                 </p>
                               </div>
-                              {canActOnEvent && (canMarkAnormalidad || canDeleteScan) && (
+                              {canActOnEvent && (canMarkAnormalidad || canDeleteScan || (canUndoLastValidation && item.id === latestPersistedValidationId)) && (
                                 <div className="flex items-center gap-1 shrink-0">
                                   {canMarkAnormalidad && (
                                     <button
                                       type="button"
-                                      onClick={() => setMarkAnormalidadModal({ open: true, event: item, tipo: '', ubicacion: item.ubicacion || formatTarimaLocation(ts.num) || '' })}
-                                      disabled={markScanEventAsNovedadMut.isPending}
+                                      onClick={() => openSingleMarkAnormalidad(item, item.ubicacion || formatTarimaLocation(ts.num) || '')}
+                                      disabled={markScanEventAsNovedadMut.isPending || markScanEventsAsNovedadBulkMut.isPending}
                                       className={`p-1 rounded-md transition-colors disabled:opacity-20 disabled:cursor-not-allowed ${isActive ? 'text-white/80 hover:bg-white/15' : 'text-warning-600 hover:bg-warning-50'}`}
                                       title={t('rec.val.markAnormalidad.tooltip')}
                                     >
                                       <AlertTriangle className="w-3 h-3" />
                                     </button>
                                   )}
-                                  {canDeleteScan && (
+                                  {(canDeleteScan || (canUndoLastValidation && item.id === latestPersistedValidationId)) && (
                                     <button
                                       type="button"
-                                      onClick={() => { setPendingDeleteEventId(item.id); setConfirmDeleteOpen(true) }}
-                                      disabled={deleteScanEventMut.isPending}
+                                      onClick={() => {
+                                        setPendingDeleteMode(canDeleteScan ? 'event' : 'last-validation')
+                                        setPendingDeleteEventId(item.id)
+                                        setConfirmDeleteOpen(true)
+                                      }}
+                                      disabled={deleteScanEventMut.isPending || deleteLastValidationMut.isPending}
                                       className={`p-1 rounded-md transition-colors disabled:opacity-20 disabled:cursor-not-allowed ${isActive ? 'text-white/80 hover:bg-white/15' : 'text-danger-500 hover:bg-danger-50'}`}
                                       title={t('rec.val.delete.tooltip')}
                                     >
@@ -2345,24 +2531,28 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                                           </span>
                                         </td>
                                         <td className="px-2 py-1.5 text-right">
-                                          {(canMarkAnormalidad || canDeleteScan) && h.result === 'correcto' && isPersistedScanEventId(h.id) && (
+                                          {(canMarkAnormalidad || canDeleteScan || (canUndoLastValidation && h.id === latestPersistedValidationId)) && h.result === 'correcto' && isPersistedScanEventId(h.id) && (
                                             <div className="inline-flex items-center justify-end gap-1">
                                               {canMarkAnormalidad && (
                                                 <button
                                                   type="button"
-                                                  onClick={() => setMarkAnormalidadModal({ open: true, event: h, tipo: '', ubicacion: h.ubicacion || '' })}
-                                                  disabled={markScanEventAsNovedadMut.isPending}
+                                                  onClick={() => openSingleMarkAnormalidad(h, h.ubicacion || '')}
+                                                  disabled={markScanEventAsNovedadMut.isPending || markScanEventsAsNovedadBulkMut.isPending}
                                                   className="p-1 rounded-md text-warning-600 hover:bg-warning-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                                                   title={t('rec.val.markAnormalidad.tooltip')}
                                                 >
                                                   <AlertTriangle className="w-3 h-3" />
                                                 </button>
                                               )}
-                                              {canDeleteScan && (
+                                              {(canDeleteScan || (canUndoLastValidation && h.id === latestPersistedValidationId)) && (
                                                 <button
                                                   type="button"
-                                                  onClick={() => { setPendingDeleteEventId(h.id); setConfirmDeleteOpen(true) }}
-                                                  disabled={deleteScanEventMut.isPending}
+                                                  onClick={() => {
+                                                    setPendingDeleteMode(canDeleteScan ? 'event' : 'last-validation')
+                                                    setPendingDeleteEventId(h.id)
+                                                    setConfirmDeleteOpen(true)
+                                                  }}
+                                                  disabled={deleteScanEventMut.isPending || deleteLastValidationMut.isPending}
                                                   className="p-1 rounded-md text-danger-500 hover:bg-danger-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                                                   title={t('rec.val.delete.tooltip')}
                                                 >
@@ -2449,24 +2639,28 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                               </td>
                             )}
                             <td className="px-3 py-2 text-right">
-                              {(canMarkAnormalidad || canDeleteScan) && h.result === 'correcto' && isPersistedScanEventId(h.id) && (
+                              {(canMarkAnormalidad || canDeleteScan || (canUndoLastValidation && h.id === latestPersistedValidationId)) && h.result === 'correcto' && isPersistedScanEventId(h.id) && (
                                 <div className="inline-flex items-center justify-end gap-1">
                                   {canMarkAnormalidad && (
                                     <button
                                       type="button"
-                                      onClick={() => setMarkAnormalidadModal({ open: true, event: h, tipo: '', ubicacion: h.ubicacion || '' })}
-                                      disabled={markScanEventAsNovedadMut.isPending}
+                                      onClick={() => openSingleMarkAnormalidad(h, h.ubicacion || '')}
+                                      disabled={markScanEventAsNovedadMut.isPending || markScanEventsAsNovedadBulkMut.isPending}
                                       className="p-1.5 rounded-lg text-warning-600 hover:bg-warning-50 disabled:opacity-30 disabled:cursor-not-allowed"
                                       title={t('rec.val.markAnormalidad.tooltip')}
                                     >
                                       <AlertTriangle className="w-3.5 h-3.5" />
                                     </button>
                                   )}
-                                  {canDeleteScan && (
+                                  {(canDeleteScan || (canUndoLastValidation && h.id === latestPersistedValidationId)) && (
                                     <button
                                       type="button"
-                                      onClick={() => { setPendingDeleteEventId(h.id); setConfirmDeleteOpen(true) }}
-                                      disabled={deleteScanEventMut.isPending}
+                                      onClick={() => {
+                                        setPendingDeleteMode(canDeleteScan ? 'event' : 'last-validation')
+                                        setPendingDeleteEventId(h.id)
+                                        setConfirmDeleteOpen(true)
+                                      }}
+                                      disabled={deleteScanEventMut.isPending || deleteLastValidationMut.isPending}
                                       className="p-1.5 rounded-lg text-danger-600 hover:bg-danger-50 disabled:opacity-30 disabled:cursor-not-allowed"
                                       title={t('rec.val.delete.tooltip')}
                                     >
@@ -2931,63 +3125,105 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       {/* ── Delete confirm modal ── */}
       <Modal
         isOpen={confirmDeleteOpen}
-        onClose={() => { setConfirmDeleteOpen(false); setPendingDeleteEventId(null) }}
+        onClose={resetDeleteModal}
         title={t('rec.val.delete.title')}
         icon={AlertCircle}
         size="sm"
         footer={
           <div className="flex gap-2 justify-end w-full">
-            <button onClick={() => { setConfirmDeleteOpen(false); setPendingDeleteEventId(null) }} className="btn-ghost">{t('common.cancel')}</button>
+            <button onClick={resetDeleteModal} className="btn-ghost">{t('common.cancel')}</button>
             <button
-              onClick={() => pendingDeleteEventId && deleteScanEventMut.mutate(pendingDeleteEventId)}
-              disabled={deleteScanEventMut.isPending || !pendingDeleteEventId}
+              onClick={() => {
+                if (pendingDeleteMode === 'last-validation') deleteLastValidationMut.mutate()
+                else if (pendingDeleteEventId) deleteScanEventMut.mutate(pendingDeleteEventId)
+              }}
+              disabled={(pendingDeleteMode === 'last-validation' ? deleteLastValidationMut.isPending : deleteScanEventMut.isPending) || (pendingDeleteMode !== 'last-validation' && !pendingDeleteEventId)}
               className="btn-danger disabled:opacity-50"
             >
-              {deleteScanEventMut.isPending ? t('common.loading') : t('rec.val.delete.btn')}
+              {(deleteScanEventMut.isPending || deleteLastValidationMut.isPending) ? t('common.loading') : t('rec.val.delete.btn')}
             </button>
           </div>
         }
       >
-        <p className="text-sm text-warm-700">{t('rec.val.delete.desc')}</p>
+        <p className="text-sm text-warm-700">
+          {pendingDeleteMode === 'last-validation'
+            ? 'Se eliminará el último registro validado del escaneo actual.'
+            : t('rec.val.delete.desc')}
+        </p>
       </Modal>
 
       <Modal
         isOpen={markAnormalidadModal.open}
-        onClose={() => setMarkAnormalidadModal({ open: false, event: null, tipo: '', ubicacion: '' })}
+        onClose={closeMarkAnormalidadModal}
         title={t('rec.val.markAnormalidad.title')}
         icon={AlertTriangle}
         size="sm"
         footer={
           <div className="flex w-full justify-end gap-2">
             <button
-              onClick={() => setMarkAnormalidadModal({ open: false, event: null, tipo: '', ubicacion: '' })}
+              onClick={closeMarkAnormalidadModal}
               className="btn-ghost"
             >
               {t('common.cancel')}
             </button>
             <button
-              onClick={() => markAnormalidadModal.event?.id && markScanEventAsNovedadMut.mutate({
-                eventId: markAnormalidadModal.event.id,
-                tipo: markAnormalidadModal.tipo,
-                ubicacion: markAnormalidadModal.ubicacion || null,
-              })}
-              disabled={!markAnormalidadModal.tipo || markScanEventAsNovedadMut.isPending || !markAnormalidadModal.event?.id}
+              onClick={() => {
+                if (markAnormalidadModal.mode === 'bulk') {
+                  if (markAnormalidadModal.eventIds.length > 0) {
+                    markScanEventsAsNovedadBulkMut.mutate({
+                      eventIds: markAnormalidadModal.eventIds,
+                      tipo: markAnormalidadModal.tipo,
+                      ubicacion: markAnormalidadModal.ubicacion || null,
+                    })
+                  }
+                  return
+                }
+                if (markAnormalidadModal.event?.id) {
+                  markScanEventAsNovedadMut.mutate({
+                    eventId: markAnormalidadModal.event.id,
+                    tipo: markAnormalidadModal.tipo,
+                    ubicacion: markAnormalidadModal.ubicacion || null,
+                  })
+                }
+              }}
+              disabled={
+                !markAnormalidadModal.tipo ||
+                markScanEventAsNovedadMut.isPending ||
+                markScanEventsAsNovedadBulkMut.isPending ||
+                (markAnormalidadModal.mode === 'bulk'
+                  ? markAnormalidadModal.eventIds.length === 0
+                  : !markAnormalidadModal.event?.id)
+              }
               className="btn-primary disabled:opacity-50"
             >
-              {markScanEventAsNovedadMut.isPending ? t('common.loading') : t('rec.val.markAnormalidad.confirm')}
+              {(markScanEventAsNovedadMut.isPending || markScanEventsAsNovedadBulkMut.isPending)
+                ? t('common.loading')
+                : t('rec.val.markAnormalidad.confirm')}
             </button>
           </div>
         }
       >
         <div className="space-y-3">
-          <p className="text-sm text-warm-700">{t('rec.val.markAnormalidad.helper')}</p>
+          <p className="text-sm text-warm-700">
+            {markAnormalidadModal.mode === 'bulk'
+              ? `Se enviarán ${markAnormalidadModal.count} registros del lote activo a anormalidad.`
+              : t('rec.val.markAnormalidad.helper')}
+          </p>
           <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 space-y-1.5">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-warning-700">{t('rec.val.markAnormalidad.match')}</p>
-            <p className="font-mono font-bold text-warning-900 break-all">{markAnormalidadModal.event?.code || '—'}</p>
-            {markAnormalidadModal.event?.ubicacion && (
+            <p className="font-mono font-bold text-warning-900 break-all">
+              {markAnormalidadModal.mode === 'bulk' ? markAnormalidadModal.scopeLabel || '—' : (markAnormalidadModal.event?.code || '—')}
+            </p>
+            {markAnormalidadModal.mode === 'bulk' && (
+              <p className="text-xs text-warning-700">
+                <span className="font-semibold">Registros:</span>{' '}
+                <span className="font-mono">{markAnormalidadModal.count}</span>
+              </p>
+            )}
+            {markAnormalidadModal.ubicacion && (
               <p className="text-xs text-warning-700">
                 <span className="font-semibold">{t('rec.scan.col.ubicacion')}:</span>{' '}
-                <span className="font-mono">{markAnormalidadModal.event.ubicacion}</span>
+                <span className="font-mono">{markAnormalidadModal.ubicacion}</span>
               </p>
             )}
           </div>
@@ -3061,8 +3297,10 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             <button
               onClick={() => {
                 const { code, tarimaNum } = fueraSectionModal
+                const feedbackSeq = ++scanFeedbackSeqRef.current
                 setFueraSectionModal({ open: false, code: null, base: null, tarimaNum: null })
-                scanMut.mutate({ codigo: code, ubicacion: formatTarimaLocation(tarimaNum) })
+                publishLastResult({ result: 'correcto', code, sku: null, tarimaNum }, feedbackSeq)
+                scanMut.mutate({ codigo: code, ubicacion: formatTarimaLocation(tarimaNum), feedbackSeq })
               }}
               className="btn-primary"
             >

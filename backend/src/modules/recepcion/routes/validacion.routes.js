@@ -4,6 +4,7 @@ import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { refreshRecepcionOrderState } from '../utils/orderState.js'
 
 const router = Router()
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function normalizeScanCode(rawCode) {
   if (!rawCode) return ''
@@ -362,7 +363,7 @@ router.patch('/orders/:id/scan-events/relocate',
 
 router.delete('/orders/:id/scan-events/last-validation',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'eliminar'),
+  requirePermission('recepcion.validacion', 'crear'),
   async (req, res) => {
     try {
       const eventRes = await req.tQuery(
@@ -381,7 +382,7 @@ router.delete('/orders/:id/scan-events/last-validation',
 
       const event = eventRes.rows[0]
 
-      await req.tQuery(
+      const deleteRes = await req.tQuery(
         `DELETE FROM inbound_scan_events
          WHERE tenant_id=$1
            AND order_id=$2
@@ -389,7 +390,8 @@ router.delete('/orders/:id/scan-events/last-validation',
            AND (
              id=$4
              OR (resultado='duplicado' AND scanned_at >= $5)
-           )`,
+           )
+         RETURNING id`,
         [req.tenantId, req.params.id, event.line_id, event.id, event.scanned_at]
       )
 
@@ -405,6 +407,7 @@ router.delete('/orders/:id/scan-events/last-validation',
       res.json({
         ok: true,
         removedEvent: event,
+        removedEventIds: deleteRes.rows?.map?.((row) => row.id) || [event.id],
         lineId: event.line_id,
         cajas_validadas: orderState?.cajas_validadas || 0,
         cajas_forzadas: orderState?.cajas_forzadas || 0,
@@ -466,7 +469,7 @@ router.delete('/orders/:id/scan-events/:eventId',
 // POST /orders/:id/scan-events/:eventId/anormalidad — move a validated scan to novedades
 router.post('/orders/:id/scan-events/:eventId/anormalidad',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'editar'),
   async (req, res) => {
     try {
       const { tipo, ubicacion } = req.body
@@ -541,6 +544,135 @@ router.post('/orders/:id/scan-events/:eventId/anormalidad',
     } catch (err) {
       console.error('[recepcion] move scan event to novedad:', err.message)
       res.status(500).json({ error: 'Error al mover registro a anomalías' })
+    }
+  }
+)
+
+router.post('/orders/:id/scan-events/anormalidad/bulk',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'editar'),
+  async (req, res) => {
+    try {
+      const { tipo, ubicacion, event_ids } = req.body
+      if (!tipo) return res.status(400).json({ error: 'Tipo requerido' })
+
+      const requestedIds = Array.from(new Set(
+        (Array.isArray(event_ids) ? event_ids : [])
+          .map((value) => String(value || '').trim())
+          .filter((value) => UUID_RE.test(value))
+      ))
+      if (requestedIds.length === 0) {
+        return res.status(400).json({ error: 'Se requieren eventos para mover a anomalías' })
+      }
+
+      const tipoRes = await req.tQuery(
+        `SELECT id, nombre
+         FROM inbound_novedad_tipos
+         WHERE tenant_id=$1 AND activo=true AND LOWER(nombre)=LOWER($2)
+         LIMIT 1`,
+        [req.tenantId, String(tipo).trim()]
+      )
+      if (!tipoRes.rows.length) {
+        return res.status(400).json({ error: 'Tipo de anomalía inválido para este tenant' })
+      }
+
+      const result = await req.tTransaction(async (client) => {
+        const eventsRes = await client.query(
+          `SELECT *
+             FROM inbound_scan_events
+            WHERE order_id=$1
+              AND tenant_id=$2
+              AND id = ANY($3::uuid[])
+            ORDER BY scanned_at DESC, id DESC`,
+          [req.params.id, req.tenantId, requestedIds]
+        )
+
+        const validEvents = eventsRes.rows.filter((event) => event.resultado === 'correcto')
+        if (validEvents.length === 0) {
+          const error = new Error('No se encontraron escaneos válidos para mover a anomalías')
+          error.status = 404
+          throw error
+        }
+
+        const insertColumns = {
+          tenantIds: validEvents.map(() => req.tenantId),
+          orderIds: validEvents.map(() => req.params.id),
+          tipos: validEvents.map(() => tipoRes.rows[0].nombre),
+          codigos: validEvents.map((event) => normalizeScanCode(event.codigo_escaneado) || null),
+          ubicaciones: validEvents.map((event) => ubicacion?.trim() || event.ubicacion || null),
+          createdBy: validEvents.map(() => req.user.id),
+          esForzada: validEvents.map(() => true),
+          cuentaConteo: validEvents.map(() => true),
+        }
+
+        const novedadRes = await client.query(
+          `INSERT INTO inbound_novedades (tenant_id, order_id, tipo, codigo, ubicacion, created_by, es_forzada, cuenta_conteo)
+           SELECT * FROM UNNEST(
+             $1::uuid[],
+             $2::uuid[],
+             $3::text[],
+             $4::text[],
+             $5::text[],
+             $6::int[],
+             $7::boolean[],
+             $8::boolean[]
+           )
+           RETURNING *`,
+          [
+            insertColumns.tenantIds,
+            insertColumns.orderIds,
+            insertColumns.tipos,
+            insertColumns.codigos,
+            insertColumns.ubicaciones,
+            insertColumns.createdBy,
+            insertColumns.esForzada,
+            insertColumns.cuentaConteo,
+          ]
+        )
+
+        await client.query(
+          `DELETE FROM inbound_scan_events
+            WHERE tenant_id=$1
+              AND order_id=$2
+              AND id = ANY($3::uuid[])`,
+          [req.tenantId, req.params.id, validEvents.map((event) => event.id)]
+        )
+
+        const lineIds = Array.from(new Set(validEvents.map((event) => event.line_id).filter(Boolean)))
+        if (lineIds.length > 0) {
+          await client.query(
+            `UPDATE inbound_lines
+                SET estado_validacion='pendiente', validated_by=NULL, validated_at=NULL
+              WHERE tenant_id=$1
+                AND id = ANY($2::uuid[])`,
+            [req.tenantId, lineIds]
+          )
+        }
+
+        const orderState = await refreshRecepcionOrderState(client, req.tenantId, req.params.id)
+        return {
+          novedades: novedadRes.rows,
+          removedEventIds: validEvents.map((event) => event.id),
+          lineIds,
+          orderState,
+        }
+      })
+
+      res.status(201).json({
+        ok: true,
+        movedCount: result.removedEventIds.length,
+        novedades: result.novedades,
+        removedEventIds: result.removedEventIds,
+        lineIds: result.lineIds,
+        cajas_validadas: result.orderState?.cajas_validadas || 0,
+        cajas_forzadas: result.orderState?.cajas_forzadas || 0,
+        cajas_registradas: result.orderState?.cajas_registradas || 0,
+        estado: result.orderState?.estado || 'pendiente_validacion',
+        order: result.orderState?.order || null,
+      })
+    } catch (err) {
+      console.error('[recepcion] bulk move scan events to novedad:', err.message)
+      res.status(err.status || 500).json({ error: err.message || 'Error al mover registros a anomalías' })
     }
   }
 )
