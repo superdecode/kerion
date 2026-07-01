@@ -18,8 +18,8 @@ const MODULE_DEFS = [
   {
     id: 'dropscan',
     moduleCode: 'dropscan',
-    name: 'DropScan',
-    description: 'Escaneo de guías y gestión de tarimas',
+    nameKey: 'globalDash.modules.dropscan.name',
+    descriptionKey: 'globalDash.modules.dropscan.description',
     icon: ScanBarcode,
     from: '#6366f1', to: '#4338ca',
     light: 'rgba(99,102,241,0.08)', ring: 'rgba(99,102,241,0.2)',
@@ -34,8 +34,8 @@ const MODULE_DEFS = [
   {
     id: 'devoluciones',
     moduleCode: 'devoluciones',
-    name: 'Devoluciones',
-    description: 'Entradas, inventario temporal y salidas',
+    nameKey: 'globalDash.modules.devoluciones.name',
+    descriptionKey: 'globalDash.modules.devoluciones.description',
     icon: RotateCcw,
     from: '#f43f5e', to: '#ea580c',
     light: 'rgba(244,63,94,0.08)', ring: 'rgba(244,63,94,0.2)',
@@ -48,8 +48,8 @@ const MODULE_DEFS = [
   {
     id: 'recepcion',
     moduleCode: 'recepcion',
-    name: 'Recepción',
-    description: 'Recepción de mercancía e importación por Excel',
+    nameKey: 'globalDash.modules.recepcion.name',
+    descriptionKey: 'globalDash.modules.recepcion.description',
     icon: PackageCheck,
     from: '#0ea5e9', to: '#0369a1',
     light: 'rgba(14,165,233,0.08)', ring: 'rgba(14,165,233,0.2)',
@@ -61,8 +61,8 @@ const MODULE_DEFS = [
   {
     id: 'inventario',
     moduleCode: 'inventario',
-    name: 'Inventario',
-    description: 'Escaneo, registros y rastreo de stock',
+    nameKey: 'globalDash.modules.inventario.name',
+    descriptionKey: 'globalDash.modules.inventario.description',
     icon: Package,
     from: '#06b6d4', to: '#0e7490',
     light: 'rgba(6,182,212,0.08)', ring: 'rgba(6,182,212,0.2)',
@@ -75,8 +75,8 @@ const MODULE_DEFS = [
   {
     id: 'surtido',
     moduleCode: 'surtido',
-    name: 'Surtido',
-    description: 'Control de órdenes, surtidores y validación de cajas',
+    nameKey: 'globalDash.modules.surtido.name',
+    descriptionKey: 'globalDash.modules.surtido.description',
     icon: Truck,
     from: '#8b5cf6', to: '#6d28d9',
     light: 'rgba(139,92,246,0.08)', ring: 'rgba(139,92,246,0.2)',
@@ -89,8 +89,8 @@ const MODULE_DEFS = [
   {
     id: 'despacho',
     moduleCode: 'despacho',
-    name: 'Despacho',
-    description: 'Embarques, folios de salida y gestión de conductores',
+    nameKey: 'globalDash.modules.despacho.name',
+    descriptionKey: 'globalDash.modules.despacho.description',
     icon: Truck,
     from: '#22c55e', to: '#16a34a',
     light: 'rgba(34,197,94,0.08)', ring: 'rgba(34,197,94,0.2)',
@@ -103,8 +103,8 @@ const MODULE_DEFS = [
   {
     id: 'anormalidades',
     moduleCode: 'anormalidades',
-    name: 'Anormalidades',
-    description: 'Registro y seguimiento de incidencias',
+    nameKey: 'globalDash.modules.anormalidades.name',
+    descriptionKey: 'globalDash.modules.anormalidades.description',
     icon: AlertTriangle,
     from: '#f59e0b', to: '#d97706',
     light: 'rgba(245,158,11,0.08)', ring: 'rgba(245,158,11,0.2)',
@@ -118,8 +118,8 @@ const MODULE_DEFS = [
   {
     id: 'admin',
     moduleCode: null, // global permission, no module enablement check
-    name: 'Administración',
-    description: 'Usuarios, roles y configuración del sistema',
+    nameKey: 'globalDash.modules.admin.name',
+    descriptionKey: 'globalDash.modules.admin.description',
     icon: Settings2,
     from: '#64748b', to: '#334155',
     light: 'rgba(100,116,139,0.08)', ring: 'rgba(100,116,139,0.2)',
@@ -199,7 +199,7 @@ export default function GlobalDashboard() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.15, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
               >
-                {t('globalDash.welcome')}, {user?.nombre_completo?.split(' ')[0] || 'Usuario'}
+                {t('globalDash.welcome')}, {user?.nombre_completo?.split(' ')[0] || t('globalDash.userFallback')}
               </motion.p>
               <motion.p
                 className="mt-0.5 text-xs font-medium text-primary-200"
@@ -281,8 +281,8 @@ export default function GlobalDashboard() {
                     </div>
 
                     <div className="relative">
-                      <p className="text-sm font-bold text-warm-800 leading-snug">{mod.name}</p>
-                      <p className="mt-1 text-[11px] leading-relaxed text-warm-400 line-clamp-2">{mod.description}</p>
+                      <p className="text-sm font-bold text-warm-800 leading-snug">{t(mod.nameKey)}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-warm-400 line-clamp-2">{t(mod.descriptionKey)}</p>
                     </div>
 
                     <div
@@ -300,8 +300,8 @@ export default function GlobalDashboard() {
                   <ShieldOff className="w-8 h-8 text-warm-400" />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="text-sm font-semibold text-warm-700">Sin acceso a módulos</p>
-                  <p className="text-xs text-warm-400 max-w-xs">No tienes permisos asignados. Solicita acceso a tu administrador.</p>
+                  <p className="text-sm font-semibold text-warm-700">{t('globalDash.noModuleAccess')}</p>
+                  <p className="text-xs text-warm-400 max-w-xs">{t('globalDash.noModuleAccessHint')}</p>
                 </div>
               </div>
             )}

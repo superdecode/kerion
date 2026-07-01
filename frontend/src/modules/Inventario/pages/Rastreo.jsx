@@ -352,6 +352,7 @@ export default function Rastreo() {
         actions={
           <div className="flex items-center gap-2">
             <button
+              data-tour="inv-btn-gestion-causas"
               onClick={() => setShowCausas(true)}
               className="btn-ghost text-xs flex items-center gap-1.5"
             >

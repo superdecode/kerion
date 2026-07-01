@@ -7,6 +7,16 @@ import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
 
 const LANG_LABELS = { es: 'Español', zh: '中文' }
+const TOUR_MODULE_COLORS = {
+  dropscan: { bg: '#dbeafe', fg: '#1d4ed8', border: '#bfdbfe' },
+  devoluciones: { bg: '#fef3c7', fg: '#b45309', border: '#fde68a' },
+  recepcion: { bg: '#e0f2fe', fg: '#0369a1', border: '#bae6fd' },
+  inventario: { bg: '#ccfbf1', fg: '#0f766e', border: '#99f6e4' },
+  surtido: { bg: '#ede9fe', fg: '#6d28d9', border: '#ddd6fe' },
+  despacho: { bg: '#dcfce7', fg: '#15803d', border: '#bbf7d0' },
+  anormalidades: { bg: '#ffe4e6', fg: '#be123c', border: '#fecdd3' },
+  admin: { bg: '#e2e8f0', fg: '#334155', border: '#cbd5e1' },
+}
 
 export function tourHelpVisible(userId) {
   return !!userId
@@ -87,7 +97,7 @@ const buildBlocks = (t) => [
       {
         element: '[data-tour="nav-inv-escaneo"]',
         popover: { title: t('tour.block.inventario.clasificacion.title'), description: t('tour.block.inventario.clasificacion.desc'), side: 'right', align: 'center' },
-        path: null, groupToExpand: 'inventario', navHighlight: 'nav-inv-escaneo',
+        path: '/Inventario/escaneo', groupToExpand: 'inventario', navHighlight: 'nav-inv-escaneo',
       },
       {
         popover: { title: t('tour.block.inventario.ubicaciones.title'), description: t('tour.block.inventario.ubicaciones.desc'), side: 'over', align: 'center' },
@@ -96,11 +106,12 @@ const buildBlocks = (t) => [
       {
         element: '[data-tour="nav-inv-rastreo"]',
         popover: { title: t('tour.block.inventario.rastreo.title'), description: t('tour.block.inventario.rastreo.desc'), side: 'right', align: 'center' },
-        path: null, groupToExpand: 'inventario', navHighlight: 'nav-inv-rastreo',
+        path: '/Inventario/rastreo', groupToExpand: 'inventario', navHighlight: 'nav-inv-rastreo',
       },
       {
+        element: '[data-tour="inv-btn-gestion-causas"]',
         popover: { title: t('tour.block.inventario.rastreo_cfg.title'), description: t('tour.block.inventario.rastreo_cfg.desc'), side: 'over', align: 'center' },
-        path: null, groupToExpand: null, navHighlight: null,
+        path: '/Inventario/rastreo', groupToExpand: 'inventario', navHighlight: 'nav-inv-rastreo',
       },
       {
         element: '[data-tour="inv-btn-quicksearch"]',
@@ -278,6 +289,7 @@ export default function OnboardingTour() {
           animate: true,
           smoothScroll: true,
           allowClose: true,
+          overlayClickBehavior: () => {},
           overlayOpacity: 0.72,
           stagePadding: 8,
           stageRadius: 8,
@@ -428,6 +440,7 @@ export default function OnboardingTour() {
           animate: true,
           smoothScroll: true,
           allowClose: true,
+          overlayClickBehavior: () => {},
           overlayOpacity: 0.72,
           stagePadding: 8,
           stageRadius: 8,
@@ -450,7 +463,14 @@ export default function OnboardingTour() {
             if (step && step.blockIdx >= 0 && step.blockLabel) {
               const chip = document.createElement('div')
               chip.className = 'driver-module-chip'
-              chip.textContent = `${step.blockIdx + 1} / ${blocks.length} · ${step.blockLabel}`
+              const colors = TOUR_MODULE_COLORS[step.blockId] || TOUR_MODULE_COLORS.admin
+              chip.style.setProperty('--tour-chip-bg', colors.bg)
+              chip.style.setProperty('--tour-chip-fg', colors.fg)
+              chip.style.setProperty('--tour-chip-border', colors.border)
+              const progressText = tFn('tour.module_chip')
+                .replace('{{n}}', String(step.blockIdx + 1))
+                .replace('{{total}}', String(blocks.length))
+              chip.textContent = `${progressText} · ${step.blockLabel}`
               description.prepend(chip)
             }
 

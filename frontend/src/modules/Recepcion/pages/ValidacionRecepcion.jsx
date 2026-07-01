@@ -3147,7 +3147,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       >
         <p className="text-sm text-warm-700">
           {pendingDeleteMode === 'last-validation'
-            ? 'Se eliminará el último registro validado del escaneo actual.'
+            ? t('rec.val.delete.last_validation_desc')
             : t('rec.val.delete.desc')}
         </p>
       </Modal>
@@ -3206,7 +3206,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         <div className="space-y-3">
           <p className="text-sm text-warm-700">
             {markAnormalidadModal.mode === 'bulk'
-              ? `Se enviarán ${markAnormalidadModal.count} registros del lote activo a anormalidad.`
+              ? t('rec.val.markAnormalidad.bulk_helper').replace('{count}', String(markAnormalidadModal.count))
               : t('rec.val.markAnormalidad.helper')}
           </p>
           <div className="rounded-xl border border-warning-200 bg-warning-50 p-3 space-y-1.5">
@@ -3216,7 +3216,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             </p>
             {markAnormalidadModal.mode === 'bulk' && (
               <p className="text-xs text-warning-700">
-                <span className="font-semibold">Registros:</span>{' '}
+                <span className="font-semibold">{t('rec.val.markAnormalidad.bulk_count')}:</span>{' '}
                 <span className="font-mono">{markAnormalidadModal.count}</span>
               </p>
             )}
