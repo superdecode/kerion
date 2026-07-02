@@ -13,11 +13,35 @@ export const useOfflineStore = create(
       queue: [],
       /** @type {'online'|'offline'} */
       status: navigator.onLine ? 'online' : 'offline',
+      /** @type {'ok'|'degraded'} */
+      quality: 'ok',
+      manualOffline: false,
+      lastConnectionIssue: null,
       syncing: false,
       lastSyncError: null,
 
-      setOnline: () => set({ status: 'online' }),
-      setOffline: () => set({ status: 'offline' }),
+      setOnline: () => set({ status: 'online', quality: 'ok', manualOffline: false, lastConnectionIssue: null }),
+      setOffline: (reason = null) => set({ status: 'offline', quality: 'ok', manualOffline: false, lastConnectionIssue: reason }),
+      setConnectionDegraded: (reason = null) => set((s) => (
+        s.status === 'offline'
+          ? { lastConnectionIssue: reason || s.lastConnectionIssue }
+          : { quality: 'degraded', lastConnectionIssue: reason || 'connection_unstable' }
+      )),
+      clearConnectionIssue: () => set((s) => (
+        s.status === 'online' ? { quality: 'ok', lastConnectionIssue: null } : {}
+      )),
+      enableManualOffline: (reason = null) => set({
+        status: 'offline',
+        quality: 'ok',
+        manualOffline: true,
+        lastConnectionIssue: reason || 'manual_offline',
+      }),
+      disableManualOffline: () => set({
+        status: navigator.onLine ? 'online' : 'offline',
+        quality: 'ok',
+        manualOffline: false,
+        lastConnectionIssue: null,
+      }),
 
       enqueue: (sessionId, codigo_guia, tarimaId) => {
         const item = {
@@ -57,7 +81,14 @@ export const useOfflineStore = create(
     }),
     {
       name: 'wms-offline-queue',
-      partialize: (s) => ({ queue: s.queue, moduleQueue: s.moduleQueue }),
+      partialize: (s) => ({ queue: s.queue, moduleQueue: s.moduleQueue, manualOffline: s.manualOffline }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.manualOffline) {
+          state.status = 'offline'
+          state.quality = 'ok'
+          state.lastConnectionIssue = 'manual_offline'
+        }
+      },
     }
   )
 )

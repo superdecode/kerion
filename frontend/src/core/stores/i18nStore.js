@@ -2258,6 +2258,10 @@ const translations = {
 
     // ── ConnectionBanner ───────────────────────────────────────────────────────
     'connection.offline':   '无连接 — 扫描已保存至本地',
+    'connection.degraded':  '连接不稳定 — 可切换为离线作业',
+    'connection.manualOffline': '离线作业模式 — 扫描将保存在本地',
+    'connection.workOffline': '离线作业',
+    'connection.goOnline': '恢复在线',
     'connection.restored':  '连接已恢复',
     'connection.syncError': '同步失败：',
     'connection.pending':   '条待同步',
@@ -5920,6 +5924,10 @@ const translations = {
     'notfound.goHome': 'Ir al Inicio',
     // ── ConnectionBanner ───────────────────────────────────────────────────────
     'connection.offline':   'Sin conexion — los escaneos se guardan localmente',
+    'connection.degraded':  'Conexion inestable — puedes trabajar offline',
+    'connection.manualOffline': 'Modo offline manual — los escaneos se guardan localmente',
+    'connection.workOffline': 'Trabajar offline',
+    'connection.goOnline': 'Volver online',
     'connection.restored':  'Conexion Restaurada',
     'connection.syncError': 'Error al Sincronizar: ',
     'connection.pending':   'Pendiente',

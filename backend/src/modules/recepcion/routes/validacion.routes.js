@@ -5,6 +5,29 @@ import { refreshRecepcionOrderState } from '../utils/orderState.js'
 
 const router = Router()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const BOX_CODE_RE = /^\d{6,}[/-]\d{1,4}$/
+
+function extractFromJson(raw) {
+  const trimmed = String(raw || '').trim()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null
+  try {
+    const parsed = JSON.parse(trimmed)
+    const candidates = parsed && typeof parsed === 'object' ? Object.values(parsed) : []
+    for (const val of candidates) {
+      if (typeof val !== 'string') continue
+      const norm = val.trim().replace(/／/g, '/').replace(/[－‒–—―]/g, '-').toUpperCase()
+      if (BOX_CODE_RE.test(norm)) return norm
+    }
+    for (const val of candidates) {
+      if (typeof val === 'string' && val.trim()) {
+        return val.trim().toUpperCase().replace(/[^A-Z0-9_/-]/g, '')
+      }
+    }
+  } catch {
+    // Not JSON; continue with scanner patterns.
+  }
+  return null
+}
 
 function normalizeScanCode(rawCode) {
   if (!rawCode) return ''
@@ -14,6 +37,9 @@ function normalizeScanCode(rawCode) {
   code = code.replace(/^GS1:|^\]C1|^\]E0|^\]d2/i, '')
   code = code.replace(/／/g, '/')
   code = code.replace(/[－‒–—―]/g, '-')
+
+  const jsonExtracted = extractFromJson(code)
+  if (jsonExtracted) return jsonExtracted
 
   const jsonMatch = code.match(/"ID"\s*:\s*"(\d+[/-]\d+)"/i)
   if (jsonMatch?.[1]) return jsonMatch[1]

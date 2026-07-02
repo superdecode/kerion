@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CloudOff, RefreshCw, Upload, AlertCircle, PlugZap } from 'lucide-react'
+import { CloudOff, RefreshCw, AlertCircle, PlugZap, WifiOff } from 'lucide-react'
 import { useOfflineStore } from '../../stores/offlineStore'
 import { useToastStore } from '../../stores/toastStore'
 import { syncOfflineQueue, syncModuleQueue } from '../../services/offlineSync'
@@ -9,11 +9,14 @@ import { useI18nStore } from '../../stores/i18nStore'
 export default function ConnectionBanner() {
   const { t } = useI18nStore()
   const status = useOfflineStore((s) => s.status)
+  const quality = useOfflineStore((s) => s.quality)
+  const manualOffline = useOfflineStore((s) => s.manualOffline)
   const dropScanLen = useOfflineStore((s) => s.queue.length)
   const moduleLen = useOfflineStore((s) => s.moduleQueue.length)
   const queueLen = dropScanLen + moduleLen
   const syncing = useOfflineStore((s) => s.syncing)
   const syncError = useOfflineStore((s) => s.lastSyncError)
+  const degraded = status === 'online' && quality === 'degraded'
 
   const handleSync = useCallback(async () => {
     const [r1, r2] = await Promise.all([syncOfflineQueue(), syncModuleQueue()])
@@ -38,7 +41,7 @@ export default function ConnectionBanner() {
     }
   }, [status, handleSync])
 
-  const showBanner = status === 'offline' || queueLen > 0 || syncError
+  const showBanner = status === 'offline' || degraded || queueLen > 0 || syncError
 
   return (
     <AnimatePresence>
@@ -53,7 +56,7 @@ export default function ConnectionBanner() {
           <div className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-2.5 text-sm font-semibold shadow-lg backdrop-blur-sm ${
             status === 'offline'
               ? 'border-red-300/35 bg-gradient-to-r from-red-950/85 via-red-800/72 to-rose-500/60 text-white shadow-red-950/20'
-              : syncError
+              : degraded || syncError
                 ? 'border-amber-300/60 bg-gradient-to-r from-amber-200 via-orange-200 to-amber-100 text-amber-950'
                 : 'border-emerald-300/45 bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-500 text-white shadow-emerald-950/20'
           }`}>
@@ -61,7 +64,12 @@ export default function ConnectionBanner() {
               {status === 'offline' ? (
                 <>
                   <CloudOff className="w-4 h-4 animate-pulse" />
-                  <span>{t('connection.offline')}</span>
+                  <span>{manualOffline ? t('connection.manualOffline') : t('connection.offline')}</span>
+                </>
+              ) : degraded ? (
+                <>
+                  <WifiOff className="w-4 h-4" />
+                  <span>{t('connection.degraded')}</span>
                 </>
               ) : syncError ? (
                 <>
@@ -83,6 +91,22 @@ export default function ConnectionBanner() {
                 }`}>
                   {queueLen} {t('connection.pending')}
                 </span>
+              )}
+              {degraded && (
+                <button
+                  onClick={() => useOfflineStore.getState().enableManualOffline('connection_degraded')}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-900/10 hover:bg-amber-900/15 transition-colors text-xs font-bold"
+                >
+                  <CloudOff className="w-3.5 h-3.5" /> {t('connection.workOffline')}
+                </button>
+              )}
+              {manualOffline && (
+                <button
+                  onClick={() => useOfflineStore.getState().disableManualOffline()}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-xs font-bold"
+                >
+                  <PlugZap className="w-3.5 h-3.5" /> {t('connection.goOnline')}
+                </button>
               )}
               {status === 'online' && queueLen > 0 && !syncing && (
                 <button

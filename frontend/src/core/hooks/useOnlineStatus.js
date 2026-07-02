@@ -10,8 +10,11 @@ export function useOnlineStatus() {
   const setOffline = useOfflineStore((s) => s.setOffline)
 
   useEffect(() => {
-    const handleOnline = () => setOnline()
-    const handleOffline = () => setOffline()
+    const handleOnline = () => {
+      if (useOfflineStore.getState().manualOffline) return
+      setOnline()
+    }
+    const handleOffline = () => setOffline('browser_offline')
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
     return () => {

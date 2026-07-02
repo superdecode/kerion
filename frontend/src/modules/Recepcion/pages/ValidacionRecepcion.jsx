@@ -183,6 +183,17 @@ function getScanErrorMessage(err) {
   return 'Error al procesar escaneo'
 }
 
+function isRecoverableConnectionError(err) {
+  if ([502, 503, 504].includes(err?.response?.status)) return true
+  if (err?.response) return false
+  return (
+    err?.code === 'ERR_NETWORK' ||
+    err?.code === 'ECONNREFUSED' ||
+    err?.code === 'ECONNABORTED' ||
+    /Network Error|timeout|Backend temporarily unavailable/i.test(err?.message || '')
+  )
+}
+
 export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder = null, embedded = false, onBack, headerActionsSlot = null } = {}) {
   const { id: paramId } = useParams()
   const id = propOrderId ?? paramId
@@ -926,6 +937,62 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     if (!embedded) navigate('/recepcion/escanear')
   }, [crossOrderModal.order, embedded, navigate])
 
+  const queueRecepcionScanOffline = useCallback(({ code, sku = null, lineId = null, ubicacion = null, feedbackSeq = null, scannedBy = 'Pendiente local' }) => {
+    const offlineId = `offline-${Date.now()}`
+    const offlineAt = new Date().toISOString()
+    useOfflineStore.getState().enqueueModule({
+      type: 'recepcion_scan',
+      payload: {
+        orderId: id,
+        codigo_escaneado: code,
+        session_id: sessionId !== 'local' ? sessionId : null,
+        tarimas_enabled: withTarimas,
+        ubicacion: ubicacion || null,
+        local_id: offlineId,
+      },
+    })
+    publishLastResult({
+      result: 'correcto',
+      code,
+      sku,
+      tarimaNum: parseTarimaNumber(ubicacion),
+      at: offlineAt,
+    }, feedbackSeq)
+    const base = extractBaseCode(code)
+    const tarimaNum = parseTarimaNumber(ubicacion)
+    if (base && tarimaNum) {
+      setTarimaOverrides(prev => { const next = new Map(prev); next.set(base, tarimaNum); return next })
+    }
+    setHistory(prev => [{
+      id: offlineId,
+      result: 'correcto',
+      code,
+      sku,
+      scannedAt: offlineAt,
+      scannedBy,
+      ubicacion: ubicacion || null,
+    }, ...prev.slice(0, 49)])
+    if (lineId) {
+      qc.setQueryData(orderQueryKey, (cur) => {
+        if (!cur) return cur
+        return {
+          ...cur,
+          order: {
+            ...cur.order,
+            cajas_validadas: (cur.order?.cajas_validadas || 0) + 1,
+            cajas_registradas: (cur.order?.cajas_registradas || cur.order?.cajas_validadas || 0) + 1,
+          },
+          lines: (cur.lines || []).map(l =>
+            l.id === lineId
+              ? { ...l, estado_validacion: 'validada', validated_at: offlineAt, validated_by_nombre: scannedBy }
+              : l
+          ),
+        }
+      })
+    }
+    return { offlineId, offlineAt }
+  }, [id, orderQueryKey, publishLastResult, qc, sessionId, withTarimas])
+
   const scanMut = useMutation({
     mutationFn: ({ codigo, ubicacion }) => scanCode(id, { codigo_escaneado: codigo, session_id: sessionId, tarimas_enabled: withTarimas, ubicacion: ubicacion || null }),
     onSuccess: async (data, variables) => {
@@ -1010,13 +1077,35 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       else if (crossOrder) playSound('warning')
       else playSound('error')
     },
-    onError: (err) => {
+    onError: (err, variables) => {
       if (import.meta.env.DEV && scanStartRef.current != null) {
         const elapsed = performance.now() - scanStartRef.current
         console.debug(`[recepcion] scan client failed ${elapsed.toFixed(1)}ms`)
         scanStartRef.current = null
       }
+      const canQueueOffline = isRecoverableConnectionError(err) && variables?.offlineFallback?.code
+      if (canQueueOffline) {
+        useOfflineStore.getState().setConnectionDegraded('scan_network_failure')
+        startTransition(() => {
+          queueRecepcionScanOffline({
+            code: variables.offlineFallback.code,
+            sku: variables.offlineFallback.sku || null,
+            lineId: variables.offlineFallback.lineId || null,
+            ubicacion: variables.ubicacion || null,
+            feedbackSeq: variables.feedbackSeq,
+          })
+        })
+        playSound('success')
+        toast.info('Conexión lenta o fallida: escaneo guardado offline para sincronizar.')
+        return
+      }
       playSound('error')
+      publishLastResult({
+        result: 'no_encontrado',
+        code: variables?.codigo || '',
+        sku: null,
+        tarimaNum: parseTarimaNumber(variables?.ubicacion),
+      }, variables?.feedbackSeq)
       toast.error(getScanErrorMessage(err))
     },
     onSettled: (data, error, variables) => {
@@ -1270,12 +1359,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       const matchingLines = effectiveLines.filter(l => l.custom_box_barcode && codesMatch(l.custom_box_barcode, code))
       const pendingMatchingLine = matchingLines.find(l => l.estado_validacion !== 'validada') || null
       const matchedLineForScan = pendingMatchingLine || matchingLines[0] || null
+      const pendingLineForOptimisticScan = pendingMatchingLine || null
       const matchedStoredCode = getStoredLineCode(matchedLineForScan, code)
       const matchedTarimaCode = matchedLineForScan ? matchedStoredCode : ''
       const hasPendingMatchingLine = matchingLines.some(l => l.estado_validacion !== 'validada')
       const existing = history.find(h => codesMatch(h.code, code))
         || serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
-      if (matchingLines.length > 0 && !hasPendingMatchingLine) {
+      if (isOffline && matchingLines.length > 0 && !hasPendingMatchingLine) {
         playSound('duplicate')
         publishLastResult({
           result: 'duplicado',
@@ -1377,44 +1467,14 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               },
             })
           } else {
-            const offlineId = `offline-${Date.now()}`
-            useOfflineStore.getState().enqueueModule({
-              type: 'recepcion_scan',
-              payload: {
-                orderId: id,
-                codigo_escaneado: matchedStoredCode,
-                session_id: sessionId !== 'local' ? sessionId : null,
-                tarimas_enabled: withTarimas,
-                ubicacion: ubicacion || null,
-                local_id: offlineId,
-              },
+            queueRecepcionScanOffline({
+              code: matchedStoredCode,
+              sku: matchedLineForScan?.sku || null,
+              lineId: matchedLineForScan?.id || null,
+              ubicacion,
+              feedbackSeq,
+              scannedBy: '—',
             })
-            const base = extractBaseCode(matchedStoredCode)
-            if (base && tarimaNum) {
-              setTarimaOverrides(prev => { const next = new Map(prev); next.set(base, tarimaNum); return next })
-            }
-            setHistory(prev => [{
-              id: offlineId, result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null,
-              scannedAt: new Date().toISOString(), scannedBy: '—', ubicacion: ubicacion || null,
-            }, ...prev.slice(0, 49)])
-            if (matchedLineForScan) {
-              qc.setQueryData(orderQueryKey, (cur) => {
-                if (!cur) return cur
-              return {
-                ...cur,
-                  order: {
-                    ...cur.order,
-                    cajas_validadas: (cur.order?.cajas_validadas || 0) + 1,
-                    cajas_registradas: (cur.order?.cajas_registradas || cur.order?.cajas_validadas || 0) + 1,
-                  },
-                  lines: (cur.lines || []).map(l =>
-                    l.id === matchedLineForScan.id
-                      ? { ...l, estado_validacion: 'validada', validated_at: new Date().toISOString(), validated_by_nombre: '—' }
-                      : l
-                  ),
-                }
-              })
-            }
           }
         })
         if (offlineResult === 'correcto') playSound('success')
@@ -1424,16 +1484,27 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         return
       }
       if (import.meta.env.DEV) scanStartRef.current = performance.now()
-      if (matchedLineForScan) {
+      if (pendingLineForOptimisticScan) {
         const codeKey = code.toLowerCase()
         if (!inFlightCodes.current.has(codeKey)) {
           inFlightCodes.current.add(codeKey)
-          publishLastResult({ result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null, tarimaNum }, feedbackSeq)
+          publishLastResult({ result: 'correcto', code: matchedStoredCode, sku: pendingLineForOptimisticScan?.sku || null, tarimaNum }, feedbackSeq)
           playSound('success')
-          scanMut.mutate({ codigo: code, ubicacion, optimisticFeedback: true, feedbackSeq })
+          scanMut.mutate({
+            codigo: code,
+            ubicacion,
+            optimisticFeedback: true,
+            feedbackSeq,
+            offlineFallback: { code: matchedStoredCode, sku: pendingLineForOptimisticScan?.sku || null, lineId: pendingLineForOptimisticScan.id },
+          })
         } else {
-          publishLastResult({ result: 'correcto', code: matchedStoredCode, sku: matchedLineForScan?.sku || null, tarimaNum }, feedbackSeq)
-          scanMut.mutate({ codigo: code, ubicacion, feedbackSeq })
+          publishLastResult({ result: 'correcto', code: matchedStoredCode, sku: pendingLineForOptimisticScan?.sku || null, tarimaNum }, feedbackSeq)
+          scanMut.mutate({
+            codigo: code,
+            ubicacion,
+            feedbackSeq,
+            offlineFallback: { code: matchedStoredCode, sku: pendingLineForOptimisticScan?.sku || null, lineId: pendingLineForOptimisticScan.id },
+          })
         }
       } else {
         scanMut.mutate({ codigo: code, ubicacion, feedbackSeq })

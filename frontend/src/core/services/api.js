@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { useOfflineStore } from '../stores/offlineStore'
 
 function buildSameOriginApiUrl(pathname = '/api') {
   const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`
@@ -128,14 +129,23 @@ api.interceptors.response.use(
       backendUnavailableUntil = 0
       _onBackendStatus?.(true)
     }
+    useOfflineStore.getState().clearConnectionIssue()
     return response
   },
   (error) => {
-    const isNetworkFailure = !error.response && (error.code === 'ERR_NETWORK' || error.code === 'ECONNREFUSED' || /Network Error/i.test(error.message || ''))
-    const isServiceUnavailable = error.response?.status === 503
+    const isNetworkFailure = !error.response && (
+      error.code === 'ERR_NETWORK' ||
+      error.code === 'ECONNREFUSED' ||
+      error.code === 'ECONNABORTED' ||
+      /Network Error|timeout/i.test(error.message || '')
+    )
+    const isServiceUnavailable = [502, 503, 504].includes(error.response?.status)
     if ((isNetworkFailure || isServiceUnavailable) && !shouldSkipBackendCooldown(error.config)) {
       backendUnavailableUntil = Date.now() + BACKEND_COOLDOWN_MS
       _onBackendStatus?.(false)
+      useOfflineStore.getState().setConnectionDegraded(
+        isNetworkFailure ? 'network_failure' : 'server_unavailable'
+      )
     }
 
     // 429: set a per-endpoint cooldown so subsequent GET requests are blocked immediately
