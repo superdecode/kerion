@@ -18,10 +18,10 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-warm-50 bg-gradient-mesh">
-      {/* Mobile overlay backdrop — starts below header (top-14) so header stays interactive */}
+      {/* Mobile overlay backdrop — full screen, sidebar covers header when open */}
       {mobileOpen && (
         <div
-          className="fixed top-14 inset-x-0 bottom-0 z-[499] bg-black/60 md:hidden"
+          className="fixed inset-0 z-[499] bg-black/60 md:hidden"
           onClick={closeNav}
           aria-hidden="true"
         />

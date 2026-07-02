@@ -28,6 +28,7 @@ import {
   LayoutGrid,
   Download,
   ScanLine,
+  X,
 } from 'lucide-react'
 import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
@@ -237,7 +238,7 @@ export default function Sidebar() {
           return `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
             active
               ? 'bg-blue-600/25 text-white border border-blue-500/40'
-              : 'text-blue-100/80 hover:text-white hover:bg-white/10 border border-transparent'
+              : 'text-blue-100/80 hover:text-white hover:bg-white/10 border border-[#0b1437]'
           }`
         }}
       >
@@ -280,7 +281,7 @@ export default function Sidebar() {
             className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
               isOpen || hasActive
                 ? `${styles.activeBg} ${styles.activeBorder} text-white`
-                : 'border-transparent text-blue-100/80 hover:text-white hover:bg-white/10'
+                : 'border-[#0b1437] text-blue-100/80 hover:text-white hover:bg-white/10'
             }`}
           >
             <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -324,8 +325,8 @@ export default function Sidebar() {
   return (
     <aside
       className={[
-        // Mobile: fixed drawer below header (top-14 = 56px), slides from left
-        'fixed top-14 left-0 h-[calc(100dvh-3.5rem)] w-[280px]',
+        // Mobile: full-height fixed drawer (covers header + ConnectionBanner), slides from left
+        'fixed top-0 left-0 h-full w-[280px]',
         mobileOpen ? 'translate-x-0' : '-translate-x-full',
         'transition-transform duration-300 ease-in-out',
         // Desktop: relative sidebar in flex layout, full height
@@ -348,19 +349,29 @@ export default function Sidebar() {
           : <ChevronLeft className="w-3.5 h-3.5 text-blue-600" />}
       </button>
 
-      {/* Logo — hidden on mobile (already in header) */}
-      <div className={`hidden md:flex h-16 items-center border-b border-blue-900/50 flex-shrink-0 ${!showFull ? 'justify-center px-3' : 'px-4 gap-3'}`}>
-        <img src="/logo.png" alt="Kirion" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+      {/* Logo — mobile shows with close button, desktop shows collapse-aware */}
+      <div className={`h-14 md:h-16 flex items-center border-b border-blue-900/50 flex-shrink-0 ${!showFull ? 'justify-center px-3' : 'px-4 gap-3'}`}>
+        <img src="/logo.png" alt="Kirion" className="w-7 h-7 md:w-8 md:h-8 rounded-lg object-cover flex-shrink-0" />
         {showFull && (
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-white font-bold text-sm leading-none">Kirion</p>
             <p className="text-blue-300/80 text-[10px] font-semibold uppercase tracking-widest mt-0.5">WMS Auxiliar</p>
           </div>
         )}
+        {/* Close button — mobile only */}
+        {isMobile && (
+          <button
+            onClick={closeNav}
+            className="ml-auto p-1.5 rounded-lg text-blue-300/70 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
+            aria-label="Cerrar menú"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
-      {/* Nav */}
-      <nav data-tour="sidebar" className="flex-1 p-2 overflow-y-auto scrollbar-thin sidebar-scrollbar">
+      {/* Nav — flex-1 ensures it fills remaining height and scrolls */}
+      <nav data-tour="sidebar" className="flex-1 p-2 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="space-y-0.5">
           {/* Dashboard */}
           {canSeeDashboard && (() => {
@@ -374,7 +385,7 @@ export default function Sidebar() {
                 className={() => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 border ${
                   isActive
                     ? `${styles.activeBg} ${styles.activeBorder} text-white`
-                    : 'border-transparent text-blue-100/80 hover:text-white hover:bg-white/10'
+                    : 'border-[#0b1437] text-blue-100/80 hover:text-white hover:bg-white/10'
                 }`}
               >
                 <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-white/20' : styles.iconBg}`}>
@@ -403,7 +414,7 @@ export default function Sidebar() {
                     className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
                       isOpen || hasActive
                         ? `${styles.activeBg} ${styles.activeBorder} text-white`
-                        : 'border-transparent text-blue-100/80 hover:text-white hover:bg-white/10'
+                        : 'border-[#0b1437] text-blue-100/80 hover:text-white hover:bg-white/10'
                     }`}
                   >
                     <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${

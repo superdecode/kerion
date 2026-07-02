@@ -50,79 +50,58 @@ export default function ConnectionBanner() {
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.3 }}
-          className="overflow-hidden px-3 pt-3"
+          transition={{ duration: 0.25 }}
+          className="overflow-hidden"
         >
-          <div className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-2.5 text-sm font-semibold shadow-lg backdrop-blur-sm ${
+          <div className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold ${
             status === 'offline'
-              ? 'border-red-300/35 bg-gradient-to-r from-red-950/85 via-red-800/72 to-rose-500/60 text-white shadow-red-950/20'
+              ? 'bg-red-900 text-white'
               : degraded || syncError
-                ? 'border-amber-300/60 bg-gradient-to-r from-amber-200 via-orange-200 to-amber-100 text-amber-950'
-                : 'border-emerald-300/45 bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-500 text-white shadow-emerald-950/20'
+                ? 'bg-amber-100 text-amber-900 border-b border-amber-200'
+                : 'bg-emerald-700 text-white'
           }`}>
-            <div className="flex items-center gap-2">
-              {status === 'offline' ? (
-                <>
-                  <CloudOff className="w-4 h-4 animate-pulse" />
-                  <span>{manualOffline ? t('connection.manualOffline') : t('connection.offline')}</span>
-                </>
-              ) : degraded ? (
-                <>
-                  <WifiOff className="w-4 h-4" />
-                  <span>{t('connection.degraded')}</span>
-                </>
-              ) : syncError ? (
-                <>
-                  <AlertCircle className="w-4 h-4" />
-                  <span>{t('connection.syncError')}{syncError}</span>
-                </>
-              ) : (
-                <>
-                  <PlugZap className="w-4 h-4" />
-                  <span>{t('connection.restored')}</span>
-                </>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3">
-              {queueLen > 0 && (
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                  status === 'offline' ? 'bg-white/20' : 'bg-white/30'
-                }`}>
-                  {queueLen} {t('connection.pending')}
-                </span>
-              )}
-              {degraded && (
-                <button
-                  onClick={() => useOfflineStore.getState().enableManualOffline('connection_degraded')}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-900/10 hover:bg-amber-900/15 transition-colors text-xs font-bold"
-                >
-                  <CloudOff className="w-3.5 h-3.5" /> {t('connection.workOffline')}
-                </button>
-              )}
-              {manualOffline && (
-                <button
-                  onClick={() => useOfflineStore.getState().disableManualOffline()}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-xs font-bold"
-                >
-                  <PlugZap className="w-3.5 h-3.5" /> {t('connection.goOnline')}
-                </button>
-              )}
-              {status === 'online' && queueLen > 0 && !syncing && (
-                <button
-                  onClick={handleSync}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-xs font-bold"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> {t('connection.sync')}
-                </button>
-              )}
-              {syncing && (
-                <div className="flex items-center gap-1.5 text-xs">
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  {t('connection.syncing')}
-                </div>
-              )}
-            </div>
+            {status === 'offline' ? (
+              <CloudOff className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+            ) : degraded ? (
+              <WifiOff className="w-3.5 h-3.5 shrink-0" />
+            ) : syncError ? (
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            ) : (
+              <PlugZap className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span className="truncate flex-1 min-w-0">
+              {status === 'offline'
+                ? (manualOffline ? t('connection.manualOffline') : t('connection.offline'))
+                : degraded ? t('connection.degraded')
+                : syncError ? t('connection.syncError')
+                : t('connection.restored')}
+              {queueLen > 0 && ` · ${queueLen} ${t('connection.pending')}`}
+            </span>
+            {degraded && (
+              <button
+                onClick={() => useOfflineStore.getState().enableManualOffline('connection_degraded')}
+                className="shrink-0 px-2 py-0.5 rounded bg-amber-900/10 hover:bg-amber-900/20 transition-colors text-[11px] font-bold"
+              >
+                <CloudOff className="w-3 h-3 inline mr-1" />{t('connection.workOffline')}
+              </button>
+            )}
+            {manualOffline && (
+              <button
+                onClick={() => useOfflineStore.getState().disableManualOffline()}
+                className="shrink-0 px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 transition-colors text-[11px] font-bold"
+              >
+                <PlugZap className="w-3 h-3 inline mr-1" />{t('connection.goOnline')}
+              </button>
+            )}
+            {status === 'online' && queueLen > 0 && !syncing && (
+              <button
+                onClick={handleSync}
+                className="shrink-0 px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 transition-colors text-[11px] font-bold"
+              >
+                <RefreshCw className="w-3 h-3 inline mr-1" />{t('connection.sync')}
+              </button>
+            )}
+            {syncing && <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />}
           </div>
         </motion.div>
       )}
