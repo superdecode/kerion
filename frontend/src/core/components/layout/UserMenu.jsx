@@ -15,7 +15,7 @@ import { tourHelpVisible } from './OnboardingTour'
 
 const DISPLAY_PARENT = { fep: 'dropscan' }
 const PERM_MODULE_ORDER = ['dropscan', 'devoluciones', 'recepcion', 'inventario', 'surtido', 'despacho', 'anormalidades', 'sistema']
-const PERM_LEVEL_ORDER = ['eliminar', 'actualizar', 'crear', 'ver']
+const PERM_LEVEL_ORDER = ['eliminar', 'actualizar', 'editar', 'crear', 'ver']
 
 function getHighestLevel(perms) {
   if (typeof perms !== 'object') return perms

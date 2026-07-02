@@ -5,10 +5,10 @@ import { mockLogin, mockAuthMe } from '../services/mockAuth.js'
 import { setTimezone } from '../utils/dateFormat.js'
 
 /**
- * Permission resolution for 5-level system (action-verb names):
- * sin_acceso → ver → crear → actualizar → eliminar
+ * Permission resolution for 6-level system (action-verb names):
+ * sin_acceso → ver → crear → editar → actualizar → eliminar
  */
-const LEVEL_HIERARCHY = { sin_acceso: 0, ver: 1, crear: 2, actualizar: 3, eliminar: 4 }
+const LEVEL_HIERARCHY = { sin_acceso: 0, ver: 1, crear: 2, editar: 3, actualizar: 4, eliminar: 5 }
 
 // Legacy level mapping (for data that wasn't fully migrated)
 const LEGACY_MAP = { total: 'eliminar', gestion: 'actualizar', escritura: 'crear', lectura: 'ver' }
@@ -40,7 +40,7 @@ function normalizeLevel(level) {
 const ACTION_MIN_LEVEL = {
   ver: 'ver',
   crear: 'crear',
-  editar: 'crear',
+  editar: 'editar',
   imprimir: 'crear',
   actualizar: 'actualizar',
   cancelar: 'actualizar',
@@ -306,7 +306,7 @@ export const useAuthStore = create(
         if (!user) return false
         if (isTenantAdmin(user)) return true
         const level = getModuleLevel(user.permisos, modulePath)
-        return ['crear', 'actualizar', 'eliminar'].includes(level)
+        return ['crear', 'editar', 'actualizar', 'eliminar'].includes(level)
       },
 
       canDelete: (modulePath) => {

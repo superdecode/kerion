@@ -495,7 +495,7 @@ router.delete('/orders/:id/scan-events/:eventId',
 // POST /orders/:id/scan-events/:eventId/anormalidad — move a validated scan to novedades
 router.post('/orders/:id/scan-events/:eventId/anormalidad',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'editar'),
   async (req, res) => {
     try {
       const { tipo, ubicacion } = req.body
@@ -576,7 +576,7 @@ router.post('/orders/:id/scan-events/:eventId/anormalidad',
 
 router.post('/orders/:id/scan-events/anormalidad/bulk',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'editar'),
   async (req, res) => {
     try {
       const { tipo, ubicacion, event_ids } = req.body

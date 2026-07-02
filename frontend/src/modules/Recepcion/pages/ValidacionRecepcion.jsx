@@ -206,7 +206,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const toast = useToastStore()
   const qc = useQueryClient()
   const { hasPermission, isAuthenticated } = useAuthStore()
-  const canMarkAnormalidad = hasPermission('recepcion.validacion', 'actualizar')
+  const canMarkAnormalidad = hasPermission('recepcion.validacion', 'editar')
   const canUndoLastValidation = hasPermission('recepcion.validacion', 'crear')
   const canDeleteScan = hasPermission('recepcion.validacion', 'eliminar')
   const canReconfigureTarimas = hasPermission('recepcion.validacion', 'actualizar')
