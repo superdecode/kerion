@@ -2211,6 +2211,7 @@ export default function Escaneo() {
                     <input
                       ref={scanRef}
                       type="text"
+                      inputMode="none"
                       className="w-full pl-14 pr-5 py-5 text-xl bg-white border-2 border-warm-200 rounded-2xl
                         focus:border-primary-500 focus:shadow-glow
                         transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide"

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
+import { useNavStore } from '../../stores/navStore'
 import {
   LayoutDashboard,
   ScanBarcode,
@@ -32,15 +33,15 @@ import { useI18nStore } from '../../stores/i18nStore'
 import { useTourStore } from '../../stores/tourStore'
 
 const GROUP_STYLES = {
-  dashboard:    { iconBg: 'bg-indigo-500/20',  iconColor: 'text-indigo-400',  activeBg: 'bg-indigo-600/15',  activeBorder: 'border-indigo-500/30'  },
-  dropscan:     { iconBg: 'bg-blue-500/20',    iconColor: 'text-blue-400',    activeBg: 'bg-blue-600/15',    activeBorder: 'border-blue-500/30'    },
-  devoluciones: { iconBg: 'bg-amber-500/20',   iconColor: 'text-amber-400',   activeBg: 'bg-amber-600/15',   activeBorder: 'border-amber-500/30'   },
-  recepcion:    { iconBg: 'bg-sky-500/20',     iconColor: 'text-sky-400',     activeBg: 'bg-sky-600/15',     activeBorder: 'border-sky-500/30'     },
-  inventario:   { iconBg: 'bg-teal-500/20',    iconColor: 'text-teal-400',    activeBg: 'bg-teal-600/15',    activeBorder: 'border-teal-500/30'    },
-  surtido:      { iconBg: 'bg-violet-500/20',  iconColor: 'text-violet-400',  activeBg: 'bg-violet-600/15',  activeBorder: 'border-violet-500/30'  },
-  despacho:     { iconBg: 'bg-emerald-500/20', iconColor: 'text-emerald-400', activeBg: 'bg-emerald-600/15', activeBorder: 'border-emerald-500/30' },
-  anormalidades:{ iconBg: 'bg-rose-500/20',    iconColor: 'text-rose-400',    activeBg: 'bg-rose-600/15',    activeBorder: 'border-rose-500/30'    },
-  sistema:      { iconBg: 'bg-slate-500/20',   iconColor: 'text-slate-400',   activeBg: 'bg-slate-600/15',   activeBorder: 'border-slate-500/30'   },
+  dashboard:    { iconBg: 'bg-indigo-500/25',  iconColor: 'text-indigo-400',  activeBg: 'bg-indigo-600/20',  activeBorder: 'border-indigo-500/40'  },
+  dropscan:     { iconBg: 'bg-blue-500/25',    iconColor: 'text-blue-400',    activeBg: 'bg-blue-600/20',    activeBorder: 'border-blue-500/40'    },
+  devoluciones: { iconBg: 'bg-amber-500/25',   iconColor: 'text-amber-400',   activeBg: 'bg-amber-600/20',   activeBorder: 'border-amber-500/40'   },
+  recepcion:    { iconBg: 'bg-sky-500/25',     iconColor: 'text-sky-400',     activeBg: 'bg-sky-600/20',     activeBorder: 'border-sky-500/40'     },
+  inventario:   { iconBg: 'bg-teal-500/25',    iconColor: 'text-teal-400',    activeBg: 'bg-teal-600/20',    activeBorder: 'border-teal-500/40'    },
+  surtido:      { iconBg: 'bg-violet-500/25',  iconColor: 'text-violet-400',  activeBg: 'bg-violet-600/20',  activeBorder: 'border-violet-500/40'  },
+  despacho:     { iconBg: 'bg-emerald-500/25', iconColor: 'text-emerald-400', activeBg: 'bg-emerald-600/20', activeBorder: 'border-emerald-500/40' },
+  anormalidades:{ iconBg: 'bg-rose-500/25',    iconColor: 'text-rose-400',    activeBg: 'bg-rose-600/20',    activeBorder: 'border-rose-500/40'    },
+  sistema:      { iconBg: 'bg-slate-500/25',   iconColor: 'text-slate-400',   activeBg: 'bg-slate-600/20',   activeBorder: 'border-slate-500/40'   },
 }
 
 const getNavItems = (t) => [
@@ -90,9 +91,9 @@ const getNavItems = (t) => [
     label: t('nav.surtido'),
     icon: BadgeCheck,
     items: [
-      { path: '/Surtido/validacion', tourId: 'nav-sur-validacion', label: t('nav.sur.validacion'), icon: BadgeCheck, permission: 'surtido.validacion' },
+      { path: '/Surtido/validacion', tourId: 'nav-sur-validacion', label: t('nav.sur.validacion'), icon: BadgeCheck,    permission: 'surtido.validacion' },
       { path: '/surtido',            tourId: 'nav-sur-ordenes',    label: t('nav.sur.ordenes'),    icon: ClipboardList, permission: 'surtido.ordenes' },
-      { path: '/Surtido/registros',  tourId: 'nav-sur-registros',  label: t('nav.sur.registros'),  icon: History,    permission: 'surtido.registros' },
+      { path: '/Surtido/registros',  tourId: 'nav-sur-registros',  label: t('nav.sur.registros'),  icon: History,       permission: 'surtido.registros' },
     ],
   },
   {
@@ -110,26 +111,29 @@ const getNavItems = (t) => [
     label: t('nav.anormalidades'),
     icon: AlertTriangle,
     items: [
-      { path: '/Anormalidades/registro',      tourId: 'nav-anorm-registro',  label: t('nav.anorm.registro'),  icon: AlertTriangle,   permission: 'anormalidades.registro' },
-      { path: '/Anormalidades/mejoras',       tourId: 'nav-anorm-mejoras',   label: t('nav.anorm.mejoras'),   icon: Target,          permission: 'anormalidades.mejoras' },
-      { path: '/Anormalidades/configuracion', tourId: 'nav-anorm-config',    label: t('nav.configuration'),   icon: Settings,        permission: 'anormalidades.configuracion' },
+      { path: '/Anormalidades/registro',      tourId: 'nav-anorm-registro',  label: t('nav.anorm.registro'),  icon: AlertTriangle, permission: 'anormalidades.registro' },
+      { path: '/Anormalidades/mejoras',       tourId: 'nav-anorm-mejoras',   label: t('nav.anorm.mejoras'),   icon: Target,        permission: 'anormalidades.mejoras' },
+      { path: '/Anormalidades/configuracion', tourId: 'nav-anorm-config',    label: t('nav.configuration'),   icon: Settings,      permission: 'anormalidades.configuracion' },
     ],
   },
 ]
 
 const getAdminNav = (t) => [
   { path: '/sistema/conexion', tourId: 'nav-wmshub', label: t('nav.wms.config'),     icon: Wifi,      permission: 'sistema.wms' },
-  { path: '/admin',  tourId: 'nav-admin',  label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
+  { path: '/admin',            tourId: 'nav-admin',  label: t('nav.administration'), icon: Settings2, permission: 'global.administracion' },
 ]
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const [expandedGroups, setExpandedGroups] = useState(new Set())
+  const [isMobile, setIsMobile] = useState(false)
+
+  const { mobileOpen, closeNav } = useNavStore()
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)')
-    const handler = (e) => setCollapsed(e.matches)
-    if (mq.matches) setCollapsed(true)
+    const mq = window.matchMedia('(max-width: 767px)')
+    const handler = (e) => setIsMobile(e.matches)
+    setIsMobile(mq.matches)
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [])
@@ -150,6 +154,7 @@ export default function Sidebar() {
     })
     clearExpandGroup()
   }, [requestExpandGroup, clearExpandGroup])
+
   const navigate = useNavigate()
   const { pathname } = useLocation()
 
@@ -165,7 +170,6 @@ export default function Sidebar() {
     [user, navItems]
   )
 
-  // Dashboard is visible if user has actualizar+ on at least one module's key permission
   const DASHBOARD_PERMISSIONS = [
     'dropscan.dashboard', 'devoluciones.entradas', 'inventario.registros',
     'surtido.ordenes', 'despacho.folios', 'anormalidades.dashboard',
@@ -198,12 +202,19 @@ export default function Sidebar() {
 
   const roleName = user?.rol_nombre || user?.rol || ''
 
+  // On mobile, always show full content regardless of collapsed state
+  const showFull = !collapsed || isMobile
+
   const isChildActive = (item) => {
     const lp = pathname.toLowerCase()
     const ip = item.path.toLowerCase()
     if (item.path === '/surtido') return lp === '/surtido' || lp.startsWith('/surtido/ordenes')
     if (item.path === '/dropscan') return lp === '/dropscan'
     return lp === ip || lp.startsWith(ip + '/')
+  }
+
+  const handleNavClick = () => {
+    if (isMobile) closeNav()
   }
 
   const renderLink = (item) => {
@@ -220,12 +231,13 @@ export default function Sidebar() {
         to={item.path}
         end={item.path === '/dropscan' || item.path === '/surtido'}
         data-tour={item.tourId}
+        onClick={handleNavClick}
         className={({ isActive }) => {
           const active = forceActive !== null ? forceActive : isActive
-          return `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+          return `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
             active
-              ? 'bg-blue-600/25 text-blue-300 border border-blue-500/30'
-              : 'text-blue-200/70 hover:text-white hover:bg-white/10 border border-transparent'
+              ? 'bg-blue-600/25 text-white border border-blue-500/40'
+              : 'text-blue-100/80 hover:text-white hover:bg-white/10 border border-transparent'
           }`
         }}
       >
@@ -233,8 +245,8 @@ export default function Sidebar() {
           const active = forceActive !== null ? forceActive : isActive
           return (
             <>
-              <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-blue-400' : ''}`} />
-              {!collapsed && <span className="truncate flex-1">{item.label}</span>}
+              <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-blue-300' : 'text-blue-300/70'}`} />
+              {showFull && <span className="truncate flex-1">{item.label}</span>}
               {isTourHighlighted && (
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-white flex-shrink-0 tour-nav-arrow" aria-hidden="true">
                   <path d="M8 5l8 7-8 7V5z" />
@@ -252,11 +264,11 @@ export default function Sidebar() {
     const visibleItems = group.items.filter(item => canView(item.permission))
     if (visibleItems.length === 0) return null
 
-    if (collapsibleMode && !collapsed) {
+    if (collapsibleMode && showFull) {
       const isOpen = expandedGroups.has(group.id)
       const styles = GROUP_STYLES[group.id] || {
         iconBg: 'bg-white/10', iconColor: 'text-blue-400',
-        activeBg: 'bg-blue-600/15', activeBorder: 'border-blue-500/30',
+        activeBg: 'bg-blue-600/20', activeBorder: 'border-blue-500/40',
       }
       const GroupIcon = group.icon
       const hasActive = visibleItems.some(isChildActive)
@@ -265,10 +277,10 @@ export default function Sidebar() {
         <div key={group.id} className="mb-1">
           <button
             onClick={() => toggleGroup(group.id)}
-            className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 border ${
+            className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
               isOpen || hasActive
                 ? `${styles.activeBg} ${styles.activeBorder} text-white`
-                : 'border-transparent text-blue-200/70 hover:text-white hover:bg-white/10'
+                : 'border-transparent text-blue-100/80 hover:text-white hover:bg-white/10'
             }`}
           >
             <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -280,7 +292,7 @@ export default function Sidebar() {
             {hasActive && !isOpen && (
               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${styles.iconColor} bg-current`} />
             )}
-            <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 opacity-50 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
+            <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 opacity-60 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
           </button>
           {isOpen && (
             <div className="mt-0.5 ml-2 pl-2.5 border-l border-blue-900/40 pb-0.5 space-y-0.5">
@@ -291,11 +303,11 @@ export default function Sidebar() {
       )
     }
 
-    // Non-collapsible (≤3 groups) or icon-only sidebar
+    // Non-collapsible (≤3 groups) or icon-only desktop sidebar
     return (
       <div key={group.id} className="mb-3">
-        {!collapsed && (
-          <p className="px-3 text-[10px] font-semibold text-blue-400/60 uppercase tracking-widest mb-1.5">
+        {showFull && (
+          <p className="px-3 text-[10px] font-semibold text-blue-300/70 uppercase tracking-widest mb-1.5">
             {group.label}
           </p>
         )}
@@ -306,14 +318,29 @@ export default function Sidebar() {
     )
   }
 
+  // Sidebar z-index: tour overrides everything; mobile uses z-50 normally
+  const zClass = tourActive ? 'z-[100001]' : 'z-50 md:z-auto'
+
   return (
     <aside
-      className={`relative ${collapsed ? 'w-16' : 'w-60'} bg-[#0b1437] border-r border-blue-900/40 flex flex-col transition-all duration-200 flex-shrink-0 ${tourActive ? 'z-[100001]' : ''}`}
+      className={[
+        // Mobile: fixed drawer sliding from left
+        'fixed top-0 left-0 h-full w-72',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        'transition-transform duration-300 ease-in-out',
+        // Desktop: relative sidebar in flex layout
+        'md:relative md:top-auto md:left-auto md:h-auto md:flex-shrink-0',
+        'md:translate-x-0 md:transition-all md:duration-200',
+        collapsed ? 'md:w-16' : 'md:w-60',
+        // Common
+        'bg-[#0b1437] border-r border-blue-900/50 flex flex-col',
+        zClass,
+      ].join(' ')}
     >
-      {/* Collapse toggle */}
+      {/* Desktop collapse toggle — hidden on mobile */}
       <button
         onClick={() => setCollapsed(v => !v)}
-        className="absolute -right-3.5 top-[4.5rem] z-[90] w-7 h-7 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-colors shadow-md"
+        className="hidden md:flex absolute -right-3.5 top-[4.5rem] z-[90] w-7 h-7 rounded-full bg-white border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 items-center justify-center transition-colors shadow-md"
         title={collapsed ? t('nav.expand') : t('nav.collapse')}
       >
         {collapsed
@@ -322,12 +349,12 @@ export default function Sidebar() {
       </button>
 
       {/* Logo */}
-      <div className={`h-16 flex items-center border-b border-blue-900/40 flex-shrink-0 ${collapsed ? 'justify-center px-3' : 'px-4 gap-3'}`}>
+      <div className={`h-16 flex items-center border-b border-blue-900/50 flex-shrink-0 ${!showFull ? 'justify-center px-3' : 'px-4 gap-3'}`}>
         <img src="/logo.png" alt="Kirion" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
-        {!collapsed && (
+        {showFull && (
           <div className="min-w-0">
             <p className="text-white font-bold text-sm leading-none">Kirion</p>
-            <p className="text-blue-400 text-[10px] font-semibold uppercase tracking-widest mt-0.5">WMS Auxiliar</p>
+            <p className="text-blue-300/80 text-[10px] font-semibold uppercase tracking-widest mt-0.5">WMS Auxiliar</p>
           </div>
         )}
       </div>
@@ -335,7 +362,7 @@ export default function Sidebar() {
       {/* Nav */}
       <nav data-tour="sidebar" className="flex-1 p-2 overflow-y-auto scrollbar-thin sidebar-scrollbar">
         <div className="space-y-0.5">
-          {/* Dashboard consolidado — primera posición */}
+          {/* Dashboard */}
           {canSeeDashboard && (() => {
             const lp = pathname.toLowerCase()
             const isActive = lp === '/dashboard' || lp.startsWith('/dashboard?') || lp.startsWith('/dashboard/')
@@ -343,23 +370,24 @@ export default function Sidebar() {
             return (
               <NavLink
                 to="/dashboard"
-                className={() => `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors mb-1 border ${
+                onClick={handleNavClick}
+                className={() => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 border ${
                   isActive
                     ? `${styles.activeBg} ${styles.activeBorder} text-white`
-                    : 'border-transparent text-blue-200/70 hover:text-white hover:bg-white/10'
+                    : 'border-transparent text-blue-100/80 hover:text-white hover:bg-white/10'
                 }`}
               >
                 <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-white/20' : styles.iconBg}`}>
                   <LayoutGrid className={`w-3.5 h-3.5 ${isActive ? 'text-white' : styles.iconColor}`} />
                 </div>
-                {!collapsed && <span className="truncate flex-1">{t('nav.mainDashboard') || 'Dashboard'}</span>}
+                {showFull && <span className="truncate flex-1">{t('nav.mainDashboard') || 'Dashboard'}</span>}
               </NavLink>
             )
           })()}
           {navItems.map(renderGroup)}
         </div>
 
-        {/* Sistema — collapsible group */}
+        {/* Sistema */}
         {(() => {
           const visibleAdminItems = adminNav.filter(item => canView(item.permission))
           if (visibleAdminItems.length === 0) return null
@@ -368,14 +396,14 @@ export default function Sidebar() {
           const hasActive = visibleAdminItems.some(isChildActive)
           return (
             <div className="mt-3 pt-3 border-t border-blue-900/30">
-              {!collapsed ? (
+              {showFull ? (
                 <>
                   <button
                     onClick={() => toggleGroup('sistema')}
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 border ${
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
                       isOpen || hasActive
                         ? `${styles.activeBg} ${styles.activeBorder} text-white`
-                        : 'border-transparent text-blue-200/70 hover:text-white hover:bg-white/10'
+                        : 'border-transparent text-blue-100/80 hover:text-white hover:bg-white/10'
                     }`}
                   >
                     <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -387,7 +415,7 @@ export default function Sidebar() {
                     {hasActive && !isOpen && (
                       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${styles.iconColor} bg-current`} />
                     )}
-                    <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 opacity-50 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
+                    <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 opacity-60 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
                   </button>
                   {isOpen && (
                     <div className="mt-0.5 ml-2 pl-2.5 border-l border-blue-900/40 pb-0.5 space-y-0.5">
@@ -406,24 +434,24 @@ export default function Sidebar() {
       </nav>
 
       {/* Bottom — user info + logout */}
-      <div className="p-2 border-t border-blue-900/40 space-y-0.5">
-        {!collapsed && (
-          <div className="flex items-center gap-2.5 px-3 py-2 mb-1">
-            <div className="w-7 h-7 rounded-full bg-blue-700 flex items-center justify-center flex-shrink-0">
+      <div className="p-2 border-t border-blue-900/50 space-y-0.5">
+        {showFull && (
+          <div className="flex items-center gap-2.5 px-3 py-2 mb-1 rounded-lg bg-white/5">
+            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
               <span className="text-white text-xs font-bold">{initials}</span>
             </div>
             <div className="min-w-0">
-              <p className="text-white text-xs font-medium truncate">{user?.nombre_completo}</p>
-              <p className="text-blue-400/60 text-[10px] truncate">{roleName}</p>
+              <p className="text-white text-xs font-semibold truncate">{user?.nombre_completo}</p>
+              <p className="text-blue-300/70 text-[10px] truncate">{roleName}</p>
             </div>
           </div>
         )}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-blue-200/60 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-blue-200/70 hover:text-red-400 hover:bg-red-950/30 transition-colors"
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
-          {!collapsed && t('auth.logout')}
+          {showFull && t('auth.logout')}
         </button>
       </div>
     </aside>

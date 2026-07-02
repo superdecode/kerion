@@ -285,6 +285,32 @@
   .stagger-4 { animation-delay: 200ms; }
   .stagger-5 { animation-delay: 250ms; }
   .stagger-6 { animation-delay: 300ms; }
+
+  /* Mobile safe-area / viewport utilities */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Prevent layout shift when virtual keyboard opens on mobile */
+  .h-screen-safe {
+    height: 100dvh;
+  }
+
+  /* Touch-friendly tap targets for WMS scanner workflows */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Bottom sheet backdrop blur */
+  .sheet-backdrop {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
 }
 
 /* Driver.js onboarding tour — custom gradient style */

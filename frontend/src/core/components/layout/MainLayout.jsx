@@ -8,14 +8,27 @@ import WelcomeModal, { AutoTourLauncher } from './WelcomeModal'
 import BugReportButton from '../common/BugReportButton'
 import { useOnlineStatus } from '../../hooks/useOnlineStatus'
 import { usePermissionSync } from '../../hooks/usePermissionSync'
+import { useNavStore } from '../../stores/navStore'
 
 export default function MainLayout() {
   useOnlineStatus()
   usePermissionSync()
 
+  const { mobileOpen, closeNav } = useNavStore()
+
   return (
     <div className="flex h-screen overflow-hidden bg-warm-50 bg-gradient-mesh">
+      {/* Mobile overlay backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 md:hidden"
+          onClick={closeNav}
+          aria-hidden="true"
+        />
+      )}
+
       <Sidebar />
+
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <ConnectionBanner />
         <SubscriptionGuard>

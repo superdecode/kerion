@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
-import { ScanBarcode, Search, X, Plus, Loader2, ArrowRight } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ScanBarcode, Search, X, Plus, Loader2, ArrowRight, Layers, Keyboard } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import StatusPill from '../../../core/components/common/StatusPill'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -72,6 +72,7 @@ function SearchTab({ tabId, onConfirmOrder, openTabOrderIds, onGoToTab, t }) {
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [results, setResults] = useState(null)
+  const [keyboardMode, setKeyboardMode] = useState(false)
   const inputRef = useRef(null)
   const debounceRef = useRef(null)
 
@@ -140,14 +141,24 @@ function SearchTab({ tabId, onConfirmOrder, openTabOrderIds, onGoToTab, t }) {
           <input
             ref={inputRef}
             type="text"
+            inputMode={keyboardMode ? 'text' : 'none'}
             value={query}
             onChange={handleChange}
             onKeyDown={handleKey}
             placeholder={t('rec.escanear.search_placeholder')}
-            className="input-field pl-10 pr-10 font-mono w-full"
+            className="input-field pl-10 pr-20 font-mono w-full"
             autoComplete="off"
             spellCheck={false}
           />
+          {/* Keyboard toggle for mobile — lets user switch between scanner (no keyboard) and manual typing */}
+          <button
+            type="button"
+            onClick={() => { setKeyboardMode(v => !v); setTimeout(() => inputRef.current?.focus(), 50) }}
+            className={`absolute right-9 top-1/2 -translate-y-1/2 p-1 rounded transition-colors ${keyboardMode ? 'text-primary-500' : 'text-warm-300 hover:text-warm-500'}`}
+            title={keyboardMode ? 'Modo escáner (sin teclado)' : 'Activar teclado'}
+          >
+            <Keyboard size={14} />
+          </button>
           {searching && (
             <Loader2 size={15} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-warm-400 animate-spin" />
           )}
@@ -240,12 +251,69 @@ function TabBar({ tabs, activeTabId, onSelect, onClose, onAdd, t }) {
   )
 }
 
+/* ─── Mobile session picker (bottom sheet) ─────────────────── */
+function MobileSessionPicker({ tabs, activeTabId, onSelect, onClose, onCloseTab, t }) {
+  return (
+    <>
+      <motion.div
+        className="fixed inset-0 z-50 bg-black/50 md:hidden"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.div
+        className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl md:hidden safe-area-bottom"
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+      >
+        <div className="w-10 h-1 bg-warm-300 rounded-full mx-auto mt-3 mb-1" />
+        <div className="px-4 pb-2 pt-1 flex items-center justify-between">
+          <span className="text-sm font-bold text-warm-800">Sesiones activas</span>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400"><X size={16} /></button>
+        </div>
+        <div className="px-3 pb-6 space-y-2 max-h-64 overflow-y-auto">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => { onSelect(tab.id); onClose() }}
+              className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                tab.id === activeTabId
+                  ? 'border-sky-300 bg-sky-50'
+                  : 'border-warm-200 bg-warm-50 hover:bg-warm-100'
+              }`}
+            >
+              <ScanBarcode size={16} className={tab.id === activeTabId ? 'text-sky-500' : 'text-warm-400'} />
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold truncate ${tab.id === activeTabId ? 'text-sky-700' : 'text-warm-700'}`}>
+                  {tab.folio ?? t('rec.escanear.new_tab')}
+                </p>
+                {tab.cliente && <p className="text-xs text-warm-500 truncate">{tab.cliente}</p>}
+              </div>
+              {tab.id === activeTabId && (
+                <span className="text-[10px] font-bold text-sky-600 bg-sky-100 px-1.5 py-0.5 rounded shrink-0">Activa</span>
+              )}
+              {tabs.length > 1 && (
+                <button
+                  onClick={e => { e.stopPropagation(); onCloseTab(tab.id) }}
+                  className="p-1.5 hover:bg-danger-100 rounded-lg text-warm-300 hover:text-danger-500 transition-colors shrink-0"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </button>
+          ))}
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
 /* ─── Main page ────────────────────────────────────────────── */
 const INACTIVITY_MS = 30 * 60 * 1000
 
 export default function EscanearRecepcion() {
   const { t } = useI18nStore()
   const [actionsSlot, setActionsSlot] = useState(null)
+  const [mobilePickerOpen, setMobilePickerOpen] = useState(false)
   const qc = useQueryClient()
 
   const {
@@ -309,14 +377,55 @@ export default function EscanearRecepcion() {
         actions={<div ref={setActionsSlot} className="flex items-center gap-1.5 sm:gap-2" />}
       />
 
-      <TabBar
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onSelect={handleSelectTab}
-        onClose={closeTab}
-        onAdd={openEmptyTab}
-        t={t}
-      />
+      {/* Desktop tab bar */}
+      <div className="hidden md:block">
+        <TabBar
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onSelect={handleSelectTab}
+          onClose={closeTab}
+          onAdd={openEmptyTab}
+          t={t}
+        />
+      </div>
+
+      {/* Mobile session bar */}
+      <div className="md:hidden flex items-center gap-2 px-3 py-2.5 border-b border-warm-100 bg-white shrink-0">
+        <ScanBarcode size={14} className="text-sky-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <span className="text-sm font-semibold text-warm-800 truncate block">
+            {activeTab?.folio ?? t('rec.escanear.new_tab')}
+          </span>
+        </div>
+        {tabs.length > 1 && (
+          <button
+            onClick={() => setMobilePickerOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-1.5 rounded-lg font-semibold shrink-0 active:scale-95"
+          >
+            <Layers size={12} /> {tabs.length}
+          </button>
+        )}
+        <button
+          onClick={openEmptyTab}
+          className="flex items-center gap-1 text-xs text-success-600 bg-success-50 border border-success-200 px-2 py-1.5 rounded-lg font-semibold shrink-0 active:scale-95"
+          title={t('rec.escanear.new_tab')}
+        >
+          <Plus size={13} />
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {mobilePickerOpen && (
+          <MobileSessionPicker
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSelect={handleSelectTab}
+            onClose={() => setMobilePickerOpen(false)}
+            onCloseTab={closeTab}
+            t={t}
+          />
+        )}
+      </AnimatePresence>
 
       <div className="flex-1 overflow-hidden flex flex-col relative">
         {tabs.map(tab => (
