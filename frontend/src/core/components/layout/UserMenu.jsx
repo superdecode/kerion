@@ -489,6 +489,7 @@ export default function UserMenu({ compact = false }) {
                         <span className={`badge text-[10px] ${
                           level === 'eliminar' ? 'bg-primary-100 text-primary-700' :
                           level === 'actualizar' ? 'bg-accent-100 text-accent-700' :
+                          level === 'editar' ? 'bg-accent-50 text-accent-600 border border-accent-100' :
                           level === 'crear' ? 'bg-success-100 text-success-700' :
                           'bg-warning-100 text-warning-700'
                         }`}>{t(`perm.${level}`)}</span>
