@@ -283,69 +283,64 @@ export default function UserMenu({ compact = false }) {
         size="sm"
       >
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-400 to-primary-600 text-white flex items-center justify-center text-base font-bold shadow-md flex-shrink-0">
+          {/* Avatar + identity — centered stack, no side-by-side layout */}
+          <div className="flex flex-col items-center text-center gap-2 pb-1">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 text-white flex items-center justify-center text-xl font-bold shadow-md">
               {initials}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="group flex items-start gap-2">
-                {editingName ? (
-                  <div className="w-full space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        value={profileDraft.nombre}
-                        onChange={(e) => setProfileDraft((prev) => ({ ...prev, nombre: e.target.value }))}
-                        className="w-36 rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-warm-800 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-                        placeholder={t('auth.firstName')}
-                      />
-                      <input
-                        value={profileDraft.apellido}
-                        onChange={(e) => setProfileDraft((prev) => ({ ...prev, apellido: e.target.value }))}
-                        onKeyDown={(e) => e.key === 'Enter' && handleProfileSave()}
-                        className="w-44 rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-sm font-semibold text-warm-800 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-                        placeholder={t('auth.lastName')}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleProfileSave}
-                        disabled={savingProfile || !profileDraft.nombre.trim() || !profileDraft.apellido.trim()}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-primary-700 disabled:opacity-50 whitespace-nowrap"
-                      >
-                        {savingProfile ? <div className="h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                        {t('common.save')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingName(false)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-warm-600 hover:bg-warm-50 whitespace-nowrap"
-                      >
-                        {t('common.cancel')}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-2 min-w-0">
-                    <h3 className="text-lg font-bold text-warm-800 truncate">{user?.nombre_completo}</h3>
-                    <button
-                      type="button"
-                      onClick={() => setEditingName(true)}
-                      className="mt-0.5 rounded-lg p-1.5 text-warm-300 transition-all hover:bg-primary-50 hover:text-primary-600"
-                      title={t('auth.editName')}
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
+            {editingName ? (
+              <div className="w-full space-y-2">
+                <div className="flex flex-col gap-2">
+                  <input
+                    value={profileDraft.nombre}
+                    onChange={(e) => setProfileDraft((prev) => ({ ...prev, nombre: e.target.value }))}
+                    className="w-full rounded-lg border border-warm-200 bg-white px-2.5 py-2 text-sm font-semibold text-warm-800 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                    placeholder={t('auth.firstName')}
+                  />
+                  <input
+                    value={profileDraft.apellido}
+                    onChange={(e) => setProfileDraft((prev) => ({ ...prev, apellido: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleProfileSave()}
+                    className="w-full rounded-lg border border-warm-200 bg-white px-2.5 py-2 text-sm font-semibold text-warm-800 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                    placeholder={t('auth.lastName')}
+                  />
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleProfileSave}
+                    disabled={savingProfile || !profileDraft.nombre.trim() || !profileDraft.apellido.trim()}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {savingProfile ? <div className="h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    {t('common.save')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingName(false)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-xs font-semibold text-warm-600 hover:bg-warm-50"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </div>
               </div>
-              {!editingName && (
-                <>
-                  <p className="text-sm text-warm-500">{user?.email}</p>
-                  <span className="badge bg-primary-100 text-primary-700 mt-1">{user?.rol_nombre}</span>
-                </>
-              )}
-            </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-center gap-1.5 max-w-full">
+                  <h3 className="text-base font-bold text-warm-800 truncate">{user?.nombre_completo}</h3>
+                  <button
+                    type="button"
+                    onClick={() => setEditingName(true)}
+                    className="flex-shrink-0 rounded-lg p-1.5 text-warm-300 transition-all hover:bg-primary-50 hover:text-primary-600"
+                    title={t('auth.editName')}
+                  >
+                    <Edit3 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <p className="text-xs text-warm-500 truncate max-w-full">{user?.email}</p>
+                <span className="badge bg-primary-100 text-primary-700">{user?.rol_nombre}</span>
+              </>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
