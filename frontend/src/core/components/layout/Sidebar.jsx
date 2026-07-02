@@ -327,7 +327,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="min-w-0">
             <p className="text-white font-bold text-sm leading-none">Kirion</p>
-            <p className="text-blue-400 text-[10px] font-semibold uppercase tracking-widest mt-0.5">WMS</p>
+            <p className="text-blue-400 text-[10px] font-semibold uppercase tracking-widest mt-0.5">WMS Auxiliar</p>
           </div>
         )}
       </div>

@@ -5,7 +5,7 @@ const translations = {
   zh: {
     // General / 通用
     'app.name': 'Kirion',
-    'app.subtitle': '仓库管理系统',
+    'app.subtitle': '辅助系统',
     'app.version': 'V1.0.0',
     'common.search': '搜索',
     'common.searchGuide': '搜索面单号...',
@@ -3729,7 +3729,7 @@ const translations = {
   es: {
     // General
     'app.name': 'Kirion',
-    'app.subtitle': 'Sistema de Gestión de Almacén',
+    'app.subtitle': 'WMS Auxiliar',
     'app.version': 'V1.0.0',
     'common.search': 'Buscar',
     'common.searchGuide': 'Buscar guía...',

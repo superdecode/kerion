@@ -286,7 +286,7 @@ export default function PrintFolioContent({ folio, orders }) {
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <div style={{ marginTop: '14px', borderTop: '1px solid #c7d2fe', textAlign: 'center', fontSize: '8px', color: '#64748b', paddingTop: '7px' }}>
-        Generado el {new Date().toLocaleString('es-MX')} · Sistema Kirion WMS
+        Generado el {new Date().toLocaleString('es-MX')} · Sistema Kirion WMS Auxiliar
       </div>
     </div>
   )

@@ -151,7 +151,7 @@ export default function Login() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.7 }}
         >
-          Kirion WMS v1.0.0
+          Kirion WMS Auxiliar v1.0.0
         </motion.p>
       </motion.div>
     </div>

@@ -156,7 +156,7 @@ export function printFolio({ folio, orders }) {
     <div class="firma"><div class="firma-line"></div><div class="firma-label">Recibe</div></div>
   </div>
 
-  <div class="footer">Generado el ${new Date().toLocaleString('es-MX')} • Sistema Kirion WMS</div>
+  <div class="footer">Generado el ${new Date().toLocaleString('es-MX')} • Sistema Kirion WMS Auxiliar</div>
 </body>
 </html>`
 

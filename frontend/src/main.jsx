@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
-const APP_VERSION = '2026-06-15-v13'
+const APP_VERSION = '2026-07-02-v14'
 const APP_VERSION_KEY = 'kirion-app-version'
 const EXTENSION_ASYNC_RESPONSE_ERROR =
   'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received'

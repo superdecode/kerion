@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kirion-v13'
+const CACHE_NAME = 'kirion-v14'
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -24,7 +24,6 @@ self.addEventListener('activate', (event) => {
 })
 
 // Safe message handler for explicit SW commands.
-// Avoids dangling async responses and only replies when a MessagePort exists.
 self.addEventListener('message', (event) => {
   const data = event.data || {}
   const port = event.ports && event.ports[0]
@@ -70,11 +69,10 @@ self.addEventListener('fetch', (event) => {
   // API calls: always network, never cache
   if (url.pathname.startsWith('/api')) return
 
-  // Only cache same-origin GET requests
+  // Only handle same-origin GET requests
   if (request.method !== 'GET' || url.origin !== self.location.origin) return
 
-  // Never cache Vite dev-server internals — chunk hashes change on every restart
-  // and caching them causes "multiple React copies" errors in dev mode.
+  // Never cache Vite dev-server internals
   if (
     url.pathname.startsWith('/node_modules/') ||
     url.pathname.startsWith('/@') ||
@@ -82,7 +80,43 @@ self.addEventListener('fetch', (event) => {
     url.pathname.includes('/.vite/')
   ) return
 
-  // Static assets: try network first, fall back to cache
+  // Hashed JS/CSS assets: cache-first (filenames contain content hash, safe to cache forever)
+  const isHashedAsset = url.pathname.startsWith('/assets/')
+  if (isHashedAsset) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
+          }
+          return response
+        })
+        // If network fails and asset not cached, propagate the error
+        // so the browser shows a proper error instead of receiving HTML
+      })
+    )
+    return
+  }
+
+  // Navigation requests (HTML pages): network-first, fall back to cached shell
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
+          }
+          return response
+        })
+        .catch(() => caches.match('/'))
+    )
+    return
+  }
+
+  // Other static files (logo.png, manifest.json, etc.): network-first, fall back to cache only
   event.respondWith(
     fetch(request)
       .then((response) => {
@@ -92,6 +126,6 @@ self.addEventListener('fetch', (event) => {
         }
         return response
       })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
+      .catch(() => caches.match(request))
   )
 })
