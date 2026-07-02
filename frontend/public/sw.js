@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kirion-v14'
+const CACHE_NAME = 'kirion-v15'
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -100,18 +100,12 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Navigation requests (HTML pages): network-first, fall back to cached shell
+  // Navigation requests (HTML pages): network-first, fall back to install-time cached shell.
+  // Do NOT cache navigation responses — security checkpoints or other platform-level pages
+  // returned as 200 would otherwise overwrite the app shell in the cache.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone()
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
-          }
-          return response
-        })
-        .catch(() => caches.match('/'))
+      fetch(request).catch(() => caches.match('/'))
     )
     return
   }
