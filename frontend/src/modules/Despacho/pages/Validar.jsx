@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Plus, X, ScanBarcode, List, MapPin, Layers } from 'lucide-react'
+import { Plus, X, ScanBarcode, List, MapPin, Layers, Menu } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import UserMenu from '../../../core/components/layout/UserMenu'
+import { useNavStore } from '../../../core/stores/navStore'
 import FolioTypeModal from '../components/FolioTypeModal'
 import ValidarPorOrden from '../components/ValidarPorOrden'
 import ValidarPorDestino from '../components/ValidarPorDestino'
@@ -68,6 +69,7 @@ export default function Validar() {
   const { t } = useI18nStore()
   const { canWrite } = useAuthStore()
   const canCreate = canWrite('despacho.folios')
+  const { toggleNav } = useNavStore()
   const location = useLocation()
 
   const [tabs, setTabs] = useState(() => {
@@ -197,6 +199,13 @@ export default function Validar() {
     <div className="flex flex-col h-full bg-warm-50">
       {/* Page header */}
       <header className="bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-4 sm:px-5 py-3 flex items-center gap-2 sm:gap-3 flex-nowrap shrink-0 sticky top-0 z-10 overflow-visible">
+        <button
+          onClick={toggleNav}
+          className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-warm-500 hover:bg-warm-100 transition-colors"
+          aria-label="Abrir menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
         <div className="flex items-center gap-2.5 shrink-0 min-w-0 max-w-[11rem] sm:max-w-[14rem] lg:max-w-none">
           <ScanBarcode className="w-5 h-5 text-primary-600 shrink-0" />
           <h1 className="text-base font-bold text-warm-800 truncate whitespace-nowrap">{t('desp.validar.title')}</h1>

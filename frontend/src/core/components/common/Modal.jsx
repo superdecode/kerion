@@ -56,14 +56,14 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
 
           {/* Content */}
           <motion.div
-            className={`surface-enter ${sizes[size]} w-full bg-white rounded-2xl shadow-depth border border-warm-100 max-h-[96vh] flex flex-col relative z-10`}
+            className={`surface-enter ${sizes[size]} w-full bg-white rounded-2xl shadow-depth border border-warm-100 max-h-[88vh] sm:max-h-[96vh] flex flex-col relative z-10`}
             style={{ transformOrigin: 'center center', willChange: 'transform, opacity' }}
             initial={{ opacity: 0, scale: 0.985, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.99, y: 6 }}
             transition={{ type: 'spring', stiffness: 520, damping: 40, mass: 0.75 }}
           >
-            <div className="chrome-shell flex items-center justify-between px-6 py-4 border-b border-primary-100/60
+            <div className="chrome-shell flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-primary-100/60
                             bg-gradient-to-r from-primary-50/80 via-primary-100/50 to-accent-50/40 rounded-t-2xl">
               <div className="flex items-center gap-3">
                 {Icon && (
@@ -71,7 +71,7 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
                     <Icon className="w-4 h-4" />
                   </div>
                 )}
-                <h2 className="text-lg font-bold text-warm-800">{title}</h2>
+                <h2 className="text-base sm:text-lg font-bold text-warm-800">{title}</h2>
               </div>
               <div className="flex items-center gap-2">
                 {headerAction}
@@ -85,11 +85,11 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
                 </motion.button>
               </div>
             </div>
-            <div className="surface-enter-soft flex-1 overflow-y-auto px-6 py-5 scrollbar-thin">
+            <div className="surface-enter-soft flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 scrollbar-thin">
               {children}
             </div>
             {footer && (
-              <div className="px-6 py-2.5 border-t border-warm-100/60 flex items-center justify-end gap-3 bg-warm-50/30 rounded-b-2xl">
+              <div className="px-4 py-2.5 sm:px-6 border-t border-warm-100/60 flex items-center justify-end gap-3 bg-warm-50/30 rounded-b-2xl">
                 {footer}
               </div>
             )}

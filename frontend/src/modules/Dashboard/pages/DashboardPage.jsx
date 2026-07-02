@@ -3,11 +3,12 @@ import { useSearchParams } from 'react-router-dom'
 import {
   ScanBarcode, RotateCcw, Boxes, BadgeCheck, Truck,
   AlertTriangle, RefreshCw, PackageCheck, Settings2,
-  Download,
+  Download, Menu,
 } from 'lucide-react'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
+import { useNavStore } from '../../../core/stores/navStore'
 import { DateRangePicker } from '../components/DateRangePicker'
 import { getToday } from '../../../core/utils/dateFormat'
 import {
@@ -134,6 +135,7 @@ export default function DashboardPage() {
   const { hasPermission, isModuleEnabled, user } = useAuthStore()
   const enabledModules = useAuthStore(s => s.enabledModules)
   const { t } = useI18nStore()
+  const { toggleNav } = useNavStore()
   const [searchParams, setSearchParams] = useSearchParams()
   const [refreshKey, setRefreshKey] = useState(0)
   const [collapsed, setCollapsed] = useState(false)
@@ -275,8 +277,15 @@ export default function DashboardPage() {
       {/* Main content area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Module header */}
-        <div className="flex-shrink-0 bg-white border-b border-warm-100 px-5 py-3">
+        <div className="flex-shrink-0 bg-white border-b border-warm-100 px-4 md:px-5 py-3">
           <div className="flex items-center justify-between gap-4">
+            <button
+              onClick={toggleNav}
+              className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-warm-500 hover:bg-warm-100 transition-colors"
+              aria-label="Abrir menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
             {activeModule && (() => {
               const Icon = activeModule.icon
               const styles = COLOR_STYLES[activeModule.color]

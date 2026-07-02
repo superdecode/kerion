@@ -280,11 +280,11 @@ export default function UserMenu({ compact = false }) {
         isOpen={profileOpen}
         onClose={() => setProfileOpen(false)}
         title={t('auth.profile')}
-        size="md"
+        size="sm"
       >
-        <div className="space-y-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 text-white flex items-center justify-center text-xl font-bold shadow-lg">
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-400 to-primary-600 text-white flex items-center justify-center text-base font-bold shadow-md flex-shrink-0">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
@@ -348,22 +348,22 @@ export default function UserMenu({ compact = false }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-3 rounded-xl bg-warm-50">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-2.5 rounded-xl bg-warm-50">
               <div className="flex items-center gap-2 text-warm-400 mb-1">
                 <Shield className="w-3.5 h-3.5" />
                 <span className="text-[10px] uppercase tracking-wider font-bold">{t('profile.code')}</span>
               </div>
               <p className="text-sm font-semibold text-warm-700">{user?.codigo || '—'}</p>
             </div>
-            <div className="p-3 rounded-xl bg-warm-50">
+            <div className="p-2.5 rounded-xl bg-warm-50">
               <div className="flex items-center gap-2 text-warm-400 mb-1">
                 <Activity className="w-3.5 h-3.5" />
                 <span className="text-[10px] uppercase tracking-wider font-bold">{t('profile.status')}</span>
               </div>
               <p className="text-sm font-semibold text-success-600">{t('common.active')}</p>
             </div>
-            <div className="p-3 rounded-xl bg-warm-50">
+            <div className="p-2.5 rounded-xl bg-warm-50">
               <div className="flex items-center gap-2 text-warm-400 mb-2">
                 <Globe className="w-3.5 h-3.5" />
                 <span className="text-[10px] uppercase tracking-wider font-bold">{t('profile.language')}</span>
@@ -385,7 +385,7 @@ export default function UserMenu({ compact = false }) {
                 </button>
               </div>
             </div>
-            <div className="p-3 rounded-xl bg-warm-50 col-span-2">
+            <div className="p-2.5 rounded-xl bg-warm-50 col-span-2">
               <div className="flex items-center gap-2 text-warm-400 mb-1.5">
                 <Clock className="w-3.5 h-3.5" />
                 <span className="text-[10px] uppercase tracking-wider font-bold">{t('profile.timezone')}</span>

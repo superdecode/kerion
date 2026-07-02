@@ -608,7 +608,7 @@ export default function Rastreo() {
 
             <div className="card overflow-hidden shadow-sm table-shell">
               <div className="overflow-x-auto table-scroll">
-              <table className="w-full text-sm">
+              <table className="min-w-[700px] w-full text-sm">
                 <thead>
                   <tr className="bg-warm-50 border-b border-warm-100">
                     <th className="table-header w-10 text-center">

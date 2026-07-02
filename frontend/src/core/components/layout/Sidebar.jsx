@@ -237,8 +237,8 @@ export default function Sidebar() {
           const active = forceActive !== null ? forceActive : isActive
           return `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
             active
-              ? 'bg-blue-600/25 text-white border border-blue-500/40'
-              : 'text-blue-100/80 hover:text-white hover:bg-white/10 border border-[#0b1437]'
+              ? 'bg-blue-600/25 text-white ring-1 ring-inset ring-blue-500/40'
+              : 'text-blue-100/80 hover:text-white hover:bg-white/10'
           }`
         }}
       >
@@ -278,10 +278,10 @@ export default function Sidebar() {
         <div key={group.id} className="mb-1">
           <button
             onClick={() => toggleGroup(group.id)}
-            className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
+            className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
               isOpen || hasActive
-                ? `${styles.activeBg} ${styles.activeBorder} text-white`
-                : 'border-[#0b1437] text-blue-100/80 hover:text-white hover:bg-white/10'
+                ? `border ${styles.activeBg} ${styles.activeBorder} text-white`
+                : 'bg-transparent text-blue-100/80 hover:text-white hover:bg-white/10'
             }`}
           >
             <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -382,10 +382,10 @@ export default function Sidebar() {
               <NavLink
                 to="/dashboard"
                 onClick={handleNavClick}
-                className={() => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 border ${
+                className={() => `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
                   isActive
-                    ? `${styles.activeBg} ${styles.activeBorder} text-white`
-                    : 'border-[#0b1437] text-blue-100/80 hover:text-white hover:bg-white/10'
+                    ? `border ${styles.activeBg} ${styles.activeBorder} text-white`
+                    : 'text-blue-100/80 hover:text-white hover:bg-white/10'
                 }`}
               >
                 <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-white/20' : styles.iconBg}`}>
@@ -411,10 +411,10 @@ export default function Sidebar() {
                 <>
                   <button
                     onClick={() => toggleGroup('sistema')}
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                       isOpen || hasActive
-                        ? `${styles.activeBg} ${styles.activeBorder} text-white`
-                        : 'border-[#0b1437] text-blue-100/80 hover:text-white hover:bg-white/10'
+                        ? `border ${styles.activeBg} ${styles.activeBorder} text-white`
+                        : 'bg-transparent text-blue-100/80 hover:text-white hover:bg-white/10'
                     }`}
                   >
                     <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors ${
