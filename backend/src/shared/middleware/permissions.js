@@ -5,8 +5,7 @@
  * ─────────────────────────────────────────────
  * sin_acceso                  (none)
  * ver                         ver
- * crear                       ver, crear, imprimir
- * editar                      ver, crear, editar, imprimir
+ * crear                       ver, crear, editar, imprimir
  * actualizar                  ver, crear, editar, imprimir, cancelar, exportar, desbloquear
  * eliminar                    ALL (ver, crear, editar, imprimir, cancelar, exportar, desbloquear, eliminar)
  *
@@ -14,11 +13,11 @@
  *   total → eliminar, gestion → actualizar, escritura → crear, lectura → ver
  *
  * Frontend admin UI maps checkboxes to these same level names:
- *   [✓Ver] [✓Crear] [✓Editar] [✓Actualizar] [✓Eliminar]
- * Checking "Crear" also checks "Ver", checking "Editar" checks all previous, etc.
+ *   [✓Ver] [✓Crear] [✓Actualizar] [✓Eliminar]
+ * Checking "Crear" also checks "Ver", checking "Actualizar" checks all previous, etc.
  */
 
-const LEVEL_HIERARCHY = ['sin_acceso', 'ver', 'crear', 'editar', 'actualizar', 'eliminar']
+const LEVEL_HIERARCHY = ['sin_acceso', 'ver', 'crear', 'actualizar', 'eliminar']
 
 // Legacy level mapping (for data that wasn't fully migrated)
 const LEGACY_MAP = { total: 'eliminar', gestion: 'actualizar', escritura: 'crear', lectura: 'ver' }
@@ -45,7 +44,7 @@ function normalizeLevel(level) {
 const ACTION_MIN_LEVEL = {
   ver:         'ver',
   crear:       'crear',
-  editar:      'editar',
+  editar:      'crear',
   imprimir:    'crear',
   actualizar:  'actualizar',
   cancelar:    'actualizar',

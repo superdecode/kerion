@@ -103,12 +103,11 @@ const PERM_LEVELS = [
   { value: 'sin_acceso', label: 'Sin acceso', color: 'bg-warm-100 text-warm-500' },
   { value: 'ver', label: 'Ver', color: 'bg-warning-100 text-warning-700' },
   { value: 'crear', label: 'Crear', color: 'bg-success-100 text-success-700' },
-  { value: 'editar', label: 'Editar', color: 'bg-accent-100 text-accent-700' },
   { value: 'actualizar', label: 'Actualizar', color: 'bg-accent-100 text-accent-700' },
   { value: 'eliminar', label: 'Eliminar', color: 'bg-primary-100 text-primary-700' },
 ]
 
-const LEVEL_ORDER = ['sin_acceso', 'ver', 'crear', 'editar', 'actualizar', 'eliminar']
+const LEVEL_ORDER = ['sin_acceso', 'ver', 'crear', 'actualizar', 'eliminar']
 
 function CopyHoverText({ value, className = '' }) {
   const [copied, setCopied] = useState(false)
@@ -950,7 +949,6 @@ function RoleFormModal({ isOpen, onClose, role }) {
   const colLabels = [
     { key: 'ver', label: t('admin.view'), level: 'ver' },
     { key: 'crear', label: t('admin.create'), level: 'crear' },
-    { key: 'editar', label: t('admin.edit'), level: 'editar' },
     { key: 'actualizar', label: t('admin.update'), level: 'actualizar' },
     { key: 'eliminar', label: t('admin.delete'), level: 'eliminar' },
   ]
@@ -1036,7 +1034,7 @@ function RoleFormModal({ isOpen, onClose, role }) {
                 {MODULE_GROUPS.map(g => (
                   <Fragment key={g.groupKey}>
                     <tr className="bg-primary-50 border-y border-primary-100">
-                      <td colSpan={6} className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-primary-600">
+                      <td colSpan={5} className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-primary-600">
                         {t(g.groupKey) || g.group}
                       </td>
                     </tr>

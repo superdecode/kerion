@@ -858,8 +858,7 @@ const translations = {
     // Permission Levels / 权限级别
     'perm.ver': '查看',
     'perm.crear': '创建',
-    'perm.editar': '编辑',
-    'perm.actualizar': '更新',
+    'perm.actualizar': '编辑',
     'perm.eliminar': '删除',
 
     // Permission Modules / 权限模块
@@ -4521,8 +4520,7 @@ const translations = {
     'perm.sin_acceso': 'Sin Acceso',
     'perm.ver': 'Ver',
     'perm.crear': 'Crear',
-    'perm.editar': 'Editar',
-    'perm.actualizar': 'Actualizar',
+    'perm.actualizar': 'Editar',
     'perm.eliminar': 'Eliminar',
     // Permission Modules
     'perm.mod.dropscan': 'DropScan',
