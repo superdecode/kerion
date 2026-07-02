@@ -330,6 +330,10 @@ router.get('/orders/:id/scan-events',
     try {
       const resultados = String(req.query.resultados || '').trim()
       const compact = req.query.compact === '1'
+      const requestedLimit = parseInt(req.query.limit, 10)
+      const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, 100000)
+        : 10000
       const resultList = resultados
         ? resultados.split(',').map(v => v.trim()).filter(v => ['correcto', 'duplicado', 'no_encontrado'].includes(v))
         : []
@@ -352,10 +356,10 @@ router.get('/orders/:id/scan-events',
          LEFT JOIN usuarios u ON u.id = e.scanned_by
          WHERE ${where.join(' AND ')}
          ORDER BY e.scanned_at DESC
-         LIMIT 5000`,
-        params
+         LIMIT $${params.length + 1}`,
+        [...params, limit]
       )
-      res.json({ events: result.rows, truncated: result.rows.length === 5000 })
+      res.json({ events: result.rows, truncated: result.rows.length === limit, limit })
     } catch (err) {
       res.status(500).json({ error: 'Error al obtener eventos de escaneo' })
     }

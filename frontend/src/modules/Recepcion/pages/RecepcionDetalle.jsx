@@ -17,7 +17,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { getOrder, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos, markScanEventAsNovedad } from '../services/recepcionService'
+import { getOrder, getOrderExportData, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos, markScanEventAsNovedad } from '../services/recepcionService'
 import { STALE } from '../../../core/constants/queryConfig'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
@@ -171,6 +171,7 @@ export default function RecepcionDetalle() {
   const [eventSortKey, setEventSortKey] = useState('scanned_at')
   const [eventSortDir, setEventSortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [exportingScope, setExportingScope] = useState(null)
   const [nuevoTipo, setNuevoTipo] = useState('')
   const [nuevoCodigo, setNuevoCodigo] = useState('')
   const [nuevaUbicacion, setNuevaUbicacion] = useState('')
@@ -210,7 +211,7 @@ export default function RecepcionDetalle() {
 
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
-    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1 }),
+    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 100000 }),
     enabled: canQueryRecepcion && Boolean(data?.order),
     retry: false,
     staleTime: STALE.SHORT,
@@ -410,7 +411,6 @@ export default function RecepcionDetalle() {
 
   // Filtering and sorting happen server-side via orderQueryParams (lines_q, lines_sort_*)
   const displayLines = lines
-  const exportLines = lines
 
   const filteredEvents = useMemo(() => {
     const q = eventSearch.trim().toLowerCase()
@@ -466,17 +466,14 @@ export default function RecepcionDetalle() {
     </div>
   )
 
-  const handleExportWorkbook = () => {
-    const wb = XLSX.utils.book_new()
-
-    // Sheet 1: Detalle
-    const detalleRows = lines.map((l, i) => [
+  const appendDetalleSheet = (wb, exportData) => {
+    const detalleRows = (exportData.lines || []).map((l, i) => [
       i + 1, l.box_type || '', l.custom_box_barcode || '', l.sku || '',
       l.qty_per_box || '',
       l.length_oms || '', l.width_oms || '', l.height_oms || '', l.dimension_unit || '',
       l.weight_oms || '', l.weight_unit || '',
       t(`rec.line.status.${l.estado_validacion}`),
-      lineUbicacionMap.get(l.id) || '',
+      l.validation_ubicacion || lineUbicacionMap.get(l.id) || '',
       l.validated_by_nombre || '', l.validated_at ? fmtDateTime(l.validated_at) : '',
     ])
     const wsDetalle = XLSX.utils.aoa_to_sheet([
@@ -491,9 +488,10 @@ export default function RecepcionDetalle() {
       { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 18 },
     ]
     XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle')
+  }
 
-    // Sheet 2: Validación
-    const validRows = events.map((ev, i) => [
+  const appendValidacionSheet = (wb, exportData) => {
+    const validRows = (exportData.events || []).map((ev, i) => [
       i + 1,
       ev.codigo_escaneado || '',
       ev.sku_asociado || '',
@@ -511,9 +509,10 @@ export default function RecepcionDetalle() {
       { wch: 5 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 20 }, { wch: 18 },
     ]
     XLSX.utils.book_append_sheet(wb, wsValid, 'Validación')
+  }
 
-    // Sheet 3: Otros
-    const otrosRows = novedades.map((n, i) => [
+  const appendOtrosSheet = (wb, exportData) => {
+    const otrosRows = (exportData.novedades || []).map((n, i) => [
       i + 1,
       n.tipo || '',
       n.codigo || '',
@@ -527,74 +526,35 @@ export default function RecepcionDetalle() {
     ])
     wsOtros['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 18 }]
     XLSX.utils.book_append_sheet(wb, wsOtros, 'Otros')
-
-    XLSX.writeFile(wb, `${order.folio}-recepcion.xlsx`)
   }
 
-  const handleExportDetalle = () => {
-    const ws = XLSX.utils.aoa_to_sheet([
-      ['#', 'Box Type', 'Custom Box Barcode', 'SKU', 'Qty/Caja',
-       'Length (OMS)', 'Width (OMS)', 'Height (OMS)', 'Dim Unit', 'Weight (OMS)', 'Weight Unit',
-       'Estado', 'Ubicación', 'Validado por', 'Hora validación'],
-      ...exportLines.map((l, i) => [
-        i + 1, l.box_type || '', l.custom_box_barcode || '', l.sku || '',
-        l.qty_per_box || '',
-        l.length_oms || '', l.width_oms || '', l.height_oms || '', l.dimension_unit || '',
-        l.weight_oms || '', l.weight_unit || '',
-        t(`rec.line.status.${l.estado_validacion}`),
-        lineUbicacionMap.get(l.id) || '',
-        l.validated_by_nombre || '', l.validated_at ? fmtDateTime(l.validated_at) : '',
-      ]),
-    ])
-    ws['!cols'] = [
-      { wch: 5 }, { wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 10 },
-      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
-      { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 18 },
-    ]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Detalle')
-    XLSX.writeFile(wb, `${order.folio}-detalle.xlsx`)
+  const runExport = async (scope) => {
+    if (exportingScope) return
+    setExportingScope(scope)
+    try {
+      toast.info(t('rec.export.preparing'))
+      const exportData = await getOrderExportData(id, scope)
+      if (exportData.meta?.large_export) {
+        toast.info(t('rec.export.large').replace('{count}', Number(exportData.meta.total_rows || 0).toLocaleString('es-MX')))
+      }
+      const wb = XLSX.utils.book_new()
+      if (scope === 'all' || scope === 'detalle') appendDetalleSheet(wb, exportData)
+      if (scope === 'all' || scope === 'validacion') appendValidacionSheet(wb, exportData)
+      if (scope === 'all' || scope === 'otros') appendOtrosSheet(wb, exportData)
+      const suffix = scope === 'all' ? 'recepcion' : scope
+      XLSX.writeFile(wb, `${exportData.order?.folio || order.folio}-${suffix}.xlsx`)
+    } catch (err) {
+      const message = err.response?.data?.error || t('rec.export.error')
+      toast.error(message)
+    } finally {
+      setExportingScope(null)
+    }
   }
 
-  const handleExportValidacion = () => {
-    const ws = XLSX.utils.aoa_to_sheet([
-      ['#', 'Código Escaneado', 'SKU', 'Campo', 'Resultado', 'Ubicación', 'Escaneado por', 'Hora'],
-      ...sortedEvents.map((ev, i) => [
-        i + 1,
-        ev.codigo_escaneado || '',
-        ev.sku_asociado || '',
-        ev.match_field || '',
-        t(`rec.scan.result.${ev.resultado}`) || ev.resultado,
-        ev.ubicacion || '',
-        ev.scanned_by_nombre || '',
-        ev.scanned_at ? fmtDateTime(ev.scanned_at) : '',
-      ]),
-    ])
-    ws['!cols'] = [
-      { wch: 5 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 20 }, { wch: 18 },
-    ]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Validación')
-    XLSX.writeFile(wb, `${order.folio}-validacion.xlsx`)
-  }
-
-  const handleExportOtros = () => {
-    const ws = XLSX.utils.aoa_to_sheet([
-      ['#', t('rec.otros.col.tipo'), t('rec.otros.col.codigo'), t('rec.otros.col.ubicacion'), t('rec.otros.col.registrado_por'), t('rec.otros.col.fecha_hora')],
-      ...filteredNovedades.map((n, i) => [
-        i + 1,
-        n.tipo || '',
-        n.codigo || '',
-        n.ubicacion || '',
-        n.created_by_nombre || '',
-        n.created_at ? fmtDateTime(n.created_at) : '',
-      ]),
-    ])
-    ws['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 18 }]
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Otros')
-    XLSX.writeFile(wb, `${order.folio}-otros.xlsx`)
-  }
+  const handleExportWorkbook = () => runExport('all')
+  const handleExportDetalle = () => runExport('detalle')
+  const handleExportValidacion = () => runExport('validacion')
+  const handleExportOtros = () => runExport('otros')
 
   const handleListaRecepcion = async () => {
     setListaPreviewLoading(true)
@@ -638,9 +598,13 @@ export default function RecepcionDetalle() {
                 {t('rec.btn.listaRecepcion')}
               </button>
             )}
-            <button onClick={handleExportWorkbook} className="btn-ghost flex items-center gap-1.5 text-sm">
+            <button
+              onClick={handleExportWorkbook}
+              disabled={Boolean(exportingScope)}
+              className="btn-ghost flex items-center gap-1.5 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+            >
               <Download className="w-4 h-4" />
-              {t('rec.btn.exportar')}
+              {exportingScope === 'all' ? t('common.loading') : t('rec.btn.exportar')}
             </button>
             {canValidate && (
               <button
@@ -817,9 +781,13 @@ export default function RecepcionDetalle() {
                     </button>
                   )}
                 </div>
-                <button onClick={handleInlineExport} className="btn-ghost flex items-center gap-1.5 text-sm">
+                <button
+                  onClick={handleInlineExport}
+                  disabled={Boolean(exportingScope)}
+                  className="btn-ghost flex items-center gap-1.5 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                >
                   <Download className="w-4 h-4" />
-                  {t('rec.btn.exportar')}
+                  {exportingScope === activeTab ? t('common.loading') : t('rec.btn.exportar')}
                 </button>
               </div>
             </div>

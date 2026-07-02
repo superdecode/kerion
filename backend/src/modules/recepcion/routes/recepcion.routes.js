@@ -6,6 +6,8 @@ import { getRecepcionValidationRecordCount, refreshRecepcionOrderState } from '.
 
 const router = Router()
 let inboundLineColumnsCache = null
+const EXPORT_SYNC_WARN_ROWS = 100000
+const EXPORT_SYNC_MAX_ROWS = 150000
 
 function sanitizeValidationConfig(input = {}) {
   const toPositiveInt = (value, fallback) => {
@@ -106,6 +108,17 @@ function buildInboundLinesInsertPayload(lines, availableColumns, ctx) {
   return { columnsSql, unnestSql, params, activeColumns: activeSpecs.map((spec) => spec.column) }
 }
 
+function normalizeExportScope(value) {
+  return ['detalle', 'validacion', 'otros', 'all'].includes(value) ? value : 'all'
+}
+
+function sumExportCounts(counts, scope) {
+  if (scope === 'detalle') return counts.lines
+  if (scope === 'validacion') return counts.events
+  if (scope === 'otros') return counts.novedades
+  return counts.lines + counts.events + counts.novedades
+}
+
 // GET /orders/clientes — distinct client list for filter dropdown (must be before /orders/:id)
 router.get('/orders/clientes',
   authenticateToken, loadFullUser,
@@ -183,6 +196,109 @@ router.get('/orders',
     } catch (err) {
       console.error('[recepcion] list:', err.message)
       res.status(500).json({ error: 'Error al obtener órdenes de recepción' })
+    }
+  }
+)
+
+// GET /orders/:id/export-data — full export payload for one tab or the complete workbook.
+router.get('/orders/:id/export-data',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.recibir', 'ver'),
+  async (req, res) => {
+    try {
+      const scope = normalizeExportScope(String(req.query.scope || 'all'))
+      const orderRes = await req.tQuery(
+        `SELECT o.*, u.nombre_completo AS responsable_nombre
+         FROM inbound_orders o
+         LEFT JOIN usuarios u ON u.id = o.responsable_id
+         WHERE o.id=$1 AND o.tenant_id=$2
+         LIMIT 1`,
+        [req.params.id, req.tenantId]
+      )
+      if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
+
+      const countsRes = await req.tQuery(
+        `SELECT
+           (SELECT COUNT(*)::int FROM inbound_lines l WHERE l.order_id=$1 AND l.tenant_id=$2) AS lines,
+           (SELECT COUNT(*)::int FROM inbound_scan_events e WHERE e.order_id=$1 AND e.tenant_id=$2 AND e.resultado='correcto') AS events,
+           (SELECT COUNT(*)::int FROM inbound_novedades n WHERE n.order_id=$1 AND n.tenant_id=$2) AS novedades`,
+        [req.params.id, req.tenantId]
+      )
+      const counts = {
+        lines: Number(countsRes.rows[0]?.lines || 0),
+        events: Number(countsRes.rows[0]?.events || 0),
+        novedades: Number(countsRes.rows[0]?.novedades || 0),
+      }
+      const totalRows = sumExportCounts(counts, scope)
+      if (totalRows > EXPORT_SYNC_MAX_ROWS) {
+        return res.status(413).json({
+          error: `La exportación contiene ${totalRows.toLocaleString('es-MX')} registros. Usa filtros o solicita una exportación por lotes para evitar saturar el sistema.`,
+          code: 'EXPORT_TOO_LARGE',
+          counts,
+          limit: EXPORT_SYNC_MAX_ROWS,
+        })
+      }
+
+      const payload = {
+        order: orderRes.rows[0],
+        meta: {
+          scope,
+          counts,
+          total_rows: totalRows,
+          large_export: totalRows >= EXPORT_SYNC_WARN_ROWS,
+          limit: EXPORT_SYNC_MAX_ROWS,
+        },
+      }
+
+      if (scope === 'detalle' || scope === 'all') {
+        const linesRes = await req.tQuery(
+          `SELECT l.*, u.nombre_completo AS validated_by_nombre,
+                  last_event.ubicacion AS validation_ubicacion
+           FROM inbound_lines l
+           LEFT JOIN usuarios u ON u.id = l.validated_by
+           LEFT JOIN LATERAL (
+             SELECT e.ubicacion
+             FROM inbound_scan_events e
+             WHERE e.line_id = l.id AND e.tenant_id = l.tenant_id AND e.resultado = 'correcto'
+             ORDER BY e.scanned_at DESC
+             LIMIT 1
+           ) last_event ON true
+           WHERE l.order_id=$1 AND l.tenant_id=$2
+           ORDER BY l.created_at ASC, l.id ASC`,
+          [req.params.id, req.tenantId]
+        )
+        payload.lines = linesRes.rows
+      }
+
+      if (scope === 'validacion' || scope === 'all') {
+        const eventsRes = await req.tQuery(
+          `SELECT e.id, e.line_id, e.codigo_escaneado, e.sku_asociado, e.match_field, e.resultado,
+                  e.ubicacion, e.scanned_at, u.nombre_completo AS scanned_by_nombre
+           FROM inbound_scan_events e
+           LEFT JOIN usuarios u ON u.id = e.scanned_by
+           WHERE e.order_id=$1 AND e.tenant_id=$2 AND e.resultado='correcto'
+           ORDER BY e.scanned_at DESC, e.id DESC`,
+          [req.params.id, req.tenantId]
+        )
+        payload.events = eventsRes.rows
+      }
+
+      if (scope === 'otros' || scope === 'all') {
+        const novedadesRes = await req.tQuery(
+          `SELECT n.*, u.nombre_completo AS created_by_nombre
+           FROM inbound_novedades n
+           LEFT JOIN usuarios u ON u.id = n.created_by
+           WHERE n.order_id=$1 AND n.tenant_id=$2
+           ORDER BY n.created_at DESC, n.id DESC`,
+          [req.params.id, req.tenantId]
+        )
+        payload.novedades = novedadesRes.rows
+      }
+
+      res.json(payload)
+    } catch (err) {
+      console.error('[recepcion] export-data:', err.message)
+      res.status(500).json({ error: 'Error al preparar exportación de recepción' })
     }
   }
 )
@@ -484,7 +600,7 @@ router.get('/orders/:id',
     try {
       const page = Math.max(1, parseInt(req.query.lines_page, 10) || 1)
       const requestedLimit = parseInt(req.query.lines_limit, 10) || 100
-      const maxLimit = req.query.validation_mode === '1' ? 10000 : 500
+      const maxLimit = req.query.validation_mode === '1' ? 100000 : 500
       const limit = Math.min(maxLimit, Math.max(25, requestedLimit))
       const offset = (page - 1) * limit
       const q = String(req.query.lines_q || '').trim()

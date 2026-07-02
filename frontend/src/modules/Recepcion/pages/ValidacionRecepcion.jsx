@@ -331,7 +331,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     error: linesError,
   } = useQuery({
     queryKey: orderQueryKey,
-    queryFn: () => getOrder(id, { validation_mode: 1, lines_limit: 10000, lines_sort_key: 'created_at', lines_sort_dir: 'asc' }),
+    queryFn: () => getOrder(id, { validation_mode: 1, lines_limit: 100000, lines_sort_key: 'created_at', lines_sort_dir: 'asc' }),
     enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.FROZEN,
@@ -347,7 +347,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
-    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1 }),
+    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 100000 }),
     enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.DEFAULT,
@@ -393,6 +393,57 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     [savedValidationConfig?.emptyTarimas]
   )
   const correctHistory = useMemo(() => history.filter((h) => h.result === 'correcto'), [history])
+  const unifiedCorrectScanEvents = useMemo(() => {
+    const entries = []
+    const persistedIds = new Set()
+    const persistedCodeLocationKeys = new Set()
+    const addPersistedKey = (code, ubicacion) => {
+      const normalizedCode = normalizeScanCode(code)
+      if (!normalizedCode) return
+      persistedCodeLocationKeys.add(`${normalizedCode}:${String(ubicacion || '')}`)
+    }
+
+    for (const ev of serverEvents) {
+      if (ev.resultado !== 'correcto') continue
+      if (ev.id) persistedIds.add(String(ev.id))
+      addPersistedKey(ev.codigo_escaneado, ev.ubicacion)
+      entries.push({
+        id: ev.id,
+        code: ev.codigo_escaneado,
+        ubicacion: ev.ubicacion || null,
+        scannedAt: ev.scanned_at,
+        scannedBy: ev.scanned_by_nombre,
+        lineId: ev.line_id,
+        persisted: true,
+      })
+    }
+
+    const localSeen = new Set()
+    const addLocal = (scan, fallbackUbicacion = null) => {
+      const normalizedCode = normalizeScanCode(scan.code)
+      if (!normalizedCode) return
+      const ubicacion = scan.ubicacion || fallbackUbicacion || null
+      if (scan.id && persistedIds.has(String(scan.id))) return
+      if (persistedCodeLocationKeys.has(`${normalizedCode}:${String(ubicacion || '')}`)) return
+      const key = `${scan.id || ''}:${normalizedCode}:${String(ubicacion || '')}:${scan.scannedAt || ''}`
+      if (localSeen.has(key)) return
+      localSeen.add(key)
+      entries.push({
+        id: scan.id,
+        code: scan.code,
+        ubicacion,
+        scannedAt: scan.scannedAt,
+        scannedBy: scan.scannedBy,
+        lineId: scan.line_id || scan.lineId || null,
+        persisted: false,
+      })
+    }
+
+    for (const h of correctHistory) addLocal(h, selectedUbicacion)
+    for (const pending of pendingRecepcionScans) addLocal(pending)
+
+    return entries
+  }, [serverEvents, correctHistory, pendingRecepcionScans, selectedUbicacion])
   const localValidationScans = useMemo(() => {
     const seen = new Set()
     return [...correctHistory, ...pendingRecepcionScans].filter((scan) => {
@@ -411,10 +462,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const totalRegistradas = Number(order?.cajas_registradas ?? order?.cajas_validadas ?? 0)
   const totalForzadas = Number(order?.cajas_forzadas ?? 0)
   const serverCorrectScanCount = serverEvents.filter((ev) => ev.resultado === 'correcto').length
+  const unifiedCorrectScanCount = unifiedCorrectScanEvents.length
   const validationRecordsCount = Math.max(
     totalRegistradas,
     totalForzadas,
     serverCorrectScanCount + totalForzadas,
+    unifiedCorrectScanCount + totalForzadas,
     correctHistory.length,
     pendingRecepcionScans.length
   )
@@ -555,7 +608,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       const base = extractBaseCode(storedCode)
       const num = parseTarimaNumber(ubicacion) || (base ? effectiveTarimaMap.get(base) : null)
       if (!num) return
-      const key = eventId ? String(eventId) : `${storedCode}:${scannedAt || ''}:${ubicacion || ''}`
+      const key = eventId && persisted ? String(eventId) : `${normalizeScanCode(storedCode)}:${scannedAt || ''}:${ubicacion || ''}`
       if (seen.has(key)) return
       seen.add(key)
       const list = map.get(num) || []
@@ -570,35 +623,14 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       map.set(num, list)
     }
 
-    for (const ev of serverEvents) {
-      if (ev.resultado !== 'correcto') continue
+    for (const ev of unifiedCorrectScanEvents) {
       add({
         id: ev.id,
-        code: ev.codigo_escaneado,
+        code: ev.code,
         ubicacion: ev.ubicacion,
-        scannedAt: ev.scanned_at,
-        scannedBy: ev.scanned_by_nombre,
-        persisted: true,
-      })
-    }
-    for (const h of correctHistory) {
-      add({
-        id: h.id,
-        code: h.code,
-        ubicacion: h.ubicacion,
-        scannedAt: h.scannedAt,
-        scannedBy: h.scannedBy,
-        persisted: isPersistedScanEventId(h.id),
-      })
-    }
-    for (const pending of pendingRecepcionScans) {
-      add({
-        id: pending.id,
-        code: pending.code,
-        ubicacion: pending.ubicacion,
-        scannedAt: pending.scannedAt,
-        scannedBy: pending.scannedBy,
-        persisted: false,
+        scannedAt: ev.scannedAt,
+        scannedBy: ev.scannedBy,
+        persisted: ev.persisted,
       })
     }
 
@@ -606,7 +638,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       list.sort((a, b) => new Date(b.scannedAt || 0) - new Date(a.scannedAt || 0))
     }
     return map
-  }, [isTarimaMode, serverEvents, correctHistory, pendingRecepcionScans, effectiveTarimaMap])
+  }, [isTarimaMode, unifiedCorrectScanEvents, effectiveTarimaMap])
 
   // Dynamic active set: first N incomplete tarimas in the current visual order
   const activeTarimaSet = useMemo(() => {
@@ -652,36 +684,18 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     })
   }, [])
 
-  // Server events grouped by ubicacion (persists across page reloads / different computers)
+  // Unified scan events grouped by ubicacion (server truth plus non-persisted local queue)
   const allUbicacionGroups = useMemo(() => {
     if (isTarimaMode) return []
     const map = new Map()
-    // Load from server events (source of truth)
-    for (const ev of serverEvents) {
-      if (ev.resultado !== 'correcto') continue
+    const seen = new Set()
+    for (const ev of unifiedCorrectScanEvents) {
       const key = ev.ubicacion ?? ''
       const existing = map.get(key) ?? { ubicacion: ev.ubicacion || null, codes: [] }
-      existing.codes.push({ id: ev.id, code: ev.codigo_escaneado, scannedAt: ev.scanned_at })
-      map.set(key, existing)
-    }
-    // Merge current in-session history (optimistic — may not yet be in server events)
-    const activeCodes = correctHistory
-    if (activeCodes.length > 0) {
-      const key = selectedUbicacion ?? ''
-      const existing = map.get(key) ?? { ubicacion: selectedUbicacion, codes: [] }
-      const serverIds = new Set(existing.codes.map(c => c.id))
-      for (const h of activeCodes) {
-        if (!serverIds.has(h.id)) existing.codes.push({ id: h.id, code: h.code, scannedAt: h.scannedAt })
-      }
-      map.set(key, existing)
-    }
-    for (const pending of pendingRecepcionScans) {
-      const key = pending.ubicacion ?? ''
-      const existing = map.get(key) ?? { ubicacion: pending.ubicacion, codes: [] }
-      const existingIds = new Set(existing.codes.map(c => c.id))
-      if (!existingIds.has(pending.id)) {
-        existing.codes.push({ id: pending.id, code: pending.code, scannedAt: pending.scannedAt })
-      }
+      const eventKey = ev.id && ev.persisted ? String(ev.id) : `${normalizeScanCode(ev.code)}:${key}:${ev.scannedAt || ''}`
+      if (seen.has(eventKey)) continue
+      seen.add(eventKey)
+      existing.codes.push({ id: ev.id, code: ev.code, scannedAt: ev.scannedAt })
       map.set(key, existing)
     }
     return Array.from(map.values()).sort((a, b) => {
@@ -689,7 +703,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       if (!b.ubicacion) return -1
       return a.ubicacion.localeCompare(b.ubicacion)
     })
-  }, [serverEvents, correctHistory, pendingRecepcionScans, selectedUbicacion, isTarimaMode])
+  }, [unifiedCorrectScanEvents, isTarimaMode])
 
   const filteredUbicacionGroups = useMemo(() => {
     if (isTarimaMode) return []
@@ -726,13 +740,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   }, [allUbicacionGroups, selectedUbicacion, ubicacionConfirmed, isTarimaMode])
   const activeUbicacionScanCount = activeUbicacionGroup?.codes.length ?? 0
   const latestPersistedValidationEvent = useMemo(() => {
-    const events = [...correctHistory, ...serverEvents]
-      .filter((event) => event.result === 'correcto' || event.resultado === 'correcto')
-      .filter((event) => event.line_id || event.id)
+    const events = unifiedCorrectScanEvents
+      .filter((event) => event.lineId || event.id)
       .filter((event) => isPersistedScanEventId(event.id))
-      .sort((a, b) => new Date(b.scannedAt || b.scanned_at || 0) - new Date(a.scannedAt || a.scanned_at || 0))
+      .sort((a, b) => new Date(b.scannedAt || 0) - new Date(a.scannedAt || 0))
     return events[0] ?? null
-  }, [correctHistory, serverEvents])
+  }, [unifiedCorrectScanEvents])
   const latestPersistedValidationId = latestPersistedValidationEvent?.id ?? null
   const activeTarimaPersistedEventIds = useMemo(
     () => (

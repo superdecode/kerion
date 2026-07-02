@@ -4,6 +4,8 @@ export const listOrders = (params = {}) => api.get('/recepcion/orders', { params
 export const listClientes = () => api.get('/recepcion/orders/clientes').then(r => r.data)
 export const createOrder = (payload, options = {}) => api.post('/recepcion/orders', payload, options).then(r => r.data)
 export const getOrder = (id, params = {}) => api.get(`/recepcion/orders/${id}`, { params }).then(r => r.data)
+export const getOrderExportData = (id, scope = 'all') =>
+  api.get(`/recepcion/orders/${id}/export-data`, { params: { scope }, timeout: 120000 }).then(r => r.data)
 export const updateOrder = (id, payload) => api.patch(`/recepcion/orders/${id}`, payload).then(r => r.data)
 export const deleteOrder = (id) => api.delete(`/recepcion/orders/${id}`).then(r => r.data)
 export const updateLine = (lineId, payload) => api.patch(`/recepcion/lines/${lineId}`, payload).then(r => r.data)
