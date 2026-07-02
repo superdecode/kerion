@@ -2281,7 +2281,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             <button
               type="button"
               onClick={() => setForceCloseOpen(true)}
-              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors"
+              className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors"
               title={t('rec.val.forceClose.title')}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
@@ -2346,7 +2346,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               <span className="sm:hidden">OK</span>
             </button>
           )}
-          <button type="button" onClick={() => setForceCloseOpen(true)} className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors" title={t('rec.val.forceClose.title')}>
+          <button type="button" onClick={() => setForceCloseOpen(true)} className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors" title={t('rec.val.forceClose.title')}>
             <AlertTriangle className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
           </button>

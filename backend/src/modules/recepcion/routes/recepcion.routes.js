@@ -744,7 +744,7 @@ router.patch('/orders/:id',
       const updatingValidationConfig = validation_config !== undefined
       const canUpdateRecepcion = hasModulePermission(req.fullUser, 'recepcion.recibir', 'actualizar')
       const canUpdateValidation = hasModulePermission(req.fullUser, 'recepcion.validacion', 'actualizar')
-      if (updatingState && !canUpdateRecepcion) {
+      if (updatingState && !canUpdateRecepcion && !canUpdateValidation) {
         return res.status(403).json({ error: 'No tienes permisos para actualizar la orden' })
       }
       if (updatingValidationConfig && !canUpdateValidation && !canUpdateRecepcion) {
