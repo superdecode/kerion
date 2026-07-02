@@ -145,7 +145,7 @@ export default function UserMenu({ compact = false }) {
         <AnimatePresence>
           {userMenuOpen && (
             <motion.div
-              className="absolute right-0 top-full mt-2 w-72 bg-white/95 backdrop-blur-xl rounded-2xl shadow-depth border border-white/60 overflow-hidden z-[10021]"
+              className="fixed right-2 top-14 w-64 bg-white rounded-2xl shadow-xl border border-warm-200 overflow-hidden z-[10021] md:absolute md:right-0 md:top-full md:mt-2 md:w-72 md:bg-white/95 md:backdrop-blur-xl md:shadow-depth md:border-white/60"
               initial={{ opacity: 0, scale: 0.95, y: -5 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -5 }}
