@@ -1827,16 +1827,20 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   <p className="text-[9px] font-semibold uppercase tracking-wide opacity-70">{t('rec.cajas_validadas')}</p>
                 </div>
               )}
-              {canMarkAnormalidad && activeTarimaPersistedEventIds.length > 0 && (
+              {canMarkAnormalidad && activeTarimaStat && (
                 <button
                   type="button"
-                  onClick={() => openBulkMarkAnormalidad({
-                    eventIds: activeTarimaPersistedEventIds,
-                    count: activeTarimaPersistedEventIds.length,
-                    scopeLabel: `T${lastTarimaNum}`,
-                    ubicacion: formatTarimaLocation(lastTarimaNum) || '',
-                  })}
-                  className="shrink-0 p-1.5 rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors"
+                  onClick={() => {
+                    if (activeTarimaPersistedEventIds.length === 0) return
+                    openBulkMarkAnormalidad({
+                      eventIds: activeTarimaPersistedEventIds,
+                      count: activeTarimaPersistedEventIds.length,
+                      scopeLabel: `T${lastTarimaNum}`,
+                      ubicacion: formatTarimaLocation(lastTarimaNum) || '',
+                    })
+                  }}
+                  disabled={activeTarimaPersistedEventIds.length === 0 || markScanEventAsNovedadMut.isPending || markScanEventsAsNovedadBulkMut.isPending}
+                  className="shrink-0 p-1.5 rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors disabled:opacity-35 disabled:cursor-not-allowed"
                   title={t('rec.val.markAnormalidad.tooltip')}
                 >
                   <AlertTriangle size={12} />
@@ -1970,16 +1974,20 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${isExpanded ? '-rotate-180' : ''} ${isActive ? 'text-white/60' : 'text-warm-300'}`} />
                 </button>
                 {withTarimas && (
-                  isActive && canMarkAnormalidad && activeTarimaPersistedEventIds.length > 0 && (
+                  isActive && canMarkAnormalidad && (
                     <button
                       type="button"
-                      onClick={() => openBulkMarkAnormalidad({
-                        eventIds: activeTarimaPersistedEventIds,
-                        count: activeTarimaPersistedEventIds.length,
-                        scopeLabel: `T${ts.num}`,
-                        ubicacion: formatTarimaLocation(ts.num) || '',
-                      })}
-                      className={`p-2 rounded-lg transition-colors shrink-0 ${isActive ? 'text-white/70 hover:bg-white/20 hover:text-white' : 'text-warning-500 hover:text-warning-700 hover:bg-warning-50'}`}
+                      onClick={() => {
+                        if (activeTarimaPersistedEventIds.length === 0) return
+                        openBulkMarkAnormalidad({
+                          eventIds: activeTarimaPersistedEventIds,
+                          count: activeTarimaPersistedEventIds.length,
+                          scopeLabel: `T${ts.num}`,
+                          ubicacion: formatTarimaLocation(ts.num) || '',
+                        })
+                      }}
+                      disabled={activeTarimaPersistedEventIds.length === 0 || markScanEventAsNovedadMut.isPending || markScanEventsAsNovedadBulkMut.isPending}
+                      className={`p-2 rounded-lg transition-colors shrink-0 disabled:opacity-35 disabled:cursor-not-allowed ${isActive ? 'text-white/70 hover:bg-white/20 hover:text-white' : 'text-warning-500 hover:text-warning-700 hover:bg-warning-50'}`}
                       title={t('rec.val.markAnormalidad.tooltip')}
                     >
                       <AlertTriangle size={11} />
