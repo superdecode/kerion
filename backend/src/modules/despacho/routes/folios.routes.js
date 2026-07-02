@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { requireAnyPermission, requirePermission } from '../../../shared/middleware/permissions.js'
 import { instantDateInTZ } from '../../../shared/utils/dateUtils.js'
@@ -603,7 +604,8 @@ router.post('/:id/scans',
       }
 
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
-      const codigoCaja = codigo_caja.trim()
+      const codigoCaja = normalizeScanCode(codigo_caja)
+      if (!codigoCaja) return res.status(400).json({ error: 'codigo_caja inválido' })
       const normalizedOrderNo = matched_order_no ? String(matched_order_no).trim() : null
 
       const scan = await req.tTransaction(async (client) => {
@@ -943,6 +945,8 @@ router.post('/:id/orders/:orderId/scans',
     try {
       const { codigo_caja, tarima_ref = null } = req.body
       if (!codigo_caja?.trim()) return res.status(400).json({ error: 'codigo_caja requerido' })
+      const codigoCaja = normalizeScanCode(codigo_caja)
+      if (!codigoCaja) return res.status(400).json({ error: 'codigo_caja inválido' })
 
       const folioRes = await req.tQuery(
         `SELECT estado FROM dispatch_folios WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
@@ -955,7 +959,7 @@ router.post('/:id/orders/:orderId/scans',
       await req.tQuery(
         `INSERT INTO dispatch_order_scans (tenant_id, folio_id, folio_order_id, codigo_caja, tarima_ref, validated_by)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [req.tenantId, req.params.id, req.params.orderId, codigo_caja.trim(), tarima_ref || null, req.user.id]
+        [req.tenantId, req.params.id, req.params.orderId, codigoCaja, tarima_ref || null, req.user.id]
       )
       await syncOrderProgressById(req, req.params.orderId)
       const detail = await getFolioDetail(req, req.params.id)

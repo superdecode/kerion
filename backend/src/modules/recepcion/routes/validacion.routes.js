@@ -1,105 +1,11 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
+import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 import { refreshRecepcionOrderState } from '../utils/orderState.js'
 
 const router = Router()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const BOX_CODE_RE = /^\d{6,}[/-]\d{1,4}$/
-
-function extractFromJson(raw) {
-  const trimmed = String(raw || '').trim()
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null
-  try {
-    const parsed = JSON.parse(trimmed)
-    const candidates = parsed && typeof parsed === 'object' ? Object.values(parsed) : []
-    for (const val of candidates) {
-      if (typeof val !== 'string') continue
-      const norm = val.trim().replace(/／/g, '/').replace(/[－‒–—―]/g, '-').toUpperCase()
-      if (BOX_CODE_RE.test(norm)) return norm
-    }
-    for (const val of candidates) {
-      if (typeof val === 'string' && val.trim()) {
-        return val.trim().toUpperCase().replace(/[^A-Z0-9_/-]/g, '')
-      }
-    }
-  } catch {
-    // Not JSON; continue with scanner patterns.
-  }
-  return null
-}
-
-function normalizeScanCode(rawCode) {
-  if (!rawCode) return ''
-
-  let code = String(rawCode).trim()
-  code = code.replace(/[\x00-\x1F\x7F]/g, '')
-  code = code.replace(/^GS1:|^\]C1|^\]E0|^\]d2/i, '')
-  code = code.replace(/／/g, '/')
-  code = code.replace(/[－‒–—―]/g, '-')
-
-  const jsonExtracted = extractFromJson(code)
-  if (jsonExtracted) return jsonExtracted
-
-  const jsonMatch = code.match(/"ID"\s*:\s*"(\d+[/-]\d+)"/i)
-  if (jsonMatch?.[1]) return jsonMatch[1]
-
-  code = code.replace(/ö/gi, 'o')
-  code = code.replace(/ï/gi, 'i')
-  code = code.replace(/Ñ/g, ':')
-  code = code.replace(/ñ/g, ':')
-  code = code.replace(/\^/g, '')
-  code = code.replace(/¨/g, '"')
-  // Some scanners emit GS1 AIs with square brackets in their human-readable form.
-  // We normalize [ and ] to " so the downstream JSON/ID regex patterns match correctly.
-  // Note: this transform is intentional and specific to the scanner hardware in use.
-  code = code.replace(/\[/g, '"')
-  code = code.replace(/\]/g, '"')
-  code = code.replace(/\'/g, '/')
-  code = code.replace(/\*/g, '')
-  code = code.replace(/&/g, '/')
-  code = code.replace(/[""«»„‟‚‛''¨]/g, '"')
-  code = code.replace(/\?/g, '_')
-
-  const upper = code.toUpperCase()
-  const patterns = [
-    /"ID"\s*:\s*"?(\d+[/-]\d+)"?/i,
-    /"REFERENCE_ID"\s*:\s*"?(\d+[/-]\d+)"?/i,
-    /\[ID\[N\s*\[([\d]+[/-][\d]+)/i,
-    /\[ID\[.*?\[([\d]+[/-][\d]+)/i,
-    /"\[ID"N"([\d]+[/-][\d]+)/i,
-    /"\[ID".*?"([\d]+[/-][\d]+)/i,
-    /"ID"\s*[N:"]+\s*"([\d]+[/-][\d]+)"/i,
-    /"CODE"\s*:\s*"([^"]+)"/i,
-    /\bID\s*:\s*"?(\d+[/-]\d+)/i,
-    /\bID"?"?(\d+[/-]\d+)/i,
-    /^"?(\d+[/-]\d+)"?/,
-  ]
-
-  for (const pattern of patterns) {
-    const match = upper.match(pattern)
-    if (match?.[1]) {
-      const extracted = match[1].replace(/"/g, '')
-      if (/^\d{6,}[/-]\d{1,4}$/.test(extracted)) return extracted
-    }
-  }
-
-  const idMatch = upper.match(/^ID(\d+[-/]\d+)/i)
-  if (idMatch) return idMatch[1]
-
-  return upper.replace(/[^A-Z0-9_\/-]/g, '')
-}
-
-function generateCodeVariations(rawCode, normalize = true) {
-  const code = normalize ? normalizeScanCode(rawCode) : String(rawCode || '').toUpperCase()
-  if (!code) return []
-
-  const variations = [code]
-  if (code.includes('-')) variations.push(code.replace(/-/g, '/'))
-  if (code.includes('/')) variations.push(code.replace(/\//g, '-'))
-  return [...new Set(variations)]
-}
-
 function normalizedCodeSql(column) {
   return `UPPER(REGEXP_REPLACE(
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(${column}, ''), '／', '/'), '－', '-'), '‒', '-'), '–', '-'), '—', '-'), '―', '-'),

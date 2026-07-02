@@ -4,6 +4,7 @@ import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { getPermissionLevel } from '../../../shared/middleware/permissions.js'
 import { generateRastreoFolioForClient } from '../services/folioService.js'
 import { crearAnormalidadRastreo, crearAnormalidadRastreoConsolidada } from '../services/anormalidadHelper.js'
+import { normalizeCode } from '../../../shared/utils/codeNormalization.js'
 
 const router = Router()
 
@@ -55,10 +56,6 @@ function canTransitionEstado(currentRaw, nextRaw) {
   if (!current || !next) return false
   if (current === next) return true
   return ESTADO_TRANSITIONS[current]?.has(next) || false
-}
-
-function normalizeCode(raw) {
-  return (raw || '').toUpperCase().replace(/[^A-Z0-9\-/]/g, '')
 }
 
 function stripCode(raw) {

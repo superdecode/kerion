@@ -1,5 +1,35 @@
 // Box code pattern: 6+ digits, dash or slash, 1-4 digits (e.g. 62503559-3)
-const BOX_CODE_RE = /^\d{6,}[\/\-]\d{1,4}$/
+const BOX_CODE_RE = /^\d{6,}[/-]\d{1,4}$/
+const STRUCTURED_CODE_PATTERNS = [
+  /["'\[]?(?:REFERENCE_ID|ID|CODE)["'\]]?\s*(?:[:=Ññ]|["'\[]N\s*["'\[])+\s*["'\[]?([A-Z0-9_]+[\/\-&][A-Z0-9_]+)["'\]]?/i,
+  /\[ID\[.*?\[([\d]+[\/\-&][\d]+)/i,
+  /\bID\s*["']*([\d]+[\/\-&][\d]+)/i,
+  /^"?(\d{6,}[\/\-&]\d{1,4})"?/i,
+]
+
+function normalizeSeparators(value) {
+  return String(value || '')
+    .replace(/／/g, '/')
+    .replace(/[－‒–—―]/g, '-')
+    // PDA readers configured with a Spanish keyboard commonly emit these
+    // shifted keys instead of slash.
+    .replace(/[&']/g, '/')
+}
+
+function cleanCode(value) {
+  return normalizeSeparators(value).toUpperCase().replace(/[^A-Z0-9_/-]/g, '')
+}
+
+function extractStructuredCode(value) {
+  const input = normalizeSeparators(value)
+  for (const pattern of STRUCTURED_CODE_PATTERNS) {
+    const match = input.match(pattern)
+    if (!match?.[1]) continue
+    const candidate = cleanCode(match[1])
+    if (BOX_CODE_RE.test(candidate) || /\d/.test(candidate)) return candidate
+  }
+  return null
+}
 
 /**
  * Tries to extract a box code from a JSON-encoded barcode string.
@@ -10,17 +40,23 @@ function extractFromJson(raw) {
   if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null
   try {
     const parsed = JSON.parse(trimmed)
-    const candidates = typeof parsed === 'object' && parsed !== null ? Object.values(parsed) : []
+    const candidates = []
+    const collect = (value) => {
+      if (typeof value === 'string') candidates.push(value)
+      else if (Array.isArray(value)) value.forEach(collect)
+      else if (value && typeof value === 'object') Object.values(value).forEach(collect)
+    }
+    collect(parsed)
     for (const val of candidates) {
       if (typeof val === 'string') {
-        const norm = val.trim().replace(/／/g, '/').replace(/[－‒–—―]/g, '-').toUpperCase()
+        const norm = cleanCode(val)
         if (BOX_CODE_RE.test(norm)) return norm
       }
     }
     // No strict box-code match — return first non-empty string value as fallback
     for (const val of candidates) {
       if (typeof val === 'string' && val.trim()) {
-        return val.trim().toUpperCase().replace(/[^A-Z0-9_\/-]/g, '')
+        return cleanCode(val)
       }
     }
   } catch { /* not valid JSON */ }
@@ -43,12 +79,15 @@ export function normalizeCode(rawCode) {
 
   // Unicode dash/slash normalization — must run before pattern matching so
   // full-width chars (exported by WMS systems) map to ASCII separators correctly
-  code = code.replace(/／/g, '/')  // ／ full-width solidus
-  code = code.replace(/[－‒–—―]/g, '-') // －‒–—― dashes
+  code = normalizeSeparators(code)
 
   // Top priority: try full JSON parse for any box-code value (handles "BOX", "ID", etc.)
   const jsonExtracted = extractFromJson(code)
   if (jsonExtracted) return jsonExtracted
+
+  // Evaluate PDA/bracket formats before replacing their delimiter characters.
+  const structuredExtracted = extractStructuredCode(code)
+  if (structuredExtracted) return structuredExtracted
 
   // Legacy JSON regex match for "ID" key
   const jsonMatch = code.match(/"ID"\s*:\s*"(\d+[\/\-]\d+)"/i)
@@ -63,9 +102,7 @@ export function normalizeCode(rawCode) {
   code = code.replace(/¨/g, '"')
   code = code.replace(/\[/g, '"')
   code = code.replace(/\]/g, '"')
-  code = code.replace(/\'/g, '/')
   code = code.replace(/\*/g, '')
-  code = code.replace(/&/g, '/')
   code = code.replace(/[""«»„‟‚‛''¨]/g, '"')
   code = code.replace(/\?/g, '_')
 
@@ -116,12 +153,14 @@ export function normalizeScanCode(rawCode) {
   let code = String(rawCode).trim()
   code = code.replace(/[\x00-\x1F\x7F]/g, '')
   code = code.replace(/^GS1:|^\]C1|^\]E0|^\]d2/i, '')
-  code = code.replace(/／/g, '/')
-  code = code.replace(/[－‒–—―]/g, '-')
+  code = normalizeSeparators(code)
 
   // Try full JSON parse first — handles "BOX", "ID", "CODE" and any future key names
   const jsonExtracted = extractFromJson(code)
   if (jsonExtracted) return jsonExtracted
+
+  const structuredExtracted = extractStructuredCode(code)
+  if (structuredExtracted) return structuredExtracted
 
   const jsonMatch = code.match(/"ID"\s*:\s*"(\d+[\/\-]\d+)"/i)
   if (jsonMatch?.[1]) return jsonMatch[1]
@@ -134,9 +173,7 @@ export function normalizeScanCode(rawCode) {
   code = code.replace(/¨/g, '"')
   code = code.replace(/\[/g, '"')
   code = code.replace(/\]/g, '"')
-  code = code.replace(/\'/g, '/')
   code = code.replace(/\*/g, '')
-  code = code.replace(/&/g, '/')
   code = code.replace(/[""«»„‟‚‛''¨]/g, '"')
   code = code.replace(/\?/g, '_')
 
@@ -183,7 +220,7 @@ export function normalizeScanCode(rawCode) {
 export function normalizeCodeFast(rawCode) {
   if (!rawCode) return ''
   let code = String(rawCode).trim()
-  code = code.replace(/／/g, '/').replace(/[－‒–—―]/g, '-')
+  code = normalizeSeparators(code)
   const jsonExtracted = extractFromJson(code)
   if (jsonExtracted) return jsonExtracted
   return code.toUpperCase().replace(/[^A-Z0-9_\/-]/g, '')

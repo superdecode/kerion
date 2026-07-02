@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission, getPermissionLevel, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { getToday, instantDateInTZ } from '../../../shared/utils/dateUtils.js'
+import { normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 import { checkModuleLimitForUpdate } from '../../middleware/usageGuard.js'
 
 const SURTIDO_COUNT_QUERY = `SELECT COUNT(*) FROM pick_order_tracking WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`
@@ -899,7 +900,7 @@ router.post('/scan-event',
         return res.status(404).json({ success: false, error: 'Sesión no encontrada o no activa' })
       }
 
-      const normCode = normalizeOptionalText(normalized_code) || String(scanned_code).trim()
+      const normCode = normalizeScanCode(normalized_code || scanned_code)
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
@@ -983,7 +984,7 @@ router.post('/scan-event/manual',
       }
 
       const reason = reasonRes.rows[0]
-      const normCodeManual = normalizeOptionalText(normalized_code) || String(scanned_code).trim()
+      const normCodeManual = normalizeScanCode(normalized_code || scanned_code)
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
@@ -1211,7 +1212,7 @@ router.post('/inventory-session',
           const scannedCode = normalizeOptionalText(
             scan.scanned_code || scan.raw || scan.code || scan.normalized_code || scan.code2
           )
-          const normalizedCode = normalizeOptionalText(
+          const normalizedCode = normalizeScanCode(
             scan.normalized_code || scan.code || scan.scanned_code || scan.raw || scan.code2
           )
           const scanStatus = String(scan.scan_status || '').trim()
@@ -1457,7 +1458,7 @@ router.post('/inventory-scan',
           session_id,
           req.tenantId,
           String(scanned_code).trim(),
-          normalizeOptionalText(normalized_code) || String(scanned_code).trim(),
+          normalizeScanCode(normalized_code || scanned_code),
           normalizeOptionalText(code2),
           !!was_swapped,
           scan_status,
