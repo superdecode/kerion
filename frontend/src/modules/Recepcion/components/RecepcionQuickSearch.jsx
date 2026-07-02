@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { quickSearchBoxes } from '../services/recepcionService'
 import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { fmtDateTimeMini } from '../../../core/utils/dateFormat'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 const STATUS_STYLE = {
   validada: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -15,7 +16,7 @@ const STATUS_STYLE = {
   faltante: 'bg-red-100 text-red-700 border-red-200',
 }
 
-function CopyTiny({ value }) {
+function CopyTiny({ value, title }) {
   const [copied, setCopied] = useState(false)
   if (!value) return null
   async function handleCopy(event) {
@@ -30,8 +31,8 @@ function CopyTiny({ value }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-warm-300 transition-colors hover:bg-warm-100 hover:text-sky-600"
-      title="Copiar"
+      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-warm-300 transition-colors hover:bg-warm-100 hover:text-primary-600"
+      title={title}
     >
       {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
@@ -50,21 +51,21 @@ function InfoPill({ icon: Icon, label, value, mono = false }) {
   )
 }
 
-function ResultCard({ item, onOpenOrder }) {
+function ResultCard({ item, onOpenOrder, t }) {
   const statusClass = STATUS_STYLE[item.estado_validacion] || STATUS_STYLE.pendiente
   const scanned = Boolean(item.scanned_at)
   const container = item.inbound_order_no || item.tracking_no || item.reference_no || '—'
 
   return (
-    <article className="rounded-2xl border border-warm-100 bg-white p-3 shadow-sm transition-all hover:border-sky-200 hover:shadow-md sm:p-4">
+    <article className="rounded-2xl border border-warm-100 bg-white p-3 shadow-sm transition-all hover:border-primary-200 hover:shadow-md sm:p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <p className="truncate font-mono text-sm font-black text-warm-900">{item.custom_box_barcode || item.box_type || '—'}</p>
-            <CopyTiny value={item.custom_box_barcode || item.box_type} />
+            <CopyTiny value={item.custom_box_barcode || item.box_type} title={t('common.copy')} />
           </div>
           <p className="mt-0.5 truncate text-xs text-warm-500">
-            Box Type <span className="font-mono font-semibold text-warm-700">{item.box_type || '—'}</span>
+            {t('rec.quickSearch.boxType')} <span className="font-mono font-semibold text-warm-700">{item.box_type || '—'}</span>
           </p>
         </div>
         <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${statusClass}`}>
@@ -73,27 +74,27 @@ function ResultCard({ item, onOpenOrder }) {
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <InfoPill icon={Clock3} label="Escaneada" value={scanned ? fmtDateTimeMini(item.scanned_at) : 'Sin escaneo'} />
-        <InfoPill icon={User} label="Usuario" value={item.scanned_by_nombre || (scanned ? '—' : 'Pendiente')} />
-        <InfoPill icon={MapPin} label="Ubicacion" value={item.ubicacion || '—'} mono />
-        <InfoPill icon={Container} label="Contenedor" value={container} mono />
-        <InfoPill icon={ClipboardList} label="Orden entrada" value={item.folio} mono />
-        <InfoPill icon={PackageCheck} label="Cliente" value={item.cliente || '—'} />
+        <InfoPill icon={Clock3} label={t('rec.quickSearch.scanned')} value={scanned ? fmtDateTimeMini(item.scanned_at) : t('rec.quickSearch.notScanned')} />
+        <InfoPill icon={User} label={t('rec.quickSearch.user')} value={item.scanned_by_nombre || (scanned ? '—' : t('rec.quickSearch.pending'))} />
+        <InfoPill icon={MapPin} label={t('rec.quickSearch.location')} value={item.ubicacion || '—'} mono />
+        <InfoPill icon={Container} label={t('rec.quickSearch.container')} value={container} mono />
+        <InfoPill icon={ClipboardList} label={t('rec.quickSearch.inboundOrder')} value={item.folio} mono />
+        <InfoPill icon={PackageCheck} label={t('rec.quickSearch.client')} value={item.cliente || '—'} />
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-warm-100 pt-3">
         <div className="min-w-0">
           <p className="truncate text-[11px] text-warm-400">
             SKU <span className="font-mono text-warm-600">{item.sku || '—'}</span>
-            {item.qty_per_box != null ? <span> · Qty {item.qty_per_box}</span> : null}
+            {item.qty_per_box != null ? <span> · {t('rec.quickSearch.qty')} {item.qty_per_box}</span> : null}
           </p>
         </div>
         <button
           type="button"
           onClick={() => onOpenOrder(item)}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-sky-600 px-3 text-xs font-bold text-white transition-colors hover:bg-sky-700"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-primary-600 px-3 text-xs font-bold text-white transition-colors hover:bg-primary-700"
         >
-          Abrir <ArrowRight className="h-3.5 w-3.5" />
+          {t('rec.quickSearch.open')} <ArrowRight className="h-3.5 w-3.5" />
         </button>
       </div>
     </article>
@@ -101,6 +102,7 @@ function ResultCard({ item, onOpenOrder }) {
 }
 
 export default function RecepcionQuickSearch() {
+  const { t } = useI18nStore()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -177,8 +179,8 @@ export default function RecepcionQuickSearch() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="interactive-lift inline-flex h-9 w-9 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 text-sky-600 hover:bg-sky-100"
-        title="Buscar caja de recepcion"
+        className="interactive-lift inline-flex h-9 w-9 items-center justify-center rounded-xl border border-primary-200 bg-primary-50 text-primary-600 hover:bg-primary-100"
+        title={t('rec.quickSearch.buttonTitle')}
       >
         <Search className="h-4 w-4" />
       </button>
@@ -189,20 +191,20 @@ export default function RecepcionQuickSearch() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[220] bg-warm-950/45 p-0 backdrop-blur-sm sm:p-4"
+            className="fixed inset-0 z-[220] flex items-center justify-center bg-warm-950/45 p-3 backdrop-blur-sm sm:p-4"
           >
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12, scale: 0.98 }}
               transition={{ duration: 0.18 }}
-              className="ml-auto flex h-[100dvh] w-full flex-col overflow-hidden bg-warm-50 shadow-2xl sm:h-[min(760px,calc(100dvh-2rem))] sm:max-w-3xl sm:rounded-3xl sm:border sm:border-warm-100"
+              className="flex h-[min(760px,calc(100dvh-1.5rem))] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-warm-100 bg-warm-50 shadow-2xl"
             >
               <div className="border-b border-warm-100 bg-white/90 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-xl sm:px-5 sm:pt-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-black text-warm-900">Busqueda rapida de recepcion</p>
-                    <p className="text-xs text-warm-500">Box Type o Custom Box Barcode</p>
+                    <p className="text-sm font-black text-warm-900">{t('rec.quickSearch.title')}</p>
+                    <p className="text-xs text-warm-500">{t('rec.quickSearch.subtitle')}</p>
                   </div>
                   <button
                     type="button"
@@ -214,20 +216,20 @@ export default function RecepcionQuickSearch() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="relative">
-                  <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-sky-500" />
+                  <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-primary-500" />
                   <input
                     ref={inputRef}
                     value={query}
                     onChange={handleChange}
-                    placeholder="Escanea o escribe codigo de caja..."
+                    placeholder={t('rec.quickSearch.placeholder')}
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
                     inputMode="search"
-                    className="h-12 w-full rounded-2xl border border-sky-200 bg-white pl-10 pr-12 font-mono text-base font-semibold text-warm-800 outline-none transition-all placeholder:font-sans placeholder:text-warm-300 focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+                    className="h-12 w-full rounded-2xl border border-primary-200 bg-white pl-10 pr-12 font-mono text-base font-semibold text-warm-800 outline-none transition-all placeholder:font-sans placeholder:text-warm-300 focus:border-primary-400 focus:ring-4 focus:ring-primary-100"
                   />
                   {loading ? (
-                    <Loader2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-sky-500" />
+                    <Loader2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary-500" />
                   ) : query ? (
                     <button
                       type="button"
@@ -244,40 +246,42 @@ export default function RecepcionQuickSearch() {
                 {!searched ? (
                   <div className="flex h-full items-center justify-center p-6 text-center">
                     <div>
-                      <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-100 text-sky-600">
+                      <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-100 text-primary-600">
                         <ScanBarcode className="h-7 w-7" />
                       </div>
-                      <p className="text-sm font-bold text-warm-800">Lista para buscar desde PDA</p>
+                      <p className="text-sm font-bold text-warm-800">{t('rec.quickSearch.readyTitle')}</p>
                       <p className="mt-1 max-w-xs text-xs leading-relaxed text-warm-500">
-                        Escanea un codigo o escribe al menos 2 caracteres para consultar registros de recepcion.
+                        {t('rec.quickSearch.readyBody')}
                       </p>
                     </div>
                   </div>
                 ) : loading ? (
                   <div className="flex h-48 items-center justify-center text-sm text-warm-500">
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin text-sky-500" />
-                    Buscando coincidencias...
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin text-primary-500" />
+                    {t('rec.quickSearch.searching')}
                   </div>
                 ) : results.length === 0 ? (
                   <div className="flex h-48 items-center justify-center p-6 text-center">
                     <div>
                       <Search className="mx-auto mb-2 h-9 w-9 text-warm-200" />
-                      <p className="text-sm font-semibold text-warm-700">Sin coincidencias</p>
-                      <p className="mt-1 text-xs text-warm-400">Revisa el Box Type o el Custom Box Barcode.</p>
+                      <p className="text-sm font-semibold text-warm-700">{t('rec.quickSearch.noMatches')}</p>
+                      <p className="mt-1 text-xs text-warm-400">{t('rec.quickSearch.noMatchesHint')}</p>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between px-1">
                       <p className="text-[11px] font-black uppercase tracking-wider text-warm-400">
-                        {results.length} de {total} resultado(s)
+                        {t('rec.quickSearch.resultCount')
+                          .replace('{shown}', String(results.length))
+                          .replace('{total}', String(total))}
                       </p>
                       {total > results.length && (
-                        <p className="text-[11px] text-warm-400">Refina la busqueda para ver menos coincidencias</p>
+                        <p className="text-[11px] text-warm-400">{t('rec.quickSearch.refine')}</p>
                       )}
                     </div>
                     {results.map((item) => (
-                      <ResultCard key={item.line_id} item={item} onOpenOrder={handleOpenOrder} />
+                      <ResultCard key={item.line_id} item={item} onOpenOrder={handleOpenOrder} t={t} />
                     ))}
                   </div>
                 )}
@@ -289,4 +293,3 @@ export default function RecepcionQuickSearch() {
     </>
   )
 }
-
