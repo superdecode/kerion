@@ -103,7 +103,7 @@
   }
 
   .btn-ghost {
-    @apply px-4 py-2.5 rounded-xl text-warm-600 text-sm font-medium
+    @apply px-4 py-2.5 rounded-xl bg-transparent text-warm-600 text-sm font-medium
            hover:bg-warm-100 active:bg-warm-200 transition-all duration-200;
   }
 

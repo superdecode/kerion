@@ -126,7 +126,7 @@ export default function UserMenu({ compact = false }) {
       <div ref={menuRef} className={`relative shrink-0 ${userMenuOpen ? 'z-[10020]' : 'z-[120]'}`}>
         <button
           onClick={() => setUserMenuOpen(!userMenuOpen)}
-          className={`flex items-center rounded-xl transition-all duration-200 group hover:bg-warm-100 ${
+          className={`flex items-center rounded-xl bg-transparent transition-all duration-200 group hover:bg-warm-100 ${
             compact ? 'gap-2 px-1.5 py-1.5' : 'gap-2.5 px-2 py-1.5'
           }`}
         >
@@ -167,21 +167,21 @@ export default function UserMenu({ compact = false }) {
               <div className="p-2">
                 <button
                   onClick={() => { setProfileOpen(true); setUserMenuOpen(false) }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-warm-600 hover:bg-warm-50 hover:text-warm-800 transition-all"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-transparent text-sm text-warm-600 hover:bg-warm-50 hover:text-warm-800 transition-all"
                 >
                   <User className="w-4 h-4" />
                   {t('auth.profile')}
                 </button>
                 <button
                   onClick={() => { setChangePassOpen(true); setUserMenuOpen(false); resetChangePass() }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-warm-600 hover:bg-warm-50 hover:text-warm-800 transition-all"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-transparent text-sm text-warm-600 hover:bg-warm-50 hover:text-warm-800 transition-all"
                 >
                   <Key className="w-4 h-4" />
                   {t('auth.changePassword')}
                 </button>
                 <button
                   onClick={() => setLocale(locale === 'es' ? 'zh' : 'es')}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-warm-600 hover:bg-warm-50 hover:text-warm-800 transition-all"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-transparent text-sm text-warm-600 hover:bg-warm-50 hover:text-warm-800 transition-all"
                 >
                   <Globe className="w-4 h-4" />
                   <span className="flex-1 text-left">{t('auth.languageLabel')}{locale === 'es' ? t('auth.languageEs') : t('auth.languageZh')}</span>
@@ -192,7 +192,7 @@ export default function UserMenu({ compact = false }) {
               <div className="p-2 border-t border-warm-100">
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-danger-600 hover:bg-danger-50 transition-all"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-transparent text-sm text-danger-600 hover:bg-danger-50 transition-all"
                 >
                   <LogOut className="w-4 h-4" />
                   {t('auth.logout')}
@@ -331,7 +331,7 @@ export default function UserMenu({ compact = false }) {
                   <button
                     type="button"
                     onClick={() => setEditingName(true)}
-                    className="flex-shrink-0 rounded-lg p-1.5 text-warm-300 transition-all hover:bg-primary-50 hover:text-primary-600"
+                    className="flex-shrink-0 rounded-lg p-1.5 bg-transparent text-warm-300 transition-all hover:bg-primary-50 hover:text-primary-600"
                     title={t('auth.editName')}
                   >
                     <Edit3 className="h-3.5 w-3.5" />

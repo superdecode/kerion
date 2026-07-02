@@ -77,7 +77,7 @@ export default function Modal({ isOpen, onClose, title, icon: Icon, children, si
                 {headerAction}
                 <motion.button
                   onClick={onClose}
-                  className="p-2 rounded-xl hover:bg-primary-100/60 text-warm-400 hover:text-primary-600 transition-all duration-200"
+                  className="p-2 rounded-xl bg-transparent hover:bg-primary-100/60 text-warm-400 hover:text-primary-600 transition-all duration-200"
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
