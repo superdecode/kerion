@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAdminAuthStore } from '../stores/adminAuthStore'
 import {
   LayoutDashboard, Building2, FileText, Bell, LogOut,
-  ChevronLeft, ChevronRight, Shield, BarChart3, CreditCard, Lock, X, Eye, EyeOff, MessageSquare
+  ChevronLeft, ChevronRight, Shield, BarChart3, CreditCard, Lock, X, Eye, EyeOff, MessageSquare, ShieldAlert
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 
@@ -14,6 +14,7 @@ const NAV = [
   { to: '/super-admin/suscripciones', label: 'Suscripciones', icon: CreditCard },
   { to: '/super-admin/notificaciones', label: 'Notificaciones', icon: Bell },
   { to: '/super-admin/analytics', label: 'Analiticas', icon: BarChart3 },
+  { to: '/super-admin/errores', label: 'Errores', icon: ShieldAlert },
   { to: '/super-admin/soporte', label: 'Soporte', icon: MessageSquare },
 ]
 

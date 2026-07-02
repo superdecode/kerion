@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './core/stores/authStore'
+import { captureErrorEvent } from './core/services/errorTelemetry'
 
 // Layout
 import MainLayout from './core/components/layout/MainLayout'
@@ -20,6 +21,7 @@ import AdminTenants from './modules/SuperAdmin/pages/AdminTenants'
 import AdminTenantDetalle from './modules/SuperAdmin/pages/AdminTenantDetalle'
 import AdminNotificaciones from './modules/SuperAdmin/pages/AdminNotificaciones'
 import AdminAnalytics from './modules/SuperAdmin/pages/AdminAnalytics'
+import AdminErrores from './modules/SuperAdmin/pages/AdminErrores'
 import AdminSuscripciones from './modules/SuperAdmin/pages/AdminSuscripciones'
 import AdminSoporte from './modules/SuperAdmin/pages/AdminSoporte'
 import { useAdminAuthStore } from './modules/SuperAdmin/stores/adminAuthStore'
@@ -127,6 +129,42 @@ function AppRoutes() {
     }
   }, [isAuthenticated, setTokenFromUrl])
 
+  useEffect(() => {
+    function handleError(event) {
+      captureErrorEvent({
+        source: 'global',
+        severity: 'critical',
+        message: event.message || event.error?.message || 'Unhandled window error',
+        stack: event.error?.stack,
+        metadata: {
+          filename: event.filename || null,
+          lineno: event.lineno || null,
+          colno: event.colno || null,
+        },
+      })
+    }
+
+    function handleRejection(event) {
+      const reason = event.reason
+      captureErrorEvent({
+        source: 'global',
+        severity: 'error',
+        message: reason?.message || String(reason || 'Unhandled promise rejection'),
+        stack: reason?.stack,
+        metadata: {
+          type: 'unhandledrejection',
+        },
+      })
+    }
+
+    window.addEventListener('error', handleError)
+    window.addEventListener('unhandledrejection', handleRejection)
+    return () => {
+      window.removeEventListener('error', handleError)
+      window.removeEventListener('unhandledrejection', handleRejection)
+    }
+  }, [])
+
   return (
     <Routes>
       {/* PUBLIC ROUTES — No auth required, outside all protected layouts */}
@@ -155,6 +193,7 @@ function AppRoutes() {
         <Route path="tenants/:id" element={<AdminTenantDetalle />} />
         <Route path="notificaciones" element={<AdminNotificaciones />} />
         <Route path="analytics" element={<AdminAnalytics />} />
+        <Route path="errores" element={<AdminErrores />} />
         <Route path="suscripciones" element={<AdminSuscripciones />} />
         <Route path="soporte" element={<AdminSoporte />} />
       </Route>

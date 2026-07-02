@@ -233,6 +233,35 @@ app.use('/api/support', tenantContext, tenantDB, supportRoutes)
 async function runMigrations() {} // no-op stub
 await runMigrations()
 
+function recordBackendError(req, err) {
+  const message = String(err?.message || 'Unhandled backend error').slice(0, 1000)
+  query(
+    `INSERT INTO system_error_events (
+       tenant_id, tenant_slug, user_id, user_email, source, severity, fingerprint,
+       message, stack, page_url, route, http_method, http_status, api_url, user_agent, metadata
+     )
+     VALUES ($1,$2,$3,$4,'backend','critical',$5,$6,$7,$8,$9,$10,500,$11,$12,$13)`,
+    [
+      req.tenantId || req.user?.tenant_id || null,
+      req.tenant?.slug || null,
+      req.user?.id || null,
+      req.user?.email || null,
+      ['backend', req.method, req.originalUrl, message].join('|').slice(0, 500),
+      message,
+      String(err?.stack || '').slice(0, 8000),
+      req.originalUrl || null,
+      req.path || null,
+      req.method || null,
+      req.originalUrl || null,
+      req.headers['user-agent'] || null,
+      JSON.stringify({
+        code: err?.code || null,
+        ip: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || null,
+      }),
+    ]
+  ).catch(logErr => console.error('[error telemetry backend]', logErr.message))
+}
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Ruta no encontrada' })
@@ -241,6 +270,7 @@ app.use((req, res) => {
 // Error handler
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err)
+  recordBackendError(req, err)
   res.status(500).json({ error: 'Error interno del servidor' })
 })
 

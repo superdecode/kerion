@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import { AlertTriangle, RotateCcw } from 'lucide-react'
+import { captureErrorEvent } from '../../services/errorTelemetry'
 
 export default class ErrorBoundary extends Component {
   constructor(props) {
@@ -9,6 +10,18 @@ export default class ErrorBoundary extends Component {
 
   static getDerivedStateFromError(error) {
     return { hasError: true, error }
+  }
+
+  componentDidCatch(error, info) {
+    captureErrorEvent({
+      source: 'react',
+      severity: 'critical',
+      error,
+      componentStack: info?.componentStack,
+      metadata: {
+        boundary: true,
+      },
+    })
   }
 
   handleReset = () => {

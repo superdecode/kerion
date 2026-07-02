@@ -58,6 +58,12 @@ function buildSubscriptionTypeAndPrice(plan, subscriptionType) {
   }
 }
 
+function parsePositiveInt(value, fallback, max = 500) {
+  const parsed = parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.min(parsed, max)
+}
+
 // POST /api/admin/auth/login
 router.post('/auth/login', async (req, res) => {
   try {
@@ -814,6 +820,7 @@ router.delete('/tenants/:id', authenticateAdmin, async (req, res) => {
     await query(`DELETE FROM usuarios_internos WHERE tenant_id = $1`, [id]).catch(() => {})
     await query(`DELETE FROM token_blacklist WHERE tenant_id = $1`, [id]).catch(() => {})
     await query(`DELETE FROM notifications_outbox WHERE tenant_id = $1`, [id]).catch(() => {})
+    await query(`DELETE FROM system_error_events WHERE tenant_id = $1`, [id]).catch(() => {})
     await query(`DELETE FROM tenant_signup_requests WHERE resulting_tenant_id = $1`, [id]).catch(() => {})
     await query(`UPDATE tenant_signup_requests SET resulting_tenant_id = NULL WHERE resulting_tenant_id = $1`, [id]).catch(() => {})
     // Top-level tenant tables
@@ -1445,6 +1452,130 @@ router.delete('/notifications', authenticateAdmin, async (req, res) => {
     await query(`DELETE FROM notifications_outbox WHERE id = ANY($1::uuid[])`, [ids])
     res.json({ success: true })
   } catch (err) {
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// GET /api/admin/error-events — technical errors captured automatically by the app
+router.get('/error-events', authenticateAdmin, async (req, res) => {
+  try {
+    const {
+      tenant_id,
+      status,
+      severity,
+      source,
+      date_from,
+      date_to,
+      q,
+      page = 1,
+      limit = 50,
+    } = req.query
+    const rowsLimit = parsePositiveInt(limit, 50, 100)
+    const offset = (parsePositiveInt(page, 1, 100000) - 1) * rowsLimit
+    const where = []
+    const params = []
+    const add = (sql, value) => {
+      params.push(value)
+      where.push(sql.replace('?', `$${params.length}`))
+    }
+
+    if (tenant_id) add('e.tenant_id = ?', tenant_id)
+    if (status) add('e.status = ?', status)
+    if (severity) add('e.severity = ?', severity)
+    if (source) add('e.source = ?', source)
+    if (date_from) add('e.last_seen_at >= ?', date_from)
+    if (date_to) add('e.last_seen_at <= ?', date_to)
+    if (q) {
+      params.push(`%${String(q).trim()}%`)
+      where.push(`(
+        e.message ILIKE $${params.length}
+        OR e.user_email ILIKE $${params.length}
+        OR e.page_url ILIKE $${params.length}
+        OR e.api_url ILIKE $${params.length}
+        OR e.fingerprint ILIKE $${params.length}
+        OR t.legal_name ILIKE $${params.length}
+        OR t.slug ILIKE $${params.length}
+      )`)
+    }
+
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+    const dataParams = [...params, rowsLimit, offset]
+    const [events, count, summary, topTenants] = await Promise.all([
+      query(
+        `SELECT e.*, COALESCE(t.legal_name, e.tenant_slug) AS tenant_name, t.slug AS tenant_slug_current
+           FROM system_error_events e
+           LEFT JOIN tenants t ON t.id = e.tenant_id
+          ${whereClause}
+          ORDER BY
+            CASE e.severity WHEN 'critical' THEN 0 WHEN 'error' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END,
+            e.last_seen_at DESC
+          LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        dataParams
+      ),
+      query(`SELECT count(*)::int AS total FROM system_error_events e LEFT JOIN tenants t ON t.id = e.tenant_id ${whereClause}`, params),
+      query(
+        `SELECT
+           COUNT(*) FILTER (WHERE e.status IN ('open','reviewing'))::int AS active,
+           COUNT(*) FILTER (WHERE e.status = 'open')::int AS open,
+           COUNT(*) FILTER (WHERE e.status = 'reviewing')::int AS reviewing,
+           COUNT(*) FILTER (WHERE e.severity = 'critical' AND e.status IN ('open','reviewing'))::int AS critical,
+           COUNT(*) FILTER (WHERE e.severity = 'error' AND e.status IN ('open','reviewing'))::int AS errors,
+           COALESCE(SUM(e.occurrences) FILTER (WHERE e.last_seen_at >= now() - INTERVAL '24 hours'), 0)::int AS occurrences_24h,
+           MAX(e.last_seen_at) AS latest_at
+         FROM system_error_events e
+         LEFT JOIN tenants t ON t.id = e.tenant_id
+         ${whereClause}`,
+        params
+      ),
+      query(
+        `SELECT COALESCE(t.legal_name, e.tenant_slug, 'Sin tenant') AS tenant_name,
+                e.tenant_id,
+                COUNT(*)::int AS active_events,
+                COALESCE(SUM(e.occurrences), 0)::int AS occurrences
+           FROM system_error_events e
+           LEFT JOIN tenants t ON t.id = e.tenant_id
+          WHERE e.status IN ('open','reviewing')
+          GROUP BY e.tenant_id, COALESCE(t.legal_name, e.tenant_slug, 'Sin tenant')
+          ORDER BY active_events DESC, occurrences DESC
+          LIMIT 8`
+      ),
+    ])
+
+    res.json({
+      success: true,
+      events: events.rows,
+      total: count.rows[0]?.total || 0,
+      summary: summary.rows[0] || {},
+      top_tenants: topTenants.rows,
+    })
+  } catch (err) {
+    console.error('[admin/error-events GET]', err.message)
+    res.status(500).json({ error: 'Error interno' })
+  }
+})
+
+// PATCH /api/admin/error-events/:id — triage technical error status/notes
+router.patch('/error-events/:id', authenticateAdmin, async (req, res) => {
+  const { status, admin_notes } = req.body
+  const VALID = ['open', 'reviewing', 'resolved', 'ignored']
+  if (status && !VALID.includes(status)) return res.status(400).json({ error: 'Estado invalido' })
+  try {
+    const result = await query(
+      `UPDATE system_error_events
+          SET status = COALESCE($1, status),
+              admin_notes = COALESCE($2, admin_notes),
+              resolved_at = CASE WHEN $1 IN ('resolved','ignored') THEN now() ELSE resolved_at END,
+              resolved_by = CASE WHEN $1 IN ('resolved','ignored') THEN $3 ELSE resolved_by END,
+              updated_at = now()
+        WHERE id = $4
+        RETURNING *`,
+      [status || null, admin_notes !== undefined ? admin_notes : null, req.admin.id, req.params.id]
+    )
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Evento no encontrado' })
+    adminAudit(req.admin.id, 'UPDATE_ERROR_EVENT', 'system_error_event', req.params.id, { status })
+    res.json({ success: true, event: result.rows[0] })
+  } catch (err) {
+    console.error('[admin/error-events PATCH]', err.message)
     res.status(500).json({ error: 'Error interno' })
   }
 })

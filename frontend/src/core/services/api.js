@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useOfflineStore } from '../stores/offlineStore'
+import { captureApiError } from './errorTelemetry'
 
 function buildSameOriginApiUrl(pathname = '/api') {
   const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`
@@ -133,6 +134,7 @@ api.interceptors.response.use(
     return response
   },
   (error) => {
+    captureApiError(error)
     const isNetworkFailure = !error.response && (
       error.code === 'ERR_NETWORK' ||
       error.code === 'ECONNREFUSED' ||
