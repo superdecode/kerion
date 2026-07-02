@@ -594,7 +594,7 @@ router.get('/orders/quick-box-search',
 // GET /orders/:id — order detail with lines
 router.get('/orders/:id',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.recibir', 'ver'),
+  requirePermission('recepcion.validacion', 'ver'),
   async (req, res) => {
     let client
     try {

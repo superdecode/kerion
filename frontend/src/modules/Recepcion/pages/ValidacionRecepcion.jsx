@@ -1699,7 +1699,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       </div>
 
       {/* ── Card list ── */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
         {filteredUbicacionGroups.length === 0 ? (
           <div className="py-10 text-center space-y-1.5">
             <MapPin className="w-7 h-7 text-warm-200 mx-auto" />
@@ -1936,7 +1936,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       </div>
 
       {/* Cards list — mirrors Dropscan's scrollbar-thin bg-warm-50/55 p-3 space-y-2.5 */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
+      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin bg-warm-50/55 p-3 space-y-2.5">
         {filteredTarimaStats.length === 0 ? (
           <div className="py-8 text-center text-xs text-warm-400">{tarimaSearch ? t('rec.tarimas.panel.no_results') : t('rec.tarimas.panel.sin_tarimas')}</div>
         ) : filteredTarimaStats.map(ts => {
@@ -2233,7 +2233,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   }
                 }
               }}
-              className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+              className={`hidden sm:flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
                 withTarimas ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-warm-200 text-warm-500 hover:bg-warm-50'
               }`}
             >
@@ -2321,7 +2321,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 else { setTarimaConfirmMode('activate'); setShowTarimaConfirm(true) }
               }
             }}
-            className={`flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+            className={`hidden sm:flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
               withTarimas ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-warm-200 text-warm-500 hover:bg-warm-50'
             }`}
           >
