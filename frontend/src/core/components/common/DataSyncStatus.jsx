@@ -23,6 +23,7 @@ export default function DataSyncStatus({
   refreshing = false,
   refreshState = 'idle',
   refreshMessage = '',
+  compact = false,
 }) {
   const { t, locale } = useI18nStore()
   const tone = partial
@@ -31,6 +32,28 @@ export default function DataSyncStatus({
   const accent = partial ? 'text-warning-600' : 'text-success-600'
   const formattedDate = formatSyncDate(updatedAt, locale)
   const fullTitle = t('wmshub.sync.summary_title')
+
+  if (compact) {
+    return (
+      <div className={`inline-flex h-8 items-center gap-1 rounded-lg border px-1.5 ${tone}`}>
+        <div className={`flex h-4 w-4 items-center justify-center rounded ${accent}`}>
+          {partial ? <Database className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+        </div>
+        <span className="text-[10px] font-bold">{records.toLocaleString()}</span>
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            className="inline-flex h-6 w-6 items-center justify-center rounded border border-white/70 bg-white/70 text-warm-700 transition-all hover:bg-white disabled:opacity-50"
+            title={t('wmshub.config.sheet_refresh')}
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={`inline-flex h-10 items-center gap-1.5 rounded-xl border px-2.5 ${tone}`}>

@@ -199,7 +199,7 @@ function SearchStep({ onFound }) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-3 md:p-6">
       <div className="max-w-2xl mx-auto">
         <motion.div className="text-center mb-8"
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
@@ -284,7 +284,7 @@ function PreviewStep({ obc, detailData, isLoadingDetail, onStart, onBack, isStar
   const canStart = !isLoadingDetail && validation?.ok === true
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex-1 overflow-y-auto p-3 md:p-6">
       <div className="max-w-2xl mx-auto space-y-4">
         <button className="btn-ghost text-sm inline-flex items-center gap-1.5" onClick={onBack}>
           <ArrowLeft size={14} /> {t('surtido.escaneo.search_other')}
@@ -1513,8 +1513,8 @@ const { data: reasonsData } = useQuery({
         </div>
       )}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
-        <div className="p-6">
-          <div className="max-w-3xl mx-auto space-y-4">
+        <div className="p-3 md:p-6">
+          <div className="max-w-3xl mx-auto space-y-3 md:space-y-4">
 
             {/* Session info card */}
             <motion.div className="card p-4 shadow-sm overflow-hidden relative"
@@ -2482,55 +2482,69 @@ export default function SurtidoValidacion() {
   }
 
   const headerActions = (
-    <div className="flex items-center gap-1.5 flex-wrap justify-end">
-      <DataSyncStatus
-        records={outboundSummaryRecords}
-        updatedAt={sheetTs}
-        partial={outboundSummaryPartial}
-        onRefresh={handleSheetRefresh}
-        refreshing={refreshingSheet}
-      />
+    <div className="flex items-center gap-1 md:gap-1.5 flex-nowrap">
+      {/* Compact on mobile, full on desktop */}
+      <span className="md:hidden">
+        <DataSyncStatus
+          records={outboundSummaryRecords}
+          updatedAt={sheetTs}
+          partial={outboundSummaryPartial}
+          onRefresh={handleSheetRefresh}
+          refreshing={refreshingSheet}
+          compact
+        />
+      </span>
+      <span className="hidden md:inline-flex">
+        <DataSyncStatus
+          records={outboundSummaryRecords}
+          updatedAt={sheetTs}
+          partial={outboundSummaryPartial}
+          onRefresh={handleSheetRefresh}
+          refreshing={refreshingSheet}
+        />
+      </span>
       {activeSession && (
         <>
           {activeSession.pendingCount > 0 && (
-            <span className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
-              {activeSession.isSyncing ? <Loader2 size={12} className="animate-spin" /> : <WifiOff size={12} />}
-              {activeSession.pendingCount}
+            <span className="px-2 py-1.5 rounded-lg text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1">
+              {activeSession.isSyncing ? <Loader2 size={11} className="animate-spin" /> : <WifiOff size={11} />}
+              <span className="text-[10px]">{activeSession.pendingCount}</span>
             </span>
           )}
           {activeSession.onRecount && (
-            <button className="px-3 py-2 rounded-xl text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-              onClick={activeSession.onRecount}>
-              <RotateCcw className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('surtido.escaneo.recount')}</span>
+            <button className="h-8 px-2 rounded-lg text-warm-500 bg-warm-100 hover:bg-warm-200 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+              onClick={activeSession.onRecount} title={t('surtido.escaneo.recount')}>
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">{t('surtido.escaneo.recount')}</span>
             </button>
           )}
-          <button className="px-3 py-2 rounded-xl text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-            onClick={activeSession.onMissing}>
-            <List className="w-4 h-4" />
-            <span className="hidden sm:inline">{t('surtido.escaneo.missing')}</span>
+          <button className="h-8 px-2 rounded-lg text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+            onClick={activeSession.onMissing} title={t('surtido.escaneo.missing')}>
+            <List className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{t('surtido.escaneo.missing')}</span>
           </button>
           {activeSession.onCancel && (
-            <button className="px-3 py-2 rounded-xl text-warning-600 bg-warning-50 hover:bg-warning-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
-              onClick={activeSession.onCancel}>
-              <XOctagon className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('surtido.escaneo.cancel')}</span>
+            <button className="h-8 px-2 rounded-lg text-warning-600 bg-warning-50 hover:bg-warning-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+              onClick={activeSession.onCancel} title={t('surtido.escaneo.cancel')}>
+              <XOctagon className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">{t('surtido.escaneo.cancel')}</span>
             </button>
           )}
           {activeSession.onFinalize && (
-            <button className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
-              onClick={activeSession.onFinalize}>
-              <Square className="w-4 h-4" /> {t('surtido.escaneo.finalize')}
+            <button className="h-8 px-2.5 md:px-4 rounded-lg bg-danger-600 text-white hover:bg-danger-700 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+              onClick={activeSession.onFinalize} title={t('surtido.escaneo.finalize')}>
+              <Square className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">{t('surtido.escaneo.finalize')}</span>
             </button>
           )}
         </>
       )}
       <button
-        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-warm-100 text-warm-400 transition-all duration-200 hover:bg-primary-50 hover:text-primary-600"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 bg-warm-100 text-warm-400 transition-all hover:bg-primary-50 hover:text-primary-600"
         onClick={() => setShowQuickSearch(true)}
         title={t('surtido.validacion.quick_search_title')}
         aria-label={t('surtido.validacion.quick_search_title')}>
-        <Search className="w-4 h-4" />
+        <Search className="w-3.5 h-3.5" />
       </button>
     </div>
   )

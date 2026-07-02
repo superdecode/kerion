@@ -1635,6 +1635,7 @@ export default function Escaneo() {
   const [originLocation, setOriginLocation] = useState(() => sessionStorage.getItem('kirion_work_location') || '')
   const [showClasifSummaryModal, setShowClasifSummaryModal] = useState(false)
   const [pendingClasifGroup, setPendingClasifGroup] = useState(null)
+  const [mobilePickerOpen, setMobilePickerOpen] = useState(false)
 
   const buildSessionDuplicateConflicts = useCallback((codes) => {
     if (!activeTab) return []
@@ -2046,50 +2047,59 @@ export default function Escaneo() {
       )}
       <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')}
         actions={
-            <div className="flex items-center gap-1.5 flex-wrap justify-end">
-              {inventoryHeaderSummary}
-              {pendingCount > 0 && (
-                <span className="px-3 py-2 rounded-xl text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1.5">
-                  {isSyncing ? <Loader2 size={13} className="animate-spin" /> : <WifiOff size={13} />}
-                {pendingCount}
+          <div className="flex items-center gap-1 md:gap-1.5 flex-nowrap">
+            <span className="md:hidden">
+              <DataSyncStatus
+                records={inventoryRecords}
+                updatedAt={sheetTs}
+                partial={inventoryPartial}
+                onRefresh={handleSheetRefresh}
+                refreshing={boxStockQuery.isFetching}
+                compact
+              />
+            </span>
+            <span className="hidden md:inline-flex">{inventoryHeaderSummary}</span>
+            {pendingCount > 0 && (
+              <span className="px-2 py-1.5 rounded-lg text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1">
+                {isSyncing ? <Loader2 size={11} className="animate-spin" /> : <WifiOff size={11} />}
+                <span className="text-[10px]">{pendingCount}</span>
               </span>
             )}
-            {/* Cancel session */}
             {activeTab && (
               <button
                 onClick={handleCancelSession}
-                className="px-3 py-2 rounded-xl text-warning-600 bg-warning-50 hover:bg-warning-100 transition-all inline-flex items-center gap-2 text-sm font-semibold"
+                className="h-8 px-2 rounded-lg text-warning-600 bg-warning-50 hover:bg-warning-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+                title={t('common.cancel')}
               >
-                <Ban size={14} />
-                <span className="hidden sm:inline">{t('common.cancel')}</span>
+                <Ban size={13} />
+                <span className="hidden md:inline">{t('common.cancel')}</span>
               </button>
             )}
-            {/* Finalizar session */}
-            {activeTab && (
-              activeTab.scanType === 'unificado' ? (
-                <button
-                  className="btn-danger inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
-                  onClick={handleFinalize}
-                  disabled={saveSessionMut.isPending}>
-                  <Square className="w-4 h-4" /> {t('common.finalize')}
-                </button>
-              ) : null
+            {activeTab && activeTab.scanType === 'unificado' && (
+              <button
+                className="h-8 px-2.5 md:px-4 rounded-lg bg-danger-600 text-white hover:bg-danger-700 inline-flex items-center gap-1.5 text-xs font-semibold"
+                onClick={handleFinalize}
+                disabled={saveSessionMut.isPending}
+                title={t('common.finalize')}
+              >
+                <Square className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">{t('common.finalize')}</span>
+              </button>
             )}
             <button
               type="button"
               onClick={() => setShowQuickSearch(true)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-warm-100 text-warm-400 transition-all duration-200 hover:bg-primary-50 hover:text-primary-600"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 bg-warm-100 text-warm-400 transition-all hover:bg-primary-50 hover:text-primary-600"
               title="Búsqueda rápida"
-              aria-label="Búsqueda rápida"
             >
-              <Search size={16} />
+              <Search size={14} />
             </button>
           </div>
         }
       />
 
-      {/* Tab bar */}
-      <div className="flex items-center gap-1.5 px-4 pt-3 pb-0 border-b border-warm-100 bg-white overflow-x-auto overflow-y-hidden">
+      {/* Desktop tab bar */}
+      <div className="hidden md:flex items-center gap-1.5 px-4 pt-3 pb-0 border-b border-warm-100 bg-white overflow-x-auto overflow-y-hidden">
         {tabs.map(tab => {
           const isActive = tab.id === activeTabId
           const dotColor = tab.scanType === 'clasificacion' ? 'bg-accent-400' : 'bg-primary-400'
@@ -2122,15 +2132,99 @@ export default function Escaneo() {
           <button onClick={handleAddTab}
             className="flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-xs font-semibold border-2 border-transparent text-success-600 bg-success-50 hover:bg-success-100 transition-all shrink-0">
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">{t('inventario.escaneo.new_tab')}</span>
+            <span>{t('inventario.escaneo.new_tab')}</span>
           </button>
         )}
       </div>
 
+      {/* Mobile session bar */}
+      <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-warm-100 bg-white shrink-0">
+        <ScanBarcode size={13} className="text-teal-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-semibold text-warm-800 font-mono truncate block">
+            {activeTab?.name ?? t('inventario.escaneo.new_tab')}
+          </span>
+          {activeTab && (
+            <span className="text-[10px] text-warm-400">
+              {activeTab.scanType === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado')} • {activeTab.items.length} {t('inventario.escaneo.scans_label')}
+            </span>
+          )}
+        </div>
+        {tabs.length > 1 && (
+          <button
+            onClick={() => setMobilePickerOpen(true)}
+            className="flex items-center gap-1 text-[11px] text-teal-700 bg-teal-50 border border-teal-200 px-2 py-1.5 rounded-lg font-semibold shrink-0 active:scale-95"
+          >
+            <Layers size={11} /> {tabs.length}
+          </button>
+        )}
+        {tabs.length < 4 && (
+          <button
+            onClick={handleAddTab}
+            className="flex items-center gap-1 text-[11px] text-success-600 bg-success-50 border border-success-200 px-2 py-1.5 rounded-lg font-semibold shrink-0 active:scale-95"
+          >
+            <Plus size={12} />
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {mobilePickerOpen && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-50 bg-black/50 md:hidden"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setMobilePickerOpen(false)}
+            />
+            <motion.div
+              className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-2xl shadow-2xl md:hidden"
+              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            >
+              <div className="w-10 h-1 bg-warm-300 rounded-full mx-auto mt-3 mb-1" />
+              <div className="px-4 pb-2 pt-1 flex items-center justify-between">
+                <span className="text-sm font-bold text-warm-800">{t('inventario.escaneo.new_tab')}</span>
+                <button onClick={() => setMobilePickerOpen(false)} className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400"><X size={16} /></button>
+              </div>
+              <div className="px-3 pb-6 space-y-2 max-h-64 overflow-y-auto">
+                {tabs.map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => { setActiveTab(tab.id); setMobilePickerOpen(false) }}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                      tab.id === activeTabId
+                        ? 'border-teal-300 bg-teal-50'
+                        : 'border-warm-200 bg-warm-50 hover:bg-warm-100'
+                    }`}
+                  >
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${tab.scanType === 'clasificacion' ? 'bg-accent-400' : 'bg-teal-400'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold truncate font-mono ${tab.id === activeTabId ? 'text-teal-700' : 'text-warm-700'}`}>{tab.name}</p>
+                      <p className="text-[10px] text-warm-400">{tab.items.length} {t('inventario.escaneo.scans_label')}</p>
+                    </div>
+                    {tab.id === activeTabId && (
+                      <span className="text-[10px] font-bold text-teal-600 bg-teal-100 px-1.5 py-0.5 rounded shrink-0">Activa</span>
+                    )}
+                    {tabs.length > 1 && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleCloseTab(tab.id) }}
+                        className="p-1.5 hover:bg-danger-100 rounded-lg text-warm-300 hover:text-danger-500 transition-colors shrink-0"
+                      >
+                        <X size={13} />
+                      </button>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Active tab content + optional side panel */}
       {activeTab && (
         <div className="flex flex-1 overflow-hidden relative">
-          <div className="flex-1 overflow-y-auto xl:overflow-hidden flex flex-col p-6">
+          <div className="flex-1 overflow-y-auto xl:overflow-hidden flex flex-col p-3 md:p-6">
             <div className="max-w-6xl 2xl:max-w-7xl mx-auto w-full space-y-4 xl:space-y-0 xl:flex xl:flex-col xl:gap-4 xl:h-full xl:min-h-0">
 
               {/* Session info card */}

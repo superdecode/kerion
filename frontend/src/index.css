@@ -286,6 +286,12 @@
   .stagger-5 { animation-delay: 250ms; }
   .stagger-6 { animation-delay: 300ms; }
 
+  /* Prevent horizontal overflow on all screens */
+  .no-overflow-x {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   /* Mobile safe-area / viewport utilities */
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -558,4 +564,30 @@
   #print-surtido-ubicaciones th,
   #print-surtido-ubicaciones td    { display: table-cell; }
   .print-page-header                { display: block; }
+}
+
+/* Mobile global: tighter font sizes and no horizontal overflow */
+@media (max-width: 767px) {
+  /* Prevent cards/modals from overflowing viewport width */
+  .card, [class*="rounded-xl"], [class*="rounded-2xl"] {
+    max-width: 100%;
+  }
+
+  /* Modals: ensure they don't exceed viewport */
+  [class*="fixed"][class*="inset"] > * {
+    max-width: calc(100vw - 1.5rem);
+    overflow-x: hidden;
+  }
+
+  /* Slightly tighter body text on mobile */
+  .text-base { font-size: 0.8125rem !important; line-height: 1.4 !important; }
+  .text-lg   { font-size: 0.9375rem !important; }
+  .text-xl   { font-size: 1rem !important; }
+  .text-2xl  { font-size: 1.125rem !important; }
+
+  /* Session info card large number */
+  .text-4xl  { font-size: 1.875rem !important; }
+
+  /* Modal content: allow horizontal scroll only inside tables */
+  .table-scroll { overflow-x: auto; }
 }

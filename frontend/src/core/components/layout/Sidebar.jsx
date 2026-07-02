@@ -318,17 +318,17 @@ export default function Sidebar() {
     )
   }
 
-  // Sidebar z-index: tour overrides everything; mobile uses z-50 normally
-  const zClass = tourActive ? 'z-[100001]' : 'z-50 md:z-auto'
+  // Sidebar z-index: tour overrides everything; mobile z-[500] to clear all module content (max z-[220] seen in modules)
+  const zClass = tourActive ? 'z-[100001]' : 'z-[500] md:z-auto'
 
   return (
     <aside
       className={[
-        // Mobile: fixed drawer sliding from left
-        'fixed top-0 left-0 h-full w-72',
+        // Mobile: fixed drawer below header (top-14 = 56px), slides from left
+        'fixed top-14 left-0 h-[calc(100dvh-3.5rem)] w-[280px]',
         mobileOpen ? 'translate-x-0' : '-translate-x-full',
         'transition-transform duration-300 ease-in-out',
-        // Desktop: relative sidebar in flex layout
+        // Desktop: relative sidebar in flex layout, full height
         'md:relative md:top-auto md:left-auto md:h-auto md:flex-shrink-0',
         'md:translate-x-0 md:transition-all md:duration-200',
         collapsed ? 'md:w-16' : 'md:w-60',
@@ -348,8 +348,8 @@ export default function Sidebar() {
           : <ChevronLeft className="w-3.5 h-3.5 text-blue-600" />}
       </button>
 
-      {/* Logo */}
-      <div className={`h-16 flex items-center border-b border-blue-900/50 flex-shrink-0 ${!showFull ? 'justify-center px-3' : 'px-4 gap-3'}`}>
+      {/* Logo — hidden on mobile (already in header) */}
+      <div className={`hidden md:flex h-16 items-center border-b border-blue-900/50 flex-shrink-0 ${!showFull ? 'justify-center px-3' : 'px-4 gap-3'}`}>
         <img src="/logo.png" alt="Kirion" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
         {showFull && (
           <div className="min-w-0">
