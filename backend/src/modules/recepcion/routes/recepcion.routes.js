@@ -387,6 +387,94 @@ router.get('/orders/search-by-code',
   }
 )
 
+// GET /orders/quick-box-search — PDA-friendly lookup by Box Type or Custom Box Barcode
+router.get('/orders/quick-box-search',
+  authenticateToken, loadFullUser,
+  async (req, res) => {
+    try {
+      const canSearch = hasModulePermission(req.fullUser, 'recepcion.recibir', 'ver') ||
+        hasModulePermission(req.fullUser, 'recepcion.validacion', 'ver')
+      if (!canSearch) return res.status(403).json({ error: 'Permiso insuficiente' })
+
+      const q = String(req.query.q || '').trim()
+      if (q.length < 2) return res.status(400).json({ error: 'Ingresa al menos 2 caracteres' })
+
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 30))
+      const like = `%${q}%`
+      const result = await req.tQuery(
+        `SELECT
+           l.id AS line_id,
+           l.box_type,
+           l.custom_box_barcode,
+           l.sku,
+           l.qty_per_box,
+           l.estado_validacion,
+           l.validated_at,
+           o.id AS order_id,
+           o.folio,
+           o.cliente,
+           o.inbound_order_no,
+           o.tracking_no,
+           o.reference_no,
+           o.estado AS order_estado,
+           ev.id AS scan_event_id,
+           ev.codigo_escaneado,
+           ev.resultado AS scan_resultado,
+           ev.scanned_at,
+           ev.ubicacion,
+           ev.scanned_by_nombre,
+           COUNT(*) OVER()::int AS total_matches
+         FROM inbound_lines l
+         JOIN inbound_orders o ON o.id = l.order_id AND o.tenant_id = l.tenant_id
+         LEFT JOIN LATERAL (
+           SELECT e.id, e.codigo_escaneado, e.resultado, e.scanned_at, e.ubicacion,
+                  u.nombre_completo AS scanned_by_nombre
+             FROM inbound_scan_events e
+             LEFT JOIN usuarios u ON u.id = e.scanned_by AND u.tenant_id = e.tenant_id
+            WHERE e.tenant_id = l.tenant_id
+              AND e.order_id = l.order_id
+              AND (
+                e.line_id = l.id
+                OR (
+                  e.line_id IS NULL
+                  AND l.custom_box_barcode IS NOT NULL
+                  AND UPPER(e.codigo_escaneado) = UPPER(l.custom_box_barcode)
+                )
+              )
+            ORDER BY CASE WHEN e.resultado = 'correcto' THEN 0 ELSE 1 END, e.scanned_at DESC, e.id DESC
+            LIMIT 1
+         ) ev ON true
+         WHERE l.tenant_id = $1
+           AND (
+             l.custom_box_barcode ILIKE $2
+             OR l.box_type ILIKE $2
+           )
+         ORDER BY
+           CASE
+             WHEN l.custom_box_barcode = $3 THEN 0
+             WHEN l.box_type = $3 THEN 1
+             WHEN l.custom_box_barcode ILIKE $4 THEN 2
+             WHEN l.box_type ILIKE $4 THEN 3
+             ELSE 4
+           END,
+           ev.scanned_at DESC NULLS LAST,
+           o.created_at DESC,
+           l.created_at ASC
+         LIMIT $5`,
+        [req.tenantId, like, q, `${q}%`, limit]
+      )
+      res.json({
+        results: result.rows.map(({ total_matches, ...row }) => row),
+        count: result.rows.length,
+        total: result.rows[0]?.total_matches || 0,
+      })
+    } catch (err) {
+      console.error('[recepcion] quick-box-search:', err.message)
+      res.status(500).json({ error: 'Error al buscar cajas de recepción' })
+    }
+  }
+)
+
 // GET /orders/:id — order detail with lines
 router.get('/orders/:id',
   authenticateToken, loadFullUser,

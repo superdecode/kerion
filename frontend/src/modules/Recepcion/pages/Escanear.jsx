@@ -5,6 +5,7 @@ import { ScanBarcode, Search, X, Plus, Loader2, ArrowRight } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import StatusPill from '../../../core/components/common/StatusPill'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import RecepcionQuickSearch from '../components/RecepcionQuickSearch'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { listOrders, searchByCode } from '../services/recepcionService'
 import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
@@ -304,6 +305,7 @@ export default function EscanearRecepcion() {
       <Header
         title={t('rec.escanear.title')}
         subtitle={subtitle}
+        quickSearch={<RecepcionQuickSearch />}
         actions={<div ref={setActionsSlot} className="flex items-center gap-1.5 sm:gap-2" />}
       />
 

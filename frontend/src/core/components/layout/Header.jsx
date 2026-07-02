@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import UserMenu from './UserMenu'
 
-export default function Header({ title, subtitle, actions, showSearch = false }) {
+export default function Header({ title, subtitle, actions, showSearch = false, quickSearch = null }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const { t } = useI18nStore()
 
@@ -33,6 +33,12 @@ export default function Header({ title, subtitle, actions, showSearch = false })
         {actions && (
           <div className="surface-enter-soft flex items-center gap-2">
             {actions}
+          </div>
+        )}
+
+        {quickSearch && (
+          <div className="surface-enter-soft flex items-center">
+            {quickSearch}
           </div>
         )}
 

@@ -8,6 +8,7 @@ import {
   ScanBarcode, Printer, Clock, Filter, Tags, Plus, Edit3,
 } from 'lucide-react'
 import RecepcionMobileHub from '../components/RecepcionMobileHub'
+import RecepcionQuickSearch from '../components/RecepcionQuickSearch'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -444,6 +445,7 @@ export default function Recibir() {
       <Header
         title={t('rec.recibir.title')}
         icon={PackageCheck}
+        quickSearch={<RecepcionQuickSearch />}
         actions={
           <div className="flex items-center gap-1.5">
             {canCreate && (
