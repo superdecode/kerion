@@ -10,6 +10,7 @@ import { quickSearchBoxes } from '../services/recepcionService'
 import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { fmtDateTimeMini } from '../../../core/utils/dateFormat'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 
 const STATUS_STYLE = {
   validada: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -133,10 +134,11 @@ export default function RecepcionQuickSearch() {
       setSearched(false)
       return
     }
+    const resolvedQuery = normalizeScanCode(q) || q.toUpperCase()
     setLoading(true)
     setSearched(true)
     try {
-      const data = await quickSearchBoxes(q, 30)
+      const data = await quickSearchBoxes(resolvedQuery, 30)
       setResults(data.results || [])
       setTotal(data.total || data.count || 0)
     } catch {

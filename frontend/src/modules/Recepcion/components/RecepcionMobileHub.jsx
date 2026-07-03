@@ -10,6 +10,7 @@ import { fmtDate } from '../../../core/utils/dateFormat'
 import StatusPill from '../../../core/components/common/StatusPill'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import { initAudio, playSound } from '../../Shared/Wms/playSound'
+import { normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 
 const ESTADO_META = {
   pendiente_validacion: { cls: 'bg-warm-100 text-warm-600' },
@@ -129,18 +130,19 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
   const handleScan = useCallback(async () => {
     const val = code.trim()
     if (!val || scanning) return
+    const resolvedQuery = normalizeScanCode(val) || val.toUpperCase()
     setScanning(true)
     setScanState(null)
-    setLastCode(val)
+    setLastCode(resolvedQuery)
     setCode('')
     try {
-      const result = await searchByCode(val)
+      const result = await searchByCode(resolvedQuery)
       if (result.count === 0) {
         setScanState('not_found')
         playSound('error')
       } else {
         playSound('success')
-        setMatchSheet({ open: true, orders: result.orders, code: val })
+        setMatchSheet({ open: true, orders: result.orders, code: resolvedQuery })
       }
     } catch {
       setScanState('not_found')

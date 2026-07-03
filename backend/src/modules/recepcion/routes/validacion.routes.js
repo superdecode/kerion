@@ -1,11 +1,16 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
-import { requireAnyPermission, requirePermission } from '../../../shared/middleware/permissions.js'
+import { getPermissionLevel, requireAnyPermission, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 import { refreshRecepcionOrderState } from '../utils/orderState.js'
 
 const router = Router()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function hasRecepcionValidationDeletePermission(user) {
+  return resolvePermission(getPermissionLevel(user?.permisos, 'recepcion.validacion'), 'eliminar')
+}
+
 function normalizedCodeSql(column) {
   return `UPPER(REGEXP_REPLACE(
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(${column}, ''), '／', '/'), '－', '-'), '‒', '-'), '–', '-'), '—', '-'), '―', '-'),
@@ -444,6 +449,11 @@ router.delete('/orders/:id/scan-events/location/:ubicacion',
         )
         const config = orderRes.rows[0]?.validation_config
         if (config?.mode === 'tarimas') {
+          if (!hasRecepcionValidationDeletePermission(req.fullUser)) {
+            const error = new Error('Permiso insuficiente para eliminar una tarima completa')
+            error.status = 403
+            throw error
+          }
           const tarimaNum = parseInt(ubicacion, 10)
           const nextConfig = {
             ...config,

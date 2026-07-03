@@ -3,11 +3,21 @@ import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middl
 import { getPermissionLevel, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { checkModuleLimit } from '../../middleware/usageGuard.js'
 import { getRecepcionValidationRecordCount, refreshRecepcionOrderState } from '../utils/orderState.js'
+import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 
 const router = Router()
 let inboundLineColumnsCache = null
 const EXPORT_SYNC_WARN_ROWS = 100000
 const EXPORT_SYNC_MAX_ROWS = 150000
+
+function normalizedCodeSql(column) {
+  return `UPPER(REGEXP_REPLACE(
+    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(${column}, ''), '／', '/'), '－', '-'), '‒', '-'), '–', '-'), '—', '-'), '―', '-'),
+    '[^A-Z0-9_\\-/]',
+    '',
+    'g'
+  ))`
+}
 
 function sanitizeValidationConfig(input = {}) {
   const toPositiveInt = (value, fallback) => {
@@ -471,6 +481,11 @@ router.get('/orders/search-by-code',
         return res.status(400).json({ error: 'Código requerido' })
       }
       const c = String(code).trim()
+      const like = `%${c}%`
+      const prefix = `${c}%`
+      const normalizedVariants = generateCodeVariations(c, true)
+      const fallbackVariants = generateCodeVariations(c, false)
+      const scanVariations = Array.from(new Set([...normalizedVariants, ...fallbackVariants])).filter(Boolean)
       const result = await req.tQuery(
         `SELECT
            o.id,
@@ -482,24 +497,60 @@ router.get('/orders/search-by-code',
            o.cajas_forzadas,
            o.cajas_registradas,
            o.created_at,
-           COUNT(*)::int AS matching_lines,
-           COUNT(*) FILTER (WHERE l.estado_validacion = 'pendiente')::int AS pending_lines,
-           COUNT(*) FILTER (
-             WHERE l.estado_validacion = 'pendiente'
-               AND (l.custom_box_barcode ILIKE $2 OR l.sku ILIKE $2)
-           )::int AS pending_exact_lines,
-           COUNT(*) FILTER (WHERE l.estado_validacion = 'validada')::int AS validated_lines,
-           COUNT(*) FILTER (WHERE l.estado_validacion = 'faltante')::int AS missing_lines
+           COALESCE(match_stats.matching_lines, 0) AS matching_lines,
+           COALESCE(line_stats.pending_lines, 0) AS pending_lines,
+           COALESCE(match_stats.pending_exact_lines, 0) AS pending_exact_lines,
+           COALESCE(line_stats.validated_lines, 0) AS validated_lines,
+           COALESCE(line_stats.missing_lines, 0) AS missing_lines
          FROM inbound_orders o
-         JOIN inbound_lines l ON l.order_id = o.id AND l.tenant_id = o.tenant_id
-         WHERE o.tenant_id = $1 AND (
-           l.custom_box_barcode = $2 OR l.sku = $2
-           OR l.custom_box_barcode ILIKE $3 OR l.sku ILIKE $3
-         )
-         GROUP BY o.id, o.folio, o.cliente, o.estado, o.total_cajas, o.cajas_validadas, o.cajas_forzadas, o.cajas_registradas, o.created_at
-         ORDER BY o.created_at DESC
+         LEFT JOIN LATERAL (
+           SELECT
+             COUNT(*)::int AS matching_lines,
+             COUNT(*) FILTER (
+               WHERE l.estado_validacion = 'pendiente'
+                 AND (
+                   ${normalizedCodeSql('l.custom_box_barcode')} = ANY($3::text[])
+                   OR l.custom_box_barcode ILIKE $2
+                   OR l.sku ILIKE $2
+                 )
+             )::int AS pending_exact_lines
+           FROM inbound_lines l
+           WHERE l.order_id = o.id
+             AND l.tenant_id = o.tenant_id
+             AND (
+               ${normalizedCodeSql('l.custom_box_barcode')} = ANY($3::text[])
+               OR l.custom_box_barcode ILIKE $2
+               OR l.sku ILIKE $2
+             )
+         ) match_stats ON true
+         LEFT JOIN LATERAL (
+           SELECT
+             COUNT(*) FILTER (WHERE l.estado_validacion = 'pendiente')::int AS pending_lines,
+             COUNT(*) FILTER (WHERE l.estado_validacion = 'validada')::int AS validated_lines,
+             COUNT(*) FILTER (WHERE l.estado_validacion = 'faltante')::int AS missing_lines
+           FROM inbound_lines l
+           WHERE l.order_id = o.id
+             AND l.tenant_id = o.tenant_id
+         ) line_stats ON true
+         WHERE o.tenant_id = $1
+           AND (
+             o.folio ILIKE $2
+             OR o.inbound_order_no ILIKE $2
+             OR o.reference_no ILIKE $2
+             OR o.tracking_no ILIKE $2
+             OR COALESCE(match_stats.matching_lines, 0) > 0
+           )
+         ORDER BY
+           CASE
+             WHEN o.folio = $4 OR o.inbound_order_no = $4 OR o.reference_no = $4 OR o.tracking_no = $4 THEN 0
+             WHEN o.folio ILIKE $5 OR o.inbound_order_no ILIKE $5 OR o.reference_no ILIKE $5 OR o.tracking_no ILIKE $5 THEN 1
+             WHEN COALESCE(match_stats.pending_exact_lines, 0) > 0 THEN 2
+             WHEN COALESCE(match_stats.matching_lines, 0) > 0 THEN 3
+             ELSE 4
+           END,
+           o.created_at DESC
          LIMIT 10`,
-        [req.tenantId, c, `%${c}%`]
+        [req.tenantId, like, scanVariations, c, prefix]
       )
       res.json({ orders: result.rows, count: result.rows.length })
     } catch (err) {
@@ -523,6 +574,10 @@ router.get('/orders/quick-box-search',
 
       const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 30))
       const like = `%${q}%`
+      const prefix = `${q}%`
+      const normalizedVariants = generateCodeVariations(q, true)
+      const fallbackVariants = generateCodeVariations(q, false)
+      const scanVariations = Array.from(new Set([...normalizedVariants, ...fallbackVariants])).filter(Boolean)
       const result = await req.tQuery(
         `SELECT
            l.id AS line_id,
@@ -568,22 +623,24 @@ router.get('/orders/quick-box-search',
          ) ev ON true
          WHERE l.tenant_id = $1
            AND (
-             l.custom_box_barcode ILIKE $2
+             ${normalizedCodeSql('l.custom_box_barcode')} = ANY($3::text[])
+             OR l.custom_box_barcode ILIKE $2
              OR l.box_type ILIKE $2
            )
          ORDER BY
            CASE
-             WHEN l.custom_box_barcode = $3 THEN 0
-             WHEN l.box_type = $3 THEN 1
-             WHEN l.custom_box_barcode ILIKE $4 THEN 2
-             WHEN l.box_type ILIKE $4 THEN 3
-             ELSE 4
+             WHEN ${normalizedCodeSql('l.custom_box_barcode')} = ANY($3::text[]) THEN 0
+             WHEN l.custom_box_barcode = $4 THEN 1
+             WHEN l.box_type = $4 THEN 2
+             WHEN l.custom_box_barcode ILIKE $5 THEN 3
+             WHEN l.box_type ILIKE $5 THEN 4
+             ELSE 5
            END,
            ev.scanned_at DESC NULLS LAST,
            o.created_at DESC,
            l.created_at ASC
-         LIMIT $5`,
-        [req.tenantId, like, q, `${q}%`, limit]
+         LIMIT $6`,
+        [req.tenantId, like, scanVariations, q, prefix, limit]
       )
       res.json({
         results: result.rows.map(({ total_matches, ...row }) => row),

@@ -192,6 +192,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const canUndoLastValidation = hasPermission('recepcion.validacion', 'crear')
   const canDeleteScan = hasPermission('recepcion.validacion', 'eliminar')
   const canDeleteScanGroup = hasPermission('recepcion.validacion', 'actualizar') || canDeleteScan
+  const canDeleteTarimaGroup = canDeleteScan
 
   const scanRefDesktop = useRef(null)
   const scanRefMobile  = useRef(null)
@@ -2029,7 +2030,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                     <ArrowRightLeft size={11} />
                   </button>
                 )}
-                {canDeleteScanGroup && (tarimaScanEventsByNum.get(ts.num) || []).some(event => isPersistedScanEventId(event.id)) && (
+                {canDeleteTarimaGroup && (tarimaScanEventsByNum.get(ts.num) || []).some(event => isPersistedScanEventId(event.id)) && (
                   <button
                     type="button"
                     onClick={() => setDeleteGroupModal({ open: true, ubicacion: formatTarimaLocation(ts.num), label: `T${ts.num}`, type: 'tarima', tarimaNum: ts.num })}
