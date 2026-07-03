@@ -289,7 +289,10 @@ export default function RecepcionDetalle() {
       setNuevoCodigo('')
       setNuevaUbicacion('')
     },
-    onError: () => toast.error(t('toast.error')),
+    onError: (err) => {
+      if (err?.response?.status === 403) return toast.error(t('rec.novedad.error.perm'))
+      toast.error(err?.response?.data?.error || t('toast.error'))
+    },
   })
 
   const deleteNovedadMut = useMutation({
@@ -372,10 +375,14 @@ export default function RecepcionDetalle() {
   const validadas = validadasFromOrder > 0 ? validadasFromOrder : lineStatusCounts.validada
   const faltantes = lineStatusCounts.faltante
   const pendientes = Math.max(totalBase - validadas - faltantes, 0)
-  const progresoRaw = totalBase > 0 ? Math.min(100, (validadas / totalBase) * 100) : 0
-  const progreso = progresoRaw > 0 && progresoRaw < 1
-    ? parseFloat(progresoRaw.toFixed(1))
-    : Math.round(progresoRaw)
+  const progresoRaw = totalBase > 0 ? (validadas / totalBase) * 100 : 0
+  const progreso = (() => {
+    if (totalBase <= 0) return 0
+    if (validadas === totalBase) return 100
+    const val = parseFloat(progresoRaw.toFixed(1))
+    if (val >= 100 && validadas < totalBase) return 99.9
+    return val
+  })()
 
   const estadoMeta = ESTADO_META[order.estado] ?? ESTADO_META.pendiente_validacion
 
@@ -686,7 +693,7 @@ export default function RecepcionDetalle() {
                 <div className="relative w-14 h-1.5 rounded-full bg-sky-200/60 overflow-hidden">
                   <div
                     className="absolute inset-y-0 left-0 bg-sky-500 rounded-full transition-all duration-700"
-                    style={{ width: `${progresoRaw}%` }}
+                    style={{ width: `${Math.min(100, progresoRaw)}%` }}
                   />
                 </div>
               </div>

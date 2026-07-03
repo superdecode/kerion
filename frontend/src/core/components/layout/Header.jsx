@@ -5,7 +5,7 @@ import { useNavStore } from '../../stores/navStore'
 import { Search, X, Menu } from 'lucide-react'
 import UserMenu from './UserMenu'
 
-export default function Header({ title, subtitle, actions, showSearch = false, quickSearch = null }) {
+export default function Header({ title, subtitle, actions, showSearch = false, quickSearch = null, hideUserOnMobile = false }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const { t } = useI18nStore()
   const { toggleNav } = useNavStore()
@@ -76,7 +76,9 @@ export default function Header({ title, subtitle, actions, showSearch = false, q
       )}
 
       {/* User menu */}
-      <UserMenu />
+      <div className={hideUserOnMobile ? 'hidden sm:block' : undefined}>
+        <UserMenu />
+      </div>
     </header>
   )
 }

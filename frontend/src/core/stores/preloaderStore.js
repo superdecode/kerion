@@ -5,7 +5,8 @@ const pendingTimers = new Map()
 const visibleTasks = new Map()
 
 function syncStore(set) {
-  const latestVisibleTask = Array.from(visibleTasks.values()).at(-1) || null
+  const visibleArr = Array.from(visibleTasks.values())
+  const latestVisibleTask = visibleArr[visibleArr.length - 1] || null
   set({
     visible: visibleTasks.size > 0,
     message: latestVisibleTask?.message || 'Cargando...',

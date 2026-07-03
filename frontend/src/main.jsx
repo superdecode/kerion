@@ -4,6 +4,19 @@ import App from './App.jsx'
 import './index.css'
 
 // Polyfills for older browsers (Chrome 52-63, Android 5-7 WebView)
+if (!Array.prototype.at) {
+  Array.prototype.at = function at(n) {
+    const idx = Math.trunc(n) || 0
+    return this[idx < 0 ? this.length + idx : idx]
+  }
+}
+if (!String.prototype.at) {
+  String.prototype.at = function at(n) {
+    const idx = Math.trunc(n) || 0
+    const i = idx < 0 ? this.length + idx : idx
+    return i >= 0 && i < this.length ? this[i] : undefined
+  }
+}
 if (typeof ResizeObserver === 'undefined') {
   window.ResizeObserver = class ResizeObserver {
     constructor(cb) { this._cb = cb }

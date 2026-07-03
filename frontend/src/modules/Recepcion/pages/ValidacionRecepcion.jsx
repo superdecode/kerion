@@ -160,11 +160,11 @@ function isPersistedScanEventId(id) {
 
 function getScanErrorMessage(err) {
   const status = err?.response?.status
-  if (status === 403) return 'Sin permiso para escanear en esta orden. Contacta al administrador.'
   if (status === 401) return 'Sesión expirada. Vuelve a iniciar sesión.'
   const data = err?.response?.data
   const parts = [data?.error, data?.detalle].filter(Boolean)
   if (parts.length > 0) return parts.join(': ')
+  if (status === 403) return 'Sin permiso para escanear en esta orden. Contacta al administrador.'
   if (err?.message) return err.message
   return 'Error al procesar escaneo'
 }
@@ -1125,10 +1125,15 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
           }
         }
       })
-      if (ev.resultado === 'correcto' && !variables.optimisticFeedback) playSound('success')
-      else if (ev.resultado === 'duplicado') playSound('duplicate')
-      else if (crossOrder) playSound('warning')
-      else playSound('error')
+      if (ev.resultado === 'correcto') {
+        if (!variables.optimisticFeedback) playSound('success')
+      } else if (ev.resultado === 'duplicado') {
+        playSound('duplicate')
+      } else if (crossOrder) {
+        playSound('warning')
+      } else {
+        playSound('error')
+      }
     },
     onError: (err, variables) => {
       if (import.meta.env.DEV && scanStartRef.current != null) {
@@ -2294,6 +2299,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       {/* ── Header ── */}
       {!embedded && (
       <Header
+        hideUserOnMobile
         title={
           <div className="flex items-center gap-2">
             <button onClick={endSession} className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors shrink-0">
@@ -2346,7 +2352,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               >
                 <Check className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{t('rec.val.btn.completar')}</span>
-                <span className="sm:hidden">{t('rec.val.mobile.completar')}</span>
+                <span className="sm:hidden">{t('rec.val.mobile.completar_ubi')}</span>
               </button>
             )}
             {/* Force close */}
@@ -2361,11 +2367,11 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
               </button>
             )}
-            {/* Terminar */}
+            {/* Terminar — desktop only */}
             <button
               onClick={endSession}
               disabled={isEndingSession}
-              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 disabled:opacity-60 transition-colors"
+              className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 disabled:opacity-60 transition-colors"
             >
               {isEndingSession ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />}
               <span>{t('rec.val.btn.terminar')}</span>
@@ -2396,7 +2402,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             <button type="button" onClick={completarUbicacion} className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-primary-300 bg-primary-600 text-xs font-semibold text-white hover:bg-primary-700 transition-colors">
               <Check className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{t('rec.val.btn.completar')}</span>
-              <span className="sm:hidden">{t('rec.val.mobile.completar')}</span>
+              <span className="sm:hidden">{t('rec.val.mobile.completar_ubi')}</span>
             </button>
           )}
           {canForceClose && (
@@ -2405,7 +2411,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
             </button>
           )}
-          <button onClick={endSession} disabled={isEndingSession} className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 disabled:opacity-60 transition-colors">
+          <button onClick={endSession} disabled={isEndingSession} className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 disabled:opacity-60 transition-colors">
             {isEndingSession ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />}
             <span>{t('rec.val.btn.terminar')}</span>
           </button>
@@ -2508,7 +2514,9 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                     <button
                       type="button"
                       onClick={() => setLastResult(null)}
-                      className="absolute right-2 top-2 z-10 rounded-lg p-1.5 text-warm-400 transition-colors hover:bg-white/70 hover:text-warm-700"
+                      onTouchEnd={(e) => { e.preventDefault(); setLastResult(null) }}
+                      style={{ touchAction: 'manipulation', minWidth: 36, minHeight: 36 }}
+                      className="absolute right-2 top-2 z-10 rounded-lg p-1.5 text-warm-400 transition-colors hover:bg-white/70 hover:text-warm-700 flex items-center justify-center"
                       title={t('common.close')}
                     >
                       <X className="h-4 w-4" />
@@ -2751,13 +2759,10 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   <p className="text-xs font-bold text-warm-600 uppercase tracking-wide">
                     {t('rec.scan.historial')} ({history.length})
                   </p>
-                  <button onClick={() => setHistory([])} className="text-[11px] text-warm-400 hover:text-warm-600 flex items-center gap-1">
-                    <X className="w-3 h-3" /> {t('common.clear')}
-                  </button>
                 </div>
-                <div className="overflow-x-auto max-h-52">
+                <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '208px' }}>
                   <table className="w-full min-w-[560px] text-xs">
-                    <thead className="bg-warm-50 sticky top-0 border-b border-warm-100">
+                    <thead className="bg-warm-50 border-b border-warm-100">
                       <tr>
                         <th className="table-header w-8">#</th>
                         {[['code', t('rec.scan.col.codigo')], ['sku', 'SKU'], ['scannedAt', t('rec.scan.col.hora')]].map(([key, lbl]) => (
@@ -2935,13 +2940,6 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             >
               <Edit3 size={12} />
               {t('rec.val.mobile.cambiar')}
-            </button>
-            <button
-              type="button"
-              onClick={completarUbicacion}
-              className="h-8 px-3 rounded-xl text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 active:scale-95 transition-all shrink-0"
-            >
-              {t('rec.val.mobile.completar')}
             </button>
           </div>
         )}
