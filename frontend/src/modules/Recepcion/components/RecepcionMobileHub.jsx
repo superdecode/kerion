@@ -109,9 +109,8 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
   const inputRef = useRef(null)
   const [code, setCode] = useState('')
   const [scanning, setScanning] = useState(false)
-  const [scanState, setScanState] = useState(null) // null | 'not_found'
-  const [lastCode, setLastCode] = useState('')
   const [matchSheet, setMatchSheet] = useState({ open: false, orders: [], code: '' })
+  const [notFoundModal, setNotFoundModal] = useState({ open: false, code: '' })
 
   useEffect(() => {
     initAudio()
@@ -126,21 +125,19 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
     if (!val || scanning) return
     const resolvedQuery = normalizeScanCode(val) || val.toUpperCase()
     setScanning(true)
-    setScanState(null)
-    setLastCode(resolvedQuery)
     setCode('')
     try {
       const result = await searchByCode(resolvedQuery)
       if (result.count === 0) {
-        setScanState('not_found')
         playSound('error')
+        setNotFoundModal({ open: true, code: resolvedQuery })
       } else {
         playSound('success')
         setMatchSheet({ open: true, orders: result.orders, code: resolvedQuery })
       }
     } catch {
-      setScanState('not_found')
       playSound('error')
+      setNotFoundModal({ open: true, code: resolvedQuery })
     } finally {
       setScanning(false)
       refocus()
@@ -166,7 +163,7 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
             ref={inputRef}
             type="text"
             value={code}
-            onChange={e => { setCode(e.target.value); setScanState(null) }}
+            onChange={e => setCode(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleScan()}
             placeholder={t('rec.mobile.scan_order_desc')}
             className="w-full pl-14 pr-10 py-3.5 text-base bg-warm-50 border-2 border-primary-200 rounded-2xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none font-mono tracking-wide transition-all"
@@ -182,24 +179,6 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
           )}
         </div>
 
-        <AnimatePresence mode="wait">
-          {scanState === 'not_found' && (
-            <motion.div
-              key="not_found"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-danger-50 border border-danger-200"
-            >
-              <XCircle className="w-4 h-4 text-danger-500 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-danger-700">{t('rec.mobile.no_order')}</p>
-                <p className="font-mono text-[11px] text-danger-500 truncate">{lastCode}</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Active orders list */}
@@ -231,6 +210,56 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
 
         <div style={{ height: 'env(safe-area-inset-bottom, 16px)' }} />
       </div>
+
+      {/* Not-found modal — portal to body */}
+      <AnimatePresence>
+        {notFoundModal.open && createPortal(
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ position: 'fixed', inset: 0, zIndex: 9040 }}
+              className="bg-black/40 backdrop-blur-sm"
+              onClick={() => { setNotFoundModal({ open: false, code: '' }); refocus() }}
+            />
+            <div style={{ position: 'fixed', inset: 0, zIndex: 9050, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
+              <motion.div
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+                style={{ width: '100%', pointerEvents: 'auto' }}
+                className="bg-white rounded-t-3xl shadow-2xl overflow-hidden"
+              >
+                <div className="flex justify-center pt-3 pb-1 shrink-0">
+                  <div className="w-10 h-1 bg-warm-200 rounded-full" />
+                </div>
+                <div className="px-5 pt-3 pb-6 flex flex-col items-center text-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-danger-50 flex items-center justify-center">
+                    <XCircle className="w-6 h-6 text-danger-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-warm-900 text-sm">{t('rec.mobile.no_order')}</p>
+                    <p className="font-mono text-xs text-danger-600 mt-1.5 break-all">{notFoundModal.code}</p>
+                    <p className="text-[11px] text-warm-500 mt-1">{t('rec.mobile.no_order_hint')}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setNotFoundModal({ open: false, code: '' }); refocus() }}
+                    className="w-full h-10 rounded-xl bg-warm-100 hover:bg-warm-200 active:scale-95 text-warm-700 text-sm font-semibold transition-all"
+                  >
+                    {t('common.close')}
+                  </button>
+                </div>
+                <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
+              </motion.div>
+            </div>
+          </>,
+          document.body
+        )}
+      </AnimatePresence>
 
       {/* Match bottom sheet — portal to body to escape overflow-y:auto ancestor on iOS Safari */}
       <AnimatePresence>

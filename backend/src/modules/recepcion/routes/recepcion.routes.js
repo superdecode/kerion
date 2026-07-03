@@ -521,6 +521,7 @@ router.get('/orders/search-by-code',
                ${normalizedCodeSql('l.custom_box_barcode')} = ANY($3::text[])
                OR l.custom_box_barcode ILIKE $2
                OR l.sku ILIKE $2
+               OR l.box_type ILIKE $2
              )
          ) match_stats ON true
          LEFT JOIN LATERAL (
