@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, memo } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -231,26 +232,27 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
         <div style={{ height: 'env(safe-area-inset-bottom, 16px)' }} />
       </div>
 
-      {/* Match bottom sheet */}
+      {/* Match bottom sheet — portal to body to escape overflow-y:auto ancestor on iOS Safari */}
       <AnimatePresence>
-        {matchSheet.open && (
+        {matchSheet.open && createPortal(
           <>
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+              style={{ position: 'fixed', inset: 0, zIndex: 9040 }}
+              className="bg-black/40 backdrop-blur-sm"
               onClick={closeSheet}
             />
-            <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-none">
+            <div style={{ position: 'fixed', inset: 0, zIndex: 9050, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-              className="bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden pointer-events-auto w-full"
-              style={{ maxHeight: '82dvh' }}
+              style={{ width: '100%', maxHeight: '82dvh', pointerEvents: 'auto' }}
+              className="bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
             >
               <div className="flex justify-center pt-3 pb-1 shrink-0">
                 <div className="w-10 h-1 bg-warm-200 rounded-full" />
@@ -296,7 +298,8 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
               <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
             </motion.div>
             </div>
-          </>
+          </>,
+          document.body
         )}
       </AnimatePresence>
     </div>
