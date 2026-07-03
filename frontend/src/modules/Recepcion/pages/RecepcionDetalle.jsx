@@ -299,10 +299,10 @@ export default function RecepcionDetalle() {
     onError: () => toast.error(t('toast.error')),
   })
 
-  const canValidate = hasPermission('recepcion.recibir', 'actualizar')
+  const canValidate = hasPermission('recepcion.recibir', 'crear')
   const canEdit = hasPermission('recepcion.recibir', 'actualizar')
   const canCreate = hasPermission('recepcion.recibir', 'crear')
-  const canMoveValidatedToOtros = hasPermission('recepcion.validacion', 'actualizar')
+  const canMoveValidatedToOtros = hasPermission('recepcion.validacion', 'crear')
   const canDeleteEvents = hasPermission('recepcion.validacion', 'eliminar')
   const [moveToOtrosModal, setMoveToOtrosModal] = useState({ open: false, event: null, tipo: '', ubicacion: '' })
 

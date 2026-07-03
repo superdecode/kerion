@@ -121,7 +121,7 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
   const refocus = useCallback(() => setTimeout(() => inputRef.current?.focus(), 80), [])
 
   const handleScan = useCallback(async () => {
-    const val = code.trim()
+    const val = (inputRef.current?.value || code).trim()
     if (!val || scanning) return
     const resolvedQuery = normalizeScanCode(val) || val.toUpperCase()
     setScanning(true)
@@ -243,12 +243,13 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
               className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
               onClick={closeSheet}
             />
+            <div className="fixed inset-0 z-50 flex flex-col justify-end pointer-events-none">
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-              className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
+              className="bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden pointer-events-auto w-full"
               style={{ maxHeight: '82dvh' }}
             >
               <div className="flex justify-center pt-3 pb-1 shrink-0">
@@ -294,6 +295,7 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
 
               <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
             </motion.div>
+            </div>
           </>
         )}
       </AnimatePresence>

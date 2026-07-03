@@ -95,7 +95,7 @@ export default function BugReportButton() {
   const isLast = remaining === 1 && !sent
 
   return (
-    <div ref={panelRef} className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
+    <div ref={panelRef} className="fixed bottom-6 right-6 z-50 hidden sm:flex flex-col items-end gap-2">
       {open && (
         <div className="w-80 bg-white rounded-2xl shadow-2xl border border-purple-100 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 bg-purple-50 border-b border-purple-100">
