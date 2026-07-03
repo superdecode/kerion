@@ -1353,7 +1353,11 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       setDupModal({ open: false, code: null, entry: null })
       refocus()
     },
-    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+    onError: (err) => {
+      const status = err?.response?.status
+      if (status === 403) return toast.error(t('rec.novedad.error.perm'))
+      toast.error(err.response?.data?.error || t('toast.error'))
+    },
   })
 
   async function persistTarimaAssignments(nextMap, nextEmptyTarimas = savedEmptyTarimas) {
@@ -2342,7 +2346,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               >
                 <Check className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{t('rec.val.btn.completar')}</span>
-                <span className="sm:hidden">Completar</span>
+                <span className="sm:hidden">{t('rec.val.mobile.completar')}</span>
               </button>
             )}
             {/* Force close */}
@@ -2392,7 +2396,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             <button type="button" onClick={completarUbicacion} className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border border-primary-300 bg-primary-600 text-xs font-semibold text-white hover:bg-primary-700 transition-colors">
               <Check className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{t('rec.val.btn.completar')}</span>
-              <span className="sm:hidden">OK</span>
+              <span className="sm:hidden">{t('rec.val.mobile.completar')}</span>
             </button>
           )}
           {canForceClose && (
@@ -2610,7 +2614,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                         >
                           <Edit3 size={11} />
                           <span className="hidden sm:inline">{t('rec.val.ubicacion.edit')}</span>
-                          <span className="sm:hidden">Cambiar</span>
+                          <span className="sm:hidden">{t('rec.val.mobile.cambiar')}</span>
                         </button>
                         <div className="w-px h-4 bg-accent-200 shrink-0" />
                         <div className="w-4 h-4 rounded-md bg-accent-100 flex items-center justify-center shrink-0">
@@ -2921,19 +2925,23 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         {/* Active ubicacion badge on mobile */}
         {!withTarimas && ubicacionConfirmed && (
           <div className="mb-2 flex items-center gap-2 px-1">
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-primary-700 bg-primary-50 border border-primary-200 px-2 py-1 rounded-full flex-1 min-w-0 truncate">
-              <MapPin size={10} className="shrink-0" />{selectedUbicacion || t('rec.val.ubicacion.skip')}
+            <span className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-primary-700 bg-primary-50 border border-primary-200 px-2.5 py-1.5 rounded-full flex-1 min-w-0 truncate">
+              <MapPin size={11} className="shrink-0" />{selectedUbicacion || t('rec.val.ubicacion.skip')}
             </span>
             <button
               type="button"
               onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
-              className="inline-flex items-center gap-1 text-[10px] font-medium text-warm-400 hover:text-primary-600 shrink-0"
+              className="h-8 px-3 rounded-xl text-xs font-semibold text-warm-600 bg-warm-100 hover:bg-warm-200 active:scale-95 transition-all inline-flex items-center gap-1.5 shrink-0"
             >
-              <Edit3 size={11} />
-              <span>Cambiar</span>
+              <Edit3 size={12} />
+              {t('rec.val.mobile.cambiar')}
             </button>
-            <button type="button" onClick={completarUbicacion} className="text-[10px] text-primary-600 hover:text-primary-800 font-semibold shrink-0">
-              Completar
+            <button
+              type="button"
+              onClick={completarUbicacion}
+              className="h-8 px-3 rounded-xl text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 active:scale-95 transition-all shrink-0"
+            >
+              {t('rec.val.mobile.completar')}
             </button>
           </div>
         )}

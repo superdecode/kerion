@@ -812,7 +812,7 @@ router.get('/orders/:id/novedades',
 // POST /orders/:id/novedades
 router.post('/orders/:id/novedades',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'crear'),
   async (req, res) => {
     try {
       const { tipo, codigo, ubicacion } = req.body
