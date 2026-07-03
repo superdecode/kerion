@@ -43,12 +43,9 @@ function sanitizeValidationConfig(input = {}) {
   return {
     mode,
     locked: mode === 'tarimas' ? Boolean(input?.locked) : false,
-    sectionMode: Boolean(input?.sectionMode),
-    maxTarimasPerSection: toPositiveInt(input?.maxTarimasPerSection, 20),
     groupSmallCodes: Boolean(input?.groupSmallCodes),
     minCajasParaAgrupar: toPositiveInt(input?.minCajasParaAgrupar, 3),
     maxCajasEnGrupo: toPositiveInt(input?.maxCajasEnGrupo, 10),
-    sortTarimasByCountDesc: Boolean(input?.sortTarimasByCountDesc),
     tarimaAssignments: mode === 'tarimas' ? sanitizeTarimaAssignments(input?.tarimaAssignments) : [],
     emptyTarimas: mode === 'tarimas' ? sanitizeEmptyTarimas(input?.emptyTarimas) : [],
   }
@@ -792,12 +789,9 @@ router.patch('/orders/:id',
           const sameLockedConfig =
             nextConfig.mode === 'tarimas' &&
             nextConfig.locked === true &&
-            Boolean(currentConfig.sectionMode) === nextConfig.sectionMode &&
-            parseInt(currentConfig.maxTarimasPerSection || 20, 10) === nextConfig.maxTarimasPerSection &&
             Boolean(currentConfig.groupSmallCodes) === nextConfig.groupSmallCodes &&
             parseInt(currentConfig.minCajasParaAgrupar || 3, 10) === nextConfig.minCajasParaAgrupar &&
-            parseInt(currentConfig.maxCajasEnGrupo || 10, 10) === nextConfig.maxCajasEnGrupo &&
-            Boolean(currentConfig.sortTarimasByCountDesc) === nextConfig.sortTarimasByCountDesc
+            parseInt(currentConfig.maxCajasEnGrupo || 10, 10) === nextConfig.maxCajasEnGrupo
 
           if (!disablingTarimas && !sameLockedConfig && (!reconfigureRequested || !canUpdateValidation)) {
             return res.status(409).json({ error: 'La configuración de tarimas ya está bloqueada para esta orden' })

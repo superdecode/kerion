@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
-import { requirePermission } from '../../../shared/middleware/permissions.js'
+import { requireAnyPermission, requirePermission } from '../../../shared/middleware/permissions.js'
 import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 import { refreshRecepcionOrderState } from '../utils/orderState.js'
 
@@ -142,6 +142,7 @@ router.post('/orders/:id/scan',
             previous_event: {
               id: previousSuccess.id,
               codigo_escaneado: previousSuccess.codigo_escaneado,
+              ubicacion: previousSuccess.ubicacion || null,
               scanned_at: previousSuccess.scanned_at,
               scanned_by_nombre: previousSuccess.scanned_by_nombre || null,
             },
@@ -179,6 +180,7 @@ router.post('/orders/:id/scan',
             previous_event: previousSuccess ? {
               id: previousSuccess.id,
               codigo_escaneado: previousSuccess.codigo_escaneado,
+              ubicacion: previousSuccess.ubicacion || null,
               scanned_at: previousSuccess.scanned_at,
               scanned_by_nombre: previousSuccess.scanned_by_nombre || null,
             } : null,
@@ -353,6 +355,87 @@ router.delete('/orders/:id/scan-events/last-validation',
     } catch (err) {
       console.error('[recepcion] undo last validation:', err.message)
       res.status(500).json({ error: 'Error al eliminar el último registro de validación' })
+    }
+  }
+)
+
+// DELETE /orders/:id/scan-events/location/:ubicacion — remove a complete location/tarima
+router.delete('/orders/:id/scan-events/location/:ubicacion',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'recepcion.validacion', action: 'actualizar' },
+    { modulePath: 'recepcion.validacion', action: 'eliminar' },
+  ]),
+  async (req, res) => {
+    try {
+      const ubicacion = String(req.params.ubicacion || '').trim()
+      if (!ubicacion) return res.status(400).json({ error: 'Ubicación requerida' })
+
+      const result = await req.tTransaction(async (client) => {
+        const eventsRes = await client.query(
+          `SELECT id, line_id, resultado
+             FROM inbound_scan_events
+            WHERE tenant_id=$1 AND order_id=$2 AND ubicacion=$3
+            FOR UPDATE`,
+          [req.tenantId, req.params.id, ubicacion]
+        )
+        if (eventsRes.rows.length === 0) {
+          const error = new Error('No hay registros para eliminar en esta ubicación')
+          error.status = 404
+          throw error
+        }
+
+        const eventIds = eventsRes.rows.map(event => event.id)
+        const lineIds = [...new Set(eventsRes.rows
+          .filter(event => event.resultado === 'correcto' && event.line_id)
+          .map(event => event.line_id))]
+
+        await client.query(
+          `DELETE FROM inbound_scan_events
+            WHERE tenant_id=$1 AND order_id=$2 AND id = ANY($3::uuid[])`,
+          [req.tenantId, req.params.id, eventIds]
+        )
+        if (lineIds.length > 0) {
+          await client.query(
+            `UPDATE inbound_lines
+                SET estado_validacion='pendiente', validated_by=NULL, validated_at=NULL
+              WHERE tenant_id=$1 AND order_id=$2 AND id = ANY($3::uuid[])`,
+            [req.tenantId, req.params.id, lineIds]
+          )
+        }
+
+        const orderRes = await client.query(
+          `SELECT validation_config FROM inbound_orders WHERE id=$1 AND tenant_id=$2 FOR UPDATE`,
+          [req.params.id, req.tenantId]
+        )
+        const config = orderRes.rows[0]?.validation_config
+        if (config?.mode === 'tarimas') {
+          const tarimaNum = parseInt(ubicacion, 10)
+          const nextConfig = {
+            ...config,
+            tarimaAssignments: (config.tarimaAssignments || []).filter(entry => parseInt(entry?.num, 10) !== tarimaNum),
+            emptyTarimas: (config.emptyTarimas || []).filter(num => parseInt(num, 10) !== tarimaNum),
+          }
+          await client.query(
+            `UPDATE inbound_orders SET validation_config=$3::jsonb, updated_at=now() WHERE id=$1 AND tenant_id=$2`,
+            [req.params.id, req.tenantId, JSON.stringify(nextConfig)]
+          )
+        }
+
+        const orderState = await refreshRecepcionOrderState(client, req.tenantId, req.params.id)
+        return { eventIds, lineIds, order: orderState?.order || null }
+      })
+
+      res.json({
+        ok: true,
+        removedEventIds: result.eventIds,
+        lineIds: result.lineIds,
+        removedLocation: ubicacion,
+        order: result.order,
+      })
+    } catch (err) {
+      console.error('[recepcion] delete location scans:', err.message)
+      res.status(err.status || 500).json({ error: err.message || 'Error al eliminar registros de la ubicación' })
     }
   }
 )
