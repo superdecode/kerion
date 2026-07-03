@@ -229,7 +229,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const [crossOrderModal, setCrossOrderModal] = useState({ open: false, code: null, order: null })
   const [forceModal, setForceModal] = useState({ open: false, code: '', tipo: '', ubicacion: '' })
   const [showModeSelection, setShowModeSelection] = useState(false)
-  const [pendingMode, setPendingMode] = useState(null)
+  const [pendingMode, setPendingMode] = useState('ubicacion')
   const [tarimaSearch, setTarimaSearch] = useState('')
   const [tarimaFilter, setTarimaFilter] = useState(null)
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
@@ -825,7 +825,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       setMinCajasParaAgrupar(Math.max(1, parseInt(cfg?.minCajasParaAgrupar, 10) || 3))
       setMaxCajasEnGrupo(Math.max(1, parseInt(cfg?.maxCajasEnGrupo, 10) || 10))
       if (Boolean(order) && !validationAlreadyStarted) {
-        setPendingMode(cfg?.mode || null)
+        setPendingMode(cfg?.mode || 'ubicacion')
         setShowModeSelection(true)
       } else {
         setShowModeSelection(false)
@@ -848,7 +848,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       const validationAlreadyStarted = Boolean(order.validation_session_started) || hasValidationRecords
       if ((!order.validation_config?.mode || !hasValidationRecords) && !validationAlreadyStarted) {
         const cfg = order.validation_config
-        setPendingMode(cfg?.mode || null)
+        setPendingMode(cfg?.mode || 'ubicacion')
         setShowModeSelection(true)
         setBootingSession(false)
         return
@@ -2980,12 +2980,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               disabled={saveValidationConfigMut.isPending}
               className={`rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-2 disabled:opacity-50 ${
                 pendingMode === 'ubicacion'
-                  ? 'border-sky-400 bg-sky-50 ring-2 ring-sky-100'
-                  : 'border-warm-200 bg-white hover:border-sky-300 hover:bg-sky-50/50 focus:ring-sky-200'
+                  ? 'border-primary-400 bg-primary-50 ring-2 ring-primary-100'
+                  : 'border-warm-200 bg-white hover:border-warm-300 hover:bg-warm-50 focus:ring-warm-200'
               }`}
             >
               <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl transition-colors ${
-                pendingMode === 'ubicacion' ? 'bg-sky-100 text-sky-700' : 'bg-warm-100 text-warm-600'
+                pendingMode === 'ubicacion' ? 'bg-primary-100 text-primary-700' : 'bg-warm-100 text-warm-500'
               }`}>
                 <MapPin className="h-5 w-5" />
               </span>
@@ -2999,11 +2999,11 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               className={`rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-2 disabled:opacity-50 ${
                 pendingMode === 'tarimas'
                   ? 'border-primary-400 bg-primary-50 ring-2 ring-primary-100'
-                  : 'border-primary-200 bg-primary-50/40 hover:border-primary-400 hover:bg-primary-50 focus:ring-primary-200'
+                  : 'border-warm-200 bg-white hover:border-warm-300 hover:bg-warm-50 focus:ring-warm-200'
               }`}
             >
               <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl transition-colors ${
-                pendingMode === 'tarimas' ? 'bg-primary-200 text-primary-800' : 'bg-primary-100 text-primary-700'
+                pendingMode === 'tarimas' ? 'bg-primary-100 text-primary-700' : 'bg-warm-100 text-warm-500'
               }`}>
                 <Layers className="h-5 w-5" />
               </span>
