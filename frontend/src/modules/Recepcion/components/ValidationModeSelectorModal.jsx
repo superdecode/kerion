@@ -160,9 +160,14 @@ export default function ValidationModeSelectorModal({
             type="button"
             onClick={onConfirm}
             disabled={isSubmitting}
-            className="btn-primary min-w-[160px] disabled:opacity-50"
+            className="btn-primary inline-flex min-w-[180px] items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50"
           >
-            {isSubmitting ? <><Loader2 className="h-4 w-4 animate-spin" />{t('rec.mode.starting')}</> : t('rec.mode.confirm')}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                <span>{t('rec.mode.starting')}</span>
+              </>
+            ) : t('rec.mode.confirm')}
           </button>
         </div>
       </div>

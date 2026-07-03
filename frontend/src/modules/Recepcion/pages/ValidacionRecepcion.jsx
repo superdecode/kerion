@@ -269,6 +269,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   // Force close
   const [forceCloseOpen, setForceCloseOpen] = useState(false)
   const [isEndingSession, setIsEndingSession] = useState(false)
+  const [showEndingOverlay, setShowEndingOverlay] = useState(false)
 
   const canQueryRecepcion = isAuthenticated
   const isOffline = useOfflineStore((s) => s.status === 'offline')
@@ -912,7 +913,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       setSessionId(null)
       setScanning(false)
       playSound('complete')
-      await Promise.all([
+      void Promise.all([
         qc.invalidateQueries({ queryKey: ['recepcion-order', id] }),
         qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] }),
         qc.invalidateQueries({ queryKey: ['recepcion-orders'] }),
@@ -930,6 +931,15 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     handledCloseRequestRef.current = closeRequestToken
     void endSession()
   }, [closeRequestToken, embedded, bootingSession, isEndingSession])
+
+  useEffect(() => {
+    if (!isEndingSession) {
+      setShowEndingOverlay(false)
+      return undefined
+    }
+    const timer = window.setTimeout(() => setShowEndingOverlay(true), 450)
+    return () => window.clearTimeout(timer)
+  }, [isEndingSession])
 
   const findPendingCrossOrder = useCallback(async (code) => {
     if (isOffline) return null
@@ -3569,6 +3579,28 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
           <p className="text-[11px] text-warm-500 leading-relaxed">{t('rec.val.forceEntry.ubicacion_hint')}</p>
         </div>
       </Modal>
+
+      {showEndingOverlay && createPortal(
+        <div
+          className="fixed inset-0 z-[11000] flex items-center justify-center bg-warm-950/25 p-4 backdrop-blur-[3px]"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="flex min-w-[240px] flex-col items-center rounded-2xl border border-white/80 bg-white/95 px-8 py-7 text-center shadow-2xl"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </span>
+            <p className="mt-4 text-sm font-bold text-warm-800">{t('rec.val.endingSession')}</p>
+            <p className="mt-1 text-xs text-warm-500">{t('rec.val.endingSessionHint')}</p>
+          </motion.div>
+        </div>,
+        document.body
+      )}
 
     </div>
   )

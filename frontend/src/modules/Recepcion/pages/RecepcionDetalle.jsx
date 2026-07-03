@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Copy, Check, PackageCheck, ScanBarcode, Printer,
   Download, Trash2, CheckCircle2, Clock, Search, X,
-  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, AlertTriangle, MapPin, Plus,
+  User, Hash, Truck, ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, AlertTriangle, MapPin, Plus, XOctagon,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import TablePagination from '../../../core/components/common/TablePagination'
@@ -16,7 +16,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
-import { getOrder, getOrderExportData, getScanEvents, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos, markScanEventAsNovedad } from '../services/recepcionService'
+import { getOrder, getOrderExportData, getScanEvents, updateOrder, updateLine, getListaRecepcion, deleteLastValidationRecord, deleteScanEvent, getNovedades, createNovedad, deleteNovedad, getNovedadTipos, markScanEventAsNovedad } from '../services/recepcionService'
 import { STALE } from '../../../core/constants/queryConfig'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
@@ -172,6 +172,7 @@ export default function RecepcionDetalle() {
   const [eventSortKey, setEventSortKey] = useState('scanned_at')
   const [eventSortDir, setEventSortDir] = useState('desc')
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [forceCloseOpen, setForceCloseOpen] = useState(false)
   const [exportingScope, setExportingScope] = useState(null)
   const [nuevoTipo, setNuevoTipo] = useState('')
   const [nuevoCodigo, setNuevoCodigo] = useState('')
@@ -300,11 +301,24 @@ export default function RecepcionDetalle() {
     onError: () => toast.error(t('toast.error')),
   })
 
+  const forceCloseMut = useMutation({
+    mutationFn: () => updateOrder(id, { estado: 'completo' }),
+    onSuccess: () => {
+      toast.success(t('rec.val.forceClose.success'))
+      setForceCloseOpen(false)
+      qc.invalidateQueries({ queryKey: ['recepcion-order', id] })
+      qc.invalidateQueries({ queryKey: ['recepcion-orders'] })
+      qc.invalidateQueries({ queryKey: ['recepcion-orders-active'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
   const canValidate = hasPermission('recepcion.recibir', 'crear')
   const canEdit = hasPermission('recepcion.recibir', 'actualizar')
   const canCreate = hasPermission('recepcion.recibir', 'crear')
   const canMoveValidatedToOtros = hasPermission('recepcion.validacion', 'crear')
   const canDeleteEvents = hasPermission('recepcion.validacion', 'eliminar')
+  const canForceClose = hasPermission('recepcion.validacion', 'actualizar')
   const [moveToOtrosModal, setMoveToOtrosModal] = useState({ open: false, event: null, tipo: '', ubicacion: '' })
 
   const submitNuevaNovedad = () => {
@@ -614,6 +628,17 @@ export default function RecepcionDetalle() {
               >
                 <ScanBarcode className="w-4 h-4" />
                 {t('rec.btn.validar')}
+              </button>
+            )}
+            {canForceClose && !['completo', 'cancelado'].includes(order.estado) && (
+              <button
+                type="button"
+                onClick={() => setForceCloseOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-sm font-semibold text-warning-700 transition-colors hover:bg-warning-100"
+                title={t('rec.val.forceClose.title')}
+              >
+                <XOctagon className="h-4 w-4" />
+                {t('rec.val.forceClose.btn')}
               </button>
             )}
           </div>
@@ -1188,6 +1213,31 @@ export default function RecepcionDetalle() {
         }
       >
         <p className="text-sm text-warm-700">{t('rec.val.delete.desc')}</p>
+      </Modal>
+
+      <Modal
+        isOpen={forceCloseOpen}
+        onClose={() => !forceCloseMut.isPending && setForceCloseOpen(false)}
+        title={t('rec.val.forceClose.title')}
+        icon={XOctagon}
+        size="sm"
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <button onClick={() => setForceCloseOpen(false)} disabled={forceCloseMut.isPending} className="btn-ghost disabled:opacity-50">
+              {t('common.cancel')}
+            </button>
+            <button onClick={() => forceCloseMut.mutate()} disabled={forceCloseMut.isPending} className="btn-danger disabled:opacity-50">
+              {forceCloseMut.isPending ? t('common.loading') : t('rec.val.forceClose.confirm')}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-warm-700">{t('rec.val.forceClose.desc')}</p>
+          <div className="rounded-xl border border-warning-200 bg-warning-50 p-3">
+            <p className="text-xs font-semibold text-warning-800">{t('rec.val.forceClose.hint')}</p>
+          </div>
+        </div>
       </Modal>
 
       <Modal

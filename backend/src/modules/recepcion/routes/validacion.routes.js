@@ -3,7 +3,7 @@ import { isDatabaseUnavailableError } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { getPermissionLevel, requireAnyPermission, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
-import { getRecepcionValidationRecordCount, refreshRecepcionOrderState } from '../utils/orderState.js'
+import { refreshRecepcionOrderState } from '../utils/orderState.js'
 
 const router = Router()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -63,50 +63,55 @@ router.patch('/orders/:id/sessions/:sid',
   async (req, res) => {
     try {
       const { total_escaneado, ubicacion_nota } = req.body
-      const payload = await req.tTransaction(async (client) => {
-        const sessionResult = await client.query(
-          `SELECT id FROM inbound_validation_sessions
+      const result = await req.tQuery(
+        `WITH target_session AS MATERIALIZED (
+           SELECT id
+           FROM inbound_validation_sessions
            WHERE id=$1 AND order_id=$2 AND tenant_id=$3
-           FOR UPDATE`,
-          [req.params.sid, req.params.id, req.tenantId]
-        )
-        if (sessionResult.rows.length === 0) return { session: null, reason: 'already_closed' }
-
-        const validationRecords = await getRecepcionValidationRecordCount(client, req.tenantId, req.params.id)
-
-        if (validationRecords === 0) {
-          await client.query(
-            `DELETE FROM inbound_validation_sessions
-             WHERE order_id=$1 AND tenant_id=$2`,
-            [req.params.id, req.tenantId]
-          )
-          const orderResult = await client.query(
-            `UPDATE inbound_orders
-             SET estado='pendiente_validacion',
-                 validation_config='{}'::jsonb,
-                 updated_at=now()
-             WHERE id=$1 AND tenant_id=$2
-             RETURNING *`,
-            [req.params.id, req.tenantId]
-          )
-          return {
-            session: null,
-            order: orderResult.rows[0] || null,
-            reset_validation: true,
-          }
-        }
-
-        const result = await client.query(
-          `UPDATE inbound_validation_sessions
+         ), validation_count AS MATERIALIZED (
+           SELECT
+             (SELECT COUNT(*) FROM inbound_scan_events
+              WHERE order_id=$2 AND tenant_id=$3 AND resultado='correcto')
+             +
+             (SELECT COUNT(*) FROM inbound_novedades
+              WHERE order_id=$2 AND tenant_id=$3 AND COALESCE(cuenta_conteo, true)=true) AS total
+         ), deleted_sessions AS (
+           DELETE FROM inbound_validation_sessions
+           WHERE order_id=$2 AND tenant_id=$3
+             AND EXISTS (SELECT 1 FROM target_session)
+             AND (SELECT total FROM validation_count)=0
+           RETURNING id
+         ), reset_order AS (
+           UPDATE inbound_orders
+           SET estado='pendiente_validacion',
+               validation_config='{}'::jsonb,
+               updated_at=now()
+           WHERE id=$2 AND tenant_id=$3
+             AND EXISTS (SELECT 1 FROM target_session)
+             AND (SELECT total FROM validation_count)=0
+           RETURNING *
+         ), closed_session AS (
+           UPDATE inbound_validation_sessions
            SET fin_at=now(),
                total_escaneado=COALESCE($4, total_escaneado),
                ubicacion_nota=COALESCE($5, ubicacion_nota)
            WHERE id=$1 AND order_id=$2 AND tenant_id=$3
-           RETURNING *`,
-          [req.params.sid, req.params.id, req.tenantId, total_escaneado ?? null, ubicacion_nota || null]
-        )
-        return { session: result.rows[0], reset_validation: false }
-      })
+             AND (SELECT total FROM validation_count)>0
+           RETURNING *
+         )
+         SELECT
+           EXISTS (SELECT 1 FROM target_session) AS session_found,
+           (SELECT total FROM validation_count)::int AS validation_records,
+           (SELECT row_to_json(reset_order) FROM reset_order) AS reset_order,
+           (SELECT row_to_json(closed_session) FROM closed_session) AS closed_session`,
+        [req.params.sid, req.params.id, req.tenantId, total_escaneado ?? null, ubicacion_nota || null]
+      )
+      const row = result.rows[0]
+      const payload = !row?.session_found
+        ? { session: null, reason: 'already_closed' }
+        : row.validation_records === 0
+          ? { session: null, order: row.reset_order || null, reset_validation: true }
+          : { session: row.closed_session || null, reset_validation: false }
       res.json(payload)
     } catch (err) {
       console.error('[recepcion] session close:', err.message)

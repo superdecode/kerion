@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { isDatabaseUnavailableError } from '../../../config/database.js'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { getPermissionLevel, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { checkModuleLimit } from '../../middleware/usageGuard.js'
@@ -829,13 +830,15 @@ router.patch('/orders/:id',
       const params = [req.params.id, req.tenantId]
       let shouldResetTarimaNumbering = false
 
+      client = await req.tGetClient()
+
       if (estado !== undefined) {
         params.push(estado || null)
         updates.push(`estado=COALESCE($${params.length}, estado)`)
       }
 
       if (validation_config !== undefined) {
-        const currentRes = await req.tQuery(
+        const currentRes = await client.query(
           `SELECT validation_config FROM inbound_orders WHERE id=$1 AND tenant_id=$2 LIMIT 1`,
           [req.params.id, req.tenantId]
         )
@@ -843,7 +846,7 @@ router.patch('/orders/:id',
         const currentConfig = currentRes.rows[0]?.validation_config || null
         const nextConfig = sanitizeValidationConfig(validation_config)
         if (currentConfig?.mode !== 'tarimas' && nextConfig.mode === 'tarimas') {
-          const validationRecords = await getRecepcionValidationRecordCount(req, req.tenantId, req.params.id)
+          const validationRecords = await getRecepcionValidationRecordCount(client, req.tenantId, req.params.id)
           if (validationRecords > 0) {
             return res.status(409).json({ error: 'La clasificación de tarimas no se puede activar porque ya hay registros en modo normal' })
           }
@@ -852,7 +855,7 @@ router.patch('/orders/:id',
           const reconfigureRequested = reconfigure_tarimas === true
           const disablingTarimas = nextConfig.mode !== 'tarimas'
           if (disablingTarimas) {
-            const validationRecords = await getRecepcionValidationRecordCount(req, req.tenantId, req.params.id)
+            const validationRecords = await getRecepcionValidationRecordCount(client, req.tenantId, req.params.id)
             if (validationRecords > 0) {
               return res.status(409).json({ error: 'La clasificación de tarimas no se puede desactivar porque ya hay registros de validación' })
             }
@@ -873,7 +876,6 @@ router.patch('/orders/:id',
         updates.push(`validation_config=$${params.length}::jsonb`)
       }
 
-      client = await req.tGetClient()
       const result = await client.query(
         `UPDATE inbound_orders SET ${updates.join(', ')}
          WHERE id=$1 AND tenant_id=$2 RETURNING *`,
@@ -901,7 +903,13 @@ router.patch('/orders/:id',
     } catch (err) {
       if (client) try { await client.query('ROLLBACK') } catch {}
       console.error('[recepcion] update order:', err.message)
-      res.status(500).json({ error: 'Error al actualizar orden' })
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+      }
+      res.status(500).json({
+        error: 'Error al actualizar orden',
+        ...(process.env.NODE_ENV !== 'production' ? { detalle: err.message } : {}),
+      })
     } finally {
       if (client) client.release()
     }
