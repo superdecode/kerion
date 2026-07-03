@@ -326,7 +326,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const linesLoading = !orderLinesData?.lines_meta?.lines_loaded && (isLinesLoading || isLinesFetching)
   const linesReady = orderLinesData?.lines_meta?.lines_loaded === true
 
-  const { data: eventsData } = useQuery({
+  const { data: eventsData, isError: isEventsError } = useQuery({
     queryKey: ['recepcion-scan-events', id],
     queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 100000 }),
     enabled: canQueryRecepcion,
@@ -465,6 +465,11 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     pendingRecepcionScans.length
   )
   const hasValidationRecords = validationRecordsCount > 0
+  // True once we can reliably decide whether records exist:
+  // fast-path: order data says cajas_registradas > 0 → we know without waiting for events
+  // slow-path: events query has resolved (success or error)
+  const isEventsResolved = eventsData !== undefined || isEventsError
+  const canDetermineRecords = totalRegistradas > 0 || totalForzadas > 0 || isEventsResolved
   const validadas = Math.max(totalRegistradas, effectiveLines.filter(l => l.estado_validacion === 'validada').length)
   const faltantes  = effectiveLines.filter(l => l.estado_validacion === 'faltante').length
   const pendientes = Math.max(total - validadas - faltantes, 0)
@@ -816,6 +821,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
   useEffect(() => {
     if (isSummaryPlaceholder) return
+    if (!canDetermineRecords) return  // wait until we can reliably tell if records exist
     const cfg = order?.validation_config
     const validationAlreadyStarted = Boolean(order?.validation_session_started) || hasValidationRecords
     if (!cfg || typeof cfg !== 'object' || !hasValidationRecords) {
@@ -837,12 +843,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     setGroupSmallCodes(Boolean(cfg.groupSmallCodes))
     setMinCajasParaAgrupar(Math.max(1, parseInt(cfg.minCajasParaAgrupar, 10) || 3))
     setMaxCajasEnGrupo(Math.max(1, parseInt(cfg.maxCajasEnGrupo, 10) || 10))
-  }, [order?.id, order?.validation_config, order?.validation_session_started, order?.validation_tarimas_started, hasValidationRecords, isSummaryPlaceholder])
+  }, [order?.id, order?.validation_config, order?.validation_session_started, order?.validation_tarimas_started, hasValidationRecords, isSummaryPlaceholder, canDetermineRecords])
 
   useEffect(() => {
     let cancelled = false
     async function boot() {
       if (isSummaryPlaceholder) return
+      if (!canDetermineRecords) return  // wait until we can reliably tell if records exist
       if (!order || sessionBootOrderRef.current === id) return
       if (order.validation_config === undefined && !orderLinesData?.order) return
       const validationAlreadyStarted = Boolean(order.validation_session_started) || hasValidationRecords
@@ -879,7 +886,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     }
     boot()
     return () => { cancelled = true }
-  }, [id, order, orderLinesData?.order, toast, hasValidationRecords, isSummaryPlaceholder])
+  }, [id, order, orderLinesData?.order, toast, hasValidationRecords, isSummaryPlaceholder, canDetermineRecords])
 
   const endSession = async () => {
     if (sessionId && sessionId !== 'local') {
