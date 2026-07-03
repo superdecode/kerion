@@ -807,10 +807,11 @@ router.patch('/orders/:id',
       const updatingValidationConfig = validation_config !== undefined
       const canUpdateRecepcion = hasModulePermission(req.fullUser, 'recepcion.recibir', 'actualizar')
       const canUpdateValidation = hasModulePermission(req.fullUser, 'recepcion.validacion', 'actualizar')
+      const canCreateValidation = hasModulePermission(req.fullUser, 'recepcion.validacion', 'crear')
       if (updatingState && !canUpdateRecepcion && !canUpdateValidation) {
         return res.status(403).json({ error: 'No tienes permisos para actualizar la orden' })
       }
-      if (updatingValidationConfig && !canUpdateValidation && !canUpdateRecepcion) {
+      if (updatingValidationConfig && !canUpdateValidation && !canCreateValidation && !canUpdateRecepcion) {
         return res.status(403).json({ error: 'No tienes permisos para actualizar la configuración de validación' })
       }
       if (reconfigure_tarimas === true && !canUpdateValidation) {

@@ -229,6 +229,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const [crossOrderModal, setCrossOrderModal] = useState({ open: false, code: null, order: null })
   const [forceModal, setForceModal] = useState({ open: false, code: '', tipo: '', ubicacion: '' })
   const [showModeSelection, setShowModeSelection] = useState(false)
+  const [pendingMode, setPendingMode] = useState(null)
   const [tarimaSearch, setTarimaSearch] = useState('')
   const [tarimaFilter, setTarimaFilter] = useState(null)
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
@@ -293,6 +294,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     isLoading: isSummaryLoading,
     isError: isSummaryError,
     error: summaryError,
+    isPlaceholderData: isSummaryPlaceholder,
   } = useQuery({
     queryKey: orderSummaryQueryKey,
     queryFn: () => getOrder(id, { validation_mode: 1, include_lines: 0 }),
@@ -813,14 +815,21 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   }, [isOrderError])
 
   useEffect(() => {
+    if (isSummaryPlaceholder) return
     const cfg = order?.validation_config
-    if (!cfg || typeof cfg !== 'object') {
-      const validationAlreadyStarted = Boolean(order?.validation_session_started) || hasValidationRecords
-      setWithTarimas(validationAlreadyStarted ? Boolean(order?.validation_tarimas_started) : false)
-      setGroupSmallCodes(false)
-      setMinCajasParaAgrupar(3)
-      setMaxCajasEnGrupo(10)
-      setShowModeSelection(Boolean(order) && !validationAlreadyStarted)
+    const validationAlreadyStarted = Boolean(order?.validation_session_started) || hasValidationRecords
+    if (!cfg || typeof cfg !== 'object' || !hasValidationRecords) {
+      // No config, or config was chosen but no scans recorded — allow (re-)selection
+      setWithTarimas(validationAlreadyStarted ? Boolean(order?.validation_tarimas_started) : (cfg?.mode === 'tarimas'))
+      setGroupSmallCodes(cfg ? Boolean(cfg.groupSmallCodes) : false)
+      setMinCajasParaAgrupar(Math.max(1, parseInt(cfg?.minCajasParaAgrupar, 10) || 3))
+      setMaxCajasEnGrupo(Math.max(1, parseInt(cfg?.maxCajasEnGrupo, 10) || 10))
+      if (Boolean(order) && !validationAlreadyStarted) {
+        setPendingMode(cfg?.mode || null)
+        setShowModeSelection(true)
+      } else {
+        setShowModeSelection(false)
+      }
       return
     }
     setShowModeSelection(false)
@@ -828,15 +837,18 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     setGroupSmallCodes(Boolean(cfg.groupSmallCodes))
     setMinCajasParaAgrupar(Math.max(1, parseInt(cfg.minCajasParaAgrupar, 10) || 3))
     setMaxCajasEnGrupo(Math.max(1, parseInt(cfg.maxCajasEnGrupo, 10) || 10))
-  }, [order?.id, order?.validation_config, order?.validation_session_started, order?.validation_tarimas_started, hasValidationRecords])
+  }, [order?.id, order?.validation_config, order?.validation_session_started, order?.validation_tarimas_started, hasValidationRecords, isSummaryPlaceholder])
 
   useEffect(() => {
     let cancelled = false
     async function boot() {
+      if (isSummaryPlaceholder) return
       if (!order || sessionBootOrderRef.current === id) return
       if (order.validation_config === undefined && !orderLinesData?.order) return
       const validationAlreadyStarted = Boolean(order.validation_session_started) || hasValidationRecords
-      if (!order.validation_config?.mode && !validationAlreadyStarted) {
+      if ((!order.validation_config?.mode || !hasValidationRecords) && !validationAlreadyStarted) {
+        const cfg = order.validation_config
+        setPendingMode(cfg?.mode || null)
         setShowModeSelection(true)
         setBootingSession(false)
         return
@@ -867,7 +879,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     }
     boot()
     return () => { cancelled = true }
-  }, [id, order, orderLinesData?.order, toast, hasValidationRecords])
+  }, [id, order, orderLinesData?.order, toast, hasValidationRecords, isSummaryPlaceholder])
 
   const endSession = async () => {
     if (sessionId && sessionId !== 'local') {
@@ -1319,6 +1331,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     await saveValidationConfigMut.mutateAsync(nextConfig)
     setWithTarimas(classified)
     setTarimaOverrides(new Map())
+    setPendingMode(null)
     setShowModeSelection(false)
     setBootingSession(true)
     sessionBootOrderRef.current = null
@@ -2963,50 +2976,102 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
           <div className="grid gap-3 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => { void selectValidationMode('ubicacion') }}
+              onClick={() => setPendingMode('ubicacion')}
               disabled={saveValidationConfigMut.isPending}
-              className="group rounded-2xl border-2 border-warm-200 bg-white p-4 text-left transition-all hover:border-sky-300 hover:bg-sky-50/50 focus:outline-none focus:ring-2 focus:ring-sky-200 disabled:opacity-50"
+              className={`rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-2 disabled:opacity-50 ${
+                pendingMode === 'ubicacion'
+                  ? 'border-sky-400 bg-sky-50 ring-2 ring-sky-100'
+                  : 'border-warm-200 bg-white hover:border-sky-300 hover:bg-sky-50/50 focus:ring-sky-200'
+              }`}
             >
-              <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-warm-100 text-warm-600 group-hover:bg-sky-100 group-hover:text-sky-700">
+              <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl transition-colors ${
+                pendingMode === 'ubicacion' ? 'bg-sky-100 text-sky-700' : 'bg-warm-100 text-warm-600'
+              }`}>
                 <MapPin className="h-5 w-5" />
               </span>
               <span className="block text-base font-black text-warm-900">{t('rec.mode.normal.title')}</span>
               <span className="mt-1 block text-xs leading-relaxed text-warm-500">{t('rec.mode.normal.desc')}</span>
-              <span className="mt-4 inline-flex items-center text-xs font-bold text-sky-700">{t('rec.mode.select')}</span>
             </button>
             <button
               type="button"
-              onClick={() => { void selectValidationMode('tarimas') }}
+              onClick={() => setPendingMode('tarimas')}
               disabled={saveValidationConfigMut.isPending}
-              className="group rounded-2xl border-2 border-primary-200 bg-primary-50/40 p-4 text-left transition-all hover:border-primary-400 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-200 disabled:opacity-50"
+              className={`rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-2 disabled:opacity-50 ${
+                pendingMode === 'tarimas'
+                  ? 'border-primary-400 bg-primary-50 ring-2 ring-primary-100'
+                  : 'border-primary-200 bg-primary-50/40 hover:border-primary-400 hover:bg-primary-50 focus:ring-primary-200'
+              }`}
             >
-              <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-100 text-primary-700">
+              <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl transition-colors ${
+                pendingMode === 'tarimas' ? 'bg-primary-200 text-primary-800' : 'bg-primary-100 text-primary-700'
+              }`}>
                 <Layers className="h-5 w-5" />
               </span>
               <span className="block text-base font-black text-warm-900">{t('rec.mode.classified.title')}</span>
               <span className="mt-1 block text-xs leading-relaxed text-warm-500">{t('rec.mode.classified.desc')}</span>
-              <span className="mt-4 inline-flex items-center text-xs font-bold text-primary-700">{t('rec.mode.select')}</span>
             </button>
           </div>
-          <div className="rounded-xl border border-warm-200 bg-warm-50 p-3">
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={groupSmallCodes}
-                onChange={(event) => setGroupSmallCodes(event.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-warm-300 text-primary-600 focus:ring-primary-300"
-              />
-              <span>
-                <span className="block text-xs font-bold text-warm-800">{t('rec.tarimas.group.enable')}</span>
-                <span className="block text-[11px] leading-relaxed text-warm-500">{t('rec.tarimas.group.desc')}</span>
-              </span>
-            </label>
-          </div>
-          {saveValidationConfigMut.isPending && (
-            <div className="flex items-center justify-center gap-2 text-xs font-semibold text-primary-600">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {t('rec.mode.starting')}
+
+          {pendingMode === 'tarimas' && (
+            <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3 space-y-3">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={groupSmallCodes}
+                  onChange={(event) => setGroupSmallCodes(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-warm-300 text-primary-600 focus:ring-primary-300"
+                />
+                <span>
+                  <span className="block text-xs font-bold text-warm-800">{t('rec.tarimas.group.enable')}</span>
+                  <span className="block text-[11px] leading-relaxed text-warm-500">{t('rec.tarimas.group.desc')}</span>
+                </span>
+              </label>
+              {groupSmallCodes && (
+                <div className="grid grid-cols-2 gap-2 pl-7">
+                  <div>
+                    <label className="block text-[10px] font-bold text-warm-600 mb-1">{t('rec.tarimas.group.min_cajas')}</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={minCajasParaAgrupar}
+                      onChange={e => setMinCajasParaAgrupar(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-full h-8 rounded-lg border border-primary-200 px-2 text-xs font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-warm-600 mb-1">{t('rec.tarimas.group.max_cajas')}</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      value={maxCajasEnGrupo}
+                      onChange={e => setMaxCajasEnGrupo(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-full h-8 rounded-lg border border-primary-200 px-2 text-xs font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300"
+                    />
+                  </div>
+                  <p className="col-span-2 text-[10px] text-warm-400">
+                    {t('rec.tarimas.group.preview').replace('{min}', minCajasParaAgrupar).replace('{max}', maxCajasEnGrupo)}
+                  </p>
+                </div>
+              )}
             </div>
+          )}
+
+          {pendingMode && (
+            <button
+              type="button"
+              onClick={() => { void selectValidationMode(pendingMode) }}
+              disabled={saveValidationConfigMut.isPending}
+              className="w-full h-10 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+            >
+              {saveValidationConfigMut.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('rec.mode.starting')}
+                </>
+              ) : t('rec.mode.confirm')}
+            </button>
           )}
         </div>
       </Modal>
