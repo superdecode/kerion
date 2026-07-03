@@ -30,7 +30,7 @@ function EstadoBadge({ estado, t }) {
   )
 }
 
-function MobileOrderCard({ order, t, onValidate, onView, highlight = false }) {
+function MobileOrderCard({ order, t, onValidate, highlight = false }) {
   const counted = order.cajas_registradas ?? order.cajas_validadas ?? 0
   const pct = order.total_cajas > 0 ? Math.round((counted / order.total_cajas) * 100) : 0
   return (
@@ -90,13 +90,6 @@ function MobileOrderCard({ order, t, onValidate, onView, highlight = false }) {
       )}
 
       <div className="px-4 pb-3.5 flex items-center justify-end gap-1.5 border-t border-warm-50 pt-2.5">
-        <button
-          type="button"
-          onClick={onView}
-          className="h-7 px-2.5 rounded-lg text-xs font-medium text-warm-600 bg-warm-50 hover:bg-warm-100 active:scale-95 transition-all"
-        >
-          Ver
-        </button>
         <button
           type="button"
           onClick={onValidate}
@@ -228,7 +221,6 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
             key={order.id}
             order={order}
             t={t}
-            onView={() => navigate(`/recepcion/recibir/${order.id}`)}
             onValidate={() => {
               useRecepcionEscanearStore.getState().openOrderTab(order.id, order.folio, order.cliente, order)
               navigate('/recepcion/escanear')
@@ -291,7 +283,6 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
                     order={order}
                     t={t}
                     highlight
-                    onView={() => { closeSheet(); navigate(`/recepcion/recibir/${order.id}`) }}
                     onValidate={() => {
                       closeSheet()
                       useRecepcionEscanearStore.getState().openOrderTab(order.id, order.folio, order.cliente, order)

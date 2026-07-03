@@ -459,7 +459,7 @@ export default function Sidebar() {
         )}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-blue-200/70 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-blue-200/70 hover:text-red-400 hover:bg-red-950/30 transition-colors bg-transparent border-0"
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />
           {showFull && t('auth.logout')}

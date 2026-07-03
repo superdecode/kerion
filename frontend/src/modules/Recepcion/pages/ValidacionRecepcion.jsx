@@ -1006,11 +1006,11 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         }, variables.feedbackSeq)
         if (ev.resultado === 'no_encontrado') {
           if (crossOrder) {
-            setCrossOrderModal({ open: true, code: ev.codigo_escaneado, order: crossOrder })
+            setCrossOrderModal({ open: true, code: variables.codigo, order: crossOrder })
           } else {
             setRejectModal({
               open: true,
-              code: ev.codigo_escaneado,
+              code: variables.codigo,
               message: data.mensaje || 'El código no existe en las líneas esperadas de esta orden de recepción.',
               reason: data.motivo || 'codigo_no_pertenece_orden',
             })
@@ -1020,7 +1020,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
           const previousLocalEvent = pickBestDuplicateSource(unifiedCorrectScanEvents, ev.codigo_escaneado)
           setDupModal({
             open: true,
-            code: ev.codigo_escaneado,
+            code: variables.codigo,
             entry: {
               scannedAt: data.previous_event?.scanned_at || null,
               scannedBy: data.previous_event?.scanned_by_nombre || '—',

@@ -28,7 +28,7 @@ function getStoredMatchedCode(line, fallbackCode) {
 // POST /orders/:id/sessions — start validation session
 router.post('/orders/:id/sessions',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'crear'),
   async (req, res) => {
     try {
       const { tarimas_enabled } = req.body
@@ -55,7 +55,7 @@ router.post('/orders/:id/sessions',
 // PATCH /orders/:id/sessions/:sid — close session
 router.patch('/orders/:id/sessions/:sid',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'crear'),
   async (req, res) => {
     try {
       const { total_escaneado, ubicacion_nota } = req.body
@@ -78,7 +78,7 @@ router.patch('/orders/:id/sessions/:sid',
 // POST /orders/:id/scan — process a scanned code
 router.post('/orders/:id/scan',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'crear'),
   async (req, res) => {
     const timingEnabled = process.env.NODE_ENV !== 'production'
     const startedAt = timingEnabled ? process.hrtime.bigint() : null
@@ -283,7 +283,7 @@ router.get('/orders/:id/scan-events',
 // PATCH /orders/:id/scan-events/relocate — rename all scan events from one ubicacion to another
 router.patch('/orders/:id/scan-events/relocate',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'crear'),
   async (req, res) => {
     try {
       const { from_ubicacion, to_ubicacion } = req.body
@@ -310,7 +310,7 @@ router.patch('/orders/:id/scan-events/relocate',
 
 router.patch('/orders/:id/scan-events/:eventId/location',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.validacion', 'actualizar'),
+  requirePermission('recepcion.validacion', 'crear'),
   async (req, res) => {
     try {
       const toNorm = String(req.body?.ubicacion || '').trim().toUpperCase()
