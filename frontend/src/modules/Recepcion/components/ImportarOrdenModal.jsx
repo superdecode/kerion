@@ -167,13 +167,13 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
   const handleFile = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const preloaderTask = beginPreloader('Procesando archivo...', 2000)
+    const preloaderTask = beginPreloader(t('rec.import.processing'), 2000)
     setLoading(true)
     try {
       const raw = await parseExcel(file)
       if (raw.length === 0) { toast.error(t('rec.import.err.vacio')); return }
       if (raw.length > 50000) {
-        toast.error(`El archivo contiene ${raw.length.toLocaleString()} registros. El límite máximo por importación es 50,000 registros.`)
+        toast.error(t('rec.import.limit_exceeded').replace('{count}', raw.length.toLocaleString()))
         return
       }
 
@@ -202,7 +202,7 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
         const raw = await parseExcelOnMainThread(file)
         if (raw.length === 0) { toast.error(t('rec.import.err.vacio')); return }
         if (raw.length > 50000) {
-          toast.error(`El archivo contiene ${raw.length.toLocaleString()} registros. El límite máximo por importación es 50,000 registros.`)
+          toast.error(t('rec.import.limit_exceeded').replace('{count}', raw.length.toLocaleString()))
           return
         }
 
@@ -248,7 +248,8 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
     const count = mappedRows.length
     setSubmitting(true)
     setImportProgress(0)
-    setImportMessage(`Preparando ${count.toLocaleString()} registros...`)
+    const countStr = count.toLocaleString()
+    setImportMessage(t('rec.import.progress.preparing').replace('{count}', countStr))
 
     // Simulate progress up to 85% over estimated duration
     // ~1.5ms per row for serialization + transfer + DB insert
@@ -259,10 +260,10 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
     progressIntervalRef.current = setInterval(() => {
       prog = Math.min(85, prog + tickStep)
       setImportProgress(prog)
-      if (prog < 15) setImportMessage(`Preparando ${count.toLocaleString()} registros...`)
-      else if (prog < 40) setImportMessage(`Enviando ${count.toLocaleString()} registros al servidor...`)
-      else if (prog < 70) setImportMessage(`Procesando en base de datos...`)
-      else setImportMessage(`Guardando orden de entrada...`)
+      if (prog < 15) setImportMessage(t('rec.import.progress.preparing').replace('{count}', countStr))
+      else if (prog < 40) setImportMessage(t('rec.import.progress.sending').replace('{count}', countStr))
+      else if (prog < 70) setImportMessage(t('rec.import.progress.processing'))
+      else setImportMessage(t('rec.import.progress.saving'))
     }, tickMs)
 
     let result
@@ -299,7 +300,7 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
       }
       const isTimeout = !err.response && (err.code === 'ECONNABORTED' || /timeout/i.test(err.message || ''))
       if (isTimeout) {
-        toast.error('La solicitud tardó demasiado. Verifica en la lista si la orden fue creada antes de reintentar.')
+        toast.error(t('rec.import.timeout'))
       } else {
         toast.error(err.response?.data?.error || t('rec.import.err.file'))
       }
@@ -309,14 +310,14 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
     clearInterval(progressIntervalRef.current)
     progressIntervalRef.current = null
     setImportProgress(100)
-    setImportMessage(`${count.toLocaleString()} registros importados`)
+    setImportMessage(t('rec.import.progress.done').replace('{count}', count.toLocaleString()))
     setSubmitting(false)
 
     // Success path — reset and navigate
     const order = result?.order
     reset()
     onClose?.()
-    toast.success(`Orden ${order?.folio ?? ''} creada con ${count} cajas`)
+    toast.success(t('rec.import.success').replace('{folio}', order?.folio ?? '').replace('{count}', String(count)))
     try {
       await Promise.resolve(onCreated?.(order))
     } catch (callbackError) {
@@ -429,10 +430,10 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
               <div className="flex items-start gap-3 rounded-xl border border-danger-200 bg-danger-50 px-4 py-3">
                 <AlertCircle className="w-4 h-4 text-danger-600 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-danger-700">Orden duplicada — no se puede importar</p>
+                  <p className="text-sm font-semibold text-danger-700">{t('rec.import.duplicate_title')}</p>
                   <p className="text-xs text-danger-600 mt-0.5">{duplicateError.error}</p>
                   {duplicateError.existingOrder?.folio && (
-                    <p className="text-xs font-mono text-danger-800 mt-1">Orden existente: {duplicateError.existingOrder.folio}</p>
+                    <p className="text-xs font-mono text-danger-800 mt-1">{t('rec.import.existing_order')} {duplicateError.existingOrder.folio}</p>
                   )}
                 </div>
               </div>
@@ -520,7 +521,7 @@ export default function ImportarOrdenModal({ isOpen, onClose, onCreated }) {
                             {row.box_type || <span className="text-warm-300">—</span>}
                           </td>
                           <td className={`${cell} font-mono text-warm-700`} title={row.custom_box_barcode || ''}>
-                            {row.custom_box_barcode || <span className="text-warning-500">vacío</span>}
+                            {row.custom_box_barcode || <span className="text-warning-500">{t('rec.import.empty_cell')}</span>}
                           </td>
                           <td className={`${cell} text-warm-700`} title={row.sku || ''}>
                             {row.sku || '—'}

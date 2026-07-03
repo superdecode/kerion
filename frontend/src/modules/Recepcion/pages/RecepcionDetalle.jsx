@@ -130,13 +130,13 @@ function normalizeNovedadCode(value) {
   return normalized || ''
 }
 
-function getReadableQueryError(error) {
+function getReadableQueryError(error, t) {
   const data = error?.response?.data
   if (data?.error) return typeof data.error === 'string' ? data.error : JSON.stringify(data.error)
-  if (error?.code === 'ERR_BACKEND_UNAVAILABLE') return 'El backend no respondió. Intenta de nuevo en unos segundos.'
-  if (error?.code === 'ERR_RATE_LIMITED') return 'La consulta fue limitada temporalmente. Intenta de nuevo en unos segundos.'
+  if (error?.code === 'ERR_BACKEND_UNAVAILABLE') return t('rec.error.backend_unavailable')
+  if (error?.code === 'ERR_RATE_LIMITED') return t('rec.error.rate_limited')
   if (error?.message) return error.message
-  return 'No se pudo cargar la orden de recepción.'
+  return t('rec.error.load_order')
 }
 
 export default function RecepcionDetalle() {
@@ -472,10 +472,10 @@ export default function RecepcionDetalle() {
     <div className="flex flex-col h-full">
       <Header title={t('rec.recibir.title')} icon={PackageCheck} />
       <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
-        <p className="text-sm font-semibold text-danger-600">No se pudo cargar el detalle de la orden.</p>
-        <p className="max-w-xl text-xs text-warm-500">{getReadableQueryError(error)}</p>
+        <p className="text-sm font-semibold text-danger-600">{t('rec.error.load_detalle')}</p>
+        <p className="max-w-xl text-xs text-warm-500">{getReadableQueryError(error, t)}</p>
         <button onClick={() => navigate('/recepcion/recibir')} className="btn-ghost text-sm flex items-center gap-1.5">
-          <ArrowLeft className="w-4 h-4" /> Volver
+          <ArrowLeft className="w-4 h-4" /> {t('common.back')}
         </button>
       </div>
     </div>

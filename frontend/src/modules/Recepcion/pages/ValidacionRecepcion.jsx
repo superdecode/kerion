@@ -2225,10 +2225,10 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   if (isOrderError) {
     const status = orderError?.response?.status
     const message = status === 401
-      ? 'Sesión vencida o no autorizada. Inicia sesión nuevamente.'
+      ? t('rec.error.session_expired')
       : status === 403
-        ? 'No tienes permisos para abrir esta validación.'
-        : (orderError?.response?.data?.error || orderError?.message || 'No se pudo cargar la orden de recepción.')
+        ? t('rec.error.no_permission_val')
+        : (orderError?.response?.data?.error || orderError?.message || t('rec.error.load_order'))
     return (
       <div className="flex flex-col h-full">
         {!embedded && (<Header title={t('rec.scan.title')} icon={PackageCheck} />)}
@@ -2241,7 +2241,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               onClick={() => status === 401 ? navigate('/login', { replace: true }) : goBack()}
               className="btn-primary mt-4"
             >
-              {status === 401 ? 'Iniciar sesión' : 'Volver'}
+              {status === 401 ? t('auth.loginBtn') : t('common.back')}
             </button>
           </div>
         </div>
@@ -2282,7 +2282,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   }
 
   return (
-    <div className={`flex flex-col bg-warm-50 overflow-hidden${embedded ? ' flex-1' : ''}`} style={embedded ? undefined : { height: '100dvh' }}>
+    <div className={`flex flex-col bg-warm-50 overflow-hidden${embedded ? ' flex-1' : ' h-screen-safe'}`}>
 
       {/* ── Header ── */}
       {!embedded && (
@@ -2960,7 +2960,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
               className="lg:hidden fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
-              style={{ maxHeight: '82dvh' }}
+              style={{ maxHeight: '82vh' }}
             >
               {/* Drag handle */}
               <div className="flex justify-center pt-3 pb-1 shrink-0">
@@ -3005,7 +3005,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
               className="lg:hidden fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
-              style={{ maxHeight: '82dvh' }}
+              style={{ maxHeight: '82vh' }}
             >
               <div className="flex justify-center pt-3 pb-1 shrink-0">
                 <div className="w-10 h-1 bg-warm-200 rounded-full" />

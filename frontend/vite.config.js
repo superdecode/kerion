@@ -12,6 +12,8 @@ export default defineConfig({
     legacy({
       targets: ['Chrome >= 52', 'Android >= 5'],
       modernPolyfills: true,
+      // Polyfill core-js features detected in the bundle for the legacy target
+      polyfills: true,
     }),
   ],
   base: '/',

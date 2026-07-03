@@ -1242,7 +1242,7 @@ export default function ValidarPorDestino({ folioId }) {
               {showAddOrder && editable && (
                 <div className="mt-3 rounded-2xl border border-primary-100 bg-white p-3 space-y-3 shadow-sm">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-primary-700">
-                    Agregar orden manual
+                    {t('desp.validar.destino.addManualOrder')}
                   </p>
 
                   <ScanInputBar

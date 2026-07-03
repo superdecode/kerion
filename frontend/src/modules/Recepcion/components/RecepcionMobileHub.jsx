@@ -95,7 +95,7 @@ function MobileOrderCard({ order, t, onValidate, highlight = false }) {
           className="h-8 px-3 rounded-xl text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 active:scale-95 transition-all inline-flex items-center gap-1.5 shadow-sm"
         >
           <ScanBarcode className="w-3 h-3 shrink-0" />
-          Validar
+          {t('rec.mobile.validar')}
         </button>
       </div>
     </div>
@@ -284,7 +284,7 @@ function RecepcionMobileHub({ orders, isLoading, t, onValidateOrder }) {
                   animate={{ y: 0 }}
                   exit={{ y: '100%' }}
                   transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-                  style={{ width: '100%', maxHeight: '82dvh', pointerEvents: 'auto' }}
+                  style={{ width: '100%', maxHeight: '82vh', pointerEvents: 'auto' }}
                   className="bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
                 >
                   <div className="flex justify-center pt-3 pb-1 shrink-0">

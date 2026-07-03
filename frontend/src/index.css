@@ -243,6 +243,7 @@
   .table-scroll {
     flex: none;
     min-height: 0;
+    max-height: calc(100vh - var(--table-shell-offset, 16.75rem));
     max-height: calc(100dvh - var(--table-shell-offset, 16.75rem));
     overflow: auto;
     overscroll-behavior: contain;
@@ -303,6 +304,7 @@
 
   /* Prevent layout shift when virtual keyboard opens on mobile */
   .h-screen-safe {
+    height: 100vh;
     height: 100dvh;
   }
 

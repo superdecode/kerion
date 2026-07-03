@@ -189,7 +189,7 @@ export default function RecepcionQuickSearch() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
             transition={{ duration: 0.18 }}
-            className="flex h-[min(720px,calc(100dvh-1.5rem))] max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-warm-100 bg-warm-50 shadow-2xl sm:rounded-3xl"
+            className="flex h-[min(720px,calc(100vh-1.5rem))] max-h-[calc(100vh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-warm-100 bg-warm-50 shadow-2xl sm:rounded-3xl"
             role="dialog"
             aria-modal="true"
             aria-label={t('rec.quickSearch.title')}

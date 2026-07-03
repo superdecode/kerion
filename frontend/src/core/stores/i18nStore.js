@@ -3746,12 +3746,49 @@ const translations = {
     'desp.validar.destino.removeOrderConfirm': '移除订单',
     'desp.validar.destino.removeOrderSuccess': '订单已从目的地复核中移除',
     'desp.validar.destino.removeOrderError': '移除订单失败',
+    // Search placeholder
+    'rec.recibir.search_placeholder': '发货单号、客户、参考号、跟踪号、SKU、箱码...',
+    // Lista selector modal
+    'rec.lista.select_order_label': '收货单',
+    'rec.lista.select_order_placeholder': '选择一个订单...',
+    'rec.lista.select_no_client': '无客户',
+    'rec.lista.error_generate': '生成清单失败',
     // Recepcion extras / 收货额外键
     'rec.lista.preview.title': '收货清单预览',
     'rec.lista.export': '导出Excel',
     'rec.lista.print': '打印',
     'rec.lista.noData': '暂无数据显示',
     'rec.lista.generating': '生成预览中...',
+    // Escanear session picker
+    'rec.escanear.sessions_title': '活动会话',
+    'rec.escanear.session_active_badge': '活动',
+    'rec.escanear.keyboard_mode_on': '扫描模式（无键盘）',
+    'rec.escanear.keyboard_mode_off': '激活键盘',
+    // Error messages
+    'rec.mobile.validar': '验证',
+    'rec.error.backend_unavailable': '后端未响应，请稍候重试。',
+    'rec.error.rate_limited': '请求已被临时限制，请稍后重试。',
+    'rec.error.load_order': '无法加载收货单。',
+    'rec.error.load_detalle': '无法加载订单详情。',
+    'rec.error.session_expired': '会话已过期或未授权，请重新登录。',
+    'rec.error.no_permission_val': '您没有打开此验证的权限。',
+    'error.boundary.title': '出错了',
+    'error.boundary.body': '此模块发生了意外错误。',
+    'common.retry': '重试',
+    // Despacho folio manual order
+    'desp.validar.destino.addManualOrder': '添加手动订单',
+    // Import modal
+    'rec.import.duplicate_title': '重复订单 — 无法导入',
+    'rec.import.existing_order': '现有订单：',
+    'rec.import.empty_cell': '空',
+    'rec.import.limit_exceeded': '文件包含 {count} 条记录。每次导入最多允许 50,000 条记录。',
+    'rec.import.timeout': '请求超时。请在列表中确认订单是否已创建，再重试。',
+    'rec.import.success': '订单 {folio} 已创建，共 {count} 箱',
+    'rec.import.progress.preparing': '正在准备 {count} 条记录...',
+    'rec.import.progress.sending': '正在发送 {count} 条记录到服务器...',
+    'rec.import.progress.processing': '正在写入数据库...',
+    'rec.import.progress.saving': '正在保存入库单...',
+    'rec.import.progress.done': '已导入 {count} 条记录',
   },
 
   es: {
@@ -7477,6 +7514,43 @@ const translations = {
     'rec.lista.print': 'Imprimir',
     'rec.lista.noData': 'No hay datos para mostrar.',
     'rec.lista.generating': 'Generando vista previa...',
+    // Error messages
+    'rec.mobile.validar': 'Validar',
+    'rec.error.backend_unavailable': 'El backend no respondió. Intenta de nuevo en unos segundos.',
+    'rec.error.rate_limited': 'La consulta fue limitada temporalmente. Intenta de nuevo en unos segundos.',
+    'rec.error.load_order': 'No se pudo cargar la orden de recepción.',
+    'rec.error.load_detalle': 'No se pudo cargar el detalle de la orden.',
+    'rec.error.session_expired': 'Sesión vencida o no autorizada. Inicia sesión nuevamente.',
+    'rec.error.no_permission_val': 'No tienes permisos para abrir esta validación.',
+    'error.boundary.title': 'Algo salió mal',
+    'error.boundary.body': 'Error inesperado en este módulo.',
+    'common.retry': 'Reintentar',
+    // Despacho folio manual order
+    'desp.validar.destino.addManualOrder': 'Agregar orden manual',
+    // Import modal
+    'rec.import.duplicate_title': 'Orden duplicada — no se puede importar',
+    'rec.import.existing_order': 'Orden existente:',
+    'rec.import.empty_cell': 'vacío',
+    'rec.import.limit_exceeded': 'El archivo contiene {count} registros. El límite máximo por importación es 50,000 registros.',
+    'rec.import.timeout': 'La solicitud tardó demasiado. Verifica en la lista si la orden fue creada antes de reintentar.',
+    'rec.import.success': 'Orden {folio} creada con {count} cajas',
+    'rec.import.progress.preparing': 'Preparando {count} registros...',
+    'rec.import.progress.sending': 'Enviando {count} registros al servidor...',
+    'rec.import.progress.processing': 'Procesando en base de datos...',
+    'rec.import.progress.saving': 'Guardando orden de entrada...',
+    'rec.import.progress.done': '{count} registros importados',
+    // Escanear session picker
+    'rec.escanear.sessions_title': 'Sesiones activas',
+    'rec.escanear.session_active_badge': 'Activa',
+    'rec.escanear.keyboard_mode_on': 'Modo escáner (sin teclado)',
+    'rec.escanear.keyboard_mode_off': 'Activar teclado',
+    // Search placeholder
+    'rec.recibir.search_placeholder': 'Folio, cliente, referencia, tracking, SKU, código caja...',
+    // Lista selector modal
+    'rec.lista.select_order_label': 'Orden de recepción',
+    'rec.lista.select_order_placeholder': 'Selecciona una orden...',
+    'rec.lista.select_no_client': 'Sin cliente',
+    'rec.lista.error_generate': 'Error al generar lista',
   },
 }
 

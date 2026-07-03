@@ -156,7 +156,7 @@ function SearchTab({ tabId, onConfirmOrder, openTabOrderIds, onGoToTab, t }) {
             type="button"
             onClick={() => { setKeyboardMode(v => !v); setTimeout(() => inputRef.current?.focus(), 50) }}
             className={`absolute right-9 top-1/2 -translate-y-1/2 p-1 rounded transition-colors ${keyboardMode ? 'text-primary-500' : 'text-warm-300 hover:text-warm-500'}`}
-            title={keyboardMode ? 'Modo escáner (sin teclado)' : 'Activar teclado'}
+            title={keyboardMode ? t('rec.escanear.keyboard_mode_on') : t('rec.escanear.keyboard_mode_off')}
           >
             <Keyboard size={14} />
           </button>
@@ -268,7 +268,7 @@ function MobileSessionPicker({ tabs, activeTabId, onSelect, onClose, onCloseTab,
       >
         <div className="w-10 h-1 bg-warm-300 rounded-full mx-auto mt-3 mb-1" />
         <div className="px-4 pb-2 pt-1 flex items-center justify-between">
-          <span className="text-sm font-bold text-warm-800">Sesiones activas</span>
+          <span className="text-sm font-bold text-warm-800">{t('rec.escanear.sessions_title')}</span>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400"><X size={16} /></button>
         </div>
         <div className="px-3 pb-6 space-y-2 max-h-64 overflow-y-auto">
@@ -290,7 +290,7 @@ function MobileSessionPicker({ tabs, activeTabId, onSelect, onClose, onCloseTab,
                 {tab.cliente && <p className="text-xs text-warm-500 truncate">{tab.cliente}</p>}
               </div>
               {tab.id === activeTabId && (
-                <span className="text-[10px] font-bold text-sky-600 bg-sky-100 px-1.5 py-0.5 rounded shrink-0">Activa</span>
+                <span className="text-[10px] font-bold text-sky-600 bg-sky-100 px-1.5 py-0.5 rounded shrink-0">{t('rec.escanear.session_active_badge')}</span>
               )}
               {tabs.length > 1 && (
                 <button

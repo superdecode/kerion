@@ -524,7 +524,7 @@ export default function Recibir() {
                 value={q}
                 onChange={e => setQ(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleApply()}
-                placeholder="Folio, cliente, referencia, tracking, SKU, código caja..."
+                placeholder={t('rec.recibir.search_placeholder')}
                 className="flex-1 text-xs bg-transparent outline-none text-warm-700 placeholder:text-warm-400"
               />
               {q && (

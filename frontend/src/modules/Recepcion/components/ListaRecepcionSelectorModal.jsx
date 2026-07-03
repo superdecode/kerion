@@ -33,7 +33,7 @@ export default function ListaRecepcionSelectorModal({ isOpen, onClose }) {
       setPreviewData(buildListaRecepcionData(result.order, result.lines, withTarimas))
       setPreviewOpen(true)
     } catch {
-      toast.error('Error al generar lista')
+      toast.error(t('rec.lista.error_generate'))
     } finally {
       setLoading(false)
     }
@@ -64,16 +64,16 @@ export default function ListaRecepcionSelectorModal({ isOpen, onClose }) {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-warm-700 mb-1.5">Orden de recepción</label>
+            <label className="block text-sm font-medium text-warm-700 mb-1.5">{t('rec.lista.select_order_label')}</label>
             <select
               value={selectedId}
               onChange={e => setSelectedId(e.target.value)}
               className="w-full border border-warm-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary-400"
             >
-              <option value="">Selecciona una orden...</option>
+              <option value="">{t('rec.lista.select_order_placeholder')}</option>
               {orders.map(o => (
                 <option key={o.id} value={o.id}>
-                  {o.folio} — {o.cliente || 'Sin cliente'} ({o.total_cajas} cajas)
+                  {o.folio} — {o.cliente || t('rec.lista.select_no_client')} ({o.total_cajas} cajas)
                 </option>
               ))}
             </select>

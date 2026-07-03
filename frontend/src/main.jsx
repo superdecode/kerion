@@ -3,6 +3,22 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
+// Polyfills for older browsers (Chrome 52-63, Android 5-7 WebView)
+if (typeof ResizeObserver === 'undefined') {
+  window.ResizeObserver = class ResizeObserver {
+    constructor(cb) { this._cb = cb }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}
+if (typeof queueMicrotask === 'undefined') {
+  window.queueMicrotask = (fn) => { Promise.resolve().then(fn) }
+}
+if (typeof globalThis === 'undefined') {
+  window.globalThis = window
+}
+
 const APP_VERSION = '2026-07-03-v16'
 const APP_VERSION_KEY = 'kirion-app-version'
 const EXTENSION_ASYNC_RESPONSE_ERROR =
