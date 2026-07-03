@@ -159,6 +159,9 @@ function isPersistedScanEventId(id) {
 }
 
 function getScanErrorMessage(err) {
+  const status = err?.response?.status
+  if (status === 403) return 'Sin permiso para escanear en esta orden. Contacta al administrador.'
+  if (status === 401) return 'Sesión expirada. Vuelve a iniciar sesión.'
   const data = err?.response?.data
   const parts = [data?.error, data?.detalle].filter(Boolean)
   if (parts.length > 0) return parts.join(': ')
@@ -2339,7 +2342,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               >
                 <Check className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{t('rec.val.btn.completar')}</span>
-                <span className="sm:hidden">OK</span>
+                <span className="sm:hidden">Completar</span>
               </button>
             )}
             {/* Force close */}
@@ -2606,7 +2609,8 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                           title={t('rec.val.ubicacion.edit')}
                         >
                           <Edit3 size={11} />
-                          <span>{t('rec.val.ubicacion.edit')}</span>
+                          <span className="hidden sm:inline">{t('rec.val.ubicacion.edit')}</span>
+                          <span className="sm:hidden">Cambiar</span>
                         </button>
                         <div className="w-px h-4 bg-accent-200 shrink-0" />
                         <div className="w-4 h-4 rounded-md bg-accent-100 flex items-center justify-center shrink-0">
@@ -2926,10 +2930,10 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               className="inline-flex items-center gap-1 text-[10px] font-medium text-warm-400 hover:text-primary-600 shrink-0"
             >
               <Edit3 size={11} />
-              <span>{t('rec.val.ubicacion.edit')}</span>
+              <span>Cambiar</span>
             </button>
             <button type="button" onClick={completarUbicacion} className="text-[10px] text-primary-600 hover:text-primary-800 font-semibold shrink-0">
-              {t('rec.val.btn.completar')}
+              Completar
             </button>
           </div>
         )}

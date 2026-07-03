@@ -161,19 +161,29 @@ function RecepcionMobileHub({ orders, isLoading, t, onValidateOrder }) {
           <input
             ref={inputRef}
             type="text"
-            onKeyDown={e => e.key === 'Enter' && handleScan()}
+            onKeyDown={e => (e.key === 'Enter' || e.key === 'Tab' || e.keyCode === 13 || e.keyCode === 9) && handleScan()}
             placeholder={t('rec.mobile.scan_order_desc')}
-            className="w-full pl-14 pr-10 py-3.5 text-base bg-warm-50 border-2 border-primary-200 rounded-2xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none font-mono tracking-wide transition-all"
+            className="w-full pl-14 pr-16 py-3.5 text-base bg-warm-50 border-2 border-primary-200 rounded-2xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none font-mono tracking-wide transition-all"
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
             inputMode="none"
           />
-          {scanning && (
-            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            {scanning ? (
               <div className="w-4 h-4 border-2 border-primary-300 border-t-primary-600 rounded-full animate-spin" />
-            </div>
-          )}
+            ) : (
+              <button
+                type="button"
+                onClick={handleScan}
+                className="flex items-center justify-center w-8 h-8 rounded-xl bg-primary-600 text-white active:scale-95 transition-all"
+                tabIndex={-1}
+                aria-label="Buscar"
+              >
+                <ScanBarcode className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
       </div>
@@ -216,14 +226,14 @@ function RecepcionMobileHub({ orders, isLoading, t, onValidateOrder }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              style={{ position: 'fixed', inset: 0, zIndex: 9040 }}
+              style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9040 }}
             >
               <div
-                style={{ position: 'absolute', inset: 0 }}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
                 className="bg-black/40 backdrop-blur-sm"
                 onClick={() => { setNotFoundModal({ open: false, code: '' }); refocus() }}
               />
-              <div style={{ position: 'absolute', inset: 0, zIndex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
                 <motion.div
                   initial={{ y: '100%' }}
                   animate={{ y: 0 }}
@@ -271,14 +281,14 @@ function RecepcionMobileHub({ orders, isLoading, t, onValidateOrder }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              style={{ position: 'fixed', inset: 0, zIndex: 9040 }}
+              style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9040 }}
             >
               <div
-                style={{ position: 'absolute', inset: 0 }}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
                 className="bg-black/40 backdrop-blur-sm"
                 onClick={closeSheet}
               />
-              <div style={{ position: 'absolute', inset: 0, zIndex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
                 <motion.div
                   initial={{ y: '100%' }}
                   animate={{ y: 0 }}
