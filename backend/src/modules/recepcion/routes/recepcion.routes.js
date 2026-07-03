@@ -205,7 +205,16 @@ router.get('/orders/:id/export-data',
     try {
       const scope = normalizeExportScope(String(req.query.scope || 'all'))
       const orderRes = await req.tQuery(
-        `SELECT o.*, u.nombre_completo AS responsable_nombre
+        `SELECT o.*, u.nombre_completo AS responsable_nombre,
+                EXISTS (
+                  SELECT 1 FROM inbound_validation_sessions s
+                  WHERE s.order_id=o.id AND s.tenant_id=o.tenant_id
+                ) AS validation_session_started,
+                COALESCE((
+                  SELECT s.tarimas_enabled FROM inbound_validation_sessions s
+                  WHERE s.order_id=o.id AND s.tenant_id=o.tenant_id
+                  ORDER BY s.started_at DESC, s.id DESC LIMIT 1
+                ), false) AS validation_tarimas_started
          FROM inbound_orders o
          LEFT JOIN usuarios u ON u.id = o.responsable_id
          WHERE o.id=$1 AND o.tenant_id=$2

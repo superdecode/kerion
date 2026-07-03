@@ -24,6 +24,8 @@ export const markScanEventsAsNovedadBulk = (orderId, payload) =>
   api.post(`/recepcion/orders/${orderId}/scan-events/anormalidad/bulk`, payload).then(r => r.data)
 export const relocateScanEvents = (orderId, from_ubicacion, to_ubicacion) =>
   api.patch(`/recepcion/orders/${orderId}/scan-events/relocate`, { from_ubicacion, to_ubicacion }).then(r => r.data)
+export const updateScanEventLocation = (orderId, eventId, ubicacion) =>
+  api.patch(`/recepcion/orders/${orderId}/scan-events/${eventId}/location`, { ubicacion }).then(r => r.data)
 export const getListaRecepcion = (orderId) => api.get(`/recepcion/orders/${orderId}/lista-recepcion`).then(r => r.data)
 export const searchByCode = (code) => api.get('/recepcion/orders/search-by-code', { params: { code } }).then(r => r.data)
 export const quickSearchBoxes = (q, limit = 30) => api.get('/recepcion/orders/quick-box-search', { params: { q, limit } }).then(r => r.data)

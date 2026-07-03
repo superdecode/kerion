@@ -1009,12 +1009,14 @@ export default function ValidarPorDestino({ folioId }) {
                         <span className="text-[10px] font-bold uppercase tracking-wide">{t('desp.validar.destino.cajasTotal')}</span>
                       </span>
                     </div>
-                    {[...scansByTarima[tarima]].reverse().map((s, i) => (
+                    {[...scansByTarima[tarima]]
+                      .sort((a, b) => new Date(a.validated_at || a.created_at || 0) - new Date(b.validated_at || b.created_at || 0))
+                      .map((s, i) => (
                       <div key={`${tarima}-${s.id || s.codigo_caja || 'scan'}-${i}`} className={`flex items-center gap-2.5 px-4 py-2.5 group hover:bg-warm-50 transition-colors ${
                         i === 0 ? 'bg-primary-50/30' : ''
                       }`}>
                         <span className="w-5 text-right text-[10px] text-warm-400 tabular-nums shrink-0">
-                          {scansByTarima[tarima].length - i}
+                          {i + 1}
                         </span>
                         {s.__optimistic
                           ? <Loader2 className="w-3 h-3 text-primary-500 shrink-0 animate-spin" />

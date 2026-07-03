@@ -445,8 +445,11 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
                   <span className="text-[10px] text-warm-400">({tarScans.length} caja{tarScans.length !== 1 ? 's' : ''})</span>
                 </div>
                 <div className="space-y-0.5">
-                  {tarScans.map(s => (
+                  {[...tarScans]
+                    .sort((a, b) => new Date(a.validated_at || a.created_at || 0) - new Date(b.validated_at || b.created_at || 0))
+                    .map((s, scanIndex) => (
                     <div key={s.id} className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs bg-accent-50/40 border border-accent-100/50">
+                      <span className="w-5 text-right text-[10px] font-black tabular-nums text-accent-600 shrink-0">{scanIndex + 1}</span>
                       <Check className="w-3 h-3 text-success-500 shrink-0" />
                       <span className="font-mono font-semibold text-warm-800 flex-1">{s.codigo_caja}</span>
                       <span className="text-warm-400">{s.validated_by_nombre || '—'}</span>
@@ -459,10 +462,13 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
           </div>
         ) : (
           <div className="space-y-1">
-            {scans.map((s, i) => (
+            {[...scans]
+              .sort((a, b) => new Date(a.validated_at || a.created_at || 0) - new Date(b.validated_at || b.created_at || 0))
+              .map((s, i) => (
               <div key={s.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs ${
                 i === scans.length - 1 ? 'bg-white border border-primary-100' : 'bg-transparent'
               }`}>
+                <span className="w-5 text-right text-[10px] font-black tabular-nums text-primary-500 shrink-0">{i + 1}</span>
                 <Check className="w-3 h-3 text-success-500 shrink-0" />
                 <span className="font-mono font-semibold text-warm-800 flex-1">{s.codigo_caja}</span>
                 <span className="text-warm-400">{s.validated_by_nombre || '—'}</span>

@@ -7,7 +7,7 @@ import {
   ArrowLeft, ScanBarcode, CheckCircle2, XCircle, AlertCircle, AlertTriangle,
   Layers, PackageCheck, X, Square, ArrowUp, ArrowDown, ArrowUpDown, Trash2,
   ChevronDown, PanelRightClose, PanelRightOpen, Search, LayoutList, MapPin, Check, Edit3,
-  ArrowRightLeft, WifiOff, Loader2,
+  ArrowRightLeft, WifiOff, Loader2, XOctagon,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -18,7 +18,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
-import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, deleteScanEvent, deleteLocationScans, getScanEvents, relocateScanEvents, getNovedadTipos, createNovedad, markScanEventAsNovedad, markScanEventsAsNovedadBulk, searchByCode } from '../services/recepcionService'
+import { getOrder, updateOrder, createSession, updateSession, scanCode, deleteLastValidationRecord, deleteScanEvent, deleteLocationScans, getScanEvents, relocateScanEvents, updateScanEventLocation, getNovedadTipos, createNovedad, markScanEventAsNovedad, markScanEventsAsNovedadBulk, searchByCode } from '../services/recepcionService'
 import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
@@ -33,6 +33,35 @@ function parseTarimaNumber(value) {
 function formatTarimaLocation(value) {
   const num = parseTarimaNumber(value)
   return num ? String(num) : null
+}
+
+function compareScanChronology(left, right) {
+  const leftTime = Date.parse(left?.scannedAt || '')
+  const rightTime = Date.parse(right?.scannedAt || '')
+  const safeLeft = Number.isFinite(leftTime) ? leftTime : 0
+  const safeRight = Number.isFinite(rightTime) ? rightTime : 0
+  if (safeLeft !== safeRight) return safeLeft - safeRight
+  return String(left?.id || left?.code || '').localeCompare(String(right?.id || right?.code || ''))
+}
+
+function formatScanDateTime(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleString('es-MX', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
+}
+
+function pickBestDuplicateSource(events, scannedCode) {
+  return events
+    .filter((event) => codesMatch(event.code || event.codigo_escaneado, scannedCode))
+    .sort((left, right) => {
+      const rightHasLocation = right?.ubicacion ? 1 : 0
+      const leftHasLocation = left?.ubicacion ? 1 : 0
+      if (rightHasLocation !== leftHasLocation) return rightHasLocation - leftHasLocation
+      return compareScanChronology(right, left)
+    })[0] || null
 }
 
 function normalizeTarimaAssignments(input) {
@@ -214,7 +243,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const [expandedUbicaciones, setExpandedUbicaciones] = useState(new Set())
 
   // Edit ubicacion
-  const [editUbicacionModal, setEditUbicacionModal] = useState(null) // { from: string }
+  const [editUbicacionModal, setEditUbicacionModal] = useState(null) // { from: string|null, eventId?: string|null, scope: 'group'|'event' }
   const [editUbicacionValue, setEditUbicacionValue] = useState('')
 
   // Grouping small codes
@@ -567,7 +596,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     }
 
     for (const list of map.values()) {
-      list.sort((a, b) => new Date(b.scannedAt || 0) - new Date(a.scannedAt || 0))
+      list.sort(compareScanChronology)
     }
     return map
   }, [isTarimaMode, unifiedCorrectScanEvents, effectiveTarimaMap])
@@ -622,6 +651,9 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       seen.add(eventKey)
       existing.codes.push({ id: ev.id, code: ev.code, scannedAt: ev.scannedAt })
       map.set(key, existing)
+    }
+    for (const group of map.values()) {
+      group.codes.sort(compareScanChronology)
     }
     return Array.from(map.values()).sort((a, b) => {
       if (!a.ubicacion) return 1
@@ -782,11 +814,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   useEffect(() => {
     const cfg = order?.validation_config
     if (!cfg || typeof cfg !== 'object') {
-      setWithTarimas(false)
+      const validationAlreadyStarted = Boolean(order?.validation_session_started) || hasValidationRecords
+      setWithTarimas(validationAlreadyStarted ? Boolean(order?.validation_tarimas_started) : false)
       setGroupSmallCodes(false)
       setMinCajasParaAgrupar(3)
       setMaxCajasEnGrupo(10)
-      setShowModeSelection(Boolean(order))
+      setShowModeSelection(Boolean(order) && !validationAlreadyStarted)
       return
     }
     setShowModeSelection(false)
@@ -794,14 +827,15 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     setGroupSmallCodes(Boolean(cfg.groupSmallCodes))
     setMinCajasParaAgrupar(Math.max(1, parseInt(cfg.minCajasParaAgrupar, 10) || 3))
     setMaxCajasEnGrupo(Math.max(1, parseInt(cfg.maxCajasEnGrupo, 10) || 10))
-  }, [order?.id, order?.validation_config])
+  }, [order?.id, order?.validation_config, order?.validation_session_started, order?.validation_tarimas_started, hasValidationRecords])
 
   useEffect(() => {
     let cancelled = false
     async function boot() {
       if (!order || sessionBootOrderRef.current === id) return
       if (order.validation_config === undefined && !orderLinesData?.order) return
-      if (!order.validation_config?.mode) {
+      const validationAlreadyStarted = Boolean(order.validation_session_started) || hasValidationRecords
+      if (!order.validation_config?.mode && !validationAlreadyStarted) {
         setShowModeSelection(true)
         setBootingSession(false)
         return
@@ -817,7 +851,9 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         return
       }
       try {
-        const res = await createSession(id, { tarimas_enabled: order.validation_config?.mode === 'tarimas' })
+        const tarimasEnabled = order.validation_config?.mode === 'tarimas' ||
+          (!order.validation_config?.mode && Boolean(order.validation_tarimas_started))
+        const res = await createSession(id, { tarimas_enabled: tarimasEnabled })
         if (cancelled) return
         setSessionId(res.session?.id ?? 'local')
         setScanning(true)
@@ -830,7 +866,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     }
     boot()
     return () => { cancelled = true }
-  }, [id, order, orderLinesData?.order, toast])
+  }, [id, order, orderLinesData?.order, toast, hasValidationRecords])
 
   const endSession = async () => {
     if (sessionId && sessionId !== 'local') {
@@ -980,13 +1016,14 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
           }
         }
         if (ev.resultado === 'duplicado') {
+          const previousLocalEvent = pickBestDuplicateSource(unifiedCorrectScanEvents, ev.codigo_escaneado)
           setDupModal({
             open: true,
             code: ev.codigo_escaneado,
             entry: {
               scannedAt: data.previous_event?.scanned_at || null,
               scannedBy: data.previous_event?.scanned_by_nombre || '—',
-              ubicacion: data.previous_event?.ubicacion || null,
+              ubicacion: data.previous_event?.ubicacion || previousLocalEvent?.ubicacion || null,
               message: data.mensaje || 'Todas las cajas esperadas para este código ya fueron validadas.',
               reason: data.motivo || 'codigo_ya_validado',
             },
@@ -1216,7 +1253,21 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       setEditUbicacionModal(null)
       setEditUbicacionValue('')
       qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
-      toast.success(`Ubicación renombrada (${data.updated} escaneos)`)
+      toast.success(`${t('rec.val.ubicacion.edit')} (${data.updated} escaneos)`)
+    },
+    onError: () => toast.error(t('toast.error')),
+  })
+
+  const updateScanLocationMut = useMutation({
+    mutationFn: ({ eventId, ubicacion }) => updateScanEventLocation(id, eventId, ubicacion),
+    onSuccess: (_, { ubicacion }) => {
+      setEditUbicacionModal(null)
+      setEditUbicacionValue('')
+      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
+      setHistory((prev) => prev.map((item) => item.id === editUbicacionModal?.eventId
+        ? { ...item, ubicacion: ubicacion.toUpperCase() }
+        : item))
+      toast.success(t('common.save'))
     },
     onError: () => toast.error(t('toast.error')),
   })
@@ -1352,6 +1403,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       const matchedTarimaCode = matchedLineForScan ? matchedStoredCode : ''
       const hasPendingMatchingLine = matchingLines.some(l => l.estado_validacion !== 'validada')
       const existing = history.find(h => codesMatch(h.code, code))
+        || pickBestDuplicateSource(unifiedCorrectScanEvents, code)
         || serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
       if (isOffline && matchingLines.length > 0 && !hasPendingMatchingLine) {
         playSound('duplicate')
@@ -1366,12 +1418,14 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
           entry: existing?.scannedAt
             ? {
                 ...existing,
+                ubicacion: existing?.ubicacion || null,
                 message: 'Todas las cajas esperadas para este código ya fueron validadas.',
                 reason: 'codigo_ya_validado',
               }
             : {
                 scannedAt: existing?.scanned_at || null,
                 scannedBy: existing?.scanned_by_nombre || '—',
+                ubicacion: existing?.ubicacion || null,
                 message: 'Todas las cajas esperadas para este código ya fueron validadas.',
                 reason: 'codigo_ya_validado',
               },
@@ -1429,12 +1483,14 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               reason: 'codigo_no_pertenece_orden',
             })
           } else if (offlineResult === 'duplicado') {
+            const previousLocalEvent = pickBestDuplicateSource(unifiedCorrectScanEvents, matchedStoredCode || code)
             setDupModal({
               open: true,
               code: matchedStoredCode || code,
               entry: {
-                scannedAt: null,
-                scannedBy: '—',
+                scannedAt: previousLocalEvent?.scannedAt || previousLocalEvent?.scanned_at || null,
+                scannedBy: previousLocalEvent?.scannedBy || previousLocalEvent?.scanned_by_nombre || '—',
+                ubicacion: previousLocalEvent?.ubicacion || ubicacion || null,
                 message: 'Todas las cajas esperadas para este código ya fueron validadas.',
                 reason: 'codigo_ya_validado',
               },
@@ -1733,16 +1789,17 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                     </button>
                   )
                 )}
-                {g.ubicacion && (
-                  <button
-                    type="button"
-                    onClick={() => { setEditUbicacionModal({ from: g.ubicacion }); setEditUbicacionValue(g.ubicacion) }}
-                    className={`p-2 mr-1.5 rounded-lg transition-colors shrink-0 ${isActive ? 'text-primary-400 hover:bg-primary-100 hover:text-primary-700' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
-                    title={t('rec.val.ubicacion.edit')}
-                  >
-                    <Edit3 size={11} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditUbicacionModal({ from: g.ubicacion || null, eventId: null, scope: 'group' })
+                    setEditUbicacionValue((g.ubicacion || '').toUpperCase())
+                  }}
+                  className={`p-2 mr-1.5 rounded-lg transition-colors shrink-0 ${isActive ? 'text-primary-400 hover:bg-primary-100 hover:text-primary-700' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
+                  title={t('rec.val.ubicacion.edit')}
+                >
+                  <Edit3 size={11} />
+                </button>
               </div>
 
               {/* Progress bar — always visible */}
@@ -1762,14 +1819,21 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
               {/* Expandable code list */}
               {isExpanded && g.codes.length > 0 && (
-                <div className={`border-t ${isActive ? 'border-primary-100' : 'border-warm-100'} divide-y divide-warm-50 max-h-36 overflow-y-auto`}>
+                <div className={`border-t ${isActive ? 'border-primary-100' : 'border-warm-100'} divide-y divide-warm-50`}>
+                  <div className="grid grid-cols-[2rem_1rem_minmax(0,1fr)_8.5rem] gap-2 bg-warm-50/80 px-3 py-1 text-[9px] font-bold uppercase tracking-wide text-warm-500">
+                    <span>#</span>
+                    <span />
+                    <span>{t('rec.scan.col.codigo')}</span>
+                    <span className="text-right">{t('rec.scan.col.fecha_hora')}</span>
+                  </div>
                   {g.codes.map((c, ci) => (
-                    <div key={c.id || ci} className="flex items-center gap-2 px-3 py-1.5 hover:bg-primary-50/30 transition-colors">
-                      <Check className="w-2.5 h-2.5 shrink-0 text-success-400" />
+                    <div key={c.id || ci} className="grid grid-cols-[2rem_1rem_minmax(0,1fr)_8.5rem] items-center gap-2 px-3 py-1.5 hover:bg-primary-50/30 transition-colors">
+                      <span className="text-[10px] font-black tabular-nums text-primary-500">{ci + 1}</span>
+                      <Check className="h-3 w-3 text-success-500" />
                       <span className="font-mono text-[10px] truncate flex-1 text-warm-600">{c.code}</span>
                       {c.scannedAt && (
-                        <span className="text-[9px] tabular-nums shrink-0 text-warm-300">
-                          {new Date(c.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                        <span className="text-right text-[9px] font-medium tabular-nums shrink-0 text-warm-600">
+                          {formatScanDateTime(c.scannedAt)}
                         </span>
                       )}
                     </div>
@@ -2032,18 +2096,25 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                         <span>{t('rec.tarimas.panel.validated_scans')}</span>
                         <span className="tabular-nums">{scanEvents.length}</span>
                       </div>
-                      <div className="max-h-36 overflow-y-auto scrollbar-thin space-y-1">
-                        {scanEvents.map(item => {
+                      <div className="space-y-1">
+                        <div className={`grid grid-cols-[2rem_1rem_minmax(0,1fr)_8.5rem] gap-2 px-2 py-1 text-[9px] font-bold uppercase tracking-wide ${isActive ? 'text-white/75' : 'text-warm-500'}`}>
+                          <span>#</span>
+                          <span />
+                          <span>{t('rec.scan.col.codigo')}</span>
+                          <span className="text-right">{t('rec.scan.col.fecha_hora')}</span>
+                        </div>
+                        {scanEvents.map((item, scanIndex) => {
                           const canActOnEvent = item.persisted && isPersistedScanEventId(item.id)
                           return (
                             <div key={item.id || `${item.code}-${item.scannedAt}`} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${isActive ? 'bg-white/10' : 'bg-white/85'}`}>
+                              <span className={`w-6 shrink-0 text-[10px] font-black tabular-nums ${isActive ? 'text-white/75' : 'text-primary-500'}`}>{scanIndex + 1}</span>
                               <CheckCircle2 className={`w-3 h-3 shrink-0 ${isActive ? 'text-white/75' : 'text-success-500'}`} />
                               <div className="min-w-0 flex-1">
                                 <p className={`truncate font-mono text-[10px] font-semibold ${isActive ? 'text-white/85' : 'text-warm-700'}`}>{item.code}</p>
-                                <p className={`text-[9px] tabular-nums ${isActive ? 'text-white/55' : 'text-warm-400'}`}>
-                                  {item.scannedAt ? new Date(item.scannedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
-                                </p>
                               </div>
+                              <span className={`w-[8.5rem] shrink-0 text-right text-[9px] font-medium tabular-nums ${isActive ? 'text-white/80' : 'text-warm-600'}`}>
+                                {formatScanDateTime(item.scannedAt)}
+                              </span>
                               {canActOnEvent && (canMarkAnormalidad || canDeleteScan || (canUndoLastValidation && item.id === latestPersistedValidationId)) && (
                                 <div className="flex items-center gap-1 shrink-0">
                                   {canMarkAnormalidad && (
@@ -2207,7 +2278,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors"
               title={t('rec.val.forceClose.title')}
             >
-              <AlertTriangle className="w-3.5 h-3.5" />
+              <XOctagon className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
             </button>
             {/* Terminar */}
@@ -2248,7 +2319,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             </button>
           )}
           <button type="button" onClick={() => setForceCloseOpen(true)} className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors" title={t('rec.val.forceClose.title')}>
-            <AlertTriangle className="w-3.5 h-3.5" />
+            <XOctagon className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
           </button>
           <button onClick={endSession} className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 transition-colors">
@@ -2348,7 +2419,16 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8 }}
                     transition={{ duration: 0.18 }}
+                    className="relative"
                   >
+                    <button
+                      type="button"
+                      onClick={() => setLastResult(null)}
+                      className="absolute right-2 top-2 z-10 rounded-lg p-1.5 text-warm-400 transition-colors hover:bg-white/70 hover:text-warm-700"
+                      title={t('common.close')}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                     {withTarimas && lastTarimaNum && lastTarimaColor && (
                       <div className={`${sidebarVisible ? 'sm:hidden' : ''} rounded-2xl flex flex-col items-center justify-center py-6 mb-3 ${lastTarimaColor.bg} ring-4 ${lastTarimaColor.ring} ring-offset-2`}>
                         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/70">{t('rec.tarimas.label')}</p>
@@ -2365,7 +2445,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                         )}
                       </div>
                     )}
-                    <div className={`p-4 rounded-2xl flex items-center gap-3 border backdrop-blur-sm ${cfg.bg}`}>
+                    <div className={`p-4 pr-12 rounded-2xl flex items-center gap-3 border backdrop-blur-sm ${cfg.bg}`}>
                       <Icon className={`w-5 h-5 shrink-0 ${cfg.iconCls}`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-warm-400">{t('rec.scan.ultimo')}</p>
@@ -2519,8 +2599,22 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                                           </span>
                                         </td>
                                         <td className="px-2 py-1.5 text-right">
-                                          {(canMarkAnormalidad || canDeleteScan || (canUndoLastValidation && h.id === latestPersistedValidationId)) && h.result === 'correcto' && isPersistedScanEventId(h.id) && (
+                                          {((canMarkAnormalidad || canDeleteScan || canDeleteScanGroup || (canUndoLastValidation && h.id === latestPersistedValidationId)) && h.result === 'correcto' && isPersistedScanEventId(h.id)) && (
                                             <div className="inline-flex items-center justify-end gap-1">
+                                              {canDeleteScanGroup && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setEditUbicacionModal({ from: h.ubicacion || null, eventId: h.id, scope: 'event' })
+                                                    setEditUbicacionValue((h.ubicacion || '').toUpperCase())
+                                                  }}
+                                                  disabled={relocateUbicacionMut.isPending || updateScanLocationMut.isPending}
+                                                  className="p-1 rounded-md text-primary-500 hover:bg-primary-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                                                  title={t('rec.val.ubicacion.edit')}
+                                                >
+                                                  <Edit3 className="w-3 h-3" />
+                                                </button>
+                                              )}
                                               {canMarkAnormalidad && (
                                                 <button
                                                   type="button"
@@ -2627,8 +2721,22 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                               </td>
                             )}
                             <td className="px-3 py-2 text-right">
-                              {(canMarkAnormalidad || canDeleteScan || (canUndoLastValidation && h.id === latestPersistedValidationId)) && h.result === 'correcto' && isPersistedScanEventId(h.id) && (
+                              {((canMarkAnormalidad || canDeleteScan || canDeleteScanGroup || (canUndoLastValidation && h.id === latestPersistedValidationId)) && h.result === 'correcto' && isPersistedScanEventId(h.id)) && (
                                 <div className="inline-flex items-center justify-end gap-1">
+                                  {canDeleteScanGroup && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditUbicacionModal({ from: h.ubicacion || null, eventId: h.id, scope: 'event' })
+                                        setEditUbicacionValue((h.ubicacion || '').toUpperCase())
+                                      }}
+                                      disabled={relocateUbicacionMut.isPending || updateScanLocationMut.isPending}
+                                      className="p-1.5 rounded-lg text-primary-600 hover:bg-primary-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                                      title={t('rec.val.ubicacion.edit')}
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
                                   {canMarkAnormalidad && (
                                     <button
                                       type="button"
@@ -2966,7 +3074,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         isOpen={crossOrderModal.open}
         onClose={() => { setCrossOrderModal({ open: false, code: null, order: null }); refocus() }}
         title={t('rec.val.crossOrder.title')}
-        icon={AlertTriangle}
+        icon={XOctagon}
         size="sm"
         footer={
           <div className="flex w-full justify-end gap-2">
@@ -3281,11 +3389,23 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
           <div className="flex gap-3 justify-end">
             <button onClick={() => { setEditUbicacionModal(null); setEditUbicacionValue('') }} className="btn-ghost">{t('common.cancel')}</button>
             <button
-              onClick={() => relocateUbicacionMut.mutate({ from: editUbicacionModal.from, to: editUbicacionValue.trim().toUpperCase() })}
-              disabled={!editUbicacionValue.trim() || editUbicacionValue.trim().toUpperCase() === editUbicacionModal?.from || relocateUbicacionMut.isPending}
+              onClick={() => {
+                const nextLocation = editUbicacionValue.trim().toUpperCase()
+                if (editUbicacionModal?.scope === 'event' && editUbicacionModal?.eventId) {
+                  updateScanLocationMut.mutate({ eventId: editUbicacionModal.eventId, ubicacion: nextLocation })
+                  return
+                }
+                relocateUbicacionMut.mutate({ from: editUbicacionModal?.from || '', to: nextLocation })
+              }}
+              disabled={
+                !editUbicacionValue.trim() ||
+                editUbicacionValue.trim().toUpperCase() === String(editUbicacionModal?.from || '').trim().toUpperCase() ||
+                relocateUbicacionMut.isPending ||
+                updateScanLocationMut.isPending
+              }
               className="btn-primary"
             >
-              {relocateUbicacionMut.isPending ? t('admin.saving') : t('common.save')}
+              {(relocateUbicacionMut.isPending || updateScanLocationMut.isPending) ? t('admin.saving') : t('common.save')}
             </button>
           </div>
         }
@@ -3293,7 +3413,11 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         <div className="space-y-3">
           <div>
             <p className="text-xs text-warm-500 mb-1">{t('rec.val.ubicacion.badge')}</p>
-            <p className="font-mono text-sm font-bold text-warm-700 bg-warm-50 rounded-lg px-3 py-2">{editUbicacionModal?.from}</p>
+            <p className="font-mono text-sm font-bold text-warm-700 bg-warm-50 rounded-lg px-3 py-2">
+              {editUbicacionModal?.scope === 'event'
+                ? (editUbicacionModal?.from || t('rec.val.ubicacion.panel.sin_ub'))
+                : (editUbicacionModal?.from || t('rec.val.ubicacion.panel.sin_ub'))}
+            </p>
           </div>
           <div>
             <label className="block text-sm font-semibold text-warm-700 mb-1.5">{t('rec.val.ubicacion.edit')}</label>
@@ -3302,8 +3426,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               value={editUbicacionValue}
               onChange={e => setEditUbicacionValue(e.target.value.toUpperCase())}
               onKeyDown={e => {
-                if (e.key === 'Enter' && editUbicacionValue.trim() && editUbicacionValue.trim().toUpperCase() !== editUbicacionModal?.from) {
-                  relocateUbicacionMut.mutate({ from: editUbicacionModal.from, to: editUbicacionValue.trim().toUpperCase() })
+                const nextLocation = editUbicacionValue.trim().toUpperCase()
+                if (e.key === 'Enter' && nextLocation && nextLocation !== String(editUbicacionModal?.from || '').trim().toUpperCase()) {
+                  if (editUbicacionModal?.scope === 'event' && editUbicacionModal?.eventId) {
+                    updateScanLocationMut.mutate({ eventId: editUbicacionModal.eventId, ubicacion: nextLocation })
+                    return
+                  }
+                  relocateUbicacionMut.mutate({ from: editUbicacionModal?.from || '', to: nextLocation })
                 }
               }}
               className="input-field font-mono"

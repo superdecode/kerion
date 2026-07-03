@@ -282,19 +282,53 @@ router.patch('/orders/:id/scan-events/relocate',
   async (req, res) => {
     try {
       const { from_ubicacion, to_ubicacion } = req.body
-      if (!from_ubicacion || !to_ubicacion) {
-        return res.status(400).json({ error: 'from_ubicacion y to_ubicacion requeridos' })
+      if (!to_ubicacion) {
+        return res.status(400).json({ error: 'to_ubicacion requerido' })
       }
       const toNorm = String(to_ubicacion).trim().toUpperCase()
+      const fromNorm = String(from_ubicacion || '').trim().toUpperCase()
       const result = await req.tQuery(
-        `UPDATE inbound_scan_events SET ubicacion = $1
-         WHERE order_id = $2 AND tenant_id = $3 AND ubicacion = $4`,
-        [toNorm, req.params.id, req.tenantId, from_ubicacion]
+        `UPDATE inbound_scan_events
+            SET ubicacion = $1
+          WHERE order_id = $2
+            AND tenant_id = $3
+            AND COALESCE(TRIM(UPPER(ubicacion)), '') = $4`,
+        [toNorm, req.params.id, req.tenantId, fromNorm]
       )
       res.json({ success: true, updated: result.rowCount, new_ubicacion: toNorm })
     } catch (err) {
       console.error('PATCH scan-events/relocate error:', err.message)
       res.status(500).json({ error: 'Error actualizando ubicación' })
+    }
+  }
+)
+
+router.patch('/orders/:id/scan-events/:eventId/location',
+  authenticateToken, loadFullUser,
+  requirePermission('recepcion.validacion', 'actualizar'),
+  async (req, res) => {
+    try {
+      const toNorm = String(req.body?.ubicacion || '').trim().toUpperCase()
+      if (!toNorm) return res.status(400).json({ error: 'ubicacion requerida' })
+
+      const result = await req.tQuery(
+        `UPDATE inbound_scan_events
+            SET ubicacion = $1
+          WHERE id = $2
+            AND order_id = $3
+            AND tenant_id = $4
+          RETURNING id, ubicacion`,
+        [toNorm, req.params.eventId, req.params.id, req.tenantId]
+      )
+
+      if (!result.rows.length) {
+        return res.status(404).json({ error: 'Escaneo no encontrado' })
+      }
+
+      res.json({ success: true, event: result.rows[0] })
+    } catch (err) {
+      console.error('PATCH scan-events/:eventId/location error:', err.message)
+      res.status(500).json({ error: 'Error actualizando ubicación del escaneo' })
     }
   }
 )

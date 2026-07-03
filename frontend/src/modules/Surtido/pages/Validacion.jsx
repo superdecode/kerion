@@ -519,19 +519,20 @@ function ScanFeedTable({ items, t }) {
           <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
             <tr>
               <th className="table-header w-10">#</th>
+              <th className="table-header w-8" />
               <th className="table-header">{t('surtido.validacion.code_header')}</th>
               <th className="table-header text-right">{t('surtido.validacion.created_at')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
-            {items.map((e, i) => (
+            {[...items].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).map((e, i) => (
               <tr key={i} className="hover:bg-primary-100 transition-colors">
                 <td className="px-3 py-2.5">
                   <span className="w-6 h-6 rounded-lg bg-success-100 text-success-700 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                 </td>
+                <td className="px-1 py-2.5"><CheckCircle2 size={12} className="text-success-500" /></td>
                 <td className="px-3 py-2.5 font-mono font-semibold text-success-700">
                   <span className="inline-flex items-center gap-1.5 flex-wrap">
-                    <CheckCircle2 size={10} className="text-success-500 shrink-0" />
                     {e.code}
                     {e.isManual && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-warning-100 text-warning-700 border border-warning-200 leading-none normal-case tracking-normal">
