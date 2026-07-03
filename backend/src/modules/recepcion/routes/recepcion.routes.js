@@ -223,7 +223,7 @@ router.get('/orders/:id/export-data',
                 COALESCE((
                   SELECT s.tarimas_enabled FROM inbound_validation_sessions s
                   WHERE s.order_id=o.id AND s.tenant_id=o.tenant_id
-                  ORDER BY s.started_at DESC, s.id DESC LIMIT 1
+                  ORDER BY s.inicio_at DESC, s.id DESC LIMIT 1
                 ), false) AS validation_tarimas_started
          FROM inbound_orders o
          LEFT JOIN usuarios u ON u.id = o.responsable_id
@@ -809,6 +809,9 @@ router.patch('/orders/:id',
       const canUpdateRecepcion = hasModulePermission(req.fullUser, 'recepcion.recibir', 'actualizar')
       const canUpdateValidation = hasModulePermission(req.fullUser, 'recepcion.validacion', 'actualizar')
       const canCreateValidation = hasModulePermission(req.fullUser, 'recepcion.validacion', 'crear')
+      if (estado === 'completo' && !canUpdateValidation) {
+        return res.status(403).json({ error: 'Se requiere permiso de actualización para forzar el cierre' })
+      }
       if (updatingState && !canUpdateRecepcion && !canUpdateValidation) {
         return res.status(403).json({ error: 'No tienes permisos para actualizar la orden' })
       }

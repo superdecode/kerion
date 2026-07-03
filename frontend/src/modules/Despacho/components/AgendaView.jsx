@@ -27,6 +27,10 @@ const DISPATCH_CLS = {
   devolucion: 'text-danger-600',
 }
 
+function getDestino(order) {
+  return order.receiverName || order.customerName || order.cliente || order.destinatario || order.logisticsChannel || 'Sin destino'
+}
+
 export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo, onClose }) {
   const [q, setQ] = useState('')
 
@@ -35,7 +39,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
     const map = new Map()
 
     for (const order of orders) {
-      const customer = order.customerName || order.cliente || 'Sin cliente'
+      const customer = getDestino(order)
       const orderNo  = order.outboundOrderNo || order.order_no || ''
       if (search && !orderNo.toLowerCase().includes(search) && !customer.toLowerCase().includes(search)) continue
 
@@ -63,7 +67,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
       <div class="group">
         <div class="group-header">DESTINO: ${escapeHtml(g.customer)}</div>
         <table>
-          <thead><tr><th>Fecha Envío</th><th>Orden</th><th>Código base</th><th>Bultos</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Fecha Envío</th><th>Destino</th><th>Tracking</th><th>Referencia</th><th>Orden</th><th>Código base</th><th>Bultos</th><th>Estado</th></tr></thead>
           <tbody>
             ${g.rows.map(o => {
               const orderNo  = o.outboundOrderNo || o.order_no || ''
@@ -71,6 +75,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
               const bases    = [...new Set(codes.map(c => extractBaseCode(c)).filter(Boolean))]
               const dispatch = dispatchMap?.get(orderNo)
               const estado   = dispatch ? DISPATCH_LABEL[dispatch.order_estado] ?? escapeHtml(dispatch.order_estado) : 'Sin folio'
+              const destino  = getDestino(o)
               const time     = o.outboundTime || o.expectedTime || o.orderCreateTime || ''
               const hasTime  = time && String(time).length > 10
               const dateStr  = time
@@ -80,6 +85,9 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
                 : '—'
               return `<tr>
                 <td>${dateStr}</td>
+                <td>${escapeHtml(destino)}</td>
+                <td class="mono">${escapeHtml(o.logisticsTrackNo || '—')}</td>
+                <td class="mono">${escapeHtml(o.thirdOrderNo || '—')}</td>
                 <td class="mono">${escapeHtml(orderNo)}</td>
                 <td class="mono">${bases.length ? bases.map(b => escapeHtml(b)).join(', ') : '—'}</td>
                 <td class="center">${escapeHtml(o.outboundBoxCount ?? '—')}</td>
@@ -87,7 +95,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
               </tr>`
             }).join('')}
           </tbody>
-          <tfoot><tr><td colspan="5">Subtotal ${escapeHtml(g.customer)}: ${g.rows.length} orden${g.rows.length !== 1 ? 'es' : ''} · ${g.totalBultos} bultos</td></tr></tfoot>
+          <tfoot><tr><td colspan="8">Subtotal ${escapeHtml(g.customer)}: ${g.rows.length} orden${g.rows.length !== 1 ? 'es' : ''} · ${g.totalBultos} bultos</td></tr></tfoot>
         </table>
       </div>`).join('')
 
@@ -188,6 +196,9 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
               <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                 <tr>
                   <th className="table-header">Fecha Envío</th>
+                  <th className="table-header">Destino</th>
+                  <th className="table-header">Tracking</th>
+                  <th className="table-header">Referencia</th>
                   <th className="table-header">Orden</th>
                   <th className="table-header">Código base</th>
                   <th className="table-header text-center">Bultos</th>
@@ -201,6 +212,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
                   const bases    = [...new Set(codes.map(c => extractBaseCode(c)).filter(Boolean))]
                   const dispatch = dispatchMap?.get(orderNo)
                   const estado   = dispatch?.order_estado
+                  const destino  = getDestino(order)
                   const time     = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
                   const hasTime  = time && String(time).length > 10
                   return (
@@ -214,6 +226,15 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
                                 </div>
                               : <span>{fmtDate(time + 'T12:00:00')}</span>)
                           : '—'}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="text-xs text-warm-700">{destino}</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="font-mono text-xs text-warm-600">{order.logisticsTrackNo || '—'}</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className="font-mono text-xs text-warm-600">{order.thirdOrderNo || '—'}</span>
                       </td>
                       <td className="px-4 py-2.5">
                         <span className="font-mono text-xs font-semibold text-primary-700">{orderNo}</span>
@@ -237,7 +258,7 @@ export default function AgendaView({ orders = [], dispatchMap, dateFrom, dateTo,
               {/* Subtotal */}
               <tfoot>
                 <tr className="bg-warm-50/80">
-                  <td colSpan={5} className="px-4 py-2 text-[11px] font-bold text-warm-600">
+                  <td colSpan={8} className="px-4 py-2 text-[11px] font-bold text-warm-600">
                     Subtotal {customer}: {rows.length} orden{rows.length !== 1 ? 'es' : ''} · {gtb} bultos
                   </td>
                 </tr>

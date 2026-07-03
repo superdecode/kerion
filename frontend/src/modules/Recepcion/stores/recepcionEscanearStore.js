@@ -13,7 +13,7 @@ export const useRecepcionEscanearStore = create(
         const id = generateTabId()
         const now = new Date().toISOString()
         set(s => ({
-          tabs: [...s.tabs, { id, orderId: null, folio: null, cliente: null, sessionId: null, openedAt: now, lastActiveAt: now }],
+          tabs: [...s.tabs, { id, orderId: null, folio: null, cliente: null, sessionId: null, openedAt: now, lastActiveAt: now, revision: 0 }],
           activeTabId: id,
         }))
         return id
@@ -24,13 +24,29 @@ export const useRecepcionEscanearStore = create(
         const { tabs } = get()
         const existing = tabs.find(t => t.orderId === String(orderId))
         if (existing) {
-          set({ activeTabId: existing.id })
+          const now = new Date().toISOString()
+          set(s => ({
+            tabs: s.tabs.map(t =>
+              t.id === existing.id
+                ? {
+                    ...t,
+                    folio,
+                    cliente,
+                    orderSnapshot,
+                    sessionId: null,
+                    lastActiveAt: now,
+                    revision: (t.revision || 0) + 1,
+                  }
+                : t
+            ),
+            activeTabId: existing.id,
+          }))
           return { alreadyOpen: true, tabId: existing.id }
         }
         const id = generateTabId()
         const now = new Date().toISOString()
         set(s => ({
-          tabs: [...s.tabs, { id, orderId: String(orderId), folio, cliente, orderSnapshot, sessionId: null, openedAt: now, lastActiveAt: now }],
+          tabs: [...s.tabs, { id, orderId: String(orderId), folio, cliente, orderSnapshot, sessionId: null, openedAt: now, lastActiveAt: now, revision: 0 }],
           activeTabId: id,
         }))
         return { alreadyOpen: false, tabId: id }
@@ -41,7 +57,15 @@ export const useRecepcionEscanearStore = create(
         set(s => ({
           tabs: s.tabs.map(t =>
             t.id === tabId
-              ? { ...t, orderId: orderId != null ? String(orderId) : null, folio: folio ?? null, cliente: cliente ?? null, orderSnapshot, sessionId: null }
+              ? {
+                  ...t,
+                  orderId: orderId != null ? String(orderId) : null,
+                  folio: folio ?? null,
+                  cliente: cliente ?? null,
+                  orderSnapshot,
+                  sessionId: null,
+                  revision: (t.revision || 0) + 1,
+                }
               : t
           ),
         }))

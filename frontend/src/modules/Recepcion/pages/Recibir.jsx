@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
@@ -25,6 +24,7 @@ import { STALE } from '../../../core/constants/queryConfig'
 import { fmtDate } from '../../../core/utils/dateFormat'
 import ImportarOrdenModal from '../components/ImportarOrdenModal'
 import ListaRecepcionSelectorModal from '../components/ListaRecepcionSelectorModal'
+import { useRecepcionValidationLauncher } from '../hooks/useRecepcionValidationLauncher'
 
 const MemoRecepcionMobileHub = memo(RecepcionMobileHub)
 
@@ -91,6 +91,7 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
   handleExportSelected,
   onOpenBulkDelete,
   onDeleteRow,
+  onValidateRow,
   page,
   pageSize,
   setPage,
@@ -213,10 +214,7 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
                         </button>
                         {canValidate && (
                           <button
-                            onClick={() => {
-                              useRecepcionEscanearStore.getState().openOrderTab(order.id, order.folio, order.cliente, order)
-                              navigate('/recepcion/escanear')
-                            }}
+                            onClick={() => onValidateRow(order)}
                             className="p-1.5 rounded-lg hover:bg-sky-50 text-warm-400 hover:text-sky-600 transition-colors"
                             title={t('rec.btn.validar')}
                           >
@@ -261,6 +259,7 @@ export default function Recibir() {
   const toast = useToastStore()
   const { t } = useI18nStore()
   const { data: moduleUsage } = useModuleUsage()
+  const { openValidationFlow, validationModeModal } = useRecepcionValidationLauncher()
 
   const [q, setQ] = useState('')
   const [qFilter, setQFilter] = useState('')
@@ -481,7 +480,12 @@ export default function Recibir() {
 
       {/* MOBILE: scan hub — completely different layout */}
       <div className="flex sm:hidden flex-col flex-1 overflow-hidden">
-        <MemoRecepcionMobileHub orders={activeOrders} isLoading={activeLoading} t={t} />
+        <MemoRecepcionMobileHub
+          orders={activeOrders}
+          isLoading={activeLoading}
+          t={t}
+          onValidateOrder={openValidationFlow}
+        />
       </div>
 
       {/* DESKTOP: filter bar + table */}
@@ -553,6 +557,7 @@ export default function Recibir() {
           handleExportSelected={handleExportSelected}
           onOpenBulkDelete={handleOpenBulkDelete}
           onDeleteRow={setDeleteRow}
+          onValidateRow={openValidationFlow}
           page={page}
           pageSize={pageSize}
           setPage={setPage}
@@ -747,6 +752,7 @@ export default function Recibir() {
         isOpen={showListaSelector}
         onClose={() => setShowListaSelector(false)}
       />
+      {validationModeModal}
     </div>
     </ModuleLimitBanner>
   )

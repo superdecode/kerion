@@ -5,12 +5,11 @@ import {
   Search, X, Loader2, PackageCheck, Clock3, User, MapPin, Container,
   ClipboardList, ScanBarcode, ArrowRight, Copy, Check,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 import { quickSearchBoxes } from '../services/recepcionService'
-import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { fmtDateTimeMini } from '../../../core/utils/dateFormat'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { normalizeScanCode } from '../../Shared/Wms/normalizeCode'
+import { useRecepcionValidationLauncher } from '../hooks/useRecepcionValidationLauncher'
 
 const STATUS_STYLE = {
   validada: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -105,6 +104,7 @@ function ResultCard({ item, onOpenOrder, t }) {
 
 export default function RecepcionQuickSearch() {
   const { t } = useI18nStore()
+  const { openValidationFlow, validationModeModal } = useRecepcionValidationLauncher()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -113,8 +113,6 @@ export default function RecepcionQuickSearch() {
   const [searched, setSearched] = useState(false)
   const inputRef = useRef(null)
   const debounceRef = useRef(null)
-  const navigate = useNavigate()
-
   useEffect(() => {
     if (!open) return
     const timer = setTimeout(() => inputRef.current?.focus(), 80)
@@ -167,14 +165,14 @@ export default function RecepcionQuickSearch() {
   }
 
   function handleOpenOrder(item) {
-    useRecepcionEscanearStore.getState().openOrderTab(item.order_id, item.folio, item.cliente, {
+    openValidationFlow({
       id: item.order_id,
       folio: item.folio,
       cliente: item.cliente,
       estado: item.order_estado,
+    }, {
+      onBeforeNavigate: () => setOpen(false),
     })
-    setOpen(false)
-    navigate('/recepcion/escanear')
   }
 
   const modal = (
@@ -302,6 +300,7 @@ export default function RecepcionQuickSearch() {
       </button>
 
       {typeof document !== 'undefined' ? createPortal(modal, document.body) : modal}
+      {validationModeModal}
     </>
   )
 }

@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ScanBarcode, Search, X, Plus, Loader2, ArrowRight, Layers, Keyboard } from 'lucide-react'
@@ -312,8 +313,11 @@ const INACTIVITY_MS = 30 * 60 * 1000
 
 export default function EscanearRecepcion() {
   const { t } = useI18nStore()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [actionsSlot, setActionsSlot] = useState(null)
   const [mobilePickerOpen, setMobilePickerOpen] = useState(false)
+  const [closeRequests, setCloseRequests] = useState({})
   const qc = useQueryClient()
 
   const {
@@ -324,11 +328,6 @@ export default function EscanearRecepcion() {
 
   const activeTab = tabs.find(tb => tb.id === activeTabId) ?? null
   const openTabOrderIds = new Set(tabs.filter(tb => tb.orderId).map(tb => String(tb.orderId)))
-
-  // Always keep at least one tab
-  useEffect(() => {
-    if (tabs.length === 0) openEmptyTab()
-  }, [tabs.length]) // openEmptyTab is a stable Zustand action
 
   function handleConfirmOrder(order, tabId) {
     const existingTab = findTabByOrderId(String(order.id))
@@ -346,7 +345,27 @@ export default function EscanearRecepcion() {
   }
 
   function handleValidationBack(tabId) {
-    setTabOrder(tabId, null, null, null)
+    closeTab(tabId)
+  }
+
+  function handleValidationCancel(tabId) {
+    const tab = tabs.find(t => t.id === tabId)
+    closeTab(tabId)
+    if (tab && location.state?.fromExternal && String(tab.orderId) === String(location.state.fromExternal)) {
+      navigate(-1)
+    }
+  }
+
+  function requestTabClose(tabId) {
+    const tab = useRecepcionEscanearStore.getState().tabs.find(t => t.id === tabId)
+    if (!tab?.orderId) {
+      closeTab(tabId)
+      return
+    }
+    setCloseRequests(current => ({
+      ...current,
+      [tabId]: (current[tabId] || 0) + 1,
+    }))
   }
 
   const handleSelectTab = useCallback((tabId) => {
@@ -378,18 +397,21 @@ export default function EscanearRecepcion() {
       />
 
       {/* Desktop tab bar */}
+      {tabs.length > 0 && (
       <div className="hidden md:block">
         <TabBar
           tabs={tabs}
           activeTabId={activeTabId}
           onSelect={handleSelectTab}
-          onClose={closeTab}
+          onClose={requestTabClose}
           onAdd={openEmptyTab}
           t={t}
         />
       </div>
+      )}
 
       {/* Mobile session bar */}
+      {tabs.length > 0 && (
       <div className="md:hidden flex items-center gap-2 px-3 py-2.5 border-b border-warm-100 bg-white shrink-0">
         <ScanBarcode size={14} className="text-sky-500 shrink-0" />
         <div className="flex-1 min-w-0">
@@ -413,6 +435,7 @@ export default function EscanearRecepcion() {
           <Plus size={13} />
         </button>
       </div>
+      )}
 
       <AnimatePresence>
         {mobilePickerOpen && (
@@ -421,13 +444,39 @@ export default function EscanearRecepcion() {
             activeTabId={activeTabId}
             onSelect={handleSelectTab}
             onClose={() => setMobilePickerOpen(false)}
-            onCloseTab={closeTab}
+            onCloseTab={requestTabClose}
             t={t}
           />
         )}
       </AnimatePresence>
 
       <div className="flex-1 overflow-hidden flex flex-col relative">
+        {tabs.length === 0 && (
+          <div className="flex-1 flex items-center justify-center p-6">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="w-full max-w-md rounded-3xl border border-warm-100 bg-gradient-to-br from-white via-sky-50/50 to-white p-8 text-center shadow-sm"
+            >
+              <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl gradient-primary shadow-glow">
+                <ScanBarcode className="h-10 w-10 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-warm-800">{t('rec.escanear.title')}</h2>
+              <p className="mt-2 text-sm text-warm-500">
+                {t('rec.escanear.empty_hint')}
+              </p>
+              <button
+                type="button"
+                onClick={openEmptyTab}
+                className="btn-primary mt-6 inline-flex items-center gap-2"
+              >
+                <Plus size={16} />
+                {t('rec.escanear.empty_cta')}
+              </button>
+            </motion.div>
+          </div>
+        )}
         {tabs.map(tab => (
           <div
             key={tab.id}
@@ -443,10 +492,13 @@ export default function EscanearRecepcion() {
               />
             ) : (
               <ValidacionRecepcion
+                key={`${tab.id}:${tab.orderId}:${tab.revision || 0}`}
                 orderId={tab.orderId}
                 initialOrder={tab.orderSnapshot}
                 embedded
                 onBack={() => handleValidationBack(tab.id)}
+                onCancel={() => handleValidationCancel(tab.id)}
+                closeRequestToken={closeRequests[tab.id] || 0}
                 headerActionsSlot={tab.id === activeTabId ? actionsSlot : null}
               />
             )}

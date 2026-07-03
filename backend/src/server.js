@@ -69,6 +69,7 @@ import surtidoDashboardRoutes from './modules/wms/routes/surtido.dashboard.route
 
 const app = express()
 app.set('trust proxy', 1)
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function isAllowedDevOrigin(origin) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
@@ -235,6 +236,8 @@ await runMigrations()
 
 function recordBackendError(req, err) {
   const message = String(err?.message || 'Unhandled backend error').slice(0, 1000)
+  const rawUserId = req.user?.id ?? null
+  const safeUserId = rawUserId && UUID_RE.test(String(rawUserId)) ? String(rawUserId) : null
   query(
     `INSERT INTO system_error_events (
        tenant_id, tenant_slug, user_id, user_email, source, severity, fingerprint,
@@ -244,7 +247,7 @@ function recordBackendError(req, err) {
     [
       req.tenantId || req.user?.tenant_id || null,
       req.tenant?.slug || null,
-      req.user?.id || null,
+      safeUserId,
       req.user?.email || null,
       ['backend', req.method, req.originalUrl, message].join('|').slice(0, 500),
       message,
@@ -257,6 +260,7 @@ function recordBackendError(req, err) {
       JSON.stringify({
         code: err?.code || null,
         ip: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || null,
+        actor_user_id: safeUserId ? null : rawUserId,
       }),
     ]
   ).catch(logErr => console.error('[error telemetry backend]', logErr.message))

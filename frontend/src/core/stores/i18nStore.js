@@ -3142,6 +3142,7 @@ const translations = {
     'rec.tarimas.toggle': '托盘分类',
     'rec.mode.title': '选择复核方式',
     'rec.mode.subtitle': '请选择本次收货的操作方式。',
+    'rec.mode.helper': '开始后仍可查看所选配置。',
     'rec.mode.normal.title': '普通复核',
     'rec.mode.normal.desc': '按库位连续扫描箱码，适用于无需按托盘分类的收货。',
     'rec.mode.classified.title': '分类复核',
@@ -3219,6 +3220,8 @@ const translations = {
     'rec.escanear.searching':              '搜索中...',
     'rec.escanear.no_session':             '会话未就绪',
     'rec.escanear.order_complete':         '订单已完成',
+    'rec.escanear.empty_hint':             '创建一个标签页，或从收货列表打开一张订单开始复核。',
+    'rec.escanear.empty_cta':              '创建标签页',
 
     'rec.delete.confirm': '确定要删除此收货单吗？',
     'rec.delete.only_pending': '只能删除待复核状态的订单',
@@ -6859,6 +6862,7 @@ const translations = {
     'rec.tarimas.toggle': 'Clasificación en Tarimas',
     'rec.mode.title': 'Selecciona el tipo de validación',
     'rec.mode.subtitle': 'Elige cómo trabajarás esta recepción.',
+    'rec.mode.helper': 'La configuración elegida se aplicará antes de abrir el escáner.',
     'rec.mode.normal.title': 'Normal',
     'rec.mode.normal.desc': 'Escanea las cajas por ubicación, sin separarlas automáticamente en tarimas.',
     'rec.mode.classified.title': 'Clasificada',
@@ -6936,6 +6940,8 @@ const translations = {
     'rec.escanear.searching':              'Buscando...',
     'rec.escanear.no_session':             'Sesión no iniciada',
     'rec.escanear.order_complete':         'Orden completada',
+    'rec.escanear.empty_hint':             'Crea una pestaña o abre una orden desde Recepción para comenzar a validar.',
+    'rec.escanear.empty_cta':              'Crear pestaña',
 
     'rec.delete.confirm': '¿Eliminar esta orden de recepción?',
     'rec.delete.only_pending': 'Solo se pueden eliminar órdenes en estado pendiente',

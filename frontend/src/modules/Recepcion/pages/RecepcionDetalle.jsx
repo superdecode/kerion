@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import {
   ArrowLeft, Copy, Check, PackageCheck, ScanBarcode, Printer,
   Download, Trash2, CheckCircle2, Clock, Search, X,
@@ -21,6 +20,7 @@ import { getOrder, getOrderExportData, getScanEvents, updateLine, getListaRecepc
 import { STALE } from '../../../core/constants/queryConfig'
 import { buildListaRecepcionData, generateListaRecepcionXlsx } from '../utils/listaRecepcionReport'
 import ListaRecepcionPreviewModal from '../components/ListaRecepcionPreviewModal'
+import { useRecepcionValidationLauncher } from '../hooks/useRecepcionValidationLauncher'
 import { normalizeCode } from '../../Shared/Wms/normalizeCode'
 import * as XLSX from 'xlsx'
 
@@ -146,6 +146,7 @@ export default function RecepcionDetalle() {
   const { t } = useI18nStore()
   const toast = useToastStore()
   const { hasPermission, isAuthenticated } = useAuthStore()
+  const { openValidationFlow, validationModeModal } = useRecepcionValidationLauncher()
 
   const [activeTab, setActiveTab] = useState('detalle')
   const [lineSearchInput, setLineSearchInput] = useState('')
@@ -608,10 +609,7 @@ export default function RecepcionDetalle() {
             </button>
             {canValidate && (
               <button
-                onClick={() => {
-                  useRecepcionEscanearStore.getState().openOrderTab(id, order.folio, order.cliente, order)
-                  navigate('/recepcion/escanear')
-                }}
+                onClick={() => openValidationFlow({ ...order, id })}
                 className="btn-primary flex items-center gap-1.5 text-sm"
               >
                 <ScanBarcode className="w-4 h-4" />
@@ -1256,6 +1254,7 @@ export default function RecepcionDetalle() {
           </div>
         </div>
       </Modal>
+      {validationModeModal}
     </div>
   )
 }

@@ -160,7 +160,7 @@ const OUTBOUND_ALIASES = {
   // "Recipient_收件人"
   receiverName: [
     'recipient_收件人',
-    'receiver_name', 'recipient', 'destinatario', 'receiver', 'consignee',
+    'receiver_name', 'recipient', 'destinatario', 'destino', 'destination', 'receiver', 'consignee',
   ],
   // (no orderCreateTime in the exported sheet — kept for other sheet variants)
   orderCreateTime: [

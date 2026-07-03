@@ -1,8 +1,9 @@
 import { Router } from 'express'
+import { isDatabaseUnavailableError } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { getPermissionLevel, requireAnyPermission, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
-import { refreshRecepcionOrderState } from '../utils/orderState.js'
+import { getRecepcionValidationRecordCount, refreshRecepcionOrderState } from '../utils/orderState.js'
 
 const router = Router()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -47,6 +48,9 @@ router.post('/orders/:id/sessions',
       res.status(201).json({ session: result.rows[0] })
     } catch (err) {
       console.error('[recepcion] session create:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+      }
       res.status(500).json({ error: 'Error al crear sesión de validación' })
     }
   }
@@ -59,17 +63,56 @@ router.patch('/orders/:id/sessions/:sid',
   async (req, res) => {
     try {
       const { total_escaneado, ubicacion_nota } = req.body
-      const result = await req.tQuery(
-        `UPDATE inbound_validation_sessions
-         SET fin_at=now(),
-             total_escaneado=COALESCE($3, total_escaneado),
-             ubicacion_nota=COALESCE($4, ubicacion_nota)
-         WHERE id=$1 AND tenant_id=$2 RETURNING *`,
-        [req.params.sid, req.tenantId, total_escaneado || null, ubicacion_nota || null]
-      )
-      if (result.rows.length === 0) return res.json({ session: null, reason: 'already_closed' })
-      res.json({ session: result.rows[0] })
+      const payload = await req.tTransaction(async (client) => {
+        const sessionResult = await client.query(
+          `SELECT id FROM inbound_validation_sessions
+           WHERE id=$1 AND order_id=$2 AND tenant_id=$3
+           FOR UPDATE`,
+          [req.params.sid, req.params.id, req.tenantId]
+        )
+        if (sessionResult.rows.length === 0) return { session: null, reason: 'already_closed' }
+
+        const validationRecords = await getRecepcionValidationRecordCount(client, req.tenantId, req.params.id)
+
+        if (validationRecords === 0) {
+          await client.query(
+            `DELETE FROM inbound_validation_sessions
+             WHERE order_id=$1 AND tenant_id=$2`,
+            [req.params.id, req.tenantId]
+          )
+          const orderResult = await client.query(
+            `UPDATE inbound_orders
+             SET estado='pendiente_validacion',
+                 validation_config='{}'::jsonb,
+                 updated_at=now()
+             WHERE id=$1 AND tenant_id=$2
+             RETURNING *`,
+            [req.params.id, req.tenantId]
+          )
+          return {
+            session: null,
+            order: orderResult.rows[0] || null,
+            reset_validation: true,
+          }
+        }
+
+        const result = await client.query(
+          `UPDATE inbound_validation_sessions
+           SET fin_at=now(),
+               total_escaneado=COALESCE($4, total_escaneado),
+               ubicacion_nota=COALESCE($5, ubicacion_nota)
+           WHERE id=$1 AND order_id=$2 AND tenant_id=$3
+           RETURNING *`,
+          [req.params.sid, req.params.id, req.tenantId, total_escaneado ?? null, ubicacion_nota || null]
+        )
+        return { session: result.rows[0], reset_validation: false }
+      })
+      res.json(payload)
     } catch (err) {
+      console.error('[recepcion] session close:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+      }
       res.status(500).json({ error: 'Error al cerrar sesión' })
     }
   }
@@ -826,6 +869,9 @@ router.get('/novedad-tipos',
       res.json({ tipos: result.rows })
     } catch (err) {
       console.error('[recepcion] novedad-tipos get:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+      }
       res.status(500).json({ error: 'Error al obtener tipos' })
     }
   }
@@ -849,6 +895,9 @@ router.post('/novedad-tipos',
       res.status(201).json({ tipo: result.rows[0] })
     } catch (err) {
       console.error('[recepcion] novedad-tipos create:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+      }
       res.status(500).json({ error: 'Error al crear tipo' })
     }
   }
@@ -870,6 +919,9 @@ router.put('/novedad-tipos/:id',
       res.json({ tipo: rows[0] })
     } catch (err) {
       console.error('[recepcion] novedad-tipos update:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+      }
       res.status(500).json({ error: 'Error al actualizar tipo' })
     }
   }
@@ -888,6 +940,9 @@ router.delete('/novedad-tipos/:id',
       res.json({ ok: true })
     } catch (err) {
       console.error('[recepcion] novedad-tipos delete:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
+      }
       res.status(500).json({ error: 'Error al eliminar tipo' })
     }
   }

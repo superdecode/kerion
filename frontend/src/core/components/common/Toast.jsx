@@ -27,7 +27,7 @@ export default function Toast() {
   const { toasts, removeToast } = useToastStore()
 
   return (
-    <div className="fixed top-4 right-4 z-[99999] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+    <div className="fixed top-4 left-4 right-4 sm:left-auto sm:right-4 sm:max-w-sm z-[99999] flex flex-col gap-2 pointer-events-none">
       <AnimatePresence>
         {toasts.map((toast) => {
           const Icon = icons[toast.type] || Info

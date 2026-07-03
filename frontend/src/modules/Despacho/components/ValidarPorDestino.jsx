@@ -17,7 +17,7 @@ import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '..
 import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import {
   getFolio, getFolioScans, addFolioScan, deleteFolioScan,
-  moveFolioScanTarima, cerrarFolio, cancelarFolio, getOutboundList, removeDestinationOrder,
+  moveFolioScanTarima, cerrarFolio, cancelarFolio, getOutboundList, removeDestinationOrder, addOrder, findOrderByBarcode,
 } from '../services/despachoService'
 import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
@@ -83,7 +83,7 @@ function parseOrderMeta(order) {
 }
 
 function getDestinoName(order) {
-  return String(order?.receiverName || order?.logisticsChannel || order?.destinatario || '').trim()
+  return String(order?.receiverName || order?.customerName || order?.cliente || order?.logisticsChannel || order?.destinatario || '').trim()
 }
 
 function getOrderDateKey(order) {
@@ -264,8 +264,14 @@ export default function ValidarPorDestino({ folioId }) {
   const [removeOrderModal, setRemoveOrderModal] = useState({ open: false, order: null })
   const [pendingOfflineScans, setPendingOfflineScans] = useState([])
   const [orderDetailsByNo, setOrderDetailsByNo] = useState({})
+  const [showAddOrder, setShowAddOrder] = useState(false)
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [lookupResult, setLookupResult] = useState(null)
+  const [addForm, setAddForm] = useState({ outbound_order_no: '', destinatario: '', bultos: '', bultos_esperados: null, outbound_date: null })
   const isOffline = useOfflineStore((s) => s.status === 'offline')
   const detailsFetchingRef = useRef(new Set())
+  const lookupRef = useRef(null)
+  const pendingOrderNoRef = useRef(null)
 
   const { data: folioData, isLoading: loadingFolio } = useQuery({
     queryKey: ['despacho-folio', folioId],
@@ -599,6 +605,107 @@ export default function ValidarPorDestino({ folioId }) {
     },
     onError: (err) => addToast(err?.response?.data?.error || t('desp.validar.destino.removeOrderError'), 'error'),
   })
+
+  const { mutate: doAddOrder, isPending: addingOrder } = useMutation({
+    mutationFn: (body) => addOrder(folioId, body),
+    onSuccess: (data) => {
+      if (data?.folio || data?.orders) {
+        qc.setQueryData(['despacho-folio', folioId], data)
+      }
+      qc.invalidateQueries({ queryKey: ['despacho-folio', folioId] })
+      qc.invalidateQueries({ queryKey: ['despacho-folios'] })
+      qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
+      setShowAddOrder(false)
+      setLookupResult(null)
+      setAddForm({ outbound_order_no: '', destinatario: '', bultos: '', bultos_esperados: null, outbound_date: null })
+      addToast(`Orden ${pendingOrderNoRef.current || ''} agregada al folio`, 'success')
+      setTimeout(() => scanRef.current?.focus(), 80)
+    },
+    onError: (err) => addToast(err?.response?.data?.error || 'Error agregando orden al folio', 'error'),
+  })
+
+  const addOrderNo = addForm.outbound_order_no.trim()
+  const isDuplicateInFolio = !!addOrderNo && orders.some((order) => order.outbound_order_no === addOrderNo)
+  const primaryDestinatario = folio?.destino || orders.find((order) => order.destinatario)?.destinatario || null
+
+  const openAddOrder = useCallback(() => {
+    setShowAddOrder(true)
+    setLookupLoading(false)
+    setLookupResult(null)
+    setAddForm({ outbound_order_no: '', destinatario: '', bultos: '', bultos_esperados: null, outbound_date: null })
+    setTimeout(() => lookupRef.current?.focus(), 100)
+  }, [])
+
+  const closeAddOrder = useCallback(() => {
+    if (addingOrder) return
+    setShowAddOrder(false)
+    setLookupResult(null)
+    setAddForm({ outbound_order_no: '', destinatario: '', bultos: '', bultos_esperados: null, outbound_date: null })
+    setTimeout(() => scanRef.current?.focus(), 80)
+  }, [addingOrder])
+
+  const handleLookup = useCallback(async (code) => {
+    const raw = String(code || '').trim()
+    if (!raw) return
+    const normalized = normalizeScanCode(raw)
+    setLookupLoading(true)
+    setLookupResult(null)
+    try {
+      let found = null
+      for (const variant of generateCodeVariations(normalized || raw, false)) {
+        found = await findOrderByBarcode(variant)
+        if (found) break
+      }
+
+      if (found) {
+        const detail = await getOutboundDetail(found.outboundOrderNo || raw)
+        const enriched = {
+          ...found,
+          ...(detail?.data || {}),
+          outboundBoxCount: detail?.data?.outboundBoxCount || found.outboundBoxCount || null,
+        }
+        setLookupResult(enriched)
+        setAddForm({
+          outbound_order_no: enriched.outboundOrderNo || raw,
+          destinatario: getDestinoName(enriched),
+          bultos: '',
+          bultos_esperados: enriched.outboundBoxCount || null,
+          outbound_date: getOrderDateKey(enriched) || null,
+        })
+      } else {
+        addToast('Orden no encontrada en hojas; completa los datos manualmente', 'warning')
+        setAddForm((prev) => ({ ...prev, outbound_order_no: raw }))
+      }
+    } finally {
+      setLookupLoading(false)
+    }
+  }, [addToast])
+
+  const handleConfirmAddOrder = useCallback(() => {
+    if (!addForm.outbound_order_no.trim()) return
+
+    pendingOrderNoRef.current = addForm.outbound_order_no.trim()
+    const fallbackExpected = parseInt(addForm.bultos, 10) || 1
+    const expected = Number(addForm.bultos_esperados ?? fallbackExpected) || fallbackExpected
+
+    doAddOrder({
+      outbound_order_no: addForm.outbound_order_no.trim(),
+      destinatario: addForm.destinatario.trim() || null,
+      bultos: 0,
+      bultos_esperados: expected,
+      outbound_date: addForm.outbound_date || null,
+      notas: JSON.stringify({
+        manual_added: true,
+        destino: addForm.destinatario.trim() || null,
+        outbound_date: addForm.outbound_date || null,
+        outboundBoxCount: expected,
+        logisticsTrackNo: lookupResult?.logisticsTrackNo || null,
+        thirdOrderNo: lookupResult?.thirdOrderNo || null,
+        logisticsChannel: lookupResult?.logisticsChannel || null,
+        allCustomizeCodes: Array.isArray(lookupResult?.allCustomizeCodes) ? lookupResult.allCustomizeCodes : [],
+      }),
+    })
+  }, [addForm, doAddOrder, lookupResult])
 
   const requestAddScan = useCallback((payload, { skipOverLimit = false } = {}) => {
     const matchedOrderNo = payload?.matched_order_no
@@ -1083,6 +1190,16 @@ export default function ValidarPorDestino({ folioId }) {
               <div className="flex items-center gap-2.5 mb-3 min-w-0">
                 <h4 className="min-w-0 flex-1 truncate text-[15px] font-bold text-warm-700">{t('desp.validar.destino.ordenesDestino')}</h4>
                 <span className="badge shrink-0 bg-primary-100 text-primary-700 text-xs font-semibold">{orders.length}</span>
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={showAddOrder ? closeAddOrder : openAddOrder}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary-200 bg-white px-2.5 text-[11px] font-semibold text-primary-700 transition-colors hover:bg-primary-50"
+                  >
+                    {showAddOrder ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                    {showAddOrder ? t('desp.validar.orden.cerrar') : t('desp.validar.orden.agregarOrden')}
+                  </button>
+                )}
               </div>
 
               {/* Search */}
@@ -1121,6 +1238,87 @@ export default function ValidarPorDestino({ folioId }) {
                   </button>
                 ))}
               </div>
+
+              {showAddOrder && editable && (
+                <div className="mt-3 rounded-2xl border border-primary-100 bg-white p-3 space-y-3 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-primary-700">
+                    Agregar orden manual
+                  </p>
+
+                  <ScanInputBar
+                    inputRef={lookupRef}
+                    onSubmit={handleLookup}
+                    placeholder={t('desp.validar.orden.scanPlaceholderLookup')}
+                    buttonLabel={t('desp.validar.orden.buscar')}
+                    disabled={lookupLoading || addingOrder}
+                  />
+
+                  {lookupResult && (
+                    <div className="rounded-xl border border-primary-100 bg-primary-50/60 px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-mono text-xs font-bold text-primary-700 break-all">{lookupResult.outboundOrderNo}</p>
+                          <p className="text-[11px] text-warm-600 break-words">{getDestinoName(lookupResult) || 'Sin destino'}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-[10px] uppercase tracking-wide text-warm-400">Esperadas</p>
+                          <p className="text-sm font-bold text-warm-800">{lookupResult.outboundBoxCount ?? '—'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-2">
+                    <input
+                      value={addForm.outbound_order_no}
+                      onChange={(event) => setAddForm((prev) => ({ ...prev, outbound_order_no: event.target.value }))}
+                      className="input-field w-full text-sm font-mono"
+                      placeholder="No. orden"
+                    />
+                    <input
+                      value={addForm.destinatario}
+                      onChange={(event) => setAddForm((prev) => ({ ...prev, destinatario: event.target.value }))}
+                      className="input-field w-full text-sm"
+                      placeholder="Destino"
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      value={addForm.bultos_esperados ?? addForm.bultos}
+                      onChange={(event) => setAddForm((prev) => ({ ...prev, bultos: event.target.value, bultos_esperados: parseInt(event.target.value, 10) || null }))}
+                      className="input-field w-full text-sm"
+                      placeholder="Bultos esperados"
+                    />
+                  </div>
+
+                  {isDuplicateInFolio && (
+                    <div className="rounded-xl border border-danger-200 bg-danger-50 px-3 py-2 text-[11px] text-danger-700">
+                      Esta orden ya está cargada en este folio.
+                    </div>
+                  )}
+
+                  {primaryDestinatario && addForm.destinatario && addForm.destinatario !== primaryDestinatario && (
+                    <div className="rounded-xl border border-warning-200 bg-warning-50 px-3 py-2 text-[11px] text-warning-700">
+                      Destino del folio: <span className="font-semibold">{primaryDestinatario}</span>. Esta orden trae: <span className="font-semibold">{addForm.destinatario}</span>.
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2">
+                    <button type="button" onClick={closeAddOrder} disabled={addingOrder} className="btn-secondary text-xs">
+                      {t('common.cancel')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmAddOrder}
+                      disabled={addingOrder || isDuplicateInFolio || !addForm.outbound_order_no.trim() || !(parseInt(addForm.bultos_esperados ?? addForm.bultos, 10) > 0)}
+                      className="btn-primary text-xs flex items-center gap-1.5"
+                    >
+                      {addingOrder && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Agregar al folio
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Panel body: order cards */}

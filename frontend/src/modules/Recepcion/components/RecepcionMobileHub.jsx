@@ -1,7 +1,5 @@
 import { useState, useRef, useCallback, useEffect, memo } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router-dom'
-import { useRecepcionEscanearStore } from '../stores/recepcionEscanearStore'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ScanBarcode, X, XCircle, PackageCheck, CheckCircle2,
@@ -104,10 +102,9 @@ function MobileOrderCard({ order, t, onValidate, highlight = false }) {
   )
 }
 
-function RecepcionMobileHub({ orders, isLoading, t }) {
-  const navigate = useNavigate()
+function RecepcionMobileHub({ orders, isLoading, t, onValidateOrder }) {
   const inputRef = useRef(null)
-  const [code, setCode] = useState('')
+  const scanningRef = useRef(false)
   const [scanning, setScanning] = useState(false)
   const [matchSheet, setMatchSheet] = useState({ open: false, orders: [], code: '' })
   const [notFoundModal, setNotFoundModal] = useState({ open: false, code: '' })
@@ -121,11 +118,12 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
   const refocus = useCallback(() => setTimeout(() => inputRef.current?.focus(), 80), [])
 
   const handleScan = useCallback(async () => {
-    const val = (inputRef.current?.value || code).trim()
-    if (!val || scanning) return
+    const val = inputRef.current?.value?.trim() || ''
+    if (!val || scanningRef.current) return
     const resolvedQuery = normalizeScanCode(val) || val.toUpperCase()
+    scanningRef.current = true
     setScanning(true)
-    setCode('')
+    if (inputRef.current) inputRef.current.value = ''
     try {
       const result = await searchByCode(resolvedQuery)
       if (result.count === 0) {
@@ -139,10 +137,11 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
       playSound('error')
       setNotFoundModal({ open: true, code: resolvedQuery })
     } finally {
+      scanningRef.current = false
       setScanning(false)
       refocus()
     }
-  }, [code, scanning, refocus])
+  }, [refocus])
 
   const closeSheet = useCallback(() => {
     setMatchSheet({ open: false, orders: [], code: '' })
@@ -162,8 +161,6 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
           <input
             ref={inputRef}
             type="text"
-            value={code}
-            onChange={e => setCode(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleScan()}
             placeholder={t('rec.mobile.scan_order_desc')}
             className="w-full pl-14 pr-10 py-3.5 text-base bg-warm-50 border-2 border-primary-200 rounded-2xl focus:border-primary-500 focus:ring-2 focus:ring-primary-100 outline-none font-mono tracking-wide transition-all"
@@ -201,136 +198,143 @@ function RecepcionMobileHub({ orders, isLoading, t }) {
             key={order.id}
             order={order}
             t={t}
-            onValidate={() => {
-              useRecepcionEscanearStore.getState().openOrderTab(order.id, order.folio, order.cliente, order)
-              navigate('/recepcion/escanear')
-            }}
+            onValidate={() => onValidateOrder?.(order)}
           />
         ))}
 
         <div style={{ height: 'env(safe-area-inset-bottom, 16px)' }} />
       </div>
 
-      {/* Not-found modal — portal to body */}
-      <AnimatePresence>
-        {notFoundModal.open && createPortal(
-          <>
+      {/* Not-found modal — AnimatePresence must live inside the portal so Framer Motion
+          can track children within the portaled React subtree */}
+      {createPortal(
+        <AnimatePresence>
+          {notFoundModal.open && (
             <motion.div
+              key="not-found-root"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               style={{ position: 'fixed', inset: 0, zIndex: 9040 }}
-              className="bg-black/40 backdrop-blur-sm"
-              onClick={() => { setNotFoundModal({ open: false, code: '' }); refocus() }}
-            />
-            <div style={{ position: 'fixed', inset: 0, zIndex: 9050, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
-              <motion.div
-                initial={{ y: '100%' }}
-                animate={{ y: 0 }}
-                exit={{ y: '100%' }}
-                transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-                style={{ width: '100%', pointerEvents: 'auto' }}
-                className="bg-white rounded-t-3xl shadow-2xl overflow-hidden"
-              >
-                <div className="flex justify-center pt-3 pb-1 shrink-0">
-                  <div className="w-10 h-1 bg-warm-200 rounded-full" />
-                </div>
-                <div className="px-5 pt-3 pb-6 flex flex-col items-center text-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-danger-50 flex items-center justify-center">
-                    <XCircle className="w-6 h-6 text-danger-500" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-warm-900 text-sm">{t('rec.mobile.no_order')}</p>
-                    <p className="font-mono text-xs text-danger-600 mt-1.5 break-all">{notFoundModal.code}</p>
-                    <p className="text-[11px] text-warm-500 mt-1">{t('rec.mobile.no_order_hint')}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setNotFoundModal({ open: false, code: '' }); refocus() }}
-                    className="w-full h-10 rounded-xl bg-warm-100 hover:bg-warm-200 active:scale-95 text-warm-700 text-sm font-semibold transition-all"
-                  >
-                    {t('common.close')}
-                  </button>
-                </div>
-                <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
-              </motion.div>
-            </div>
-          </>,
-          document.body
-        )}
-      </AnimatePresence>
-
-      {/* Match bottom sheet — portal to body to escape overflow-y:auto ancestor on iOS Safari */}
-      <AnimatePresence>
-        {matchSheet.open && createPortal(
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              style={{ position: 'fixed', inset: 0, zIndex: 9040 }}
-              className="bg-black/40 backdrop-blur-sm"
-              onClick={closeSheet}
-            />
-            <div style={{ position: 'fixed', inset: 0, zIndex: 9050, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-              style={{ width: '100%', maxHeight: '82dvh', pointerEvents: 'auto' }}
-              className="bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
             >
-              <div className="flex justify-center pt-3 pb-1 shrink-0">
-                <div className="w-10 h-1 bg-warm-200 rounded-full" />
-              </div>
-
-              <div className="flex items-center justify-between px-4 pb-3 shrink-0 border-b border-warm-100">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-success-500 shrink-0" />
-                    <p className="font-semibold text-warm-900 text-sm">
-                      {matchSheet.orders.length === 1
-                        ? t('rec.mobile.match_title')
-                        : t('rec.mobile.match_multiple')}
-                    </p>
-                  </div>
-                  <p className="font-mono text-[11px] text-warm-500 mt-0.5 truncate pl-6">{matchSheet.code}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeSheet}
-                  className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors shrink-0"
+              <div
+                style={{ position: 'absolute', inset: 0 }}
+                className="bg-black/40 backdrop-blur-sm"
+                onClick={() => { setNotFoundModal({ open: false, code: '' }); refocus() }}
+              />
+              <div style={{ position: 'absolute', inset: 0, zIndex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
+                <motion.div
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+                  style={{ width: '100%', pointerEvents: 'auto' }}
+                  className="bg-white rounded-t-3xl shadow-2xl overflow-hidden"
                 >
-                  <X className="w-4 h-4" />
-                </button>
+                  <div className="flex justify-center pt-3 pb-1 shrink-0">
+                    <div className="w-10 h-1 bg-warm-200 rounded-full" />
+                  </div>
+                  <div className="px-5 pt-3 pb-6 flex flex-col items-center text-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-danger-50 flex items-center justify-center">
+                      <XCircle className="w-6 h-6 text-danger-500" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-warm-900 text-sm">{t('rec.mobile.no_order')}</p>
+                      <p className="font-mono text-xs text-danger-600 mt-1.5 break-all">{notFoundModal.code}</p>
+                      <p className="text-[11px] text-warm-500 mt-1">{t('rec.mobile.no_order_hint')}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setNotFoundModal({ open: false, code: '' }); refocus() }}
+                      className="w-full h-10 rounded-xl bg-warm-100 hover:bg-warm-200 active:scale-95 text-warm-700 text-sm font-semibold transition-all"
+                    >
+                      {t('common.close')}
+                    </button>
+                  </div>
+                  <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
+                </motion.div>
               </div>
-
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {matchSheet.orders.map(order => (
-                  <MobileOrderCard
-                    key={order.id}
-                    order={order}
-                    t={t}
-                    highlight
-                    onValidate={() => {
-                      closeSheet()
-                      useRecepcionEscanearStore.getState().openOrderTab(order.id, order.folio, order.cliente, order)
-                      navigate('/recepcion/escanear')
-                    }}
-                  />
-                ))}
-              </div>
-
-              <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
             </motion.div>
-            </div>
-          </>,
-          document.body
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* Match bottom sheet — same fix: AnimatePresence inside the portal */}
+      {createPortal(
+        <AnimatePresence>
+          {matchSheet.open && (
+            <motion.div
+              key="match-root"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ position: 'fixed', inset: 0, zIndex: 9040 }}
+            >
+              <div
+                style={{ position: 'absolute', inset: 0 }}
+                className="bg-black/40 backdrop-blur-sm"
+                onClick={closeSheet}
+              />
+              <div style={{ position: 'absolute', inset: 0, zIndex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', pointerEvents: 'none' }}>
+                <motion.div
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+                  style={{ width: '100%', maxHeight: '82dvh', pointerEvents: 'auto' }}
+                  className="bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
+                >
+                  <div className="flex justify-center pt-3 pb-1 shrink-0">
+                    <div className="w-10 h-1 bg-warm-200 rounded-full" />
+                  </div>
+
+                  <div className="flex items-center justify-between px-4 pb-3 shrink-0 border-b border-warm-100">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-success-500 shrink-0" />
+                        <p className="font-semibold text-warm-900 text-sm">
+                          {matchSheet.orders.length === 1
+                            ? t('rec.mobile.match_title')
+                            : t('rec.mobile.match_multiple')}
+                        </p>
+                      </div>
+                      <p className="font-mono text-[11px] text-warm-500 mt-0.5 truncate pl-6">{matchSheet.code}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeSheet}
+                      className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 transition-colors shrink-0"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {matchSheet.orders.map(order => (
+                      <MobileOrderCard
+                        key={order.id}
+                        order={order}
+                        t={t}
+                        highlight
+                        onValidate={() => {
+                          closeSheet()
+                          if (onValidateOrder) onValidateOrder(order)
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <div style={{ height: 'env(safe-area-inset-bottom, 0px)' }} className="shrink-0" />
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }

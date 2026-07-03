@@ -13,6 +13,7 @@ import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
+import ValidationModeSelectorModal from '../components/ValidationModeSelectorModal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -176,13 +177,17 @@ function isRecoverableConnectionError(err) {
   )
 }
 
-export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder = null, embedded = false, onBack, headerActionsSlot = null } = {}) {
+export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder = null, embedded = false, onBack, onCancel, closeRequestToken = 0, headerActionsSlot = null } = {}) {
   const { id: paramId } = useParams()
   const id = propOrderId ?? paramId
   const navigate = useNavigate()
   const goBack = () => {
     if (embedded && onBack) { onBack(); return }
     navigate('/recepcion/recibir')
+  }
+  const cancelValidation = () => {
+    if (embedded && onCancel) { onCancel(); return }
+    goBack()
   }
   const { t } = useI18nStore()
   const toast = useToastStore()
@@ -193,11 +198,14 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const canDeleteScan = hasPermission('recepcion.validacion', 'eliminar')
   const canDeleteScanGroup = hasPermission('recepcion.validacion', 'actualizar') || canDeleteScan
   const canDeleteTarimaGroup = canDeleteScan
+  const canForceClose = hasPermission('recepcion.validacion', 'actualizar')
 
   const scanRefDesktop = useRef(null)
   const scanRefMobile  = useRef(null)
   const locationRef    = useRef(null)
   const sessionBootOrderRef = useRef(null)
+  const sessionBootRequestRef = useRef(null)
+  const handledCloseRequestRef = useRef(0)
   const scanStartRef = useRef(null)
   const refocusRef = useRef(null)
   const inFlightCodes = useRef(new Set())
@@ -260,6 +268,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
   // Force close
   const [forceCloseOpen, setForceCloseOpen] = useState(false)
+  const [isEndingSession, setIsEndingSession] = useState(false)
 
   const canQueryRecepcion = isAuthenticated
   const isOffline = useOfflineStore((s) => s.status === 'offline')
@@ -319,14 +328,23 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     refetchInterval: canQueryRecepcion && scanning && !isOffline ? 30000 : false,
     refetchIntervalInBackground: false,
   })
-  const orderData = orderLinesData?.order ? orderLinesData : orderSummaryData
+  const queriedOrderData = orderLinesData?.order ? orderLinesData : orderSummaryData
+  const orderData = queriedOrderData?.order && initialOrder?.validation_config?.mode && !queriedOrderData.order.validation_config?.mode
+    ? {
+        ...queriedOrderData,
+        order: {
+          ...queriedOrderData.order,
+          validation_config: initialOrder.validation_config,
+        },
+      }
+    : queriedOrderData
   const isLoading = !orderData?.order && (isSummaryLoading || isLinesLoading)
   const isOrderError = !orderData?.order && (isSummaryError || isLinesError)
   const orderError = summaryError || linesError
   const linesLoading = !orderLinesData?.lines_meta?.lines_loaded && (isLinesLoading || isLinesFetching)
   const linesReady = orderLinesData?.lines_meta?.lines_loaded === true
 
-  const { data: eventsData, isError: isEventsError } = useQuery({
+  const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
     queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 100000 }),
     enabled: canQueryRecepcion,
@@ -456,20 +474,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const totalForzadas = Number(order?.cajas_forzadas ?? 0)
   const serverCorrectScanCount = serverEvents.filter((ev) => ev.resultado === 'correcto').length
   const unifiedCorrectScanCount = unifiedCorrectScanEvents.length
-  const validationRecordsCount = Math.max(
-    totalRegistradas,
-    totalForzadas,
-    serverCorrectScanCount + totalForzadas,
-    unifiedCorrectScanCount + totalForzadas,
-    correctHistory.length,
-    pendingRecepcionScans.length
-  )
-  const hasValidationRecords = validationRecordsCount > 0
-  // True once we can reliably decide whether records exist:
-  // fast-path: order data says cajas_registradas > 0 → we know without waiting for events
-  // slow-path: events query has resolved (success or error)
-  const isEventsResolved = eventsData !== undefined || isEventsError
-  const canDetermineRecords = totalRegistradas > 0 || totalForzadas > 0 || isEventsResolved
+  const hasPersistedValidationRecords = totalRegistradas > 0 || totalForzadas > 0
   const validadas = Math.max(totalRegistradas, effectiveLines.filter(l => l.estado_validacion === 'validada').length)
   const faltantes  = effectiveLines.filter(l => l.estado_validacion === 'faltante').length
   const pendientes = Math.max(total - validadas - faltantes, 0)
@@ -821,17 +826,16 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
   useEffect(() => {
     if (isSummaryPlaceholder) return
-    if (!canDetermineRecords) return  // wait until we can reliably tell if records exist
     const cfg = order?.validation_config
-    const validationAlreadyStarted = Boolean(order?.validation_session_started) || hasValidationRecords
-    if (!cfg || typeof cfg !== 'object' || !hasValidationRecords) {
+    const validationAlreadyStarted = Boolean(order?.validation_session_started)
+    if (!cfg || typeof cfg !== 'object' || !hasPersistedValidationRecords) {
       // No config, or config was chosen but no scans recorded — allow (re-)selection
       setWithTarimas(validationAlreadyStarted ? Boolean(order?.validation_tarimas_started) : (cfg?.mode === 'tarimas'))
       setGroupSmallCodes(cfg ? Boolean(cfg.groupSmallCodes) : false)
       setMinCajasParaAgrupar(Math.max(1, parseInt(cfg?.minCajasParaAgrupar, 10) || 3))
       setMaxCajasEnGrupo(Math.max(1, parseInt(cfg?.maxCajasEnGrupo, 10) || 10))
-      if (Boolean(order) && !validationAlreadyStarted) {
-        setPendingMode(cfg?.mode || 'ubicacion')
+      if (Boolean(order) && !validationAlreadyStarted && !cfg?.mode) {
+        setPendingMode('ubicacion')
         setShowModeSelection(true)
       } else {
         setShowModeSelection(false)
@@ -843,26 +847,23 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     setGroupSmallCodes(Boolean(cfg.groupSmallCodes))
     setMinCajasParaAgrupar(Math.max(1, parseInt(cfg.minCajasParaAgrupar, 10) || 3))
     setMaxCajasEnGrupo(Math.max(1, parseInt(cfg.maxCajasEnGrupo, 10) || 10))
-  }, [order?.id, order?.validation_config, order?.validation_session_started, order?.validation_tarimas_started, hasValidationRecords, isSummaryPlaceholder, canDetermineRecords])
+  }, [order?.id, order?.validation_config, order?.validation_session_started, order?.validation_tarimas_started, hasPersistedValidationRecords, isSummaryPlaceholder])
 
   useEffect(() => {
     let cancelled = false
     async function boot() {
       if (isSummaryPlaceholder) return
-      if (!canDetermineRecords) return  // wait until we can reliably tell if records exist
       if (!order || sessionBootOrderRef.current === id) return
-      if (order.validation_config === undefined && !orderLinesData?.order) return
-      const validationAlreadyStarted = Boolean(order.validation_session_started) || hasValidationRecords
-      if ((!order.validation_config?.mode || !hasValidationRecords) && !validationAlreadyStarted) {
-        const cfg = order.validation_config
-        setPendingMode(cfg?.mode || 'ubicacion')
+      const validationAlreadyStarted = Boolean(order.validation_session_started)
+      if (!order.validation_config?.mode && !validationAlreadyStarted) {
+        setPendingMode('ubicacion')
         setShowModeSelection(true)
         setBootingSession(false)
         return
       }
-      sessionBootOrderRef.current = id
       if (useOfflineStore.getState().status === 'offline') {
         if (!cancelled) {
+          sessionBootOrderRef.current = id
           setSessionId('local')
           setScanning(true)
           setBootingSession(false)
@@ -873,8 +874,18 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       try {
         const tarimasEnabled = order.validation_config?.mode === 'tarimas' ||
           (!order.validation_config?.mode && Boolean(order.validation_tarimas_started))
-        const res = await createSession(id, { tarimas_enabled: tarimasEnabled })
+        const requestKey = `${id}:${tarimasEnabled ? 'tarimas' : 'ubicacion'}`
+        let request = sessionBootRequestRef.current
+        if (!request || request.key !== requestKey) {
+          request = {
+            key: requestKey,
+            promise: createSession(id, { tarimas_enabled: tarimasEnabled }),
+          }
+          sessionBootRequestRef.current = request
+        }
+        const res = await request.promise
         if (cancelled) return
+        sessionBootOrderRef.current = id
         setSessionId(res.session?.id ?? 'local')
         setScanning(true)
         refocusRef.current?.()
@@ -886,22 +897,39 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     }
     boot()
     return () => { cancelled = true }
-  }, [id, order, orderLinesData?.order, toast, hasValidationRecords, isSummaryPlaceholder, canDetermineRecords])
+  }, [id, order, toast, isSummaryPlaceholder])
 
   const endSession = async () => {
-    if (sessionId && sessionId !== 'local') {
-      try { await updateSession(id, sessionId, { ubicacion_nota: selectedUbicacion || null }) } catch { /* best-effort */ }
+    if (isEndingSession) return
+    setIsEndingSession(true)
+    try {
+      if (sessionId && sessionId !== 'local') {
+        await updateSession(id, sessionId, {
+          total_escaneado: totalRegistradas,
+          ubicacion_nota: selectedUbicacion || null,
+        })
+      }
+      setSessionId(null)
+      setScanning(false)
+      playSound('complete')
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['recepcion-order', id] }),
+        qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] }),
+        qc.invalidateQueries({ queryKey: ['recepcion-orders'] }),
+      ])
+      goBack()
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'No se pudo terminar la validación')
+      setIsEndingSession(false)
     }
-    setSessionId(null)
-    setScanning(false)
-    playSound('complete')
-    await Promise.all([
-      qc.invalidateQueries({ queryKey: ['recepcion-order', id] }),
-      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] }),
-      qc.invalidateQueries({ queryKey: ['recepcion-orders'] }),
-    ])
-    goBack()
   }
+
+  useEffect(() => {
+    if (!embedded || !closeRequestToken || bootingSession || isEndingSession) return
+    if (handledCloseRequestRef.current === closeRequestToken) return
+    handledCloseRequestRef.current = closeRequestToken
+    void endSession()
+  }, [closeRequestToken, embedded, bootingSession, isEndingSession])
 
   const findPendingCrossOrder = useCallback(async (code) => {
     if (isOffline) return null
@@ -1342,6 +1370,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     setShowModeSelection(false)
     setBootingSession(true)
     sessionBootOrderRef.current = null
+    sessionBootRequestRef.current = null
   }
 
   async function resolveFifoTarima(base) {
@@ -1422,11 +1451,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       const pendingLineForOptimisticScan = pendingMatchingLine || null
       const matchedStoredCode = getStoredLineCode(matchedLineForScan, code)
       const matchedTarimaCode = matchedLineForScan ? matchedStoredCode : ''
-      const hasPendingMatchingLine = matchingLines.some(l => l.estado_validacion !== 'validada')
-      const existing = history.find(h => codesMatch(h.code, code))
-        || pickBestDuplicateSource(unifiedCorrectScanEvents, code)
-        || serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
+      const hasPendingMatchingLine = pendingMatchingLine !== null
       if (isOffline && matchingLines.length > 0 && !hasPendingMatchingLine) {
+        // Defer this O(n·normalizeScanCode) search to inside the branch that needs it.
+        // On happy-path (online correct scan) this was running on every keystroke for nothing.
+        const existing = history.find(h => codesMatch(h.code, code))
+          || pickBestDuplicateSource(unifiedCorrectScanEvents, code)
+          || serverEvents.find(ev => ev.resultado === 'correcto' && codesMatch(ev.codigo_escaneado, code))
         playSound('duplicate')
         publishLastResult({
           result: 'duplicado',
@@ -2218,6 +2249,15 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     </div>
   )
 
+  if (bootingSession && !showModeSelection) return (
+    <div className="flex flex-col h-full">
+      {!embedded && (<Header title={order.folio} icon={PackageCheck} />)}
+      <div className="flex-1 flex items-center justify-center">
+        <LoadingSpinner size="lg" text={t('common.loading')} delayMs={0} />
+      </div>
+    </div>
+  )
+
   const scanReady = linesReady && !linesLoading
   const scanInputProps = {
     type: 'text',
@@ -2293,21 +2333,24 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               </button>
             )}
             {/* Force close */}
-            <button
-              type="button"
-              onClick={() => setForceCloseOpen(true)}
-              className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors"
-              title={t('rec.val.forceClose.title')}
-            >
-              <XOctagon className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
-            </button>
+            {canForceClose && (
+              <button
+                type="button"
+                onClick={() => setForceCloseOpen(true)}
+                className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors"
+                title={t('rec.val.forceClose.title')}
+              >
+                <XOctagon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
+              </button>
+            )}
             {/* Terminar */}
             <button
               onClick={endSession}
-              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 transition-colors"
+              disabled={isEndingSession}
+              className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 disabled:opacity-60 transition-colors"
             >
-              <Square className="w-3.5 h-3.5" />
+              {isEndingSession ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />}
               <span>{t('rec.val.btn.terminar')}</span>
             </button>
           </div>
@@ -2318,7 +2361,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       {/* ── Portal: beam action buttons into the top Header when embedded ── */}
       {embedded && headerActionsSlot && createPortal(
         <>
-          <button onClick={goBack} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 text-warm-500 hover:bg-warm-50 hover:text-sky-600 transition-colors" title={t('common.back')}>
+          <button onClick={endSession} disabled={isEndingSession} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 text-warm-500 hover:bg-warm-50 hover:text-sky-600 disabled:opacity-60 transition-colors" title={t('common.back')}>
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
           <div className="w-px h-5 bg-warm-200 mx-0.5" />
@@ -2339,12 +2382,15 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               <span className="sm:hidden">OK</span>
             </button>
           )}
-          <button type="button" onClick={() => setForceCloseOpen(true)} className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors" title={t('rec.val.forceClose.title')}>
-            <XOctagon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
-          </button>
-          <button onClick={endSession} className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 transition-colors">
-            <Square className="w-3.5 h-3.5" /><span>{t('rec.val.btn.terminar')}</span>
+          {canForceClose && (
+            <button type="button" onClick={() => setForceCloseOpen(true)} className="hidden sm:flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-warning-200 text-xs font-semibold text-warning-600 hover:bg-warning-50 transition-colors" title={t('rec.val.forceClose.title')}>
+              <XOctagon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{t('rec.val.forceClose.btn')}</span>
+            </button>
+          )}
+          <button onClick={endSession} disabled={isEndingSession} className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-lg border border-danger-200 text-xs font-semibold text-danger-600 hover:bg-danger-50 disabled:opacity-60 transition-colors">
+            {isEndingSession ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />}
+            <span>{t('rec.val.btn.terminar')}</span>
           </button>
         </>,
         headerActionsSlot
@@ -2422,7 +2468,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             <div className={`hidden sm:block card p-3 sm:p-4 sticky top-0 z-[11] bg-gradient-to-br from-sky-50/40 via-white to-white border-sky-100 shadow-[0_6px_22px_-12px_rgba(14,165,233,0.22)] backdrop-blur-sm ${(!withTarimas && !ubicacionConfirmed) || !scanReady ? 'opacity-60' : ''}`}>
               <div className="relative">
                 <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-sky-500 pointer-events-none" />
-                {!scanReady && <Loader2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary-500" />}
+                {!scanReady && <span className="absolute right-4 top-1/2 -translate-y-1/2"><Loader2 className="h-4 w-4 animate-spin text-primary-500" /></span>}
                 <input ref={scanRefDesktop} {...scanInputProps} className="w-full pl-12 pr-4 py-3.5 text-lg bg-sky-50/30 border-2 border-sky-100 rounded-2xl focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-warm-900" />
               </div>
               <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
@@ -2880,7 +2926,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
         <div className={`relative ${(!withTarimas && !ubicacionConfirmed) || !scanReady ? 'opacity-60' : ''}`}>
           <ScanBarcode className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-sky-500 pointer-events-none" />
-          {!scanReady && <Loader2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary-500" />}
+          {!scanReady && <span className="absolute right-4 top-1/2 -translate-y-1/2"><Loader2 className="h-4 w-4 animate-spin text-primary-500" /></span>}
           <input ref={scanRefMobile} {...scanInputProps} className="w-full pl-12 pr-4 py-3.5 text-lg bg-sky-50/30 border-2 border-sky-100 rounded-2xl focus:border-sky-400 focus:ring-2 focus:ring-sky-100 transition-all outline-none placeholder:text-warm-300 font-mono tracking-wide text-warm-900" />
         </div>
         <p className="text-center text-[10px] text-warm-400 mt-1.5">{t('rec.scan.enter_hint')}</p>
@@ -2971,117 +3017,24 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       </AnimatePresence>
 
       {/* ── Initial validation mode selection ── */}
-      <Modal
+      <ValidationModeSelectorModal
         isOpen={showModeSelection}
-        onClose={() => {}}
-        title={t('rec.mode.title')}
-        icon={PackageCheck}
-        size="lg"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-warm-600">{t('rec.mode.subtitle')}</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setPendingMode('ubicacion')}
-              disabled={saveValidationConfigMut.isPending}
-              className={`rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-2 disabled:opacity-50 ${
-                pendingMode === 'ubicacion'
-                  ? 'border-primary-400 bg-primary-50 ring-2 ring-primary-100'
-                  : 'border-warm-200 bg-white hover:border-warm-300 hover:bg-warm-50 focus:ring-warm-200'
-              }`}
-            >
-              <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl transition-colors ${
-                pendingMode === 'ubicacion' ? 'bg-primary-100 text-primary-700' : 'bg-warm-100 text-warm-500'
-              }`}>
-                <MapPin className="h-5 w-5" />
-              </span>
-              <span className="block text-base font-black text-warm-900">{t('rec.mode.normal.title')}</span>
-              <span className="mt-1 block text-xs leading-relaxed text-warm-500">{t('rec.mode.normal.desc')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPendingMode('tarimas')}
-              disabled={saveValidationConfigMut.isPending}
-              className={`rounded-2xl border-2 p-4 text-left transition-all focus:outline-none focus:ring-2 disabled:opacity-50 ${
-                pendingMode === 'tarimas'
-                  ? 'border-primary-400 bg-primary-50 ring-2 ring-primary-100'
-                  : 'border-warm-200 bg-white hover:border-warm-300 hover:bg-warm-50 focus:ring-warm-200'
-              }`}
-            >
-              <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl transition-colors ${
-                pendingMode === 'tarimas' ? 'bg-primary-100 text-primary-700' : 'bg-warm-100 text-warm-500'
-              }`}>
-                <Layers className="h-5 w-5" />
-              </span>
-              <span className="block text-base font-black text-warm-900">{t('rec.mode.classified.title')}</span>
-              <span className="mt-1 block text-xs leading-relaxed text-warm-500">{t('rec.mode.classified.desc')}</span>
-            </button>
-          </div>
-
-          {pendingMode === 'tarimas' && (
-            <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-3 space-y-3">
-              <label className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={groupSmallCodes}
-                  onChange={(event) => setGroupSmallCodes(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-warm-300 text-primary-600 focus:ring-primary-300"
-                />
-                <span>
-                  <span className="block text-xs font-bold text-warm-800">{t('rec.tarimas.group.enable')}</span>
-                  <span className="block text-[11px] leading-relaxed text-warm-500">{t('rec.tarimas.group.desc')}</span>
-                </span>
-              </label>
-              {groupSmallCodes && (
-                <div className="grid grid-cols-2 gap-2 pl-7">
-                  <div>
-                    <label className="block text-[10px] font-bold text-warm-600 mb-1">{t('rec.tarimas.group.min_cajas')}</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={99}
-                      value={minCajasParaAgrupar}
-                      onChange={e => setMinCajasParaAgrupar(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      className="w-full h-8 rounded-lg border border-primary-200 px-2 text-xs font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-warm-600 mb-1">{t('rec.tarimas.group.max_cajas')}</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={999}
-                      value={maxCajasEnGrupo}
-                      onChange={e => setMaxCajasEnGrupo(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      className="w-full h-8 rounded-lg border border-primary-200 px-2 text-xs font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-primary-300"
-                    />
-                  </div>
-                  <p className="col-span-2 text-[10px] text-warm-400">
-                    {t('rec.tarimas.group.preview').replace('{min}', minCajasParaAgrupar).replace('{max}', maxCajasEnGrupo)}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {pendingMode && (
-            <button
-              type="button"
-              onClick={() => { void selectValidationMode(pendingMode) }}
-              disabled={saveValidationConfigMut.isPending}
-              className="w-full h-10 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold transition-colors flex items-center justify-center gap-2"
-            >
-              {saveValidationConfigMut.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {t('rec.mode.starting')}
-                </>
-              ) : t('rec.mode.confirm')}
-            </button>
-          )}
-        </div>
-      </Modal>
+        onClose={cancelValidation}
+        mode={pendingMode}
+        onModeChange={setPendingMode}
+        groupSmallCodes={groupSmallCodes}
+        onGroupSmallCodesChange={setGroupSmallCodes}
+        minCajasParaAgrupar={minCajasParaAgrupar}
+        onMinCajasChange={(value) => {
+          setMinCajasParaAgrupar(value)
+          setMaxCajasEnGrupo(current => Math.max(value, current))
+        }}
+        maxCajasEnGrupo={maxCajasEnGrupo}
+        onMaxCajasChange={setMaxCajasEnGrupo}
+        onConfirm={() => { void selectValidationMode(pendingMode) }}
+        isSubmitting={saveValidationConfigMut.isPending}
+        t={t}
+      />
       {/* ── Duplicate scan block modal ── */}
       <Modal
         isOpen={dupModal.open}
@@ -3358,7 +3311,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
       {/* ── Force close modal ── */}
       <Modal
-        isOpen={forceCloseOpen}
+        isOpen={canForceClose && forceCloseOpen}
         onClose={() => setForceCloseOpen(false)}
         title={t('rec.val.forceClose.title')}
         icon={AlertTriangle}

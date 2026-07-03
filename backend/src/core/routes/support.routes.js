@@ -6,11 +6,18 @@ const router = Router()
 const DAILY_LIMIT = 3
 const VALID_ERROR_SOURCES = new Set(['frontend', 'api', 'react', 'global', 'backend'])
 const VALID_ERROR_SEVERITIES = new Set(['info', 'warning', 'error', 'critical'])
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function limitText(value, max) {
   if (value === null || value === undefined) return null
   const text = String(value)
   return text.length > max ? text.slice(0, max) : text
+}
+
+function asUuidOrNull(value) {
+  if (value === null || value === undefined) return null
+  const text = String(value).trim()
+  return UUID_RE.test(text) ? text : null
 }
 
 function getRequestIp(req) {
@@ -113,9 +120,13 @@ router.post('/error-event', authenticateToken, async (req, res) => {
     const tenantId = req.tenantId || req.user?.tenant_id || null
     const tenantSlug = req.tenant?.slug || null
     const user = req.user || {}
+    const safeUserId = asUuidOrNull(user.id)
     const metadataJson = {
       ...(metadata && typeof metadata === 'object' ? metadata : {}),
       ip: getRequestIp(req),
+    }
+    if (safeUserId === null && user.id !== null && user.id !== undefined) {
+      metadataJson.actor_user_id = user.id
     }
     const cleanFingerprint = limitText(fingerprint, 500)
 
@@ -162,7 +173,7 @@ router.post('/error-event', authenticateToken, async (req, res) => {
       [
         tenantId,
         tenantSlug,
-        user.id || null,
+        safeUserId,
         user.email || null,
         cleanSource,
         cleanSeverity,
