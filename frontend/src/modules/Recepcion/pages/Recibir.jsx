@@ -442,6 +442,7 @@ export default function Recibir() {
     <ModuleLimitBanner module="recepcion" usage={moduleUsage?.recepcion}>
     <div className="flex flex-col h-full">
       <Header
+        hideUserOnMobile
         title={t('rec.recibir.title')}
         icon={PackageCheck}
         quickSearch={<RecepcionQuickSearch />}

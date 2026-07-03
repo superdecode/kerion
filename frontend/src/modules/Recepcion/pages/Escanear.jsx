@@ -390,6 +390,7 @@ export default function EscanearRecepcion() {
   return (
     <div className="flex flex-col h-full">
       <Header
+        hideUserOnMobile
         title={t('rec.escanear.title')}
         subtitle={subtitle}
         quickSearch={<RecepcionQuickSearch />}

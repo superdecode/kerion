@@ -1721,7 +1721,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               )}
               <button
                 type="button"
-                onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
+                onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => { locationRef.current?.focus(); locationRef.current?.select() }, 80) }}
                 className="p-1.5 rounded-lg text-warm-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
                 title={t('rec.val.ubicacion.edit')}
               >
@@ -2329,7 +2329,8 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-xs font-semibold text-primary-700 transition-colors"
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>{totalTarimas}</span>
+                <span>{t('rec.tarimas.label')}</span>
+                <span className="opacity-70 font-normal">({totalTarimas})</span>
               </button>
             )}
             {/* Ubicacion panel button (when not in tarimas mode) */}
@@ -2340,7 +2341,8 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-xs font-semibold text-primary-700 transition-colors"
               >
                 <MapPin className="w-3.5 h-3.5" />
-                <span>{allUbicacionGroups.length}</span>
+                <span>{t('rec.val.ubicacion.label')}</span>
+                <span className="opacity-70 font-normal">({allUbicacionGroups.length})</span>
               </button>
             )}
             {/* Completar ubicacion (when confirmed and has scans) */}
@@ -2390,12 +2392,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
           <div className="w-px h-5 bg-warm-200 mx-0.5" />
           {withTarimas && (
             <button type="button" onClick={() => setMobilePanelOpen(true)} className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-xs font-semibold text-primary-700 transition-colors">
-              <Layers className="w-3.5 h-3.5" /><span>{totalTarimas}</span>
+              <Layers className="w-3.5 h-3.5" /><span>{t('rec.tarimas.label')}</span><span className="opacity-70 font-normal">({totalTarimas})</span>
             </button>
           )}
           {!withTarimas && allUbicacionGroups.length > 0 && (
             <button type="button" onClick={() => setMobileUbicacionPanelOpen(true)} className="lg:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-primary-200 bg-primary-50 text-xs font-semibold text-primary-700 transition-colors">
-              <MapPin className="w-3.5 h-3.5" /><span>{allUbicacionGroups.length}</span>
+              <MapPin className="w-3.5 h-3.5" /><span>{t('rec.val.ubicacion.label')}</span><span className="opacity-70 font-normal">({allUbicacionGroups.length})</span>
             </button>
           )}
           {!withTarimas && ubicacionConfirmed && activeUbicacionScanCount > 0 && (
@@ -2616,7 +2618,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                       <div className="flex items-center gap-2 px-3 py-2 bg-accent-50/70 border-b border-accent-100">
                         <button
                           type="button"
-                          onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
+                          onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => { locationRef.current?.focus(); locationRef.current?.select() }, 80) }}
                           className="flex items-center gap-1 text-accent-600 hover:text-accent-800 hover:bg-accent-100 transition-colors rounded-lg px-1.5 py-1 text-[10px] font-semibold shrink-0"
                           title={t('rec.val.ubicacion.edit')}
                         >
@@ -2935,7 +2937,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             </span>
             <button
               type="button"
-              onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => locationRef.current?.focus(), 80) }}
+              onClick={() => { setUbicacionConfirmed(false); setLocationInputValue(selectedUbicacion || ''); setTimeout(() => { locationRef.current?.focus(); locationRef.current?.select() }, 80) }}
               className="h-8 px-3 rounded-xl text-xs font-semibold text-warm-600 bg-warm-100 hover:bg-warm-200 active:scale-95 transition-all inline-flex items-center gap-1.5 shrink-0"
             >
               <Edit3 size={12} />

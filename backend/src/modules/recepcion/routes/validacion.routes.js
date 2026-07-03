@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { isDatabaseUnavailableError } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
-import { getPermissionLevel, requireAnyPermission, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
+import { getPermissionLevel, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 import { refreshRecepcionOrderState } from '../utils/orderState.js'
 
@@ -449,10 +449,7 @@ router.delete('/orders/:id/scan-events/last-validation',
 // DELETE /orders/:id/scan-events/location/:ubicacion — remove a complete location/tarima
 router.delete('/orders/:id/scan-events/location/:ubicacion',
   authenticateToken, loadFullUser,
-  requireAnyPermission([
-    { modulePath: 'recepcion.validacion', action: 'actualizar' },
-    { modulePath: 'recepcion.validacion', action: 'eliminar' },
-  ]),
+  requirePermission('recepcion.validacion', 'crear'),
   async (req, res) => {
     try {
       const ubicacion = String(req.params.ubicacion || '').trim()

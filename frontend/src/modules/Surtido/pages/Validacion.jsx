@@ -2552,7 +2552,7 @@ export default function SurtidoValidacion() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} actions={headerActions} />
+      <Header hideUserOnMobile title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} actions={headerActions} />
 
       {/* Desktop tab bar */}
       <div className="hidden md:block">

@@ -76,7 +76,7 @@ export default function Header({ title, subtitle, actions, showSearch = false, q
       )}
 
       {/* User menu */}
-      <div className={hideUserOnMobile ? 'hidden sm:block' : undefined}>
+      <div className={hideUserOnMobile ? 'hidden md:block' : undefined}>
         <UserMenu />
       </div>
     </header>
