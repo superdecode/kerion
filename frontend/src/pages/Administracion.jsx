@@ -663,7 +663,16 @@ function UserFormModal({ isOpen, onClose, user, roles }) {
   const qc = useQueryClient()
   const { t } = useI18nStore()
 
+  const { data: nextCodeData } = useQuery({
+    queryKey: ['admin-users-next-code'],
+    queryFn: () => api.get('/users/next-code').then(r => r.data.code),
+    enabled: isOpen && !user,
+    staleTime: 0,
+    gcTime: 0,
+  })
+
   useEffect(() => {
+    if (!isOpen) return
     if (user) {
       setForm({
         nombre_completo: user.nombre_completo || '',
@@ -676,7 +685,13 @@ function UserFormModal({ isOpen, onClose, user, roles }) {
     } else {
       setForm({ nombre_completo: '', email: '', codigo: '', password: '', rol_id: '', estado: 'ACTIVO' })
     }
-  }, [user])
+  }, [user, isOpen])
+
+  useEffect(() => {
+    if (!user && nextCodeData) {
+      setForm(f => ({ ...f, codigo: f.codigo || nextCodeData }))
+    }
+  }, [nextCodeData, user])
 
   const mutation = useMutation({
     mutationFn: (data) => user ? api.put(`/users/${user.id}`, data) : api.post('/users', data),
@@ -715,7 +730,7 @@ function UserFormModal({ isOpen, onClose, user, roles }) {
           <div>
             <label className="block text-sm font-semibold text-warm-700 mb-1.5">{t('admin.userCode')}</label>
             <input value={form.codigo} onChange={e => setForm(f => ({ ...f, codigo: e.target.value.toUpperCase() }))}
-              className="input-field" />
+              className="input-field" required placeholder="US001" />
           </div>
         </div>
         <div>

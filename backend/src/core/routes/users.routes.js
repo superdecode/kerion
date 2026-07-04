@@ -67,6 +67,29 @@ router.post('/',
   }
 )
 
+// GET /api/users/next-code
+router.get('/next-code',
+  authenticateToken, loadFullUser,
+  requirePermission('global.administracion', 'crear'),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `SELECT COALESCE(MAX(CAST(SUBSTRING(codigo FROM 3) AS INTEGER)), 0) + 1 AS next_num
+         FROM usuarios
+         WHERE tenant_id = $1
+           AND codigo ~ '^US[0-9]+$'`,
+        [req.tenantId]
+      )
+      const num = result.rows[0].next_num
+      const code = `US${String(num).padStart(3, '0')}`
+      res.json({ code })
+    } catch (error) {
+      console.error('Next user code error:', error)
+      res.status(500).json({ error: 'Error generando código' })
+    }
+  }
+)
+
 // PUT /api/users/:id
 router.put('/:id',
   authenticateToken, loadFullUser,

@@ -22,29 +22,28 @@ router.get('/summary',
       const plan = planRes.rows[0] || {}
 
       // Query usage for each module in parallel
-      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
       const [dsRes, surtidoRes, invRes, devRes, recRes, despRes] = await Promise.all([
-        // DropScan: guías this calendar month (tenant tz-aware)
+        // DropScan: guías scanned this calendar month
         query(
           `SELECT COUNT(*) AS count FROM guias
            WHERE tenant_id = $1
-           AND DATE_TRUNC('month', scanned_at AT TIME ZONE $2) = DATE_TRUNC('month', NOW() AT TIME ZONE $2)`,
-          [req.tenantId, tz]
-        ).catch(() => ({ rows: [{ count: '0' }] })),
+           AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)`,
+          [req.tenantId]
+        ).catch(e => { console.warn('[usage] dropscan query failed:', e.message); return { rows: [{ count: '0' }] } }),
 
         // Surtido: new OBCs entered into pick_order_tracking this month
         query(
           `SELECT COUNT(*) AS count FROM pick_order_tracking
            WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`,
           [req.tenantId]
-        ).catch(() => ({ rows: [{ count: '0' }] })),
+        ).catch(e => { console.warn('[usage] surtido query failed:', e.message); return { rows: [{ count: '0' }] } }),
 
         // Inventario: individual scans this month
         query(
           `SELECT COUNT(*) AS count FROM inventory_scans
            WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`,
           [req.tenantId]
-        ).catch(() => ({ rows: [{ count: '0' }] })),
+        ).catch(e => { console.warn('[usage] inventario query failed:', e.message); return { rows: [{ count: '0' }] } }),
 
         // Devoluciones: confirmed entradas this month
         query(
@@ -52,14 +51,14 @@ router.get('/summary',
            WHERE tenant_id = $1 AND estado = 'confirmado'
            AND confirmado_at >= date_trunc('month', now())`,
           [req.tenantId]
-        ).catch(() => ({ rows: [{ count: '0' }] })),
+        ).catch(e => { console.warn('[usage] devoluciones query failed:', e.message); return { rows: [{ count: '0' }] } }),
 
         // Recepción: inbound_orders created this month
         query(
           `SELECT COUNT(*) AS count FROM inbound_orders
            WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`,
           [req.tenantId]
-        ).catch(() => ({ rows: [{ count: '0' }] })),
+        ).catch(e => { console.warn('[usage] recepcion query failed:', e.message); return { rows: [{ count: '0' }] } }),
 
         // Despacho: dispatch_folios created this month (excludes cancelados)
         query(
@@ -67,7 +66,7 @@ router.get('/summary',
            WHERE tenant_id = $1 AND deleted_at IS NULL
            AND created_at >= date_trunc('month', now())`,
           [req.tenantId]
-        ).catch(() => ({ rows: [{ count: '0' }] })),
+        ).catch(e => { console.warn('[usage] despacho query failed:', e.message); return { rows: [{ count: '0' }] } }),
       ])
 
       function buildStat(usedRaw, limit) {
