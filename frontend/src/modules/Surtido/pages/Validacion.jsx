@@ -1030,7 +1030,7 @@ const { data: reasonsData } = useQuery({
     staleTime: STALE.CATALOG,
   })
   const { data: trackingData, status: trackingStatus } = useQuery({
-    queryKey: ['wms-order-tracking'],
+    queryKey: ['wms-sessions-list'],
     queryFn: () => getScanSessions({ pageSize: 100 }),
     staleTime: 60000,
     enabled: step === 'session',
@@ -1434,6 +1434,9 @@ const { data: reasonsData } = useQuery({
       playSound('complete')
       toast.success(t('surtido.escaneo.session_saved'))
       qc.invalidateQueries({ queryKey: ['wms-scan-sessions'] })
+      qc.invalidateQueries({ queryKey: ['surtido-sessions'] })
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      qc.invalidateQueries({ queryKey: ['wms-sessions-list'] })
       autoFinalizeLockRef.current = true
       const lastTs = history.length > 0 ? history[0].ts : Date.now()
       const startTs = firstScanTs || sessionStart?.getTime()
