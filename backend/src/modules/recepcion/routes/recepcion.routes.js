@@ -213,108 +213,126 @@ router.get('/orders/:id/export-data',
   authenticateToken, loadFullUser,
   requirePermission('recepcion.recibir', 'ver'),
   async (req, res) => {
+    const orderId = req.params.id
+    const tenantId = req.tenantId
     try {
       const scope = normalizeExportScope(String(req.query.scope || 'all'))
-      const orderRes = await req.tQuery(
-        `SELECT o.*, u.nombre_completo AS responsable_nombre,
-                EXISTS (
-                  SELECT 1 FROM inbound_validation_sessions s
-                  WHERE s.order_id=o.id AND s.tenant_id=o.tenant_id
-                ) AS validation_session_started,
-                COALESCE((
-                  SELECT s.tarimas_enabled FROM inbound_validation_sessions s
-                  WHERE s.order_id=o.id AND s.tenant_id=o.tenant_id
-                  ORDER BY s.inicio_at DESC, s.id DESC LIMIT 1
-                ), false) AS validation_tarimas_started
-         FROM inbound_orders o
-         LEFT JOIN usuarios u ON u.id = o.responsable_id
-         WHERE o.id=$1 AND o.tenant_id=$2
-         LIMIT 1`,
-        [req.params.id, req.tenantId]
-      )
-      if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Orden no encontrada' })
 
-      const countsRes = await req.tQuery(
-        `SELECT
-           (SELECT COUNT(*)::int FROM inbound_lines l WHERE l.order_id=$1 AND l.tenant_id=$2) AS lines,
-           (SELECT COUNT(*)::int FROM inbound_scan_events e WHERE e.order_id=$1 AND e.tenant_id=$2 AND e.resultado='correcto') AS events,
-           (SELECT COUNT(*)::int FROM inbound_novedades n WHERE n.order_id=$1 AND n.tenant_id=$2) AS novedades`,
-        [req.params.id, req.tenantId]
-      )
-      const counts = {
-        lines: Number(countsRes.rows[0]?.lines || 0),
-        events: Number(countsRes.rows[0]?.events || 0),
-        novedades: Number(countsRes.rows[0]?.novedades || 0),
-      }
-      const totalRows = sumExportCounts(counts, scope)
-      if (totalRows > EXPORT_SYNC_MAX_ROWS) {
+      // All queries run inside one transaction to use a single pool connection.
+      // With DB_POOL_MAX=2 and concurrent polling requests, sequential tQuery calls
+      // can exhaust the pool and hit the connection timeout.
+      const result = await req.tTransaction(async (client) => {
+        const orderRes = await client.query(
+          `SELECT o.*, u.nombre_completo AS responsable_nombre,
+                  EXISTS (
+                    SELECT 1 FROM inbound_validation_sessions s
+                    WHERE s.order_id=o.id AND s.tenant_id=o.tenant_id
+                  ) AS validation_session_started,
+                  COALESCE((
+                    SELECT s.tarimas_enabled FROM inbound_validation_sessions s
+                    WHERE s.order_id=o.id AND s.tenant_id=o.tenant_id
+                    ORDER BY s.inicio_at DESC, s.id DESC LIMIT 1
+                  ), false) AS validation_tarimas_started
+           FROM inbound_orders o
+           LEFT JOIN usuarios u ON u.id = o.responsable_id
+           WHERE o.id=$1 AND o.tenant_id=$2
+           LIMIT 1`,
+          [orderId, tenantId]
+        )
+        if (orderRes.rows.length === 0) return { notFound: true }
+
+        const countsRes = await client.query(
+          `SELECT
+             (SELECT COUNT(*)::int FROM inbound_lines l WHERE l.order_id=$1 AND l.tenant_id=$2) AS lines,
+             (SELECT COUNT(*)::int FROM inbound_scan_events e WHERE e.order_id=$1 AND e.tenant_id=$2 AND e.resultado='correcto') AS events,
+             (SELECT COUNT(*)::int FROM inbound_novedades n WHERE n.order_id=$1 AND n.tenant_id=$2) AS novedades`,
+          [orderId, tenantId]
+        )
+        const counts = {
+          lines: Number(countsRes.rows[0]?.lines || 0),
+          events: Number(countsRes.rows[0]?.events || 0),
+          novedades: Number(countsRes.rows[0]?.novedades || 0),
+        }
+        const totalRows = sumExportCounts(counts, scope)
+        if (totalRows > EXPORT_SYNC_MAX_ROWS) {
+          return { tooLarge: true, counts, totalRows }
+        }
+
+        const payload = {
+          order: orderRes.rows[0],
+          meta: {
+            scope,
+            counts,
+            total_rows: totalRows,
+            large_export: totalRows >= EXPORT_SYNC_WARN_ROWS,
+            limit: EXPORT_SYNC_MAX_ROWS,
+          },
+        }
+
+        if (scope === 'detalle' || scope === 'all') {
+          const linesRes = await client.query(
+            `SELECT l.*, u.nombre_completo AS validated_by_nombre,
+                    last_event.ubicacion AS validation_ubicacion
+             FROM inbound_lines l
+             LEFT JOIN usuarios u ON u.id = l.validated_by
+             LEFT JOIN LATERAL (
+               SELECT e.ubicacion
+               FROM inbound_scan_events e
+               WHERE e.line_id = l.id AND e.tenant_id = l.tenant_id AND e.resultado = 'correcto'
+               ORDER BY e.scanned_at DESC
+               LIMIT 1
+             ) last_event ON true
+             WHERE l.order_id=$1 AND l.tenant_id=$2
+             ORDER BY l.created_at ASC, l.id ASC`,
+            [orderId, tenantId]
+          )
+          payload.lines = linesRes.rows
+        }
+
+        if (scope === 'validacion' || scope === 'all') {
+          const eventsRes = await client.query(
+            `SELECT e.id, e.line_id, e.codigo_escaneado, e.sku_asociado, e.match_field, e.resultado,
+                    e.ubicacion, e.scanned_at, u.nombre_completo AS scanned_by_nombre
+             FROM inbound_scan_events e
+             LEFT JOIN usuarios u ON u.id = e.scanned_by
+             WHERE e.order_id=$1 AND e.tenant_id=$2 AND e.resultado='correcto'
+             ORDER BY e.scanned_at DESC, e.id DESC`,
+            [orderId, tenantId]
+          )
+          payload.events = eventsRes.rows
+        }
+
+        if (scope === 'otros' || scope === 'all') {
+          const novedadesRes = await client.query(
+            `SELECT n.*, u.nombre_completo AS created_by_nombre
+             FROM inbound_novedades n
+             LEFT JOIN usuarios u ON u.id = n.created_by
+             WHERE n.order_id=$1 AND n.tenant_id=$2
+             ORDER BY n.created_at DESC, n.id DESC`,
+            [orderId, tenantId]
+          )
+          payload.novedades = novedadesRes.rows
+        }
+
+        return { payload }
+      })
+
+      if (result.notFound) return res.status(404).json({ error: 'Orden no encontrada' })
+      if (result.tooLarge) {
         return res.status(413).json({
-          error: `La exportación contiene ${totalRows.toLocaleString('es-MX')} registros. Usa filtros o solicita una exportación por lotes para evitar saturar el sistema.`,
+          error: `La exportación contiene ${result.totalRows.toLocaleString('es-MX')} registros. Usa filtros o solicita una exportación por lotes para evitar saturar el sistema.`,
           code: 'EXPORT_TOO_LARGE',
-          counts,
+          counts: result.counts,
           limit: EXPORT_SYNC_MAX_ROWS,
         })
       }
 
-      const payload = {
-        order: orderRes.rows[0],
-        meta: {
-          scope,
-          counts,
-          total_rows: totalRows,
-          large_export: totalRows >= EXPORT_SYNC_WARN_ROWS,
-          limit: EXPORT_SYNC_MAX_ROWS,
-        },
-      }
-
-      if (scope === 'detalle' || scope === 'all') {
-        const linesRes = await req.tQuery(
-          `SELECT l.*, u.nombre_completo AS validated_by_nombre,
-                  last_event.ubicacion AS validation_ubicacion
-           FROM inbound_lines l
-           LEFT JOIN usuarios u ON u.id = l.validated_by
-           LEFT JOIN LATERAL (
-             SELECT e.ubicacion
-             FROM inbound_scan_events e
-             WHERE e.line_id = l.id AND e.tenant_id = l.tenant_id AND e.resultado = 'correcto'
-             ORDER BY e.scanned_at DESC
-             LIMIT 1
-           ) last_event ON true
-           WHERE l.order_id=$1 AND l.tenant_id=$2
-           ORDER BY l.created_at ASC, l.id ASC`,
-          [req.params.id, req.tenantId]
-        )
-        payload.lines = linesRes.rows
-      }
-
-      if (scope === 'validacion' || scope === 'all') {
-        const eventsRes = await req.tQuery(
-          `SELECT e.id, e.line_id, e.codigo_escaneado, e.sku_asociado, e.match_field, e.resultado,
-                  e.ubicacion, e.scanned_at, u.nombre_completo AS scanned_by_nombre
-           FROM inbound_scan_events e
-           LEFT JOIN usuarios u ON u.id = e.scanned_by
-           WHERE e.order_id=$1 AND e.tenant_id=$2 AND e.resultado='correcto'
-           ORDER BY e.scanned_at DESC, e.id DESC`,
-          [req.params.id, req.tenantId]
-        )
-        payload.events = eventsRes.rows
-      }
-
-      if (scope === 'otros' || scope === 'all') {
-        const novedadesRes = await req.tQuery(
-          `SELECT n.*, u.nombre_completo AS created_by_nombre
-           FROM inbound_novedades n
-           LEFT JOIN usuarios u ON u.id = n.created_by
-           WHERE n.order_id=$1 AND n.tenant_id=$2
-           ORDER BY n.created_at DESC, n.id DESC`,
-          [req.params.id, req.tenantId]
-        )
-        payload.novedades = novedadesRes.rows
-      }
-
-      res.json(payload)
+      res.json(result.payload)
     } catch (err) {
       console.error('[recepcion] export-data:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo en unos segundos' })
+      }
       res.status(500).json({ error: 'Error al preparar exportación de recepción' })
     }
   }
