@@ -324,12 +324,12 @@ function PackagesTable({ packages, referencia, trackingNo, obc, boxStatuses, onO
       <table className="w-full text-xs">
         <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
           <tr>
-            <th className="table-header">#</th>
+            <th className="table-header hidden sm:table-cell">#</th>
             <th className="table-header">{t('surtido.ordenes.detail.box_type')}</th>
             <th className="table-header">{t('surtido.ordenes.detail.box_code')}</th>
             <th className="table-header text-right">{t('surtido.ordenes.detail.qty')}</th>
-            <th className="table-header">{t('surtido.ordenes.referencia')}</th>
-            <th className="table-header">{t('surtido.ordenes.detail.tracking')}</th>
+            <th className="table-header hidden md:table-cell">{t('surtido.ordenes.referencia')}</th>
+            <th className="table-header hidden md:table-cell">{t('surtido.ordenes.detail.tracking')}</th>
             <th className="table-header">{t('surtido.ordenes.box_status.title')}</th>
           </tr>
         </thead>
@@ -343,12 +343,12 @@ function PackagesTable({ packages, referencia, trackingNo, obc, boxStatuses, onO
             const rastreoFolio = normKey ? rastreoLinks?.[normKey] : null
             return (
               <tr key={i} className="table-row">
-                <td className="table-cell text-warm-400 font-bold tabular-nums w-8">{i + 1}</td>
+                <td className="table-cell text-warm-400 font-bold tabular-nums w-8 hidden sm:table-cell">{i + 1}</td>
                 <td className="table-cell text-warm-600">{type}</td>
                 <td className="table-cell font-mono font-semibold text-warm-800">{rawCode}</td>
                 <td className="table-cell text-right font-semibold text-warm-700 tabular-nums">{qty}</td>
-                <td className="table-cell font-mono text-xs text-warm-500">{referencia || '—'}</td>
-                <td className="table-cell font-mono text-xs text-warm-500">{trackingNo || '—'}</td>
+                <td className="table-cell font-mono text-xs text-warm-500 hidden md:table-cell">{referencia || '—'}</td>
+                <td className="table-cell font-mono text-xs text-warm-500 hidden md:table-cell">{trackingNo || '—'}</td>
                 <td className="table-cell">
                   <div className="flex items-center gap-1.5">
                     {normKey ? (

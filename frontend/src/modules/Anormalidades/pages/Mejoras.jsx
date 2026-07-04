@@ -401,46 +401,79 @@ export default function AnormMejoras() {
           <div className="flex justify-center py-16"><LoadingSpinner /></div>
         ) : (
           <div className="card overflow-hidden shadow-sm table-shell">
-            <div className="overflow-x-auto table-scroll">
-            <table className="w-full min-w-[1240px] text-sm">
-              <thead>
-                <tr className="bg-warm-50 border-b border-warm-100">
-                  {[t('common.date'), t('anorm.field.proceso'), t('anorm.field.origen'), t('anorm.mejoras.problema'), t('anorm.mejoras.ocurrencias'), t('anorm.field.responsable'), t('anorm.mejoras.fechaLimite'), t('common.status'), t('common.actions')].map(h => (
-                    <th key={h} className="table-header">
-                      <span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{h}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-warm-50">
-                {rows.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-16 text-warm-400 text-sm">{t('common.noData')}</td></tr>
-                ) : rows.map(row => (
-                  <tr key={row.id} onClick={() => setDetailId(row.id)} className="table-row cursor-pointer transition-colors">
-                    <td className="table-cell whitespace-nowrap text-xs text-warm-600">{fmtDate(row.created_at)}</td>
-                    <td className="table-cell whitespace-nowrap text-xs text-warm-700">{row.proceso || '—'}</td>
-                    <td className="table-cell whitespace-nowrap text-xs text-warm-600">{row.origen || '—'}</td>
-                    <td className="table-cell">
-                      <p className="max-w-[320px] truncate text-sm font-medium text-warm-800 whitespace-nowrap">{row.descripcion_problema}</p>
-                    </td>
-                    <td className="table-cell whitespace-nowrap text-center">
-                      <span className="text-xs font-semibold text-accent-700">{row.ocurrencias}</span>
-                    </td>
-                    <td className="table-cell whitespace-nowrap text-xs text-warm-600">{row.responsable_nombre || '—'}</td>
-                    <td className="table-cell whitespace-nowrap text-xs text-warm-600">{row.fecha_limite ? fmtDate(row.fecha_limite) : '—'}</td>
-                    <td className="table-cell whitespace-nowrap"><EstadoChip estado={row.estado} /></td>
-                    <td className="table-cell whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors"><Eye className="w-4 h-4" /></button>
-                        {canUpdate && <button onClick={() => setEditId(row.id)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors"><Edit3 className="w-4 h-4" /></button>}
-                        {canUpdate && <button onClick={() => setVincularMejoraId(row.id)} className="p-1.5 rounded-lg hover:bg-success-100 text-warm-400 hover:text-success-600 transition-colors" title={t('anorm.mejoras.vincular')}><Link2 className="w-4 h-4" /></button>}
-                        {canDelete && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg hover:bg-danger-100 text-warm-400 hover:text-danger-600 transition-colors" title={t('common.delete')}><Trash2 className="w-4 h-4" /></button>}
-                      </div>
-                    </td>
+            {/* Mobile card list */}
+            <div className="block md:hidden divide-y divide-warm-50">
+              {rows.length === 0 ? (
+                <p className="text-center py-16 text-warm-400 text-sm">{t('common.noData')}</p>
+              ) : rows.map(row => (
+                <div key={row.id} onClick={() => setDetailId(row.id)} className="px-4 py-3 cursor-pointer hover:bg-primary-50 transition-colors">
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <EstadoChip estado={row.estado} />
+                      <span className="text-[11px] text-warm-400">{fmtDate(row.created_at)}</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors"><Eye className="w-4 h-4" /></button>
+                      {canUpdate && <button onClick={() => setEditId(row.id)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors"><Edit3 className="w-4 h-4" /></button>}
+                      {canUpdate && <button onClick={() => setVincularMejoraId(row.id)} className="p-1.5 rounded-lg hover:bg-success-100 text-warm-400 hover:text-success-600 transition-colors"><Link2 className="w-4 h-4" /></button>}
+                      {canDelete && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg hover:bg-danger-100 text-warm-400 hover:text-danger-600 transition-colors"><Trash2 className="w-4 h-4" /></button>}
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium text-warm-800 line-clamp-2 mb-1.5">{row.descripcion_problema}</p>
+                  <div className="flex items-center gap-2 flex-wrap text-[11px] text-warm-500">
+                    {row.proceso && <span className="font-medium text-warm-700">{row.proceso}</span>}
+                    {row.origen && <><span>·</span><span>{row.origen}</span></>}
+                    {row.responsable_nombre && <><span>·</span><span>{row.responsable_nombre}</span></>}
+                    {row.fecha_limite && <><span>·</span><span className="text-warning-600">{fmtDate(row.fecha_limite)}</span></>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto table-scroll">
+              <table className="w-full min-w-[900px] text-sm">
+                <thead>
+                  <tr className="bg-warm-50 border-b border-warm-100">
+                    <th className="table-header"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{t('common.date')}</span></th>
+                    <th className="table-header"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{t('anorm.field.proceso')}</span></th>
+                    <th className="table-header hidden lg:table-cell"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{t('anorm.field.origen')}</span></th>
+                    <th className="table-header"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{t('anorm.mejoras.problema')}</span></th>
+                    <th className="table-header hidden lg:table-cell"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{t('anorm.mejoras.ocurrencias')}</span></th>
+                    <th className="table-header hidden lg:table-cell"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{t('anorm.field.responsable')}</span></th>
+                    <th className="table-header"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{t('anorm.mejoras.fechaLimite')}</span></th>
+                    <th className="table-header"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{t('common.status')}</span></th>
+                    <th className="table-header"><span className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-warm-500">{t('common.actions')}</span></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-warm-50">
+                  {rows.length === 0 ? (
+                    <tr><td colSpan={9} className="text-center py-16 text-warm-400 text-sm">{t('common.noData')}</td></tr>
+                  ) : rows.map(row => (
+                    <tr key={row.id} onClick={() => setDetailId(row.id)} className="table-row cursor-pointer transition-colors">
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-600">{fmtDate(row.created_at)}</td>
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-700">{row.proceso || '—'}</td>
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-600 hidden lg:table-cell">{row.origen || '—'}</td>
+                      <td className="table-cell">
+                        <p className="max-w-[320px] truncate text-sm font-medium text-warm-800 whitespace-nowrap">{row.descripcion_problema}</p>
+                      </td>
+                      <td className="table-cell whitespace-nowrap text-center hidden lg:table-cell">
+                        <span className="text-xs font-semibold text-accent-700">{row.ocurrencias}</span>
+                      </td>
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-600 hidden lg:table-cell">{row.responsable_nombre || '—'}</td>
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-600">{row.fecha_limite ? fmtDate(row.fecha_limite) : '—'}</td>
+                      <td className="table-cell whitespace-nowrap"><EstadoChip estado={row.estado} /></td>
+                      <td className="table-cell whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors"><Eye className="w-4 h-4" /></button>
+                          {canUpdate && <button onClick={() => setEditId(row.id)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors"><Edit3 className="w-4 h-4" /></button>}
+                          {canUpdate && <button onClick={() => setVincularMejoraId(row.id)} className="p-1.5 rounded-lg hover:bg-success-100 text-warm-400 hover:text-success-600 transition-colors" title={t('anorm.mejoras.vincular')}><Link2 className="w-4 h-4" /></button>}
+                          {canDelete && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg hover:bg-danger-100 text-warm-400 hover:text-danger-600 transition-colors" title={t('common.delete')}><Trash2 className="w-4 h-4" /></button>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
             <TablePagination page={page} limit={20} total={total} onPageChange={setPage} />
           </div>

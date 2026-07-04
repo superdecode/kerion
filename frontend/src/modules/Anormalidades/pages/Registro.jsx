@@ -529,8 +529,42 @@ export default function AnormalidadesRegistro() {
                 </button>
               </div>
             )}
-            <div className="overflow-x-auto table-scroll">
-              <table className="w-full min-w-[1180px] text-sm">
+            {/* Mobile card list — shown below md */}
+            <div className="block md:hidden divide-y divide-warm-100">
+              {rows.length === 0 ? (
+                <p className="text-center py-12 text-warm-400 text-sm">{t('common.noData')}</p>
+              ) : rows.map(row => (
+                <div key={row.id} onClick={() => setDetailId(row.id)}
+                  className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-primary-50 transition-colors">
+                  <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleRow(row.id)}
+                    className="cb mt-0.5 shrink-0" onClick={e => e.stopPropagation()} />
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs font-semibold text-primary-700">{row.folio}</span>
+                      <NivelChip nivel={row.nivel} />
+                      <EstadoChip estado={row.vencido && row.estado !== 'cerrado' ? 'vencido' : row.estado} />
+                    </div>
+                    <p className="text-xs font-medium text-warm-800 truncate">{row.codigo}{row.nombre ? ` — ${row.nombre}` : ''}</p>
+                    <div className="flex items-center gap-3 text-[10px] text-warm-400">
+                      <span>{fmtDateTime(row.fecha_ocurrencia)}</span>
+                      {row.proceso && <span>{row.proceso}</span>}
+                      <span className={row.vencido && row.estado !== 'cerrado' ? 'text-danger-600 font-semibold' : ''}>
+                        {row.dias_abierto ? `${Math.floor(row.dias_abierto)}d` : '0d'}
+                        {row.vencido && row.estado !== 'cerrado' ? ' ⚠' : ''}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setDetailId(row.id)} className="p-1.5 rounded-lg hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-colors"><Eye className="w-4 h-4" /></button>
+                    {canCreate && <button onClick={() => setEditId(row.id)} className="p-1.5 rounded-lg hover:bg-accent-100 text-warm-400 hover:text-accent-600 transition-colors"><Edit3 className="w-4 h-4" /></button>}
+                    {canDelete && <button onClick={() => setDeleteId(row.id)} className="p-1.5 rounded-lg hover:bg-danger-100 text-warm-400 hover:text-danger-600 transition-colors"><Trash2 className="w-4 h-4" /></button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table — shown at md and above */}
+            <div className="hidden md:block overflow-x-auto table-scroll">
+              <table className="w-full min-w-[900px] text-sm">
                 <thead>
                   <tr className="bg-warm-50 border-b border-warm-100">
                     <th className={`${TH} w-8`}>
@@ -545,11 +579,11 @@ export default function AnormalidadesRegistro() {
                     </th>
                     <th className={TH}><span className={TH_TEXT}>{t('anorm.field.folio')}</span></th>
                     <th className={TH}><span className={TH_TEXT}>{t('common.date')}</span></th>
-                    <th className={TH}><span className={TH_TEXT}>{t('anorm.field.proceso')}</span></th>
+                    <th className={`${TH} hidden lg:table-cell`}><span className={TH_TEXT}>{t('anorm.field.proceso')}</span></th>
                     <th className={TH}><span className={TH_TEXT}>{t('anorm.field.codigo')}</span></th>
                     <th className={TH}><span className={TH_TEXT}>{t('anorm.field.nivel')}</span></th>
                     <th className={TH}><span className={TH_TEXT}>{t('common.status')}</span></th>
-                    <th className={TH}><span className={TH_TEXT}>{t('anorm.field.responsable')}</span></th>
+                    <th className={`${TH} hidden lg:table-cell`}><span className={TH_TEXT}>{t('anorm.field.responsable')}</span></th>
                     <th className={TH}><span className={TH_TEXT}>{t('anorm.field.dias')}</span></th>
                     <th className={TH}><span className={TH_TEXT}>{t('common.actions')}</span></th>
                   </tr>
@@ -576,7 +610,7 @@ export default function AnormalidadesRegistro() {
                         <span className="font-mono text-xs font-semibold text-primary-700">{row.folio}</span>
                       </td>
                       <td className="table-cell whitespace-nowrap text-xs text-warm-600">{fmtDateTime(row.fecha_ocurrencia)}</td>
-                      <td className="table-cell whitespace-nowrap text-xs text-warm-700">{row.proceso}</td>
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-700 hidden lg:table-cell">{row.proceso}</td>
                       <td className="table-cell">
                         <div className="text-xs font-medium text-warm-800 whitespace-nowrap">{row.codigo}</div>
                         <div className="text-[10px] text-warm-400 truncate max-w-[120px]">{row.nombre}</div>
@@ -585,7 +619,7 @@ export default function AnormalidadesRegistro() {
                       <td className="table-cell whitespace-nowrap">
                         <EstadoChip estado={row.vencido && row.estado !== 'cerrado' ? 'vencido' : row.estado} />
                       </td>
-                      <td className="table-cell whitespace-nowrap text-xs text-warm-600">{row.responsable_nombre || <span className="text-warm-300">—</span>}</td>
+                      <td className="table-cell whitespace-nowrap text-xs text-warm-600 hidden lg:table-cell">{row.responsable_nombre || <span className="text-warm-300">—</span>}</td>
                       <td className="table-cell whitespace-nowrap">
                         <span className={`text-xs font-medium ${row.vencido && row.estado !== 'cerrado' ? 'text-danger-600' : 'text-warm-600'}`}>
                           {row.dias_abierto ? `${Math.floor(row.dias_abierto)}d` : '0d'}

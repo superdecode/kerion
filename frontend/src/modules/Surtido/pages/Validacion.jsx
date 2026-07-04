@@ -417,7 +417,7 @@ function ItemsTable({ items, itemCounts, t, onManualAdjust }) {
             <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('surtido.validacion.code_header')}</th>
             <th className="text-right px-3 py-2.5 font-bold text-warm-500">{t('surtido.escaneo.expected')}</th>
             <th className="text-right px-3 py-2.5 font-bold text-warm-500">{t('surtido.escaneo.scanned')}</th>
-            <th className="text-right px-3 py-2.5 font-bold text-warm-500">{t('surtido.escaneo.pending')}</th>
+            <th className="text-right px-3 py-2.5 font-bold text-warm-500 hidden sm:table-cell">{t('surtido.escaneo.pending')}</th>
             <th className="text-left px-3 py-2.5 font-bold text-warm-500">{t('common.status')}</th>
             <th className="px-3 py-2.5" />
           </tr>
@@ -433,7 +433,7 @@ function ItemsTable({ items, itemCounts, t, onManualAdjust }) {
                 <td className="px-3 py-2 font-mono font-semibold text-warm-700">{item.displayCode}</td>
                 <td className="px-3 py-2 text-right text-warm-500">{expected}</td>
                 <td className="px-3 py-2 text-right font-semibold text-success-700">{scanned}</td>
-                <td className={`px-3 py-2 text-right font-semibold ${pending > 0 ? 'text-warning-700' : 'text-success-600'}`}>{pending}</td>
+                <td className={`px-3 py-2 text-right font-semibold hidden sm:table-cell ${pending > 0 ? 'text-warning-700' : 'text-success-600'}`}>{pending}</td>
                 <td className="px-3 py-2">
                   <span className={`badge ${
                     scanned === 0 ? 'bg-warm-100 text-warm-500' :
@@ -474,16 +474,16 @@ function RejectedTable({ items, t }) {
         <table className="w-full text-xs">
           <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
             <tr>
-              <th className="table-header w-10">#</th>
+              <th className="table-header w-10 hidden sm:table-cell">#</th>
               <th className="table-header">{t('surtido.validacion.code_header')}</th>
               <th className="table-header">{t('common.status')}</th>
-              <th className="table-header text-right">{t('surtido.validacion.created_at')}</th>
+              <th className="table-header text-right hidden sm:table-cell">{t('surtido.validacion.created_at')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
             {items.map((e, i) => (
               <tr key={i} className="table-row">
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-2.5 hidden sm:table-cell">
                   <span className="w-6 h-6 rounded-lg bg-danger-100 text-danger-600 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                 </td>
                 <td className="px-3 py-2.5 font-mono font-semibold text-danger-700">{e.code}</td>
@@ -494,7 +494,7 @@ function RejectedTable({ items, t }) {
                     {e.result === 'duplicate' ? t('surtido.escaneo.match_duplicate') : t('surtido.escaneo.match_rejected')}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{fmtDateTime(e.ts)}</td>
+                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums hidden sm:table-cell">{fmtDateTime(e.ts)}</td>
               </tr>
             ))}
           </tbody>
@@ -518,16 +518,16 @@ function ScanFeedTable({ items, t }) {
         <table className="w-full text-xs">
           <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
             <tr>
-              <th className="table-header w-10">#</th>
+              <th className="table-header w-10 hidden sm:table-cell">#</th>
               <th className="table-header w-8" />
               <th className="table-header">{t('surtido.validacion.code_header')}</th>
-              <th className="table-header text-right">{t('surtido.validacion.created_at')}</th>
+              <th className="table-header text-right hidden sm:table-cell">{t('surtido.validacion.created_at')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-warm-50">
             {[...items].sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0)).map((e, i) => (
               <tr key={i} className="hover:bg-primary-100 transition-colors">
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-2.5 hidden sm:table-cell">
                   <span className="w-6 h-6 rounded-lg bg-success-100 text-success-700 flex items-center justify-center text-[10px] font-bold">{i + 1}</span>
                 </td>
                 <td className="px-1 py-2.5"><CheckCircle2 size={12} className="text-success-500" /></td>
@@ -541,7 +541,7 @@ function ScanFeedTable({ items, t }) {
                     )}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums">{fmtDateTime(e.ts)}</td>
+                <td className="px-3 py-2.5 text-right text-warm-400 tabular-nums hidden sm:table-cell">{fmtDateTime(e.ts)}</td>
               </tr>
             ))}
           </tbody>
