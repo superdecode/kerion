@@ -329,7 +329,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.FROZEN,
-    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 30000 : false,
+    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 8000 : false,
     refetchIntervalInBackground: false,
   })
   const queriedOrderData = orderLinesData?.order ? orderLinesData : orderSummaryData
@@ -354,7 +354,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.DEFAULT,
-    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 45000 : false,
+    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 10000 : false,
     refetchIntervalInBackground: false,
   })
   const serverEvents = eventsData?.events ?? []
@@ -2425,7 +2425,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       {isOffline && (
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs font-medium shrink-0">
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
-          <span>Modo offline — los escaneos se guardarán y sincronizarán al reconectar</span>
+          <span>Sin conexión — escaneos en cola para sincronizar. <strong>No trabaje en esta orden con otro operador simultaneamente: sin red no hay sincronización y se generarán duplicados.</strong></span>
         </div>
       )}
 

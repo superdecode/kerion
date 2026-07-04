@@ -2042,7 +2042,7 @@ export default function Escaneo() {
       {isOffline && (
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 border-b border-amber-300 text-amber-800 text-xs font-semibold">
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
-          Modo offline — los escaneos se guardan localmente; guarda la sesión cuando recuperes conexión
+          <span>Sin conexión — escaneos guardados localmente. <span className="font-normal">No trabaje en la misma ubicación con otro operador: sin red no hay sincronización y habrá duplicados al guardar.</span></span>
         </div>
       )}
       <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')}

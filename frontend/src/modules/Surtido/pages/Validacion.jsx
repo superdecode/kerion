@@ -1517,8 +1517,8 @@ const { data: reasonsData } = useQuery({
       {isOffline && (
         <div className="absolute top-0 inset-x-0 z-50 flex items-center gap-2 px-4 py-2 bg-amber-100 border-b border-amber-300 text-amber-800 text-xs font-semibold">
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
-          Modo offline — los escaneos se guardarán al recuperar conexión
-          {surtidoPendingCount > 0 && <span className="ml-auto bg-amber-200 px-1.5 py-0.5 rounded-full">{surtidoPendingCount} pendientes</span>}
+          <span className="flex-1">Sin conexión — escaneos en cola. <span className="font-normal">Solo un operador por sesión en offline; sin red no hay sincronización entre usuarios.</span></span>
+          {surtidoPendingCount > 0 && <span className="shrink-0 bg-amber-200 px-1.5 py-0.5 rounded-full">{surtidoPendingCount} pendientes</span>}
         </div>
       )}
       {/* Pending overlay: blocks content until sessionId is established */}
