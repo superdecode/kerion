@@ -966,7 +966,7 @@ export default function RecepcionDetalle() {
                               : <span className="text-xs text-warm-300">—</span>
                             }
                           </td>
-                          <td className="px-3 py-2.5 text-xs text-warm-500">{ev.match_field || '—'}</td>
+                          <td className="px-3 py-2.5 text-xs text-warm-500">{ev.match_field ? (t(`rec.line.${ev.match_field}`) || ev.match_field) : '—'}</td>
                           <td className="px-3 py-2.5 text-xs text-warm-600">{ev.scanned_by_nombre || '—'}</td>
                           <td className="px-3 py-2.5 text-xs text-warm-500">{fmtDateTime(ev.scanned_at)}</td>
                           <td className="px-3 py-2.5">

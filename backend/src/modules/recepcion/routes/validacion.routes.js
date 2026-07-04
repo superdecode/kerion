@@ -310,7 +310,7 @@ router.get('/orders/:id/scan-events',
       const result = await req.tQuery(
         `SELECT ${
           compact
-            ? 'e.id, e.line_id, e.codigo_escaneado, e.resultado, e.scanned_at, e.ubicacion, u.nombre_completo AS scanned_by_nombre'
+            ? 'e.id, e.line_id, e.codigo_escaneado, e.match_field, e.sku_asociado, e.resultado, e.scanned_at, e.ubicacion, u.nombre_completo AS scanned_by_nombre'
             : 'e.*, u.nombre_completo AS scanned_by_nombre'
         }
          FROM inbound_scan_events e
