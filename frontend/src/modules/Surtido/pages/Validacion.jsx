@@ -648,9 +648,16 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
   const { t } = useI18nStore()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
-  const [isSearching, setIsSearching] = useState(false)
   const [searchError, setSearchError] = useState(null)
   const inputRef = useRef(null)
+
+  // Pre-fetch when modal opens so doSearch is instant (no network block on search)
+  const { data: outboundData, isLoading: isLoadingSheet, error: sheetFetchError } = useQuery({
+    queryKey: ['outbound-list-quick'],
+    queryFn: getOutboundList,
+    staleTime: 5 * 60 * 1000,
+    enabled: isOpen,
+  })
 
   const { data: trackingData } = useQuery({
     queryKey: ['wms-scan-sessions-quick'],
@@ -668,6 +675,25 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     }
   }, [isOpen])
 
+  // Surface sheet-level errors once (not on every search)
+  useEffect(() => {
+    if (!sheetFetchError) return
+    const code = sheetFetchError?.code
+    if (code === 'SHEET_NOT_CONFIGURED') {
+      setSearchError('La hoja de salidas no esta configurada. Ve a WmsHub -> Configuracion y guarda la URL de salidas.')
+    } else if (code === 'SHEET_EMPTY') {
+      setSearchError('La hoja de Google Sheets esta vacia o tiene menos de 2 filas. Verifica el contenido.')
+    } else if (code === 'SHEET_PROXY_UNAVAILABLE') {
+      setSearchError('El proxy de Google Sheets esta temporalmente no disponible. Intenta de nuevo en unos segundos.')
+    } else if (code === 'BACKEND_UNAVAILABLE') {
+      setSearchError('El backend de Kirion no esta disponible temporalmente. Espera un momento e intenta de nuevo.')
+    } else if (code === 'SHEET_TIMEOUT') {
+      setSearchError('La consulta a Google Sheets tardo demasiado. Intenta nuevamente.')
+    } else {
+      setSearchError(`Error de conexion: ${sheetFetchError?.message ?? 'desconocido'}.`)
+    }
+  }, [sheetFetchError])
+
   const trackingMap = useMemo(() => {
     const raw = getRecords(trackingData)
     const map = new Map()
@@ -675,49 +701,32 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     return map
   }, [trackingData])
 
-  async function doSearch(q) {
+  // Synchronous — filters already-loaded in-memory data, no network call
+  function doSearch(q) {
     if (!q.trim()) return
-    setIsSearching(true)
     setSearchError(null)
-    try {
-      const data = await getOutboundList()
-      const all = getRecords(data)
-      if (all.length === 0) {
-        setSearchError('La hoja de salidas no contiene registros. Verifica la configuracion en WmsHub.')
-        setResults([])
-        return
-      }
-      const norm = q.trim().toLowerCase()
-      const filtered = all.filter(r =>
-        (r.outboundOrderNo || '').toLowerCase().includes(norm) ||
-        (r.thirdOrderNo || '').toLowerCase().includes(norm) ||
-        (r.logisticsTrackNo || '').toLowerCase().includes(norm) ||
-        (r.receiverName || '').toLowerCase().includes(norm) ||
-        (r.customizeCode || '').toLowerCase().includes(norm) ||
-        (r.boxType || '').toLowerCase().includes(norm)
-      )
-      setResults(filtered.slice(0, 20))
-    } catch (err) {
-      const code = err?.code
-      if (code === 'SHEET_NOT_CONFIGURED') {
-        setSearchError('La hoja de salidas no esta configurada. Ve a WmsHub -> Configuracion y guarda la URL de salidas.')
-      } else if (code === 'SHEET_EMPTY') {
-        setSearchError('La hoja de Google Sheets esta vacia o tiene menos de 2 filas. Verifica el contenido.')
-      } else if (code === 'SHEET_PROXY_UNAVAILABLE') {
-        setSearchError('El proxy de Google Sheets esta temporalmente no disponible. Intenta de nuevo en unos segundos.')
-      } else if (code === 'BACKEND_UNAVAILABLE') {
-        setSearchError('El backend de Kirion no esta disponible temporalmente. Espera un momento e intenta de nuevo.')
-      } else if (code === 'SHEET_TIMEOUT') {
-        setSearchError('La consulta a Google Sheets tardo demasiado. Intenta nuevamente.')
-      } else if (err?.message?.includes('HTTP')) {
-        setSearchError(`Error al obtener la hoja: ${err.message}. Verifica la URL y los permisos de acceso.`)
-      } else {
-        setSearchError(`Error de conexion: ${err?.message ?? 'desconocido'}. Verifica tu red y la URL configurada en WmsHub.`)
-      }
-      setResults(null)
-    } finally {
-      setIsSearching(false)
+    const all = getRecords(outboundData)
+    if (all.length === 0) {
+      setSearchError('La hoja de salidas no contiene registros. Verifica la configuracion en WmsHub.')
+      setResults([])
+      return
     }
+    const norm = q.trim().toLowerCase()
+    const variations = generateCodeVariations(q.trim()).map(v => v.toLowerCase())
+    const matchesCode = (field) => {
+      const f = (field || '').toLowerCase()
+      return f.length > 0 && variations.some(v => f.includes(v))
+    }
+    const filtered = all.filter(r =>
+      matchesCode(r.outboundOrderNo) ||
+      matchesCode(r.thirdOrderNo) ||
+      matchesCode(r.logisticsTrackNo) ||
+      (r.receiverName || '').toLowerCase().includes(norm) ||
+      matchesCode(r.customizeCode) ||
+      matchesCode(r.boxType) ||
+      (r.allCustomizeCodes || []).some(c => matchesCode(c))
+    )
+    setResults(filtered.slice(0, 20))
   }
 
   return (
@@ -739,11 +748,18 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
           <motion.button
             className="btn-primary px-5 h-12 shadow-glow"
             onClick={() => doSearch(query.trim())}
-            disabled={!query.trim() || isSearching}
+            disabled={!query.trim() || isLoadingSheet}
             whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-            {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+            {isLoadingSheet ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
           </motion.button>
         </div>
+
+        {isLoadingSheet && !searchError && results === null && (
+          <div className="text-center py-6 text-sm text-warm-400 flex items-center justify-center gap-2">
+            <Loader2 size={14} className="animate-spin" />
+            <span>Cargando datos de salidas...</span>
+          </div>
+        )}
 
         {searchError && (
           <div className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 flex items-start gap-3 text-sm">
@@ -752,7 +768,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
           </div>
         )}
 
-        {!searchError && results === null && (
+        {!isLoadingSheet && !searchError && results === null && (
           <div className="text-center py-10 text-sm text-warm-400">
             {t('surtido.validacion.quick_search_hint')}
           </div>
