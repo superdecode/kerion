@@ -570,7 +570,9 @@ export default function RecepcionDetalle() {
       if (data?.code === 'EXPORT_TOO_LARGE') {
         toast.error(data.error, { duration: 8000 })
       } else {
-        toast.error(data?.error || t('rec.export.error'))
+        const msg = data?.error || t('rec.export.error')
+        const detail = data?.detail ? ` (${data.detail})` : ''
+        toast.error(msg + detail)
       }
     } finally {
       setExportingScope(null)

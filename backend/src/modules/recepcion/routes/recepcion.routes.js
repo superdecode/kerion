@@ -222,6 +222,12 @@ router.get('/orders/:id/export-data',
       // With DB_POOL_MAX=2 and concurrent polling requests, sequential tQuery calls
       // can exhaust the pool and hit the connection timeout.
       const result = await req.tTransaction(async (client) => {
+        // Export can fetch tens of thousands of rows — disable both the pg-library
+        // query_timeout and the Postgres statement_timeout for this transaction only.
+        // SET LOCAL reverts automatically on COMMIT/ROLLBACK.
+        if (client.connectionParameters) client.connectionParameters.query_timeout = 0
+        await client.query("SET LOCAL statement_timeout = '0'")
+
         const orderRes = await client.query(
           `SELECT o.*, u.nombre_completo AS responsable_nombre,
                   EXISTS (
@@ -329,11 +335,11 @@ router.get('/orders/:id/export-data',
 
       res.json(result.payload)
     } catch (err) {
-      console.error('[recepcion] export-data:', err.message)
+      console.error('[recepcion] export-data error:', err.code, err.message)
       if (isDatabaseUnavailableError(err)) {
         return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo en unos segundos' })
       }
-      res.status(500).json({ error: 'Error al preparar exportación de recepción' })
+      res.status(500).json({ error: 'Error al preparar exportación de recepción', detail: err.message })
     }
   }
 )
