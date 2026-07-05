@@ -948,7 +948,7 @@ function CopyableObc({ obc }) {
 
 function StatusTabs({ selected, onChange, t }) {
   return (
-    <div className="flex gap-0 border-b border-warm-100 bg-white/60">
+    <div className="flex gap-0 border-b border-warm-100 bg-white/60 overflow-x-auto scrollbar-none">
       <button
         onClick={() => onChange('')}
         className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all border-b-2 -mb-px whitespace-nowrap ${
@@ -1026,6 +1026,7 @@ export default function Ordenes() {
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
   const [cancelStatusModal, setCancelStatusModal] = useState({ open: false, obcs: [], status: 'cancelled', note: '' })
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [filtersExpanded, setFiltersExpanded] = useState(true)
   const timeFromInputRef = useRef(null)
   const dateModeRef = useRef(null)
   const [dateModeOpen, setDateModeOpen] = useState(false)
@@ -1860,12 +1861,12 @@ export default function Ordenes() {
               refreshing={refreshing}
             />
             {canUpdateOrders && (
-              <button data-tour="sur-btn-surtidores" className="btn-ghost text-xs flex items-center gap-1.5" onClick={() => setShowSurtidoresModal(true)}>
+              <button data-tour="sur-btn-surtidores" className="hidden sm:inline-flex btn-ghost text-xs items-center gap-1.5" onClick={() => setShowSurtidoresModal(true)}>
                 <Users size={14} /> {t('surtido.ordenes.manage_surtidores')}
               </button>
             )}
             {canUpdateOrders && (
-              <button className="btn-ghost text-xs flex items-center gap-1.5" onClick={() => setShowReasonsModal(true)}>
+              <button className="hidden sm:inline-flex btn-ghost text-xs items-center gap-1.5" onClick={() => setShowReasonsModal(true)}>
                 <ClipboardList size={14} /> {t('surtido.ordenes.manage_motivos')}
               </button>
             )}
@@ -1882,9 +1883,19 @@ export default function Ordenes() {
       )}
 
       {/* Filter bar */}
-      <div className="sticky top-[3.5rem] z-[20] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
+      <div className="sticky top-[3.5rem] z-[20] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60">
+        {/* Mobile compact toggle */}
+        <button
+          onClick={() => setFiltersExpanded(v => !v)}
+          className="sm:hidden w-full flex items-center justify-between px-5 py-2 hover:bg-warm-50/80 transition-colors"
+        >
+          <span className="text-xs font-semibold text-warm-600">Filtros</span>
+          {filtersExpanded
+            ? <ChevronUp size={14} className="text-warm-400" />
+            : <ChevronDown size={14} className="text-warm-400" />}
+        </button>
+        <div className={`${filtersExpanded ? '' : 'hidden sm:block'} px-5 py-2.5 space-y-2`}>
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
             {/* Date-field dropdown — selects which column drives the date range filter */}
             <div ref={dateModeRef} className="relative">
               <button
@@ -2040,7 +2051,7 @@ export default function Ordenes() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
             <MultiSelect
               value={clientDraft}
               onChange={setClientDraft}
@@ -2076,7 +2087,7 @@ export default function Ordenes() {
                 t={t}
               />
 
-            <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[240px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+            <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[240px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
               <Search size={13} className="text-warm-400 shrink-0" />
               <input
                 type="text"

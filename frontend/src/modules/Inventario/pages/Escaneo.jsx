@@ -683,9 +683,9 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.ubicacion_scan_title')} icon={MapPin} size="sm"
       footer={
-        <div className="flex gap-3 justify-between w-full">
-          <button className="btn-ghost text-sm" onClick={onSkip}>{t('inventario.escaneo.ubicacion_skip')}</button>
-          <button className="btn-primary text-sm inline-flex items-center gap-2" onClick={handleConfirm} disabled={!inputValue.trim()}>
+        <div className="flex gap-3 justify-between w-full flex-wrap">
+          <button className="btn-ghost text-sm shrink-0" onClick={onSkip}>{t('inventario.escaneo.ubicacion_skip')}</button>
+          <button className="btn-primary text-sm inline-flex items-center gap-2 shrink-0" onClick={handleConfirm} disabled={!inputValue.trim()}>
             <CheckCircle2 size={14} /> {t('inventario.escaneo.ubicacion_continue')}
           </button>
         </div>

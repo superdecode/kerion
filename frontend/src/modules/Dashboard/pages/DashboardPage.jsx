@@ -220,9 +220,9 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Module rail */}
+      {/* Module rail — hidden on mobile */}
       <aside
-        className={`relative flex-shrink-0 bg-white border-r border-warm-100 flex flex-col overflow-hidden transition-[width] duration-200 ease-in-out ${showFull ? 'w-44' : 'w-14'}`}
+        className={`hidden sm:flex relative flex-shrink-0 bg-white border-r border-warm-100 flex-col overflow-hidden transition-[width] duration-200 ease-in-out ${showFull ? 'w-44' : 'w-14'}`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
@@ -335,6 +335,27 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Mobile module tabs */}
+        <div className="sm:hidden flex gap-0 border-b border-warm-100 overflow-x-auto scrollbar-none bg-white">
+          {visibleModules.map(mod => {
+            const isActive = mod.id === activeModule?.id
+            const styles = COLOR_STYLES[mod.color]
+            const Icon = mod.icon
+            return (
+              <button
+                key={mod.id}
+                onClick={() => handleModuleSelect(mod.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 whitespace-nowrap shrink-0 transition-all ${
+                  isActive ? `border-current ${styles.activeText}` : 'border-transparent text-warm-400 hover:text-warm-600'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {t(mod.labelKey)}
+              </button>
+            )
+          })}
         </div>
 
         {/* Date filter bar */}

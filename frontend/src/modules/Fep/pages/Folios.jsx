@@ -42,6 +42,7 @@ export default function Folios() {
 
   const defaultEnd = getToday()
   const defaultStart = subtractDays(defaultEnd, 30)
+  const [filtersExpanded, setFiltersExpanded] = useState(true)
   const [datePreset, setDatePreset] = useState('30')
 
   const [page, setPage] = useState(1)
@@ -414,7 +415,12 @@ export default function Folios() {
         )}
         {canViewFolios && <>
         {/* Filter bar */}
-        <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2 space-y-2">
+        <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60">
+          <button onClick={() => setFiltersExpanded(v => !v)} className="sm:hidden w-full flex items-center justify-between px-5 py-2 hover:bg-warm-50/80 transition-colors">
+            <span className="text-xs font-semibold text-warm-600">Filtros</span>
+            {filtersExpanded ? <ChevronUp size={14} className="text-warm-400" /> : <ChevronDown size={14} className="text-warm-400" />}
+          </button>
+          <div className={`${filtersExpanded ? '' : 'hidden sm:block'} px-5 py-2 space-y-2`}>
           <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5">
             <Clock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
@@ -444,7 +450,7 @@ export default function Folios() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
             <MultiSelect
               icon={Building2}
               placeholder={t('fep.empresa')}
@@ -470,8 +476,8 @@ export default function Folios() {
                 <X className="w-3 h-3" />{t('common.clear')}
               </button>
             )}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 h-10 bg-warm-50 border border-warm-200 rounded-xl px-3 min-w-[220px] transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+            <div className="col-span-2 sm:col-span-1 flex items-center gap-2">
+              <div className="flex items-center gap-1.5 h-10 bg-warm-50 border border-warm-200 rounded-xl px-3 min-w-[220px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
                 <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
                 <input type="text" value={folioSearchInput}
                   onChange={e => handleFolioSearch(e.target.value)}
@@ -492,6 +498,7 @@ export default function Folios() {
                 </button>
               )}
             </div>
+          </div>
           </div>
         </div>
 

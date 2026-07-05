@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx'
 import {
   X, CheckCircle2, XCircle, AlertTriangle, Copy, Check,
   Clock, ScanBarcode, Package2, BadgeCheck, User, Timer,
-  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Edit3, Trash2, Search, ChevronRight,
+  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Edit3, Trash2, Search, ChevronRight, ChevronUp, ChevronDown,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
@@ -854,6 +854,7 @@ export default function SurtidoRegistros() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [copiedCode, setCopiedCode] = useState('')
+  const [filtersExpanded, setFiltersExpanded] = useState(true)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const searchDebounceRef = useRef(null)
@@ -1050,7 +1051,12 @@ export default function SurtidoRegistros() {
         }
       />
 
-      <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2 space-y-2">
+      <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60">
+        <button onClick={() => setFiltersExpanded(v => !v)} className="sm:hidden w-full flex items-center justify-between px-5 py-2 hover:bg-warm-50/80 transition-colors">
+          <span className="text-xs font-semibold text-warm-600">Filtros</span>
+          {filtersExpanded ? <ChevronUp size={14} className="text-warm-400" /> : <ChevronDown size={14} className="text-warm-400" />}
+        </button>
+        <div className={`${filtersExpanded ? '' : 'hidden sm:block'} px-5 py-2 space-y-2`}>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5">
             <Clock className="w-3.5 h-3.5 text-warm-400 shrink-0" />
@@ -1097,7 +1103,7 @@ export default function SurtidoRegistros() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
           <select
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
@@ -1121,7 +1127,7 @@ export default function SurtidoRegistros() {
             />
           )}
 
-          <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 w-full max-w-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+          <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 w-full max-w-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
             <ScanBarcode size={13} className="text-warm-400 shrink-0" />
             <input
               type="text"
@@ -1160,6 +1166,7 @@ export default function SurtidoRegistros() {
             </span>
           )}
 
+        </div>
         </div>
       </div>
 

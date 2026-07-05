@@ -8,7 +8,7 @@ import * as ds from '../services/dropscanService'
 import { getFolios } from '../../Fep/services/fepService'
 import {
   BarChart3, Download, TrendingUp, Package, CheckCircle, Building2,
-  Radio, Clock, User, ChevronDown, FileText, LayoutDashboard, Table2
+  Radio, Clock, User, ChevronDown, ChevronUp, FileText, LayoutDashboard, Table2
 } from 'lucide-react'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -51,6 +51,7 @@ export default function Reportes() {
   ]
   const weekAgo = subtractDays(today, 7)
 
+  const [filtersExpanded, setFiltersExpanded] = useState(true)
   const [fechaInicio, setFechaInicio] = useState(weekAgo)
   const [fechaFin, setFechaFin] = useState(today)
   const [empresaFilter, setEmpresaFilter] = useState([])
@@ -207,7 +208,12 @@ export default function Reportes() {
       <Header title={t('reports.title')} subtitle={t('reports.subtitle')} />
 
       {/* Sticky filter bar */}
-      <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2.5 space-y-2">
+      <div className="sticky top-0 z-[5] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60">
+        <button onClick={() => setFiltersExpanded(v => !v)} className="sm:hidden w-full flex items-center justify-between px-5 py-2 hover:bg-warm-50/80 transition-colors">
+          <span className="text-xs font-semibold text-warm-600">Filtros</span>
+          {filtersExpanded ? <ChevronUp size={14} className="text-warm-400" /> : <ChevronDown size={14} className="text-warm-400" />}
+        </button>
+        <div className={`${filtersExpanded ? '' : 'hidden sm:block'} px-5 py-2.5 space-y-2`}>
         {/* Row 1: date range + shortcuts */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5 shrink-0">
@@ -234,7 +240,7 @@ export default function Reportes() {
           ))}
         </div>
         {/* Row 2: dropdowns + export */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
           <MultiSelect icon={Building2} placeholder={t('history.company')}
             options={empresas.map(e => ({ value: e.id, label: e.nombre, color: e.color }))}
             selected={empresaFilter} onChange={setEmpresaFilter} />
@@ -276,10 +282,11 @@ export default function Reportes() {
             )}
           </div>
         </div>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-warm-100 px-5 bg-white">
+      <div className="flex gap-1 border-b border-warm-100 px-5 bg-white overflow-x-auto scrollbar-none">
         {TABS.map(tab => (
           <button key={tab.id} onClick={() => setReportTab(tab.id)}
             className={`flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px ${
