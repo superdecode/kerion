@@ -8,8 +8,8 @@ import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils
 
 const router = Router()
 let inboundLineColumnsCache = null
-const EXPORT_SYNC_WARN_ROWS = 100000
-const EXPORT_SYNC_MAX_ROWS = 150000
+const EXPORT_SYNC_WARN_ROWS = 50000
+const EXPORT_SYNC_MAX_ROWS = 100000
 
 function normalizedCodeSql(column) {
   return `UPPER(REGEXP_REPLACE(

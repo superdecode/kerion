@@ -566,8 +566,12 @@ export default function RecepcionDetalle() {
       const suffix = scope === 'all' ? 'recepcion' : scope
       XLSX.writeFile(wb, `${exportData.order?.folio || order.folio}-${suffix}.xlsx`)
     } catch (err) {
-      const message = err.response?.data?.error || t('rec.export.error')
-      toast.error(message)
+      const data = err.response?.data
+      if (data?.code === 'EXPORT_TOO_LARGE') {
+        toast.error(data.error, { duration: 8000 })
+      } else {
+        toast.error(data?.error || t('rec.export.error'))
+      }
     } finally {
       setExportingScope(null)
     }
