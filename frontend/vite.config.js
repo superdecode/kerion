@@ -35,7 +35,6 @@ export default defineConfig({
     host: '0.0.0.0',
     open: true,
     hmr: {
-      host: 'localhost',
       port: 4500,
     },
     proxy: {

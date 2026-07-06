@@ -23,7 +23,9 @@ function extractSlugFromHost(host) {
 
 function isLocalDevHost(host) {
   const withoutPort = String(host || '').split(':')[0].trim().toLowerCase()
-  return withoutPort === 'localhost' || withoutPort === '127.0.0.1' || withoutPort === '0.0.0.0'
+  if (['localhost', '127.0.0.1', '0.0.0.0'].includes(withoutPort)) return true
+  // Private LAN IPs: allow mobile on same local network to use x-tenant-slug header
+  return /^(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+)$/.test(withoutPort)
 }
 
 // Decode JWT without verification — only used for tenant routing in dev

@@ -75,6 +75,14 @@ function isAllowedDevOrigin(origin) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
 }
 
+// Private/LAN IP ranges: 10.x, 172.16-31.x, 192.168.x
+function isLanIpOrigin(origin) {
+  try {
+    const { hostname } = new URL(origin)
+    return /^(10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+)$/.test(hostname)
+  } catch { return false }
+}
+
 function isAllowedOrigin(origin) {
   if (!origin) return true
 
@@ -87,17 +95,16 @@ function isAllowedOrigin(origin) {
   )
   if (allowedOrigins.has(origin)) return true
 
-  // Dev: allow localhost
-  if (env.NODE_ENV !== 'production' && isAllowedDevOrigin(origin)) return true
+  // Dev: allow localhost and LAN IPs (mobile on same network)
+  if (env.NODE_ENV !== 'production' && (isAllowedDevOrigin(origin) || isLanIpOrigin(origin))) return true
 
-  // Allow any subdomain of TENANT_BASE_DOMAIN (wildcard tenant subdomains)
+  // Allow any subdomain of TENANT_BASE_DOMAIN (wildcard tenant subdomains).
+  // Allow http in non-production so mobile on staging without TLS is not blocked.
   try {
     const { hostname, protocol } = new URL(origin)
     const baseDomain = env.TENANT_BASE_DOMAIN
-    if (
-      protocol === 'https:' &&
-      (hostname === baseDomain || hostname.endsWith(`.${baseDomain}`))
-    ) return true
+    const validProtocol = protocol === 'https:' || env.NODE_ENV !== 'production'
+    if (validProtocol && (hostname === baseDomain || hostname.endsWith(`.${baseDomain}`))) return true
   } catch {}
 
   return false
