@@ -12,12 +12,15 @@ export function useFilterAutoCollapse(initialExpanded = true) {
     const COLLAPSE_AT = 60
     const EXPAND_AT = 20
 
-    const scrollEl = document.querySelector('main')
-    if (!scrollEl) return
-
-    function handleScroll() {
+    // Capture-phase listener catches scroll on ANY element, not just document.
+    // We filter to large containers (not dropdowns/modals) by requiring height > 40% viewport.
+    function handleScroll(e) {
       if (window.innerWidth >= 640) return
-      const st = scrollEl.scrollTop
+      const target = e.target
+      if (!(target instanceof Element)) return
+      if (target.clientHeight < window.innerHeight * 0.4) return
+
+      const st = target.scrollTop
       if (st > COLLAPSE_AT && expandedRef.current) {
         setFiltersExpanded(false)
       } else if (st <= EXPAND_AT && !expandedRef.current) {
@@ -25,8 +28,8 @@ export function useFilterAutoCollapse(initialExpanded = true) {
       }
     }
 
-    scrollEl.addEventListener('scroll', handleScroll, { passive: true })
-    return () => scrollEl.removeEventListener('scroll', handleScroll)
+    document.addEventListener('scroll', handleScroll, { capture: true, passive: true })
+    return () => document.removeEventListener('scroll', handleScroll, { capture: true })
   }, [])
 
   return [filtersExpanded, setFiltersExpanded]
