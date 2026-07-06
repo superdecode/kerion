@@ -148,7 +148,7 @@ router.delete('/empresas/:id',
   requirePermission('dropscan.configuracion', 'editar'),
   async (req, res) => {
     try {
-      const inUse = await req.tQuery('SELECT COUNT(*) FROM tarimas WHERE empresa_id = $1', [req.params.id])
+      const inUse = await req.tQuery('SELECT COUNT(*) FROM tarimas WHERE empresa_id = $1 AND tenant_id = $2', [req.params.id, req.tenantId])
       if (parseInt(inUse.rows[0].count) > 0) {
         return res.status(409).json({ error: 'No se puede eliminar: la empresa está siendo utilizada en tarimas' })
       }
@@ -304,7 +304,7 @@ router.delete('/canales/:id',
   requirePermission('dropscan.configuracion', 'editar'),
   async (req, res) => {
     try {
-      const inUse = await req.tQuery('SELECT COUNT(*) FROM tarimas WHERE canal_id = $1', [req.params.id])
+      const inUse = await req.tQuery('SELECT COUNT(*) FROM tarimas WHERE canal_id = $1 AND tenant_id = $2', [req.params.id, req.tenantId])
       if (parseInt(inUse.rows[0].count) > 0) {
         return res.status(409).json({ error: 'No se puede eliminar: el canal está siendo utilizado en tarimas' })
       }

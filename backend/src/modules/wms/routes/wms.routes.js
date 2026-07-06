@@ -295,7 +295,9 @@ async function assertSessionOwnership(req, sessionId) {
   )
   if (sessionRes.rows.length === 0) return null
   const session = sessionRes.rows[0]
-  if (session.operator_id !== req.user.id && req.fullUser.rol_nombre !== 'Administrador') {
+  const isAdmin = req.fullUser.es_admin_tenant === true ||
+    (req.fullUser.es_admin_tenant === undefined && req.fullUser.rol_nombre === 'Administrador')
+  if (session.operator_id !== req.user.id && !isAdmin) {
     return false
   }
   return session
@@ -776,7 +778,9 @@ router.put('/scan-session/:id',
       if (sessionRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
 
       const session = sessionRes.rows[0]
-      if (session.operator_id !== req.user.id && req.fullUser.rol_nombre !== 'Administrador') {
+      const isAdmin = req.fullUser.es_admin_tenant === true ||
+        (req.fullUser.es_admin_tenant === undefined && req.fullUser.rol_nombre === 'Administrador')
+      if (session.operator_id !== req.user.id && !isAdmin) {
         return res.status(403).json({ success: false, error: 'No autorizado para modificar esta sesión' })
       }
 
@@ -1042,7 +1046,9 @@ router.put('/scan-event/:id',
       if (eventRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Registro no encontrado' })
       const event = eventRes.rows[0]
       if (event.status !== 'open') return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
-      if (event.operator_id !== req.user.id && req.fullUser.rol_nombre !== 'Administrador') {
+      const isEventAdmin = req.fullUser.es_admin_tenant === true ||
+        (req.fullUser.es_admin_tenant === undefined && req.fullUser.rol_nombre === 'Administrador')
+      if (event.operator_id !== req.user.id && !isEventAdmin) {
         return res.status(403).json({ success: false, error: 'No autorizado para modificar este registro' })
       }
 

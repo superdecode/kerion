@@ -70,13 +70,14 @@ export function parseDateValue(value) {
   // Normalize: strip AM/PM suffix (Google Sheets 12-hour format) before D/M/Y matching
   const normalized = raw.replace(/\s*[AaPp][Mm]$/, '').trim()
 
-  // Google Sheets exports M/D/Y (US locale). Default: first=month, second=day.
-  // Exception: if first > 12 it can't be a month, so format is D/M/Y (day first).
+  // Ambiguous two-part dates: D/M/Y vs M/D/Y.
+  // Unambiguous: if first > 12 it must be the day (D/M/Y); if second > 12 it must be the day (M/D/Y).
+  // Ambiguous (both ≤ 12): default to D/M/Y — the format used by the WMS and Mexican locale.
   const dmy = normalized.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
   if (dmy) {
     const first = Number(dmy[1])
     const second = Number(dmy[2])
-    const [day, month] = first > 12 ? [first, second] : [second, first]
+    const [day, month] = first > 12 ? [first, second] : second > 12 ? [second, first] : [first, second]
     return parseDateParts(dmy[3], month, day, dmy[4] || 0, dmy[5] || 0, dmy[6] || 0)
   }
 

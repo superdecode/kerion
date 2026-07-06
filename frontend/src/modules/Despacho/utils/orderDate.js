@@ -20,10 +20,10 @@ export function getOrderDateKey(order) {
   if (slashDate) {
     const first  = Number(slashDate[1])
     const second = Number(slashDate[2])
-    // Google Sheets M/D/Y default. Only treat first as day when first > 12
-    // (months can't exceed 12, so it must be the day in that case).
-    const day   = first > 12 ? first : second
-    const month = first > 12 ? second : first
+    // Unambiguous: first > 12 → must be day (D/M/Y). second > 12 → must be day (M/D/Y).
+    // Ambiguous (both ≤ 12): default D/M/Y — WMS and Mexican locale standard.
+    const day   = first > 12 ? first : second > 12 ? second : first
+    const month = first > 12 ? second : second > 12 ? first : second
     return `${slashDate[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
