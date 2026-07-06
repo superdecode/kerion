@@ -203,6 +203,17 @@
 }
 
 @layer utilities {
+  /* iOS momentum scrolling + ensures scroll events fire on older iOS Safari (<13). */
+  .overflow-y-auto,
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* pan-y only for vertical-only containers; pan-x (tables) must not be constrained. */
+  .overflow-y-auto {
+    touch-action: pan-y;
+  }
+
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
