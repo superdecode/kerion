@@ -204,7 +204,8 @@ export default function Ordenes() {
       let dateKey = ''
       if (orderDate) {
         try {
-          dateKey = /^\d{4}-\d{2}-\d{2}/.test(orderDate) ? orderDate.slice(0, 10) : toDateKey(orderDate)
+          const raw = /^\d{4}-\d{2}-\d{2}/.test(orderDate) ? orderDate.slice(0, 10) : toDateKey(orderDate)
+          dateKey = (raw && raw !== '—') ? raw : ''
         } catch { dateKey = '' }
       }
       if (dateFrom && dateKey && dateKey < dateFrom) return false
@@ -390,8 +391,10 @@ export default function Ordenes() {
     function getDateKey(order) {
       const orderDate = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
       if (!orderDate) return ''
-      try { return /^\d{4}-\d{2}-\d{2}/.test(orderDate) ? orderDate.slice(0, 10) : toDateKey(orderDate) }
-      catch { return '' }
+      try {
+        const raw = /^\d{4}-\d{2}-\d{2}/.test(orderDate) ? orderDate.slice(0, 10) : toDateKey(orderDate)
+        return (raw && raw !== '—') ? raw : ''
+      } catch { return '' }
     }
 
     function isInRange(order) {
