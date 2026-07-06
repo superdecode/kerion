@@ -10,7 +10,8 @@ function getOrderDateKey(order) {
   const raw = order.outboundTime || order.expectedTime || order.orderCreateTime || ''
   if (!raw) return ''
   try {
-    return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : toDateKey(raw)
+    const k = /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : toDateKey(raw)
+    return (k && k !== '—') ? k : ''
   } catch { return '' }
 }
 

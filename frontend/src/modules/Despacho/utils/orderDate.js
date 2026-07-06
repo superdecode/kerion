@@ -27,5 +27,5 @@ export function getOrderDateKey(order) {
     return `${slashDate[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
-  try { return toDateKey(str) } catch { return '' }
+  try { const k = toDateKey(str); return (k && k !== '—') ? k : '' } catch { return '' }
 }

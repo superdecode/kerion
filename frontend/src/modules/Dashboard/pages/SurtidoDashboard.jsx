@@ -213,7 +213,7 @@ export default function SurtidoDashboard({ dateRange }) {
   for (const r of (outboundListData?.data?.records || [])) {
     if (!r.outboundTime) continue
     const key = toDateKey(r.outboundTime)
-    if (!key) continue
+    if (!key || key === '—') continue
     if (!expectedByDay[key]) expectedByDay[key] = { ordenes: 0, cajas: 0 }
     expectedByDay[key].ordenes += 1
     expectedByDay[key].cajas += Number(r.outboundBoxCount || r.quantity || 0)

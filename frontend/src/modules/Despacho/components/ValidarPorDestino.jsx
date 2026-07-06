@@ -97,13 +97,16 @@ function getOrderDateKey(order) {
   if (slashDate) {
     const first = Number(slashDate[1])
     const second = Number(slashDate[2])
-    // Google Sheets M/D/Y default. Only treat first as day when first > 12.
-    const day   = first > 12 ? first : second
-    const month = first > 12 ? second : first
+    // first > 12 → D/M/Y unambiguous. second > 12 → M/D/Y unambiguous. Both ≤ 12 → D/M/Y (WMS/MX default).
+    const day   = first > 12 ? first : second > 12 ? second : first
+    const month = first > 12 ? second : second > 12 ? first  : second
     return `${slashDate[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
-  try { return toDateKey(str) } catch { return '' }
+  try {
+    const k = toDateKey(str)
+    return (k && k !== '—') ? k : ''
+  } catch { return '' }
 }
 
 function CopyMetaPill({ label, value, tone = 'primary' }) {

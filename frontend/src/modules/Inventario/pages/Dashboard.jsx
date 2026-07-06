@@ -64,7 +64,7 @@ export default function InventarioDashboard() {
     const dayMap = {}
     sessions.forEach(s => {
       const day = s.started_at ? toDateKey(s.started_at) : ''
-      if (!day) return
+      if (!day || day === '—') return
       dayMap[day] = (dayMap[day] || 0) + (s.total_scanned || 0)
     })
     return Object.entries(dayMap)
