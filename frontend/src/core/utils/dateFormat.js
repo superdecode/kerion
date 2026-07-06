@@ -72,12 +72,24 @@ export function parseDateValue(value) {
 
   // Ambiguous two-part dates: D/M/Y vs M/D/Y.
   // Unambiguous: if first > 12 it must be the day (D/M/Y); if second > 12 it must be the day (M/D/Y).
-  // Ambiguous (both ≤ 12): default to D/M/Y — the format used by the WMS and Mexican locale.
+  // Ambiguous (both ≤ 12): Google Sheets exports date cells without leading zeros (e.g. "7/8/2026"
+  // = July 8 in M/D/Y). Zero-padded strings (e.g. "08/07/2026") are text entries in Mexican D/M/Y.
   const dmy = normalized.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
   if (dmy) {
     const first = Number(dmy[1])
     const second = Number(dmy[2])
-    const [day, month] = first > 12 ? [first, second] : second > 12 ? [second, first] : [first, second]
+    let day, month
+    if (first > 12) {
+      day = first; month = second
+    } else if (second > 12) {
+      month = first; day = second
+    } else {
+      // Both ≤ 12: use leading-zero presence to disambiguate.
+      // No leading zeros → Google Sheets date value (M/D/Y). Any leading zero → D/M/Y text.
+      const hasLeadingZero = dmy[1].startsWith('0') || dmy[2].startsWith('0')
+      if (hasLeadingZero) { day = first; month = second }
+      else               { month = first; day = second }
+    }
     return parseDateParts(dmy[3], month, day, dmy[4] || 0, dmy[5] || 0, dmy[6] || 0)
   }
 

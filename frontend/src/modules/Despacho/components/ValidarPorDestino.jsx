@@ -98,8 +98,14 @@ function getOrderDateKey(order) {
     const first = Number(slashDate[1])
     const second = Number(slashDate[2])
     // first > 12 → D/M/Y unambiguous. second > 12 → M/D/Y unambiguous. Both ≤ 12 → D/M/Y (WMS/MX default).
-    const day   = first > 12 ? first : second > 12 ? second : first
-    const month = first > 12 ? second : second > 12 ? first  : second
+    let day, month
+    if (first > 12)       { day = first; month = second }
+    else if (second > 12) { month = first; day = second }
+    else {
+      const hasLeadingZero = slashDate[1].startsWith('0') || slashDate[2].startsWith('0')
+      if (hasLeadingZero) { day = first; month = second }
+      else                { month = first; day = second }
+    }
     return `${slashDate[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
