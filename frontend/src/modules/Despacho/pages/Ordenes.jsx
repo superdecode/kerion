@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useFilterAutoCollapse } from '../../../core/hooks/useFilterAutoCollapse'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -130,7 +131,7 @@ export default function Ordenes() {
     return ['crear', 'actualizar', 'eliminar'].includes(lvl)
   })
 
-  const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
   const [searchInput, setSearchInput]   = useState('')
   const [search, setSearch]             = useState('')
   const [dateFrom, setDateFrom]         = useState(() => getSmartDespachoDates().dateFrom)

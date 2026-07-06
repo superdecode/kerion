@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useFilterAutoCollapse } from '../../../core/hooks/useFilterAutoCollapse'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
@@ -854,7 +855,7 @@ export default function SurtidoRegistros() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
   const [copiedCode, setCopiedCode] = useState('')
-  const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const searchDebounceRef = useRef(null)
@@ -1092,7 +1093,7 @@ export default function SurtidoRegistros() {
                 setDateTo(end)
                 setPage(1)
               }}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+              className={`hidden sm:inline-flex px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
                 datePreset === String(d)
                   ? 'bg-primary-50 text-primary-700 border-primary-200'
                   : 'bg-warm-100 text-warm-600 border-warm-200 hover:bg-warm-200'

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useFilterAutoCollapse } from '../../../core/hooks/useFilterAutoCollapse'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import Header from '../../../core/components/layout/Header'
@@ -51,7 +52,7 @@ export default function Reportes() {
   ]
   const weekAgo = subtractDays(today, 7)
 
-  const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
   const [fechaInicio, setFechaInicio] = useState(weekAgo)
   const [fechaFin, setFechaFin] = useState(today)
   const [empresaFilter, setEmpresaFilter] = useState([])
@@ -236,7 +237,7 @@ export default function Reportes() {
               setFechaInicio(d === 0 ? currentToday : subtractDays(currentToday, d))
               setFechaFin(currentToday)
             }}
-              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors">{label}</button>
+              className="hidden sm:inline-flex px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors">{label}</button>
           ))}
         </div>
         {/* Row 2: dropdowns + export */}

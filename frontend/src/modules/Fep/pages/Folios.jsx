@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useFilterAutoCollapse } from '../../../core/hooks/useFilterAutoCollapse'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -42,7 +43,7 @@ export default function Folios() {
 
   const defaultEnd = getToday()
   const defaultStart = subtractDays(defaultEnd, 30)
-  const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
   const [datePreset, setDatePreset] = useState('30')
 
   const [page, setPage] = useState(1)
@@ -440,7 +441,7 @@ export default function Folios() {
                 setDatePreset(String(d))
                 setFilters(f => ({ ...f, fecha_desde: d === 0 ? today : subtractDays(today, d), fecha_fin: today }))
                 setPage(1)
-              }} className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+              }} className={`hidden sm:inline-flex px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
                 datePreset === String(d)
                   ? 'bg-primary-50 text-primary-700 border-primary-200'
                   : 'bg-warm-100 text-warm-600 border-warm-200 hover:bg-warm-200'
@@ -490,14 +491,12 @@ export default function Folios() {
                 )}
               </div>
             </div>
-            <div className="ml-auto flex items-center gap-2">
-              {canCreateFolios && (
-                <button onClick={openWizard}
-                  className="btn-primary inline-flex items-center gap-2">
-                  <FilePlus className="w-4 h-4" /> {t('fep.newFolio')}
-                </button>
-              )}
-            </div>
+            {canCreateFolios && (
+              <button onClick={openWizard}
+                className="col-span-2 sm:col-span-1 btn-primary inline-flex items-center justify-center gap-2 sm:ml-auto">
+                <FilePlus className="w-4 h-4" /> {t('fep.newFolio')}
+              </button>
+            )}
           </div>
           </div>
         </div>

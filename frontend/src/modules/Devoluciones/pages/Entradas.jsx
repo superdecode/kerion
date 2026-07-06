@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
+import { useFilterAutoCollapse } from '../../../core/hooks/useFilterAutoCollapse'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -68,7 +69,7 @@ export default function Entradas() {
   const defaultEnd = getToday()
   const defaultStart = subtractDays(defaultEnd, 30)
 
-  const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
   const [qInput, setQInput]   = useState('')
   const [qFilter, setQFilter] = useState('')
   const [estados, setEstados] = useState([])
@@ -243,7 +244,7 @@ export default function Entradas() {
             {[{ label: t('dev.entradas.today'), d: 0 }, { label: t('dev.entradas.days7'), d: 7 }, { label: t('dev.entradas.days30'), d: 30 }].map(({ label, d }) => (
               <button key={label}
                 onClick={() => { const today = getToday(); setFechaDesde(d === 0 ? today : subtractDays(today, d)); setFechaHasta(today) }}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors"
+                className="hidden sm:inline-flex px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-warm-100 text-warm-600 hover:bg-warm-200 transition-colors"
               >{label}</button>
             ))}
           </div>
@@ -261,33 +262,30 @@ export default function Entradas() {
               selected={estados}
               onChange={setEstados}
             />
-            <div className="col-span-2 sm:col-span-1 flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[220px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
-                <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
-                <input type="text" value={qInput} onChange={e => handleQChange(e.target.value)}
-                  placeholder={t('dev.entradas.search')}
-                  className="text-xs outline-none bg-transparent text-warm-700 flex-1 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
-                {qInput && <button onClick={() => handleQChange('')} className="text-warm-400 hover:text-warm-600"><X className="w-3 h-3" /></button>}
-              </div>
-              {hasActiveFilters && (
-                <button onClick={clearFilters} className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
-                  <X className="w-3 h-3" /> {t('common.clear')}
-                </button>
-              )}
+            <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[220px] flex-1 transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
+              <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+              <input type="text" value={qInput} onChange={e => handleQChange(e.target.value)}
+                placeholder={t('dev.entradas.search')}
+                className="text-xs outline-none bg-transparent text-warm-700 flex-1 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0" />
+              {qInput && <button onClick={() => handleQChange('')} className="text-warm-400 hover:text-warm-600"><X className="w-3 h-3" /></button>}
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              {canCreate && (
-                <button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}
-                  className="btn-primary inline-flex items-center gap-2 hover:shadow-glow hover:-translate-y-[1px] transition-all duration-200 active:scale-[0.97]">
-                  {createMutation.isPending
-                    ? <span className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
-                    : <Plus className="w-4 h-4" />
-                  }
-                  {createMutation.isPending ? t('dev.entradas.creating') : t('dev.entradas.new')}
-                </button>
-              )}
-            </div>
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="inline-flex items-center gap-1 h-10 px-2 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors">
+                <X className="w-3 h-3" /> {t('common.clear')}
+              </button>
+            )}
+
+            {canCreate && (
+              <button onClick={() => createMutation.mutate()} disabled={createMutation.isPending}
+                className="col-span-2 sm:col-span-1 btn-primary inline-flex items-center justify-center gap-2 hover:shadow-glow hover:-translate-y-[1px] transition-all duration-200 active:scale-[0.97] sm:ml-auto">
+                {createMutation.isPending
+                  ? <span className="w-4 h-4 border-2 border-white/60 border-t-white rounded-full animate-spin" />
+                  : <Plus className="w-4 h-4" />
+                }
+                {createMutation.isPending ? t('dev.entradas.creating') : t('dev.entradas.new')}
+              </button>
+            )}
           </div>
           </div>
         </div>

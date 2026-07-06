@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react'
+import { useFilterAutoCollapse } from '../../../core/hooks/useFilterAutoCollapse'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -1026,7 +1027,7 @@ export default function Ordenes() {
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
   const [cancelStatusModal, setCancelStatusModal] = useState({ open: false, obcs: [], status: 'cancelled', note: '' })
   const [isTransitioning, setIsTransitioning] = useState(false)
-  const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
   const timeFromInputRef = useRef(null)
   const dateModeRef = useRef(null)
   const [dateModeOpen, setDateModeOpen] = useState(false)
@@ -2038,17 +2039,6 @@ export default function Ordenes() {
               </span>
             )}
 
-            <div className="ml-auto flex items-center gap-2 shrink-0">
-              {canCreateValidation && (
-                <button
-                  className="btn-primary inline-flex items-center gap-2 text-sm py-2 px-4 h-10"
-                  onClick={() => navigate('/Surtido/validacion')}
-                >
-                  <BadgeCheck size={15} />
-                  {t('surtido.ordenes.validate_btn')}
-                </button>
-              )}
-            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
@@ -2122,6 +2112,16 @@ export default function Ordenes() {
             >
               <Filter size={13} /> {t('common.apply')}
             </button>
+
+            {canCreateValidation && (
+              <button
+                className="col-span-2 sm:col-span-1 btn-primary inline-flex items-center justify-center gap-2 text-sm h-10 sm:ml-auto"
+                onClick={() => navigate('/Surtido/validacion')}
+              >
+                <BadgeCheck size={15} />
+                {t('surtido.ordenes.validate_btn')}
+              </button>
+            )}
 
           </div>
         </div>

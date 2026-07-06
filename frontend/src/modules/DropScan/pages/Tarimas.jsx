@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useFilterAutoCollapse } from '../../../core/hooks/useFilterAutoCollapse'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -43,7 +44,7 @@ const TARIMA_CODE_STYLE = {
 export default function Tarimas() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
   const [page, setPage] = useState(1)
   const [pageLimit, setPageLimit] = useState(50)
   const defaultEnd = getToday()
@@ -500,7 +501,7 @@ export default function Tarimas() {
                 setDatePreset(String(d))
                 setFilters(f => ({ ...f, fecha_inicio: s, fecha_fin: todayNow })); setPage(1)
               }}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+              className={`hidden sm:inline-flex px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
                 datePreset === String(d)
                   ? 'bg-primary-50 text-primary-700 border-primary-200'
                   : 'bg-warm-100 text-warm-600 border-warm-200 hover:bg-warm-200'
@@ -639,15 +640,15 @@ export default function Tarimas() {
                 </AnimatePresence>
               </div>
             </div>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="col-span-2 sm:col-span-1 flex items-center gap-2 sm:ml-auto">
               {canExportTarimas && !selectMode && (
                 <button onClick={() => { setSelectMode(true); setSelectedIds(new Set()) }}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold bg-success-600 text-white hover:bg-success-700 rounded-xl transition-all duration-200 hover:shadow-glow hover:-translate-y-[1px] active:scale-[0.97]">
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold bg-success-600 text-white hover:bg-success-700 rounded-xl transition-all duration-200 hover:shadow-glow hover:-translate-y-[1px] active:scale-[0.97]">
                   <Download className="w-4 h-4" /> {t('common.export')}
                 </button>
               )}
               {selectMode && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-semibold text-primary-600">{selectedIds.size} {t('history.selected')}</span>
                   <button onClick={toggleSelectAll}
                     className="px-2.5 py-1 text-[11px] font-semibold bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-lg transition-colors">
