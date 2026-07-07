@@ -19,10 +19,10 @@ const TRANSIENT_DB_ERROR_CODES = new Set([
   'ECONNREFUSED',
   'EPIPE',
 ])
-const DEFAULT_POOL_MAX = env.NODE_ENV === 'production' ? 2 : 5
+const DEFAULT_POOL_MAX = env.NODE_ENV === 'production' ? 4 : 5
 const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX, 10) || DEFAULT_POOL_MAX
 const DB_IDLE_TIMEOUT_MS = parseInt(process.env.DB_IDLE_TIMEOUT_MS, 10) || 5000
-const DB_CONNECTION_TIMEOUT_MS = parseInt(process.env.DB_CONNECTION_TIMEOUT_MS, 10) || 15000
+const DB_CONNECTION_TIMEOUT_MS = parseInt(process.env.DB_CONNECTION_TIMEOUT_MS, 10) || 5000
 const DB_QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS, 10) || 12000
 const DB_STATEMENT_TIMEOUT_MS = parseInt(process.env.DB_STATEMENT_TIMEOUT_MS, 10) || 12000
 
@@ -73,20 +73,32 @@ export const query = (text, params) => pool.query(text, params)
 export const getClient = () => pool.connect()
 
 // Execute a single query scoped to a tenant (SET LOCAL requires a transaction).
+// Retries once on pool checkout timeout (ECHECKOUTTIMEOUT) after a short delay.
 export async function tenantQuery(tenantId, text, params) {
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-    assertTenantId(tenantId)
-    await client.query(`SET LOCAL app.tenant_id = '${tenantId}'`)
-    const result = await client.query(text, params)
-    await client.query('COMMIT')
-    return result
-  } catch (err) {
-    await client.query('ROLLBACK')
-    throw err
-  } finally {
-    client.release()
+  for (let attempt = 0; attempt <= 1; attempt++) {
+    let client
+    try {
+      client = await pool.connect()
+      await client.query('BEGIN')
+      assertTenantId(tenantId)
+      await client.query(`SET LOCAL app.tenant_id = '${tenantId}'`)
+      const result = await client.query(text, params)
+      await client.query('COMMIT')
+      return result
+    } catch (err) {
+      if (client) {
+        try { await client.query('ROLLBACK') } catch {}
+        client.release()
+        client = null
+      }
+      if (err.code === 'ECHECKOUTTIMEOUT' && attempt === 0) {
+        await new Promise(r => setTimeout(r, 300))
+        continue
+      }
+      throw err
+    } finally {
+      if (client) client.release()
+    }
   }
 }
 

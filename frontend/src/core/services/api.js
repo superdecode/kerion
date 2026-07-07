@@ -43,7 +43,7 @@ const api = axios.create({
 // Track whether we're already handling a 401 redirect to prevent loops
 let isHandling401 = false
 let backendUnavailableUntil = 0
-const BACKEND_COOLDOWN_MS = 15000
+const BACKEND_COOLDOWN_MS = 8000
 
 // Per-endpoint 429 cooldown: key = url prefix, value = timestamp when cooldown expires
 const rateLimitCooldowns = new Map()
@@ -133,7 +133,7 @@ api.interceptors.response.use(
     useOfflineStore.getState().clearConnectionIssue()
     return response
   },
-  (error) => {
+  async (error) => {
     captureApiError(error)
     const isNetworkFailure = !error.response && (
       error.code === 'ERR_NETWORK' ||
@@ -142,6 +142,23 @@ api.interceptors.response.use(
       /Network Error|timeout/i.test(error.message || '')
     )
     const isServiceUnavailable = [502, 503, 504].includes(error.response?.status)
+
+    // Auto-retry once on 503 (transient DB pool exhaustion) before declaring backend down.
+    // Only retry GET requests and only if this is the first attempt.
+    const method = String(error.config?.method || 'get').toLowerCase()
+    if (error.response?.status === 503 && method === 'get' && !error.config?._retried503) {
+      error.config._retried503 = true
+      await new Promise(r => setTimeout(r, 1500))
+      try {
+        return await api.request(error.config)
+      } catch (retryErr) {
+        // If retry also fails, fall through to normal error handling below
+        const retryError = retryErr
+        retryError._retried503 = true
+        captureApiError(retryError)
+      }
+    }
+
     if ((isNetworkFailure || isServiceUnavailable) && !shouldSkipBackendCooldown(error.config)) {
       backendUnavailableUntil = Date.now() + BACKEND_COOLDOWN_MS
       _onBackendStatus?.(false)
