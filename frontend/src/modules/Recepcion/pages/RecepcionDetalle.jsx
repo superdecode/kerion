@@ -171,7 +171,6 @@ export default function RecepcionDetalle() {
   const [novPageSize, setNovPageSize] = useState(100)
   const [eventSortKey, setEventSortKey] = useState('scanned_at')
   const [eventSortDir, setEventSortDir] = useState('desc')
-  const [progressiveEventsData, setProgressiveEventsData] = useState(null)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [forceCloseOpen, setForceCloseOpen] = useState(false)
   const [exportingScope, setExportingScope] = useState(null)
@@ -189,7 +188,6 @@ export default function RecepcionDetalle() {
     setNovedadSearch('')
     setLinePage(1)
     setEventPage(1)
-    setProgressiveEventsData(null)
     setNovPage(1)
     setNuevoTipo('')
     setNuevoCodigo('')
@@ -221,45 +219,13 @@ export default function RecepcionDetalle() {
     staleTime: STALE.SHORT,
   })
 
-  useEffect(() => {
-    if (!eventsData?.events) return undefined
-
-    let cancelled = false
-    setProgressiveEventsData(eventsData)
-    if (!eventsData.truncated) return () => { cancelled = true }
-
-    const loadRemainingEvents = async () => {
-      let page = 2
-      let allEvents = [...eventsData.events]
-      let hasMore = true
-
-      // Two pages at a time keeps the UI responsive without exhausting the DB pool.
-      while (!cancelled && hasMore && allEvents.length < 50000) {
-        const pages = [page, page + 1]
-        const responses = await Promise.all(
-          pages.map(currentPage => getScanEvents(id, { compact: 1, limit: 500, page: currentPage }))
-        )
-        if (cancelled) return
-
-        for (const response of responses) {
-          allEvents.push(...(response.events || []))
-          if (!response.truncated) {
-            hasMore = false
-            break
-          }
-        }
-        setProgressiveEventsData({
-          ...eventsData,
-          events: allEvents,
-          truncated: hasMore,
-        })
-        page += pages.length
-      }
-    }
-
-    loadRemainingEvents().catch(() => {})
-    return () => { cancelled = true }
-  }, [eventsData, id])
+  const { data: bulkEventsData } = useQuery({
+    queryKey: ['recepcion-scan-events', id, 'detail-bulk'],
+    queryFn: () => getScanEvents(id, { compact: 1, bulk: 1 }, { timeout: 15000 }),
+    enabled: canQueryRecepcion,
+    retry: false,
+    staleTime: STALE.SHORT,
+  })
 
   const { data: novedadesData } = useQuery({
     queryKey: ['recepcion-novedades', id],
@@ -381,18 +347,18 @@ export default function RecepcionDetalle() {
 
   const lineUbicacionMap = useMemo(() => {
     const map = new Map()
-    for (const ev of (progressiveEventsData?.events || [])) {
+    for (const ev of (bulkEventsData?.events || eventsData?.events || [])) {
       if (ev.resultado === 'correcto' && ev.line_id && ev.ubicacion) {
         map.set(ev.line_id, ev.ubicacion)
       }
     }
     return map
-  }, [progressiveEventsData?.events])
+  }, [bulkEventsData?.events, eventsData?.events])
 
   const order = data?.order ?? {}
   const lines = data?.lines ?? []
   const linesMeta = data?.lines_meta ?? {}
-  const events = progressiveEventsData?.events || []
+  const events = bulkEventsData?.events || eventsData?.events || []
   const novedades = novedadesData?.novedades || []
   const linesTotal = Number(linesMeta.total ?? lines.length)
 

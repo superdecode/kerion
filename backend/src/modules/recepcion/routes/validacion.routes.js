@@ -4,9 +4,50 @@ import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth
 import { getPermissionLevel, requireAnyPermission, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 import { refreshRecepcionOrderState } from '../utils/orderState.js'
+import env from '../../../config/env.js'
 
 const router = Router()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const BULK_SCAN_EVENTS_PAGE_SIZE = 1000
+const BULK_SCAN_EVENTS_MAX_ROWS = 50000
+
+async function getBulkScanEvents(tenantId, orderId, resultados) {
+  const url = new URL(`${env.SUPABASE_URL}/rest/v1/inbound_scan_events`)
+  url.searchParams.set('select', 'id,line_id,codigo_escaneado,match_field,sku_asociado,resultado,scanned_at,ubicacion,scanned_by')
+  url.searchParams.set('tenant_id', `eq.${tenantId}`)
+  url.searchParams.set('order_id', `eq.${orderId}`)
+  url.searchParams.set('order', 'scanned_at.desc,id.desc')
+  if (resultados) url.searchParams.set('resultado', `in.(${resultados})`)
+
+  const headers = {
+    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+  }
+  const usersUrl = new URL(`${env.SUPABASE_URL}/rest/v1/usuarios`)
+  usersUrl.searchParams.set('select', 'id,nombre_completo')
+  usersUrl.searchParams.set('tenant_id', `eq.${tenantId}`)
+  const pageCount = BULK_SCAN_EVENTS_MAX_ROWS / BULK_SCAN_EVENTS_PAGE_SIZE
+  const requests = Array.from({ length: pageCount }, async (_, index) => {
+    const start = index * BULK_SCAN_EVENTS_PAGE_SIZE
+    const response = await fetch(url, {
+      headers: { ...headers, Range: `${start}-${start + BULK_SCAN_EVENTS_PAGE_SIZE - 1}` },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!response.ok) throw new Error(`Supabase scan-events ${response.status}`)
+    return response.json()
+  })
+  const usersRequest = fetch(usersUrl, { headers, signal: AbortSignal.timeout(15000) })
+    .then(response => response.ok ? response.json() : [])
+  const [responses, users] = await Promise.all([Promise.all(requests), usersRequest])
+
+  const events = responses.flat()
+  const userNames = new Map(users.map(user => [user.id, user.nombre_completo]))
+
+  return events.map(event => ({
+    ...event,
+    scanned_by_nombre: userNames.get(event.scanned_by) || null,
+  }))
+}
 
 // Short-lived in-memory cache for scan-events GETs to absorb burst polling.
 // Key: "<tenantId>:<orderId>:<resultados>:<compact>". TTL: 12 seconds.
@@ -326,6 +367,16 @@ router.get('/orders/:id/scan-events',
       const resultList = resultados
         ? resultados.split(',').map(v => v.trim()).filter(v => ['correcto', 'duplicado', 'no_encontrado'].includes(v))
         : []
+
+      if (req.query.bulk === '1') {
+        const events = await getBulkScanEvents(req.tenantId, req.params.id, resultList.join(','))
+        return res.json({
+          events,
+          truncated: events.length >= BULK_SCAN_EVENTS_MAX_ROWS,
+          limit: BULK_SCAN_EVENTS_MAX_ROWS,
+          total: events.length,
+        })
+      }
 
       const cacheKey = `${req.tenantId}:${req.params.id}:${resultados}:${compact ? '1' : '0'}:${limit}:${page}`
       const cached = getCachedScanEvents(cacheKey)
