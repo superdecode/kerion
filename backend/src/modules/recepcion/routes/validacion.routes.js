@@ -318,7 +318,7 @@ router.get('/orders/:id/scan-events',
       const compact = req.query.compact === '1'
       const requestedLimit = parseInt(req.query.limit, 10)
       const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
-        ? Math.min(requestedLimit, 5000)
+        ? Math.min(requestedLimit, 50000)
         : 2000
       const resultList = resultados
         ? resultados.split(',').map(v => v.trim()).filter(v => ['correcto', 'duplicado', 'no_encontrado'].includes(v))
