@@ -68,9 +68,32 @@ pool.on('error', (err) => {
   // Do NOT call process.exit() — it kills the Vercel serverless function
 })
 
+// Separate pool for long-running export queries.
+// No query_timeout or statement_timeout so large exports don't get cancelled.
+// max:2 — exports are infrequent; we don't want them to starve normal requests.
+const exportPool = new Pool({
+  host: env.DB_HOST,
+  port: env.DB_PORT,
+  database: env.DB_NAME,
+  user: env.DB_USER,
+  password: env.DB_PASSWORD,
+  ssl: env.DB_SSL ? { rejectUnauthorized: false } : false,
+  max: 2,
+  idleTimeoutMillis: DB_IDLE_TIMEOUT_MS,
+  connectionTimeoutMillis: DB_CONNECTION_TIMEOUT_MS,
+  query_timeout: 0,
+  statement_timeout: 0,
+  maxLifetimeSeconds: 60,
+})
+exportPool.on('error', (err) => console.error('❌ export pool idle error:', err))
+
 export const query = (text, params) => pool.query(text, params)
 
 export const getClient = () => pool.connect()
+
+// Acquire a client from the export pool (no query timeout).
+// Caller MUST release() in a finally block.
+export const getExportClient = () => exportPool.connect()
 
 // Execute a single query scoped to a tenant (SET LOCAL requires a transaction).
 // Retries once on pool checkout timeout (ECHECKOUTTIMEOUT) after a short delay.
@@ -155,6 +178,25 @@ export function tenantDB(req, res, next) {
       throw err
     }
     return client
+  }
+
+  // Like tTransaction but uses the no-timeout export pool.
+  // Use for exports and any long-running read that legitimately exceeds 12s.
+  req.tExportTransaction = async (cb) => {
+    const client = await exportPool.connect()
+    try {
+      await client.query('BEGIN')
+      assertTenantId(tid)
+      await client.query(`SET LOCAL app.tenant_id = '${tid}'`)
+      const result = await cb(client)
+      await client.query('COMMIT')
+      return result
+    } catch (err) {
+      try { await client.query('ROLLBACK') } catch {}
+      throw err
+    } finally {
+      client.release()
+    }
   }
 
   next()

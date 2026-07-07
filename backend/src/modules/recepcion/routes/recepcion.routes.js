@@ -218,15 +218,9 @@ router.get('/orders/:id/export-data',
     try {
       const scope = normalizeExportScope(String(req.query.scope || 'all'))
 
-      // All queries run inside one transaction to use a single pool connection.
-      // With DB_POOL_MAX=2 and concurrent polling requests, sequential tQuery calls
-      // can exhaust the pool and hit the connection timeout.
-      const result = await req.tTransaction(async (client) => {
-        // Export can fetch tens of thousands of rows — disable both the pg-library
-        // query_timeout and the Postgres statement_timeout for this transaction only.
-        // SET LOCAL reverts automatically on COMMIT/ROLLBACK.
-        if (client.connectionParameters) client.connectionParameters.query_timeout = 0
-        await client.query("SET LOCAL statement_timeout = '0'")
+      // Uses the no-timeout export pool so large exports (tens of thousands of rows)
+      // are not cancelled by the 12s pg library query_timeout on the main pool.
+      const result = await req.tExportTransaction(async (client) => {
 
         const orderRes = await client.query(
           `SELECT o.*, u.nombre_completo AS responsable_nombre,
