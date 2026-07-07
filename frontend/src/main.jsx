@@ -32,20 +32,21 @@ if (typeof globalThis === 'undefined') {
   window.globalThis = window
 }
 
-const APP_VERSION = '2026-07-03-v16'
+const APP_VERSION = '2026-07-06-v18'
 const APP_VERSION_KEY = 'kirion-app-version'
 const EXTENSION_ASYNC_RESPONSE_ERROR =
   'A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received'
 
 async function resetStaleClientState() {
   try {
-    // In dev mode always clear any stale SW/cache — dev chunks change on every restart
     const isDev = import.meta.env.DEV
     const storedVersion = localStorage.getItem(APP_VERSION_KEY)
     if (!isDev && storedVersion === APP_VERSION) return
 
+    let hadActiveSW = false
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations()
+      hadActiveSW = regs.some((r) => r.active)
       await Promise.all(regs.map((reg) => reg.unregister().catch(() => {})))
     }
 
@@ -56,6 +57,15 @@ async function resetStaleClientState() {
 
     if (!isDev) {
       localStorage.setItem(APP_VERSION_KEY, APP_VERSION)
+    }
+
+    // If a SW was controlling this page, its fetch handlers are still active even
+    // after unregister() — they run for the lifetime of the current page.
+    // We just wiped all caches, so any SW-intercepted request that misses network
+    // would get an empty response. Reload once (version is now stored, so we won't
+    // loop) to boot on a clean page with no active SW.
+    if (hadActiveSW && !isDev) {
+      window.location.reload()
     }
   } catch {
     // Ignore cache cleanup errors and continue booting.
@@ -95,13 +105,15 @@ function suppressKnownBrowserNoise() {
   })
 }
 
+// Boot React only after stale-state cleanup finishes.
+// If cleanup triggers a reload (had a live SW), render never runs on this
+// page instance — the reloaded page boots fresh with no active SW.
 void resetStaleClientState().finally(() => {
   suppressKnownBrowserNoise()
   void registerServiceWorker()
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  )
 })
-
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)
