@@ -102,9 +102,15 @@ function getOrderDateKey(order) {
     if (first > 12)       { day = first; month = second }
     else if (second > 12) { month = first; day = second }
     else {
-      const hasLeadingZero = slashDate[1].startsWith('0') || slashDate[2].startsWith('0')
-      if (hasLeadingZero) { day = first; month = second }
-      else                { month = first; day = second }
+      const dmyKey = `${slashDate[3]}-${String(second).padStart(2, '0')}-${String(first).padStart(2, '0')}`
+      const mdyKey = `${slashDate[3]}-${String(first).padStart(2, '0')}-${String(second).padStart(2, '0')}`
+      const dmyMs = new Date(dmyKey + 'T12:00:00').getTime()
+      const mdyMs = new Date(mdyKey + 'T12:00:00').getTime()
+      if (!isNaN(dmyMs) && !isNaN(mdyMs)) {
+        const now = Date.now()
+        return Math.abs(mdyMs - now) < Math.abs(dmyMs - now) ? mdyKey : dmyKey
+      }
+      return !isNaN(dmyMs) ? dmyKey : mdyKey
     }
     return `${slashDate[3]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }

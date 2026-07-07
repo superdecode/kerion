@@ -64,7 +64,21 @@ export function parseDateValue(value) {
       const date = new Date(raw)
       return Number.isNaN(date.getTime()) ? null : date
     }
-    return parseDateParts(isoLike[1], isoLike[2], isoLike[3], isoLike[4] || 0, isoLike[5] || 0, isoLike[6] || 0)
+    const a = Number(isoLike[2]), b = Number(isoLike[3])
+    const h = Number(isoLike[4] || 0), mn = Number(isoLike[5] || 0), sc = Number(isoLike[6] || 0)
+    // When both parts are ≤ 12 the WMS may export YYYY-DD-MM instead of YYYY-MM-DD.
+    // Use proximity to today to pick the more plausible interpretation; ties keep YYYY-MM-DD.
+    if (a <= 12 && b <= 12) {
+      const stdDate = parseDateParts(isoLike[1], a, b, h, mn, sc)
+      const altDate = parseDateParts(isoLike[1], b, a, h, mn, sc)
+      if (stdDate && altDate) {
+        const now = Date.now()
+        return Math.abs(altDate.getTime() - now) < Math.abs(stdDate.getTime() - now)
+          ? altDate : stdDate
+      }
+      return stdDate || altDate || null
+    }
+    return parseDateParts(isoLike[1], isoLike[2], isoLike[3], h, mn, sc)
   }
 
   // Normalize: strip AM/PM suffix (Google Sheets 12-hour format) before D/M/Y matching
@@ -84,11 +98,21 @@ export function parseDateValue(value) {
     } else if (second > 12) {
       month = first; day = second
     } else {
-      // Both ≤ 12: use leading-zero presence to disambiguate.
-      // No leading zeros → Google Sheets date value (M/D/Y). Any leading zero → D/M/Y text.
-      const hasLeadingZero = dmy[1].startsWith('0') || dmy[2].startsWith('0')
-      if (hasLeadingZero) { day = first; month = second }
-      else               { month = first; day = second }
+      // Both ≤ 12: ambiguous. The same sheet can mix Google Sheets date values (M/D/Y, no
+      // padding) and Mexican-locale text entries (D/M/Y, no padding).
+      // Strategy: try both interpretations and pick the one whose date is closer to today —
+      // WMS delivery dates are nearly always within the current period, so the nearer date
+      // is almost always correct. Ties default to D/M/Y (Mexican locale).
+      const yr = Number(dmy[3])
+      const h = Number(dmy[4] || 0), mn = Number(dmy[5] || 0), sc = Number(dmy[6] || 0)
+      const dmyDate = parseDateParts(yr, second, first, h, mn, sc)
+      const mdyDate = parseDateParts(yr, first, second, h, mn, sc)
+      if (dmyDate && mdyDate) {
+        const now = Date.now()
+        return Math.abs(mdyDate.getTime() - now) < Math.abs(dmyDate.getTime() - now)
+          ? mdyDate : dmyDate
+      }
+      return dmyDate || mdyDate || null
     }
     return parseDateParts(dmy[3], month, day, dmy[4] || 0, dmy[5] || 0, dmy[6] || 0)
   }
