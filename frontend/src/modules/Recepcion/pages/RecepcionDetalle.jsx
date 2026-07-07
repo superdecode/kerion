@@ -213,7 +213,7 @@ export default function RecepcionDetalle() {
 
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
-    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 100000 }),
+    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 2000 }),
     enabled: canQueryRecepcion && Boolean(data?.order),
     retry: false,
     staleTime: STALE.SHORT,

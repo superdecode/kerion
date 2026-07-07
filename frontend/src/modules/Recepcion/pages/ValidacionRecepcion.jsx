@@ -325,11 +325,11 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     error: linesError,
   } = useQuery({
     queryKey: orderQueryKey,
-    queryFn: () => getOrder(id, { validation_mode: 1, lines_limit: 100000, lines_sort_key: 'created_at', lines_sort_dir: 'asc' }),
+    queryFn: () => getOrder(id, { validation_mode: 1, lines_limit: 3000, lines_sort_key: 'created_at', lines_sort_dir: 'asc' }),
     enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.FROZEN,
-    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 8000 : false,
+    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 15000 : false,
     refetchIntervalInBackground: false,
   })
   const queriedOrderData = orderLinesData?.order ? orderLinesData : orderSummaryData
@@ -350,11 +350,11 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
 
   const { data: eventsData } = useQuery({
     queryKey: ['recepcion-scan-events', id],
-    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 100000 }),
+    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 2000 }),
     enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.DEFAULT,
-    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 10000 : false,
+    refetchInterval: canQueryRecepcion && scanning && !isOffline ? 20000 : false,
     refetchIntervalInBackground: false,
   })
   const serverEvents = eventsData?.events ?? []

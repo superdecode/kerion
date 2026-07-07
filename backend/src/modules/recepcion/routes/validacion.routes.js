@@ -8,6 +8,27 @@ import { refreshRecepcionOrderState } from '../utils/orderState.js'
 const router = Router()
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Short-lived in-memory cache for scan-events GETs to absorb burst polling.
+// Key: "<tenantId>:<orderId>:<resultados>:<compact>". TTL: 12 seconds.
+const SCAN_EVENTS_CACHE_TTL_MS = 12000
+const _scanEventsCache = new Map()
+function getCachedScanEvents(key) {
+  const entry = _scanEventsCache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.ts > SCAN_EVENTS_CACHE_TTL_MS) { _scanEventsCache.delete(key); return null }
+  return entry.data
+}
+function setCachedScanEvents(key, data) {
+  _scanEventsCache.set(key, { ts: Date.now(), data })
+  // Evict stale entries lazily — runs at most once per write
+  if (_scanEventsCache.size > 500) {
+    const now = Date.now()
+    for (const [k, v] of _scanEventsCache) {
+      if (now - v.ts > SCAN_EVENTS_CACHE_TTL_MS) _scanEventsCache.delete(k)
+    }
+  }
+}
+
 function hasRecepcionValidationDeletePermission(user) {
   return resolvePermission(getPermissionLevel(user?.permisos, 'recepcion.validacion'), 'eliminar')
 }
@@ -264,6 +285,10 @@ router.post('/orders/:id/scan',
           event: eventRes.rows[0],
         }
       })
+      // Invalidate scan-events cache so next poll returns fresh data immediately
+      for (const k of _scanEventsCache.keys()) {
+        if (k.startsWith(`${req.tenantId}:${req.params.id}:`)) _scanEventsCache.delete(k)
+      }
       if (timingEnabled && startedAt) {
         const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
         console.info(`[recepcion] scan ${req.params.id} ${elapsedMs.toFixed(1)}ms`)
@@ -293,11 +318,16 @@ router.get('/orders/:id/scan-events',
       const compact = req.query.compact === '1'
       const requestedLimit = parseInt(req.query.limit, 10)
       const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
-        ? Math.min(requestedLimit, 100000)
-        : 10000
+        ? Math.min(requestedLimit, 5000)
+        : 2000
       const resultList = resultados
         ? resultados.split(',').map(v => v.trim()).filter(v => ['correcto', 'duplicado', 'no_encontrado'].includes(v))
         : []
+
+      const cacheKey = `${req.tenantId}:${req.params.id}:${resultados}:${compact ? '1' : '0'}:${limit}`
+      const cached = getCachedScanEvents(cacheKey)
+      if (cached) return res.json(cached)
+
       const where = ['e.order_id=$1', 'e.tenant_id=$2']
       const params = [req.params.id, req.tenantId]
       if (resultList.length === 1) {
@@ -320,7 +350,9 @@ router.get('/orders/:id/scan-events',
          LIMIT $${params.length + 1}`,
         [...params, limit]
       )
-      res.json({ events: result.rows, truncated: result.rows.length === limit, limit })
+      const payload = { events: result.rows, truncated: result.rows.length === limit, limit }
+      setCachedScanEvents(cacheKey, payload)
+      res.json(payload)
     } catch (err) {
       res.status(500).json({ error: 'Error al obtener eventos de escaneo' })
     }

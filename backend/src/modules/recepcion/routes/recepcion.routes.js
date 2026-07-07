@@ -689,7 +689,7 @@ router.get('/orders/:id',
     try {
       const page = Math.max(1, parseInt(req.query.lines_page, 10) || 1)
       const requestedLimit = parseInt(req.query.lines_limit, 10) || 100
-      const maxLimit = req.query.validation_mode === '1' ? 100000 : 500
+      const maxLimit = req.query.validation_mode === '1' ? 5000 : 500
       const limit = Math.min(maxLimit, Math.max(25, requestedLimit))
       const offset = (page - 1) * limit
       const q = String(req.query.lines_q || '').trim()
