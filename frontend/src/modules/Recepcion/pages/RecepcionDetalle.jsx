@@ -211,9 +211,9 @@ export default function RecepcionDetalle() {
     staleTime: STALE.SHORT,
   })
 
-  const { data: eventsData } = useQuery({
+  const { data: eventsData, isLoading: isEventsLoading } = useQuery({
     queryKey: ['recepcion-scan-events', id],
-    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 50000 }),
+    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 10000 }),
     enabled: canQueryRecepcion && Boolean(data?.order),
     retry: false,
     staleTime: STALE.SHORT,
@@ -924,7 +924,18 @@ export default function RecepcionDetalle() {
         {activeTab === 'validacion' && (
           <div className="space-y-3">
 
+            {eventsData?.truncated && (
+              <div className="px-3 py-2 rounded-lg bg-warning-50 border border-warning-200 text-xs text-warning-700 font-medium">
+                {t('rec.scan.tab.validacion')}: {t('common.showing')} {(eventsData.events?.length ?? 0).toLocaleString('es-MX')} {t('rec.scan.items')} ({t('common.mostRecent')})
+              </div>
+            )}
+
             <div className="card overflow-hidden border border-warm-100/80 shadow-soft" style={{ '--table-shell-offset': '24rem' }}>
+              {isEventsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <LoadingSpinner size="md" />
+                </div>
+              ) : (
               <div className="table-scroll">
                 <table className="w-full text-sm">
                   <thead>
@@ -1019,6 +1030,7 @@ export default function RecepcionDetalle() {
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
             {sortedEvents.length > 100 && (
               <TablePagination

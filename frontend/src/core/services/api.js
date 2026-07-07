@@ -135,11 +135,13 @@ api.interceptors.response.use(
   },
   async (error) => {
     captureApiError(error)
-    const isNetworkFailure = !error.response && (
+    // ECONNABORTED = axios request timeout (response took too long).
+    // This means the server is slow, not necessarily down — don't blackout all queries.
+    const isAxiosTimeout = error.code === 'ECONNABORTED'
+    const isNetworkFailure = !error.response && !isAxiosTimeout && (
       error.code === 'ERR_NETWORK' ||
       error.code === 'ECONNREFUSED' ||
-      error.code === 'ECONNABORTED' ||
-      /Network Error|timeout/i.test(error.message || '')
+      /Network Error/i.test(error.message || '')
     )
     const isServiceUnavailable = [502, 503, 504].includes(error.response?.status)
 
