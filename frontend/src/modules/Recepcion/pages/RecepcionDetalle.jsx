@@ -216,7 +216,7 @@ export default function RecepcionDetalle() {
   const { data: eventsData, isLoading: isEventsLoading } = useQuery({
     queryKey: ['recepcion-scan-events', id, 'detail'],
     queryFn: () => getScanEvents(id, { compact: 1, limit: 500 }),
-    enabled: canQueryRecepcion && Boolean(data?.order),
+    enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.SHORT,
   })
@@ -397,7 +397,7 @@ export default function RecepcionDetalle() {
   const linesTotal = Number(linesMeta.total ?? lines.length)
 
   const totalBase = Number(order.total_cajas || 0) > 0 ? Number(order.total_cajas) : Number(linesMeta.total_all || lines.length)
-  const validadasFromOrder = Number(order.cajas_registradas ?? order.cajas_validadas ?? 0)
+  const validadasFromOrder = Number(order.cajas_validadas ?? 0)
   const forzadasFromOrder = Number(order.cajas_forzadas || 0)
   const lineStatusCounts = useMemo(() => {
     if (linesMeta.status_counts) {
@@ -813,8 +813,8 @@ export default function RecepcionDetalle() {
                   }`}
                 >
                   {t('rec.scan.tab.validacion')}
-                  {events.length > 0 && (
-                    <span className="badge text-[9px] bg-sky-100 text-sky-700 border-0 shrink-0">{events.length}</span>
+                  {validadas > 0 && (
+                    <span className="badge text-[9px] bg-sky-100 text-sky-700 border-0 shrink-0">{validadas.toLocaleString('es-MX')}</span>
                   )}
                 </button>
                 <button
