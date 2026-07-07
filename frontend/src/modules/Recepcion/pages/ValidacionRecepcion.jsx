@@ -31,7 +31,8 @@ const VALIDATION_LARGE_ORDER_LINES_LIMIT = 50000
 const VALIDATION_DEFAULT_EVENTS_LIMIT = 2000
 const VALIDATION_LARGE_ORDER_EVENTS_LIMIT = 50000
 const VALIDATION_HEAVY_REQUEST_TIMEOUT_MS = 120000
-const VALIDATION_LARGE_ORDER_CHUNK_SIZE = 5000
+// Keep each database read below the backend's 12s query deadline.
+const VALIDATION_LARGE_ORDER_CHUNK_SIZE = 500
 
 function parseTarimaNumber(value) {
   const normalized = String(value ?? '').trim().toUpperCase().replace(/^T\s*/, '')
