@@ -171,6 +171,7 @@ export default function RecepcionDetalle() {
   const [novPageSize, setNovPageSize] = useState(100)
   const [eventSortKey, setEventSortKey] = useState('scanned_at')
   const [eventSortDir, setEventSortDir] = useState('desc')
+  const [progressiveEventsData, setProgressiveEventsData] = useState(null)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [forceCloseOpen, setForceCloseOpen] = useState(false)
   const [exportingScope, setExportingScope] = useState(null)
@@ -188,6 +189,7 @@ export default function RecepcionDetalle() {
     setNovedadSearch('')
     setLinePage(1)
     setEventPage(1)
+    setProgressiveEventsData(null)
     setNovPage(1)
     setNuevoTipo('')
     setNuevoCodigo('')
@@ -218,6 +220,46 @@ export default function RecepcionDetalle() {
     retry: false,
     staleTime: STALE.SHORT,
   })
+
+  useEffect(() => {
+    if (!eventsData?.events) return undefined
+
+    let cancelled = false
+    setProgressiveEventsData(eventsData)
+    if (!eventsData.truncated) return () => { cancelled = true }
+
+    const loadRemainingEvents = async () => {
+      let page = 2
+      let allEvents = [...eventsData.events]
+      let hasMore = true
+
+      // Two pages at a time keeps the UI responsive without exhausting the DB pool.
+      while (!cancelled && hasMore && allEvents.length < 50000) {
+        const pages = [page, page + 1]
+        const responses = await Promise.all(
+          pages.map(currentPage => getScanEvents(id, { compact: 1, limit: 500, page: currentPage }))
+        )
+        if (cancelled) return
+
+        for (const response of responses) {
+          allEvents.push(...(response.events || []))
+          if (!response.truncated) {
+            hasMore = false
+            break
+          }
+        }
+        setProgressiveEventsData({
+          ...eventsData,
+          events: allEvents,
+          truncated: hasMore,
+        })
+        page += pages.length
+      }
+    }
+
+    loadRemainingEvents().catch(() => {})
+    return () => { cancelled = true }
+  }, [eventsData, id])
 
   const { data: novedadesData } = useQuery({
     queryKey: ['recepcion-novedades', id],
@@ -339,18 +381,18 @@ export default function RecepcionDetalle() {
 
   const lineUbicacionMap = useMemo(() => {
     const map = new Map()
-    for (const ev of (eventsData?.events || [])) {
+    for (const ev of (progressiveEventsData?.events || [])) {
       if (ev.resultado === 'correcto' && ev.line_id && ev.ubicacion) {
         map.set(ev.line_id, ev.ubicacion)
       }
     }
     return map
-  }, [eventsData?.events])
+  }, [progressiveEventsData?.events])
 
   const order = data?.order ?? {}
   const lines = data?.lines ?? []
   const linesMeta = data?.lines_meta ?? {}
-  const events = eventsData?.events || []
+  const events = progressiveEventsData?.events || []
   const novedades = novedadesData?.novedades || []
   const linesTotal = Number(linesMeta.total ?? lines.length)
 
@@ -923,12 +965,6 @@ export default function RecepcionDetalle() {
         {/* Tab: Validación */}
         {activeTab === 'validacion' && (
           <div className="space-y-3">
-
-            {eventsData?.truncated && (
-              <div className="px-3 py-2 rounded-lg bg-warning-50 border border-warning-200 text-xs text-warning-700 font-medium">
-                {t('rec.scan.tab.validacion')}: {t('common.showing')} {(eventsData.events?.length ?? 0).toLocaleString('es-MX')} {t('rec.scan.items')} ({t('common.mostRecent')})
-              </div>
-            )}
 
             <div className="card overflow-hidden border border-warm-100/80 shadow-soft" style={{ '--table-shell-offset': '24rem' }}>
               {isEventsLoading ? (
