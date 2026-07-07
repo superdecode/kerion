@@ -180,6 +180,19 @@ export function tenantDB(req, res, next) {
     return client
   }
 
+  // Same as tGetClient but uses the no-timeout export pool.
+  req.tGetExportClient = async () => {
+    const client = await exportPool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(`SET LOCAL app.tenant_id = '${tid}'`)
+    } catch (err) {
+      client.release()
+      throw err
+    }
+    return client
+  }
+
   // Like tTransaction but uses the no-timeout export pool.
   // Use for exports and any long-running read that legitimately exceeds 12s.
   req.tExportTransaction = async (cb) => {

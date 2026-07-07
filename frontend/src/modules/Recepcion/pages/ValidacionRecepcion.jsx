@@ -25,6 +25,14 @@ import { extractBaseCode } from '../../Shared/Wms/extractBaseCode'
 import { generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { STALE } from '../../../core/constants/queryConfig'
 
+const VALIDATION_LARGE_ORDER_THRESHOLD = 5000
+const VALIDATION_DEFAULT_LINES_LIMIT = 3000
+const VALIDATION_LARGE_ORDER_LINES_LIMIT = 50000
+const VALIDATION_DEFAULT_EVENTS_LIMIT = 2000
+const VALIDATION_LARGE_ORDER_EVENTS_LIMIT = 50000
+const VALIDATION_HEAVY_REQUEST_TIMEOUT_MS = 120000
+const VALIDATION_LARGE_ORDER_CHUNK_SIZE = 5000
+
 function parseTarimaNumber(value) {
   const normalized = String(value ?? '').trim().toUpperCase().replace(/^T\s*/, '')
   const num = Number.parseInt(normalized, 10)
@@ -278,7 +286,6 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const isOffline = useOfflineStore((s) => s.status === 'offline')
   const moduleQueue = useOfflineStore((s) => s.moduleQueue)
   const orderSummaryQueryKey = useMemo(() => ['recepcion-order', id, 'validation-summary'], [id])
-  const orderQueryKey = useMemo(() => ['recepcion-order', id, 'validation-lines'], [id])
   const initialOrderData = useMemo(() => {
     if (!initialOrder || String(initialOrder.id) !== String(id)) return undefined
     const totalCajas = Number(initialOrder.total_cajas || 0)
@@ -316,6 +323,73 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     retry: false,
     staleTime: STALE.FROZEN,
   })
+  const summaryTotalLines = Number(orderSummaryData?.lines_meta?.total_all ?? initialOrderData?.lines_meta?.total_all ?? 0)
+  const shouldLoadLargeValidationDataset = summaryTotalLines > VALIDATION_LARGE_ORDER_THRESHOLD
+  const validationLinesLimit = shouldLoadLargeValidationDataset
+    ? VALIDATION_LARGE_ORDER_LINES_LIMIT
+    : VALIDATION_DEFAULT_LINES_LIMIT
+  const validationEventsLimit = shouldLoadLargeValidationDataset
+    ? VALIDATION_LARGE_ORDER_EVENTS_LIMIT
+    : VALIDATION_DEFAULT_EVENTS_LIMIT
+  const orderQueryKey = useMemo(
+    () => ['recepcion-order', id, 'validation-lines', validationLinesLimit],
+    [id, validationLinesLimit]
+  )
+
+  const loadValidationLines = async () => {
+    if (!shouldLoadLargeValidationDataset) {
+      return getOrder(id, {
+        validation_mode: 1,
+        lines_limit: validationLinesLimit,
+        lines_sort_key: 'created_at',
+        lines_sort_dir: 'asc',
+      })
+    }
+
+    const pages = Math.ceil(summaryTotalLines / VALIDATION_LARGE_ORDER_CHUNK_SIZE)
+    const responses = []
+    for (let page = 1; page <= pages; page += 1) {
+      responses.push(await getOrder(id, {
+        validation_mode: 1,
+        lines_page: page,
+        lines_limit: VALIDATION_LARGE_ORDER_CHUNK_SIZE,
+        lines_sort_key: 'created_at',
+        lines_sort_dir: 'asc',
+      }, { timeout: VALIDATION_HEAVY_REQUEST_TIMEOUT_MS }))
+    }
+
+    const first = responses[0]
+    return {
+      ...first,
+      lines: responses.flatMap(response => response.lines || []),
+      lines_meta: {
+        ...first.lines_meta,
+        page: 1,
+        limit: validationLinesLimit,
+      },
+    }
+  }
+
+  const loadValidationEvents = async () => {
+    if (!shouldLoadLargeValidationDataset) {
+      return getScanEvents(id, { resultados: 'correcto', compact: 1, limit: validationEventsLimit })
+    }
+
+    const events = []
+    let page = 1
+    while (events.length < VALIDATION_LARGE_ORDER_EVENTS_LIMIT) {
+      const response = await getScanEvents(id, {
+        resultados: 'correcto',
+        compact: 1,
+        limit: VALIDATION_LARGE_ORDER_CHUNK_SIZE,
+        page,
+      }, { timeout: VALIDATION_HEAVY_REQUEST_TIMEOUT_MS })
+      events.push(...(response.events || []))
+      if (!response.truncated || response.events.length === 0) break
+      page += 1
+    }
+    return { events, truncated: events.length >= VALIDATION_LARGE_ORDER_EVENTS_LIMIT }
+  }
 
   const {
     data: orderLinesData,
@@ -325,7 +399,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     error: linesError,
   } = useQuery({
     queryKey: orderQueryKey,
-    queryFn: () => getOrder(id, { validation_mode: 1, lines_limit: 3000, lines_sort_key: 'created_at', lines_sort_dir: 'asc' }),
+    queryFn: loadValidationLines,
     enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.FROZEN,
@@ -349,8 +423,8 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   const linesReady = orderLinesData?.lines_meta?.lines_loaded === true
 
   const { data: eventsData } = useQuery({
-    queryKey: ['recepcion-scan-events', id],
-    queryFn: () => getScanEvents(id, { resultados: 'correcto', compact: 1, limit: 2000 }),
+    queryKey: ['recepcion-scan-events', id, validationEventsLimit],
+    queryFn: loadValidationEvents,
     enabled: canQueryRecepcion,
     retry: false,
     staleTime: STALE.DEFAULT,

@@ -10,6 +10,7 @@ const router = Router()
 let inboundLineColumnsCache = null
 const EXPORT_SYNC_WARN_ROWS = 50000
 const EXPORT_SYNC_MAX_ROWS = 100000
+const VALIDATION_HEAVY_ORDER_THRESHOLD = 5000
 
 function normalizedCodeSql(column) {
   return `UPPER(REGEXP_REPLACE(
@@ -701,8 +702,9 @@ router.get('/orders/:id',
       }
       const sortColumn = sortColumns[sortKey] || sortColumns.created_at
       const includeLines = req.query.include_lines !== '0'
+      const useHeavyValidationClient = req.query.validation_mode === '1' && includeLines && requestedLimit > VALIDATION_HEAVY_ORDER_THRESHOLD
 
-      client = await req.tGetClient()
+      client = useHeavyValidationClient ? await req.tGetExportClient() : await req.tGetClient()
 
       const orderRes = await client.query(
         `SELECT o.*, u.nombre_completo AS responsable_nombre

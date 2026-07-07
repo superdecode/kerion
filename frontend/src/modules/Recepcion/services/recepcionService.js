@@ -3,7 +3,7 @@ import api from '../../../core/services/api.js'
 export const listOrders = (params = {}) => api.get('/recepcion/orders', { params }).then(r => r.data)
 export const listClientes = () => api.get('/recepcion/orders/clientes').then(r => r.data)
 export const createOrder = (payload, options = {}) => api.post('/recepcion/orders', payload, options).then(r => r.data)
-export const getOrder = (id, params = {}) => api.get(`/recepcion/orders/${id}`, { params }).then(r => r.data)
+export const getOrder = (id, params = {}, options = {}) => api.get(`/recepcion/orders/${id}`, { params, ...options }).then(r => r.data)
 export const getOrderExportData = (id, scope = 'all') =>
   api.get(`/recepcion/orders/${id}/export-data`, { params: { scope }, timeout: 120000 }).then(r => r.data)
 export const updateOrder = (id, payload) => api.patch(`/recepcion/orders/${id}`, payload).then(r => r.data)
@@ -13,7 +13,7 @@ export const deleteLine = (lineId) => api.delete(`/recepcion/lines/${lineId}`).t
 export const createSession = (orderId, payload) => api.post(`/recepcion/orders/${orderId}/sessions`, payload).then(r => r.data)
 export const updateSession = (orderId, sessionId, payload) => api.patch(`/recepcion/orders/${orderId}/sessions/${sessionId}`, payload).then(r => r.data)
 export const scanCode = (orderId, payload) => api.post(`/recepcion/orders/${orderId}/scan`, payload).then(r => r.data)
-export const getScanEvents = (orderId, params = {}) => api.get(`/recepcion/orders/${orderId}/scan-events`, { params }).then(r => r.data)
+export const getScanEvents = (orderId, params = {}, options = {}) => api.get(`/recepcion/orders/${orderId}/scan-events`, { params, ...options }).then(r => r.data)
 export const deleteLastValidationRecord = (orderId) => api.delete(`/recepcion/orders/${orderId}/scan-events/last-validation`).then(r => r.data)
 export const deleteScanEvent = (orderId, eventId) => api.delete(`/recepcion/orders/${orderId}/scan-events/${eventId}`).then(r => r.data)
 export const deleteLocationScans = (orderId, ubicacion) =>

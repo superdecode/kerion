@@ -320,11 +320,14 @@ router.get('/orders/:id/scan-events',
       const limit = Number.isInteger(requestedLimit) && requestedLimit > 0
         ? Math.min(requestedLimit, 50000)
         : 2000
+      const requestedPage = parseInt(req.query.page, 10)
+      const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
+      const offset = (page - 1) * limit
       const resultList = resultados
         ? resultados.split(',').map(v => v.trim()).filter(v => ['correcto', 'duplicado', 'no_encontrado'].includes(v))
         : []
 
-      const cacheKey = `${req.tenantId}:${req.params.id}:${resultados}:${compact ? '1' : '0'}:${limit}`
+      const cacheKey = `${req.tenantId}:${req.params.id}:${resultados}:${compact ? '1' : '0'}:${limit}:${page}`
       const cached = getCachedScanEvents(cacheKey)
       if (cached) return res.json(cached)
 
@@ -346,14 +349,16 @@ router.get('/orders/:id/scan-events',
          FROM inbound_scan_events e
          LEFT JOIN usuarios u ON u.id = e.scanned_by
          WHERE ${where.join(' AND ')}
-         ORDER BY e.scanned_at DESC
-         LIMIT $${params.length + 1}`,
-        [...params, limit]
+         ORDER BY e.scanned_at DESC, e.id DESC
+         LIMIT $${params.length + 1}
+         OFFSET $${params.length + 2}`,
+        [...params, limit, offset]
       )
-      const payload = { events: result.rows, truncated: result.rows.length === limit, limit }
+      const payload = { events: result.rows, truncated: result.rows.length === limit, limit, page }
       setCachedScanEvents(cacheKey, payload)
       res.json(payload)
     } catch (err) {
+      console.error('[recepcion] scan-events:', err.message)
       res.status(500).json({ error: 'Error al obtener eventos de escaneo' })
     }
   }
