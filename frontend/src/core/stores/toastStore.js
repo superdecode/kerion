@@ -7,8 +7,13 @@ export const useToastStore = create((set) => ({
 
   addToast: (message, type = 'info', duration = 2500) => {
     const id = ++toastId
+    const safeMsg = typeof message === 'string'
+      ? message
+      : (message instanceof Error ? message.message : null) ||
+        (typeof message?.message === 'string' ? message.message : null) ||
+        (message != null ? String(message) : 'Error')
     set((state) => ({
-      toasts: [...state.toasts, { id, message, type, duration }]
+      toasts: [...state.toasts, { id, message: safeMsg, type, duration }]
     }))
     if (duration > 0) {
       setTimeout(() => {

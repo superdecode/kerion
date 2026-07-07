@@ -162,7 +162,7 @@ function getScanErrorMessage(err) {
   const status = err?.response?.status
   if (status === 401) return 'Sesión expirada. Vuelve a iniciar sesión.'
   const data = err?.response?.data
-  const parts = [data?.error, data?.detalle].filter(Boolean)
+  const parts = [data?.error, data?.detalle].filter(v => v && typeof v === 'string')
   if (parts.length > 0) return parts.join(': ')
   if (status === 403) return 'Sin permiso para escanear en esta orden. Contacta al administrador.'
   if (err?.message) return err.message
