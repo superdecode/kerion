@@ -325,6 +325,48 @@ async function refreshPickSessionTotals(req, sessionId) {
        AND NOT EXISTS (SELECT 1 FROM pick_events WHERE session_id = $1 AND scan_result = 'ok')`,
     [sessionId, req.tenantId]
   )
+
+  const sessionRes = await req.tQuery(
+    `SELECT id, outbound_order_no, third_order_no, status, total_expected, total_scanned
+     FROM pick_sessions
+     WHERE id = $1 AND tenant_id = $2`,
+    [sessionId, req.tenantId]
+  )
+  const session = sessionRes.rows[0]
+  if (!session) return
+
+  const expected = parsePositiveInt(session.total_expected, 0)
+  const scanned = parsePositiveInt(session.total_scanned, 0)
+  if (session.status !== 'open' || expected <= 0 || scanned < expected) return
+
+  const completedRes = await req.tQuery(
+    `UPDATE pick_sessions
+     SET status = 'complete',
+         completed_at = COALESCE(completed_at, now()),
+         updated_at = now()
+     WHERE id = $1
+       AND tenant_id = $2
+       AND status = 'open'
+     RETURNING *`,
+    [sessionId, req.tenantId]
+  )
+  const completedSession = completedRes.rows[0]
+  if (!completedSession?.outbound_order_no) return
+
+  const userNombre = req.fullUser?.nombre_completo || req.user?.email || String(req.user?.id || '')
+  await req.tQuery(
+    `INSERT INTO pick_order_tracking
+       (tenant_id, outbound_order_no, third_order_no, status, validation_completed_at, validated_by)
+     VALUES ($1, $2, $3, 'complete', now(), $4)
+     ON CONFLICT (tenant_id, outbound_order_no)
+     DO UPDATE SET
+       third_order_no = COALESCE(EXCLUDED.third_order_no, pick_order_tracking.third_order_no),
+       status = 'complete',
+       validation_completed_at = now(),
+       validated_by = EXCLUDED.validated_by,
+       updated_at = now()`,
+    [req.tenantId, completedSession.outbound_order_no, completedSession.third_order_no || null, userNombre]
+  )
 }
 
 const BOX_STATUS_TRANSITIONS = {
@@ -687,7 +729,30 @@ router.get('/scan-sessions',
       else if (opIds.length > 1) { conditions.push(`s.operator_id = ANY($${p++})`); params.push(opIds) }
       if (fecha_inicio) { conditions.push(`${instantDateInTZ('s.started_at', tz)} >= $${p++}`); params.push(fecha_inicio) }
       if (fecha_fin) { conditions.push(`${instantDateInTZ('s.started_at', tz)} <= $${p++}`); params.push(fecha_fin) }
-      if (outbound_order_no) { conditions.push(`s.outbound_order_no ILIKE $${p++}`); params.push(`%${outbound_order_no}%`) }
+      if (outbound_order_no) {
+        const searchTerm = `%${outbound_order_no}%`
+        const normalizedSearch = normalizeScanCode(outbound_order_no)
+        const searchConditions = [`s.outbound_order_no ILIKE $${p++}`]
+        params.push(searchTerm)
+
+        if (normalizedSearch) {
+          searchConditions.push(`EXISTS (
+            SELECT 1
+            FROM pick_events e
+            WHERE e.session_id = s.id
+              AND e.tenant_id = s.tenant_id
+              AND (
+                e.scanned_code ILIKE $${p}
+                OR e.normalized_code ILIKE $${p}
+                OR e.normalized_code = $${p + 1}
+              )
+          )`)
+          params.push(searchTerm, normalizedSearch)
+          p += 2
+        }
+
+        conditions.push(`(${searchConditions.join(' OR ')})`)
+      }
 
       const where = conditions.join(' AND ')
       const [sessionsRes, countRes] = await Promise.all([
@@ -1364,6 +1429,53 @@ router.get('/inventory-session/:id',
     } catch (err) {
       console.error('GET wmshub/inventory-session/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo sesión' })
+    }
+  }
+)
+
+// PATCH /api/wmshub/inventory-session/:id — update session metadata (origen/destino)
+router.patch('/inventory-session/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.registros', 'actualizar'),
+  async (req, res) => {
+    try {
+      const { origin_location, ubicacion_id } = req.body
+      const sessionRes = await req.tQuery(
+        'SELECT id FROM inv_sessions WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, req.tenantId]
+      )
+      if (sessionRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
+
+      const fields = []
+      const params = []
+      let p = 1
+      if (origin_location !== undefined) { fields.push(`origin_location = $${p++}`); params.push(normalizeOptionalText(origin_location)) }
+      if (ubicacion_id !== undefined) {
+        const parsed = ubicacion_id === null || ubicacion_id === '' ? null : parseInt(ubicacion_id, 10)
+        fields.push(`ubicacion_id = $${p++}`)
+        params.push(Number.isInteger(parsed) ? parsed : null)
+      }
+      if (fields.length === 0) return res.status(400).json({ success: false, error: 'Sin cambios' })
+      fields.push(`updated_at = now()`)
+      params.push(req.params.id, req.tenantId)
+
+      await req.tQuery(
+        `UPDATE inv_sessions SET ${fields.join(', ')} WHERE id = $${p++} AND tenant_id = $${p}`,
+        params
+      )
+      const enriched = await req.tQuery(
+        `SELECT s.*, u.nombre_completo as operator_nombre,
+                ub.codigo as ubicacion_codigo, ub.nombre as ubicacion_nombre
+         FROM inv_sessions s
+         LEFT JOIN usuarios u ON u.id = s.operator_id
+         LEFT JOIN dev_ubicaciones ub ON ub.id = s.ubicacion_id
+         WHERE s.id = $1 AND s.tenant_id = $2`,
+        [req.params.id, req.tenantId]
+      )
+      res.json({ success: true, data: enriched.rows[0] })
+    } catch (err) {
+      console.error('PATCH wmshub/inventory-session/:id error:', err.message)
+      res.status(500).json({ success: false, error: 'Error actualizando sesión' })
     }
   }
 )
@@ -2477,28 +2589,52 @@ router.get('/ubicaciones',
   ]),
   async (req, res) => {
     try {
-      const { modulo, full } = req.query
+      const { modulo, full, q, limit } = req.query
       const params = [req.tenantId]
       let filter = ''
       if (modulo && modulo !== 'todos') {
-        filter = ` AND (modulo_uso @> ARRAY['todos'] OR modulo_uso @> ARRAY[$2])`
+        filter = ` AND (modulo_uso @> ARRAY['todos'] OR modulo_uso @> ARRAY[$${params.length + 1}])`
         params.push(modulo)
       }
-      const sql = full
-        ? `SELECT u.*,
-                  COALESCE(SUM(i.cantidad_disponible), 0) AS pcs_stock
-             FROM dev_ubicaciones u
-             LEFT JOIN dev_inventario i
-               ON i.ubicacion_id = u.id
-              AND i.tenant_id = u.tenant_id
-              AND i.cantidad_disponible > 0
-            WHERE u.tenant_id = $1${filter}
-            GROUP BY u.id
-            ORDER BY u.activo DESC, u.codigo ASC`
-        : `SELECT id, codigo, nombre
-             FROM dev_ubicaciones
-            WHERE tenant_id = $1 AND activo = true${filter}
-            ORDER BY codigo ASC`
+
+      // Optional server-side search by codigo/nombre. Always cap the result set:
+      // the catalog can hold thousands of rows, so the client never loads it all.
+      const search = normalizeOptionalText(q)
+      const cap = Math.min(Math.max(parseInt(limit, 10) || (full ? 300 : 20), 1), 1000)
+
+      if (full) {
+        let searchClause = ''
+        if (search) {
+          params.push(`%${search}%`)
+          searchClause = ` AND (u.codigo ILIKE $${params.length} OR u.nombre ILIKE $${params.length})`
+        }
+        const sql = `SELECT u.*,
+                            COALESCE(SUM(i.cantidad_disponible), 0) AS pcs_stock
+                       FROM dev_ubicaciones u
+                       LEFT JOIN dev_inventario i
+                         ON i.ubicacion_id = u.id
+                        AND i.tenant_id = u.tenant_id
+                        AND i.cantidad_disponible > 0
+                      WHERE u.tenant_id = $1${filter}${searchClause}
+                      GROUP BY u.id
+                      ORDER BY u.activo DESC, u.codigo ASC
+                      LIMIT ${cap}`
+        const result = await req.tQuery(sql, params)
+        return res.json({ success: true, data: result.rows })
+      }
+
+      let searchClause = ''
+      let orderExtra = ''
+      if (search) {
+        params.push(`%${search}%`)
+        searchClause = ` AND (codigo ILIKE $${params.length} OR nombre ILIKE $${params.length})`
+        orderExtra = `(codigo ILIKE $${params.length}) DESC, `
+      }
+      const sql = `SELECT id, codigo, nombre
+                     FROM dev_ubicaciones
+                    WHERE tenant_id = $1 AND activo = true${filter}${searchClause}
+                    ORDER BY ${orderExtra}codigo ASC
+                    LIMIT ${cap}`
       const result = await req.tQuery(sql, params)
       res.json({ success: true, data: result.rows })
     } catch (err) {
@@ -2723,6 +2859,30 @@ router.get('/box-status-incidents/:obc',
     } catch (err) {
       console.error('GET box-status-incidents error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo incidencias' })
+    }
+  }
+)
+
+// GET /wmshub/box-status-detail/:obc — full status rows (incl. validada) with date/user, for a single box lookup
+router.get('/box-status-detail/:obc',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'ver' },
+  ]),
+  async (req, res) => {
+    try {
+      const result = await req.tQuery(
+        `SELECT box_code, estado, updated_by, updated_at
+         FROM pick_box_status
+         WHERE tenant_id = $1 AND outbound_order_no = $2`,
+        [req.tenantId, req.params.obc]
+      )
+      res.json({ success: true, data: result.rows })
+    } catch (err) {
+      console.error('GET box-status-detail error:', err.message)
+      res.status(500).json({ success: false, error: 'Error obteniendo detalle de estado de cajas' })
     }
   }
 )

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutGrid, Upload, Trash2, Search, X, Plus, AlertTriangle, Check } from 'lucide-react'
+import { LayoutGrid, Upload, Trash2, Search, X, Plus, AlertTriangle, Check, Loader2 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import { createUbicacion, deleteUbicacion, updateUbicacion } from '../services/devolucionesService'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -34,6 +34,8 @@ export default function InventarioUbicacionesModal({
   allowManagement = true,
   selectActionLabel = 'Seleccionar',
   serviceOverrides = null,
+  onSearchChange = null,
+  loading = false,
 }) {
   const toast = useToastStore()
   const { t } = useI18nStore()
@@ -50,13 +52,17 @@ export default function InventarioUbicacionesModal({
     ...serviceOverrides,
   }
 
+  // When onSearchChange is provided the parent performs server-side search,
+  // so the received `ubicaciones` are already filtered — skip client filtering.
+  const serverSearch = typeof onSearchChange === 'function'
   const filtered = useMemo(() => {
+    if (serverSearch) return ubicaciones
     const q = search.toLowerCase().trim()
     if (!q) return ubicaciones
     return ubicaciones.filter(u =>
       u.codigo?.toLowerCase().includes(q) || u.nombre?.toLowerCase().includes(q)
     )
-  }, [ubicaciones, search])
+  }, [ubicaciones, search, serverSearch])
 
   const handleSave = async () => {
     if (!codigo.trim()) return
@@ -119,12 +125,12 @@ export default function InventarioUbicacionesModal({
             <input
               type="text"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); if (serverSearch) onSearchChange(e.target.value) }}
               placeholder={t('dev.inv_ubicaciones.search')}
               className="text-xs outline-none bg-transparent text-warm-700 flex-1"
             />
             {search && (
-              <button onClick={() => setSearch('')} className="text-warm-400 hover:text-warm-600">
+              <button onClick={() => { setSearch(''); if (serverSearch) onSearchChange('') }} className="text-warm-400 hover:text-warm-600">
                 <X className="w-3 h-3" />
               </button>
             )}
@@ -216,7 +222,13 @@ export default function InventarioUbicacionesModal({
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary-500 mx-auto" />
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-warm-400 text-sm">
                     {search ? t('dev.inv_ubicaciones.sin_resultados') : t('dev.inv_ubicaciones.sin_datos')}

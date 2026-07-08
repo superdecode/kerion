@@ -22,11 +22,12 @@ import { getTimeBounds } from '../utils/timeBounds'
 import {
   getInventorySessions, getInventorySession, deleteInventorySession,
   createInventoryScan, updateInventoryScan, deleteInventoryScan, checkInventoryDuplicates,
+  updateInventorySession,
 } from '../services/inventarioService'
 import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 import QuickCodeSearchModal from '../components/QuickCodeSearchModal'
 import InventarioUbicacionesModal from '../../Devoluciones/components/InventarioUbicacionesModal'
-import { getUbicacionesAdmin, createUbicacion, updateUbicacion, deleteUbicacion } from '../../WmsHub/services/wmsHubService'
+import { getUbicacionesAdmin, searchUbicaciones, createUbicacion, updateUbicacion, deleteUbicacion } from '../../WmsHub/services/wmsHubService'
 
 const STATUS_META_KEYS = {
   ok: {
@@ -234,6 +235,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
   const [editingCell, setEditingCell] = useState('')
   const [newScan, setNewScan] = useState({ scanned_code: '', scan_status: 'ok', group_assignment: 'auto' })
   const [duplicatePending, setDuplicatePending] = useState(null)
+  const [editOrigin, setEditOrigin] = useState('')
+  const [editUbicacionInput, setEditUbicacionInput] = useState('')
+  const [showUbicSuggest, setShowUbicSuggest] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['wms-inventory-session', session?.id],
@@ -241,6 +245,21 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
     enabled: isOpen && !!session?.id,
     staleTime: STALE.SHORT,
   })
+
+  // Server-side autocomplete for destino: only fetch matches as the user types.
+  const [ubicacionQuery, setUbicacionQuery] = useState('')
+  useEffect(() => {
+    const handle = setTimeout(() => setUbicacionQuery(editUbicacionInput.trim()), 250)
+    return () => clearTimeout(handle)
+  }, [editUbicacionInput])
+
+  const { data: ubicacionesData, isFetching: ubicacionMatchesFetching } = useQuery({
+    queryKey: ['wms-ubicaciones-search', ubicacionQuery],
+    queryFn: () => searchUbicaciones(ubicacionQuery),
+    enabled: isOpen && !isReadOnly && ubicacionQuery.length >= 1,
+    staleTime: STALE.SHORT,
+  })
+  const ubicacionMatches = ubicacionesData?.data ?? []
 
   const sessionData = data?.data?.session ?? {}
   const scans = data?.data?.scans ?? []
@@ -308,8 +327,15 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
     setEditingScanId(null)
     setEditingCode('')
     setEditingCell('')
+    setShowUbicSuggest(false)
     setDuplicatePending(null)
   }, [initialTab, initialReadOnly, isOpen])
+
+  // Keep origen/destino edit fields in sync with loaded session data
+  useEffect(() => {
+    setEditOrigin(sessionData.origin_location || '')
+    setEditUbicacionInput(sessionData.ubicacion_codigo || sessionData.ubicacion_code || '')
+  }, [sessionData.origin_location, sessionData.ubicacion_codigo, sessionData.ubicacion_code])
 
   const confirmPotentialDuplicate = async ({ codes, displayCode, excludeScanId = null, onAccept }) => {
     const variantSet = buildCodeVariantSet(...codes)
@@ -358,6 +384,41 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
       qc.invalidateQueries({ queryKey: ['wms-inventory-session', session?.id] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  const updateSessionMut = useMutation({
+    mutationFn: async () => {
+      const typed = editUbicacionInput.trim()
+      let ubicacion_id = null
+      if (typed) {
+        // Authoritatively resolve the typed code; reject if it isn't a real ubicacion.
+        const res = await searchUbicaciones(typed)
+        const found = (res?.data ?? []).find((u) => (u.codigo || '').toLowerCase() === typed.toLowerCase())
+        if (!found) {
+          const err = new Error('ubicacion_invalida')
+          err.ubicInvalid = true
+          throw err
+        }
+        ubicacion_id = found.id
+      }
+      return updateInventorySession(session.id, {
+        origin_location: editOrigin.trim() || null,
+        ubicacion_id,
+      })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['wms-inventory-session', session?.id] })
+      qc.invalidateQueries({ queryKey: ['wms-inventory-sessions'] })
+      toast.success(t('common.saved', 'Guardado'))
+      onClose?.()
+    },
+    onError: (err) => {
+      if (err?.ubicInvalid) {
+        toast.error(t('inventario.registros.ubicacionInvalida', 'Ubicación destino no válida. Selecciónala de la lista.'))
+        return
+      }
+      toast.error(err.response?.data?.error || t('toast.error'))
+    },
   })
 
   const deleteScanMut = useMutation({
@@ -448,7 +509,19 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
               </button>
             )}
           </div>
-          <button className="btn-secondary" onClick={onClose}>{t('common.close')}</button>
+          <div className="flex items-center gap-2">
+            <button className="btn-secondary" onClick={onClose}>{t('common.close')}</button>
+            {!isLoading && !isReadOnly && canEditScans && (
+              <button
+                className="btn-primary inline-flex items-center gap-1.5"
+                disabled={updateSessionMut.isPending}
+                onClick={() => updateSessionMut.mutate()}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {updateSessionMut.isPending ? t('common.saving', 'Guardando...') : t('common.save', 'Guardar')}
+              </button>
+            )}
+          </div>
         </div>
       }
     >
@@ -464,16 +537,61 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
               { label: 'Tarimas', value: totals.tarimas, Icon: Boxes },
               { label: t('inventario.registros.total'), value: totals.total, Icon: Package2 },
               { label: t('inventario.escaneo.time_label'), value: duration, Icon: Timer },
-              { label: 'Ubic. trabajo', value: sessionData.origin_location || '—', Icon: MapPin },
-              { label: 'Ubic. destino', value: sessionData.ubicacion_codigo || sessionData.ubicacion_code || '—', Icon: MapPin },
-            ].map(card => (
+              { label: 'Ubic. trabajo', value: sessionData.origin_location || '—', Icon: MapPin, edit: 'origen' },
+              { label: 'Ubic. destino', value: sessionData.ubicacion_codigo || sessionData.ubicacion_code || '—', Icon: MapPin, edit: 'destino' },
+            ].map(card => {
+              const editable = !isReadOnly && canEditScans && card.edit
+              return (
               <div key={card.label} className="rounded-2xl border border-warm-100/70 bg-gradient-to-br from-white via-warm-50/70 to-warm-100/60 p-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.5)]">
                 <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-1 flex items-center gap-1.5">
                   <card.Icon className="w-3 h-3" /> {card.label}
                 </p>
-                <p className={card.label.includes('Fecha') ? 'font-mono text-xs font-medium text-warm-600' : 'text-sm font-semibold text-warm-700 truncate'}>{card.value}</p>
+                {editable === 'origen' ? (
+                  <input
+                    className="input-field h-8 text-sm w-full"
+                    value={editOrigin}
+                    placeholder="Ubicación origen"
+                    onChange={(event) => setEditOrigin(event.target.value)}
+                  />
+                ) : editable === 'destino' ? (
+                  <div className="relative">
+                    <input
+                      className="input-field h-8 text-sm w-full font-mono pr-7"
+                      value={editUbicacionInput}
+                      placeholder="Buscar ubicación destino"
+                      autoComplete="off"
+                      onChange={(event) => { setEditUbicacionInput(event.target.value); setShowUbicSuggest(true) }}
+                      onFocus={() => setShowUbicSuggest(true)}
+                      onBlur={() => setTimeout(() => setShowUbicSuggest(false), 150)}
+                    />
+                    {ubicacionMatchesFetching && (
+                      <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-primary-500" />
+                    )}
+                    {showUbicSuggest && editUbicacionInput.trim() && ubicacionMatches.length > 0 && (
+                      <ul className="absolute z-30 mt-1 w-full max-h-52 overflow-auto rounded-xl border border-warm-200 bg-white shadow-xl">
+                        {ubicacionMatches.map((u) => (
+                          <li key={u.id}>
+                            <button
+                              type="button"
+                              onMouseDown={(event) => { event.preventDefault(); setEditUbicacionInput(u.codigo); setShowUbicSuggest(false) }}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-primary-50 flex items-center justify-between gap-2"
+                            >
+                              <span className="font-mono font-semibold text-warm-700">{u.codigo}</span>
+                              {u.nombre && u.nombre !== u.codigo && (
+                                <span className="text-warm-400 truncate">{u.nombre}</span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : (
+                  <p className={card.label.includes('Fecha') ? 'font-mono text-xs font-medium text-warm-600' : 'text-sm font-semibold text-warm-700 truncate'}>{card.value}</p>
+                )}
               </div>
-            ))}
+              )
+            })}
           </div>
 
           {tarimas.length === 0 ? (
@@ -531,9 +649,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                                 <span className="text-center text-xs font-bold text-warning-600">{tarima.counts.blocked}</span>
                                 <span className="text-center text-xs font-bold text-danger-600">{tarima.counts.nowms}</span>
                                 <span className="text-center text-xs font-bold text-warm-700">{tarima.counts.total}</span>
-                                {isExpanded
-                                  ? <ChevronUp className="w-4 h-4 text-warm-400 justify-self-end" />
-                                  : <ChevronDown className="w-4 h-4 text-warm-400 justify-self-end" />}
+                                <span className={`justify-self-end grid place-items-center w-6 h-6 rounded-full border transition-all duration-200 ${isExpanded ? 'rotate-180 border-primary-300 bg-primary-50 text-primary-600' : 'border-warm-200 bg-white text-warm-400'}`}>
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </span>
                               </button>
                               <AnimatePresence>
                                 {isExpanded && (
@@ -815,6 +933,8 @@ export default function InventarioRegistros() {
   const [search, setSearch] = useState('')
   const [showQuickSearch, setShowQuickSearch] = useState(false)
   const [showManageUbicaciones, setShowManageUbicaciones] = useState(false)
+  const [manageUbicSearch, setManageUbicSearch] = useState('')
+  const [manageUbicSearchDebounced, setManageUbicSearchDebounced] = useState('')
 
   const filters = {
     scan_type: scanTypeFilter || undefined,
@@ -841,9 +961,14 @@ export default function InventarioRegistros() {
   const filteredRecords = useMemo(() =>
     filterOperators.length === 0 ? records : records.filter(r => filterOperators.includes(r.operator_nombre)),
   [records, filterOperators])
-  const { data: ubicacionesAdminData } = useQuery({
-    queryKey: ['wms-ubicaciones-admin', 'inventario'],
-    queryFn: () => getUbicacionesAdmin('inventario'),
+  useEffect(() => {
+    const handle = setTimeout(() => setManageUbicSearchDebounced(manageUbicSearch.trim()), 250)
+    return () => clearTimeout(handle)
+  }, [manageUbicSearch])
+
+  const { data: ubicacionesAdminData, isFetching: ubicacionesFetching } = useQuery({
+    queryKey: ['wms-ubicaciones-admin', 'inventario', manageUbicSearchDebounced],
+    queryFn: () => getUbicacionesAdmin('inventario', manageUbicSearchDebounced),
     staleTime: STALE.CATALOG,
     enabled: showManageUbicaciones,
   })
@@ -1339,8 +1464,10 @@ export default function InventarioRegistros() {
       />
       <InventarioUbicacionesModal
         isOpen={showManageUbicaciones}
-        onClose={() => setShowManageUbicaciones(false)}
+        onClose={() => { setShowManageUbicaciones(false); setManageUbicSearch('') }}
         ubicaciones={ubicacionesAdminData?.data ?? []}
+        loading={ubicacionesFetching}
+        onSearchChange={setManageUbicSearch}
         onSaved={() => {
           qc.invalidateQueries({ queryKey: ['wms-ubicaciones-admin'] })
         }}

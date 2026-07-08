@@ -319,6 +319,23 @@ function dedupeRows(rows, keyFn) {
   })
 }
 
+// Run thunks with bounded concurrency, preserving result order.
+// `limit` caps how many DB connections are used at once so parallel search
+// queries don't starve the pool for other concurrent requests.
+async function runLimited(thunks, limit) {
+  const results = new Array(thunks.length)
+  let next = 0
+  async function worker() {
+    while (next < thunks.length) {
+      const idx = next++
+      results[idx] = await thunks[idx]()
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, thunks.length) }, worker)
+  await Promise.all(workers)
+  return results
+}
+
 // ── GET /api/rastreo/causas — catálogo causa tipos ───────────────────────────
 router.get('/causas',
   authenticateToken, loadFullUser,
@@ -453,8 +470,7 @@ router.get('/buscar',
       const mode = req.query.mode === 'exact' ? 'exact' : 'flexible'
       if (!q) return res.status(400).json({ error: 'Parámetro q requerido' })
       const tokens = getSearchTokens(q)
-      const client = await req.tGetClient()
-      const hasRastreoBoxType = await hasTableColumn(client, 'rastreo_cajas', 'box_type')
+      const hasRastreoBoxType = await hasTableColumn(req.tQuery, 'rastreo_cajas', 'box_type')
       const rastreoMatchColumns = hasRastreoBoxType
         ? ['rc.box_code', 'rc.box_code_normalized', 'rc.box_type', 'ro.outbound_order_no']
         : ['rc.box_code', 'rc.box_code_normalized', 'ro.outbound_order_no']
@@ -486,9 +502,7 @@ router.get('/buscar',
 
       const searchParams = [req.tenantId, tokens.exactVariants, tokens.compact, tokens.baseCompact, tokens.partialVariants]
       const flexibleSearchParams = [...searchParams, mode !== 'exact']
-      let invRes, invRegRes, pickRes, pickStatusRes, rastreoRes, inboundRes, anormRes, despRes, despOrdenesRes
-      try {
-        invRes = await client.query(
+      const invT = () => req.tQuery(
           `SELECT s.barcode, s.sku, s.product_name, s.cell_no, s.available_stock,
                   s.status, s.created_at,
                   u.nombre_completo AS operador,
@@ -510,7 +524,7 @@ router.get('/buscar',
            LIMIT 30`,
           searchParams
         )
-        invRegRes = await client.query(
+        const invRegT = () => req.tQuery(
           `SELECT sc.id, sc.scanned_code, sc.normalized_code, sc.code2, sc.scan_status, sc.cell_no,
                   sc.group_assignment, sc.scanned_at,
                   sess.id AS session_id, sess.scan_type,
@@ -532,15 +546,17 @@ router.get('/buscar',
            LIMIT 30`,
           searchParams
         )
-        pickRes = await client.query(
+        const pickT = () => req.tQuery(
           `SELECT pe.scanned_code, pe.scan_result, pe.scanned_at AS created_at,
                   pe.normalized_code, pe.matched_box_type,
                   ps.outbound_order_no, ps.status AS session_status,
                   u.nombre_completo AS operador,
+                  COALESCE(ub.codigo, ps.ubicacion_nota) AS ubicacion_codigo,
                   ${buildMatchCase(['pe.scanned_code', 'pe.normalized_code', 'pe.matched_box_type', 'ps.outbound_order_no'], matchParams)} AS match_type
            FROM pick_events pe
            JOIN pick_sessions ps ON ps.id = pe.session_id
            LEFT JOIN usuarios u ON u.id = ps.operator_id
+           LEFT JOIN dev_ubicaciones ub ON ub.id = ps.ubicacion_id AND ub.tenant_id = ps.tenant_id
            WHERE ps.tenant_id = $1
              AND ${surtidoWhere}
            ORDER BY
@@ -554,7 +570,7 @@ router.get('/buscar',
            LIMIT 50`,
           searchParams
         )
-        pickStatusRes = await client.query(
+        const pickStatusT = () => req.tQuery(
           `SELECT
              pbs.box_code AS scanned_code,
              pbs.box_code AS normalized_code,
@@ -576,8 +592,17 @@ router.get('/buscar',
              END AS scan_result,
              pbs.estado AS box_status,
              pbs.updated_at AS created_at,
-             pbs.updated_by AS operador
+             pbs.updated_by AS operador,
+             COALESCE(ub.codigo, latest_ps.ubicacion_nota) AS ubicacion_codigo
            FROM pick_box_status pbs
+           LEFT JOIN LATERAL (
+             SELECT ps2.ubicacion_id, ps2.ubicacion_nota
+               FROM pick_sessions ps2
+              WHERE ps2.tenant_id = pbs.tenant_id AND ps2.outbound_order_no = pbs.outbound_order_no
+              ORDER BY ps2.started_at DESC
+              LIMIT 1
+           ) latest_ps ON true
+           LEFT JOIN dev_ubicaciones ub ON ub.id = latest_ps.ubicacion_id AND ub.tenant_id = pbs.tenant_id
            WHERE pbs.tenant_id = $1
              AND (
               UPPER(COALESCE(pbs.box_code, '')) = ANY($2::text[])
@@ -599,7 +624,7 @@ router.get('/buscar',
            LIMIT 50`,
           flexibleSearchParams
         )
-        rastreoRes = await client.query(
+        const rastreoT = () => req.tQuery(
           `WITH inbound_xref AS (
              SELECT DISTINCT il.custom_box_barcode AS xref_barcode
              FROM inbound_lines il
@@ -641,13 +666,15 @@ router.get('/buscar',
            LIMIT 100`,
           searchParams
         )
-        inboundRes = await client.query(
+        const inboundT = () => req.tQuery(
           `SELECT il.id, il.custom_box_barcode, il.box_type, il.sku, il.qty_per_box,
                   il.estado_validacion, il.validated_at, il.created_at,
+                  u_val.nombre_completo AS validated_by_nombre,
                   io.folio, io.cliente, io.inbound_order_no, io.tracking_no, io.estado AS orden_estado,
                   ${buildMatchCase(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)} AS match_type
            FROM inbound_lines il
            JOIN inbound_orders io ON io.id = il.order_id
+           LEFT JOIN usuarios u_val ON u_val.id = il.validated_by AND u_val.tenant_id = io.tenant_id
            WHERE io.tenant_id = $1
              AND ${inboundWhere}
            ORDER BY
@@ -661,7 +688,7 @@ router.get('/buscar',
            LIMIT 100`,
           searchParams
         )
-        anormRes = await client.query(
+        const anormT = () => req.tQuery(
           `SELECT a.id, a.folio, a.codigo, a.descripcion, a.contenedor_orden,
                  a.nombre, a.proceso, a.cliente, a.almacen, a.sku, a.ubicacion,
                  ac.codigo AS codigo_anormalidad, ac.nombre_es AS tipo_anormalidad,
@@ -747,7 +774,7 @@ router.get('/buscar',
            LIMIT 30`,
           flexibleSearchParams
         )
-        despRes = await client.query(
+        const despT = () => req.tQuery(
           `SELECT dos.id, dos.codigo_caja, dos.matched_order_no, dos.created_at,
                   df.folio_numero,
                   dfo.outbound_order_no, dfo.cliente,
@@ -801,7 +828,7 @@ router.get('/buscar',
            LIMIT 50`,
           flexibleSearchParams
         )
-        despOrdenesRes = await client.query(
+        const despOrdenesT = () => req.tQuery(
           `SELECT dfo.id, dfo.outbound_order_no, dfo.cliente, dfo.bultos, dfo.peso_kg,
                   dfo.estado AS orden_estado, dfo.notas, dfo.created_at,
                   df.folio_numero, df.estado AS folio_estado, df.fecha_salida,
@@ -821,13 +848,14 @@ router.get('/buscar',
            LIMIT 50`,
           searchParams
         )
-        await client.query('COMMIT')
-      } catch (err) {
-        await client.query('ROLLBACK').catch(() => {})
-        throw err
-      } finally {
-        client.release()
-      }
+      // Run the independent datasets in parallel with bounded concurrency so
+      // one slow scan doesn't serialize the whole search, while leaving pool
+      // headroom for other concurrent requests (deletes, etc.).
+      const [invRes, invRegRes, pickRes, pickStatusRes, rastreoRes, inboundRes, anormRes, despRes, despOrdenesRes] =
+        await runLimited(
+          [invT, invRegT, pickT, pickStatusT, rastreoT, inboundT, anormT, despT, despOrdenesT],
+          3
+        )
 
       const pickRows = dedupeRows(pickRes.rows, row => [
         canonicalCodeKey(row.normalized_code || row.scanned_code || row.matched_box_type),

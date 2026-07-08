@@ -67,6 +67,18 @@ import devDashboardRoutes from './modules/devoluciones/routes/dashboard.routes.j
 import invDashboardRoutes from './modules/inventory/routes/dashboard.routes.js'
 import surtidoDashboardRoutes from './modules/wms/routes/surtido.dashboard.routes.js'
 
+// Node's fetch/undici can emit an async 'error' after a request's own promise
+// chain has already settled (e.g. an HTTP/2 stream reset from an upstream
+// like Google Sheets after a timeout abort). Without these handlers that
+// crashes the whole process — killing every in-flight request, not just the
+// one that failed. Same rationale as pool.on('error') below: log, never exit.
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught exception (process kept alive):', err)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Unhandled rejection (process kept alive):', reason)
+})
+
 const app = express()
 app.set('trust proxy', 1)
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

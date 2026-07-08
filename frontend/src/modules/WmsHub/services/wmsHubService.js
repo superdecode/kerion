@@ -9,8 +9,15 @@ export const getUbicaciones = (modulo) =>
     data: r.data?.data ?? r.data?.ubicaciones ?? [],
   }))
 
-export const getUbicacionesAdmin = (modulo) =>
-  api.get('/wmshub/ubicaciones', { params: { modulo, full: 1 } }).then(r => ({
+export const getUbicacionesAdmin = (modulo, q = '') =>
+  api.get('/wmshub/ubicaciones', { params: { modulo, full: 1, ...(q ? { q } : {}) } }).then(r => ({
+    success: true,
+    data: r.data?.data ?? r.data?.ubicaciones ?? [],
+  }))
+
+// Lightweight server-side autocomplete: returns up to 20 matches for `q`.
+export const searchUbicaciones = (q, modulo = 'inventario') =>
+  api.get('/wmshub/ubicaciones', { params: { modulo, q } }).then(r => ({
     success: true,
     data: r.data?.data ?? r.data?.ubicaciones ?? [],
   }))

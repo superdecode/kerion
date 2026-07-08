@@ -32,10 +32,17 @@ const INVENTORY_STATUS_LABELS = {
   NoWMS: 'rastreo.searchModal.status.nowms',
 }
 
+// Two sources feed this section's rows (see rastreo.routes.js /buscar):
+// pick_events.scan_result is one of ok/unexpected/duplicate/not_found; the
+// pick_box_status-derived rows synthesize a virtual 'rejected' value (from
+// estado='faltante'). The map only had ok/duplicate/rejected, so real
+// not_found/unexpected rows fell back to a blank generic "Estado" badge.
 const SCAN_RESULT_LABELS = {
   ok: 'rastreo.searchModal.result.ok',
   duplicate: 'rastreo.searchModal.result.duplicate',
   rejected: 'rastreo.searchModal.result.rejected',
+  not_found: 'rastreo.searchModal.result.not_found',
+  unexpected: 'rastreo.searchModal.result.unexpected',
 }
 
 const SCAN_STATUS_LABELS = {
@@ -294,7 +301,7 @@ function ValidacionSection({ records, open, onToggle }) {
                 <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-success-50/60 border-b border-success-100">
                     <tr>
-                      {[t('rastreo.searchModal.col.codigoEscaneado'), t('rastreo.col.ordenSalida'), t('rastreo.searchModal.col.resultado'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
+                      {[t('rastreo.searchModal.col.codigoEscaneado'), t('rastreo.col.ordenSalida'), t('rastreo.searchModal.col.resultado'), t('rastreo.detalle.col.ubicacion'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-success-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -309,12 +316,16 @@ function ValidacionSection({ records, open, onToggle }) {
                           <CopyableCell text={r.outbound_order_no || '—'} className="font-mono font-semibold text-primary-700" />
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold
-                            ${r.scan_result === 'ok' ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-600'}`}>
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
+                            r.scan_result === 'ok' ? 'bg-success-100 text-success-700'
+                              : r.scan_result === 'duplicate' ? 'bg-warning-100 text-warning-700'
+                                : 'bg-danger-100 text-danger-600'
+                          }`}>
                             {r.scan_result === 'ok' ? <CheckCircle2 size={10} /> : <XCircle size={10} />}
                             {t(SCAN_RESULT_LABELS[r.scan_result] || 'common.status')}
                           </span>
                         </td>
+                        <td className="px-3 py-2.5 font-mono text-warm-600">{r.ubicacion_codigo || '—'}</td>
                         <td className="px-3 py-2.5 text-warm-600">{r.operador || '—'}</td>
                         <td className="px-3 py-2.5 text-warm-400">
                           {new Date(r.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
@@ -726,7 +737,7 @@ function RecepcionSection({ records, open, onToggle }) {
                 <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-violet-50/70 border-b border-violet-100">
                     <tr>
-                      {['Cód. caja', 'Tipo caja', 'SKU', 'Folio entrada', 'Cliente', t('common.status')].map(h => (
+                      {['Cód. caja', 'SKU', 'Folio entrada', t('common.status'), 'Validador', 'Validación'].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-violet-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -737,14 +748,10 @@ function RecepcionSection({ records, open, onToggle }) {
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.custom_box_barcode || '—'} className="font-mono text-warm-700" />
                         </td>
-                        <td className="px-3 py-2.5">
-                          <CopyableCell text={r.box_type || '—'} className="font-mono text-warm-500" />
-                        </td>
                         <td className="px-3 py-2.5 text-warm-600">{r.sku || '—'}</td>
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.folio || r.inbound_order_no || '—'} className="font-mono font-semibold text-primary-700" />
                         </td>
-                        <td className="px-3 py-2.5 text-warm-600 max-w-[120px] truncate">{r.cliente || '—'}</td>
                         <td className="px-3 py-2.5">
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
                             r.estado_validacion === 'validada' ? 'bg-success-100 text-success-700'
@@ -753,6 +760,16 @@ function RecepcionSection({ records, open, onToggle }) {
                           }`}>
                             {t(INBOUND_ESTADO_LABELS[r.estado_validacion] || 'common.status')}
                           </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-warm-600">
+                          {r.estado_validacion === 'validada'
+                            ? (r.validated_by_nombre || '—')
+                            : '—'}
+                        </td>
+                        <td className="px-3 py-2.5 text-warm-500 whitespace-nowrap">
+                          {r.estado_validacion === 'validada' && r.validated_at
+                            ? fmtDateTime(r.validated_at)
+                            : '—'}
                         </td>
                       </tr>
                     ))}
@@ -957,68 +974,79 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
             </button>
           </div>
 
-          <div className="px-5 pt-3 shrink-0">
-            <div className="inline-flex rounded-2xl border border-primary-200/70 bg-gradient-to-b from-primary-50 to-white p-1 shadow-[0_16px_28px_-24px_rgba(59,130,246,0.45)]">
-              {[
-                { key: 'exact', label: t('rastreo.searchModal.exacta') },
-                { key: 'flexible', label: t('rastreo.searchModal.flexible') },
-              ].map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => setSearchMode(tab.key)}
-                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
-                    searchMode === tab.key
-                      ? 'border-primary-200 bg-white text-primary-700 shadow-[0_10px_24px_-18px_rgba(37,99,235,0.65)]'
-                      : 'border-transparent text-warm-500 hover:border-primary-100 hover:bg-white/80 hover:text-warm-700'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-[11px] text-warm-400">
-              {searchMode === 'exact'
-                ? t('rastreo.searchModal.exactaHint')
-                : t('rastreo.searchModal.flexibleHint')}
-            </p>
-          </div>
-
           {/* Search input */}
           <div className="px-5 py-4 border-b border-warm-100 shrink-0">
-            <div className="flex gap-2">
-              <div className="flex min-w-0 flex-1 overflow-hidden rounded-full border border-warm-200 bg-white shadow-sm focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
-                <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
-                  <Search size={15} className="shrink-0 text-warm-400" />
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="inline-flex w-fit rounded-2xl border border-primary-200/70 bg-gradient-to-b from-primary-50 to-white p-1 shadow-[0_16px_28px_-24px_rgba(59,130,246,0.45)]">
+                {[
+                  { key: 'exact', label: t('rastreo.searchModal.exacta') },
+                  { key: 'flexible', label: t('rastreo.searchModal.flexible') },
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setSearchMode(tab.key)}
+                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
+                      searchMode === tab.key
+                        ? 'border-primary-200 bg-white text-primary-700 shadow-[0_10px_24px_-18px_rgba(37,99,235,0.65)]'
+                        : 'border-transparent text-warm-500 hover:border-primary-100 hover:bg-white/80 hover:text-warm-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex min-w-0 flex-1 gap-2">
+                <div className="relative min-w-0 flex-1 rounded-full border border-warm-200 bg-white shadow-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
+                  <Search size={15} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-warm-400" />
                   <input
                     ref={inputRef}
                     autoFocus
-                    className="min-w-0 flex-1 border-0 bg-transparent py-2.5 text-sm text-warm-700 outline-none placeholder-warm-300"
+                    className="block w-full rounded-full border-0 bg-transparent py-3 pl-12 pr-44 text-sm text-warm-700 outline-none placeholder-warm-300"
                     placeholder={t('rastreo.searchModal.placeholder')}
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleSearch()}
                   />
+                  {(query.trim() || results) && (
+                    <button
+                      onClick={() => {
+                        setQuery('')
+                        setResults(null)
+                        setGsInv(null)
+                        setGsSurtido(null)
+                        setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true })
+                        inputRef.current?.focus()
+                      }}
+                      className="absolute right-[7.25rem] top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-warm-400 transition-colors hover:bg-warm-100 hover:text-warm-600"
+                      aria-label={t('common.clear')}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                  <button
+                    onClick={handleSearch}
+                    disabled={loading || !query.trim()}
+                    className="absolute right-1 top-1/2 inline-flex h-10 -translate-y-1/2 items-center gap-1.5 rounded-full bg-primary-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                    {t('common.search')}
+                  </button>
                 </div>
-                <button
-                  onClick={handleSearch}
-                  disabled={loading || !query.trim()}
-                  className="flex items-center gap-1.5 border-l border-warm-200 bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                  {t('common.search')}
-                </button>
               </div>
-              {results && (
-                <button onClick={() => { setQuery(''); setResults(null); setGsInv(null); setGsSurtido(null); setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true }) }} className="btn btn-secondary h-11 px-4">
-                  {t('common.clear')}
-                </button>
-              )}
             </div>
-            <p className="text-[11px] text-warm-400 mt-1.5">
-              {searchMode === 'exact'
-                ? t('rastreo.searchModal.tipExacta')
-                : t('rastreo.searchModal.tipFlexible')}
-            </p>
+            <div className="mt-2 flex items-center justify-between gap-4 text-[11px] text-warm-400">
+              <p className="min-w-0 truncate">
+                {searchMode === 'exact'
+                  ? t('rastreo.searchModal.exactaHint')
+                  : t('rastreo.searchModal.flexibleHint')}
+              </p>
+              <p className="min-w-0 truncate text-right">
+                {searchMode === 'exact'
+                  ? t('rastreo.searchModal.tipExacta')
+                  : t('rastreo.searchModal.tipFlexible')}
+              </p>
+            </div>
           </div>
 
           {/* Results */}

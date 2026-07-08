@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, CheckCircle2, XCircle, AlertCircle, Loader2, Wifi, WifiOff,
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
-  ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck,
+  ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck, ShieldCheck,
   MapPin, XOctagon, Plus, Edit3, X, AlertTriangle, Copy, Check,
   PanelRightClose, PanelRightOpen, Save, PartyPopper, Layers,
 } from 'lucide-react'
@@ -24,7 +24,7 @@ import {
   getOutboundList, getOutboundDetail,
   createScanSession, updateScanSession, addScanEvent, addManualScanEvent, clearSessionEvents,
   getManualEntryReasons,
-  upsertOrderTracking, getScanSessions, getScanSession, getRecords,
+  upsertOrderTracking, getScanSessions, getScanSession, getRecords, getBoxStatusDetail,
 } from '../services/surtidoService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
 import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
@@ -650,6 +650,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
   const [results, setResults] = useState(null)
   const [searchError, setSearchError] = useState(null)
   const inputRef = useRef(null)
+  const pendingQueryRef = useRef(null)
 
   // Pre-fetch when modal opens so doSearch is instant (no network block on search)
   const { data: outboundData, isLoading: isLoadingSheet, error: sheetFetchError } = useQuery({
@@ -705,6 +706,12 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
   function doSearch(q) {
     if (!q.trim()) return
     setSearchError(null)
+    // Sheet still loading (e.g. Enter pressed right after opening) — queue the
+    // search instead of reporting a false "no records" error.
+    if (isLoadingSheet) {
+      pendingQueryRef.current = q
+      return
+    }
     const all = getRecords(outboundData)
     if (all.length === 0) {
       setSearchError('La hoja de salidas no contiene registros. Verifica la configuracion en WmsHub.')
@@ -717,16 +724,68 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
       const f = (field || '').toLowerCase()
       return f.length > 0 && variations.some(v => f.includes(v))
     }
-    const filtered = all.filter(r =>
-      matchesCode(r.outboundOrderNo) ||
-      matchesCode(r.thirdOrderNo) ||
-      matchesCode(r.logisticsTrackNo) ||
-      (r.receiverName || '').toLowerCase().includes(norm) ||
-      matchesCode(r.customizeCode) ||
-      matchesCode(r.boxType) ||
-      (r.allCustomizeCodes || []).some(c => matchesCode(c))
-    )
+    const filtered = all
+      .filter(r =>
+        matchesCode(r.outboundOrderNo) ||
+        matchesCode(r.thirdOrderNo) ||
+        matchesCode(r.logisticsTrackNo) ||
+        (r.receiverName || '').toLowerCase().includes(norm) ||
+        matchesCode(r.customizeCode) ||
+        matchesCode(r.boxType) ||
+        (r.allCustomizeCodes || []).some(c => matchesCode(c))
+      )
+      .map(r => ({
+        ...r,
+        matchedBoxCode: (r.allCustomizeCodes || []).find(c => matchesCode(c))
+          || (matchesCode(r.customizeCode) ? r.customizeCode : null),
+      }))
     setResults(filtered.slice(0, 20))
+  }
+
+  // Run a search that was queued while the sheet was still loading.
+  useEffect(() => {
+    if (!isLoadingSheet && pendingQueryRef.current) {
+      const q = pendingQueryRef.current
+      pendingQueryRef.current = null
+      doSearch(q)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingSheet])
+
+  // Fetch box-level status only for orders where the search matched a specific
+  // box code. Fetching this for every result (up to 20) fans out too many
+  // parallel requests against the DB pool and stalls the whole modal — scope
+  // it to the case that actually needs it.
+  const boxMatchedObcs = useMemo(() => (
+    [...new Set((results || []).filter(r => r.matchedBoxCode).map(r => r.outboundOrderNo))]
+  ), [results])
+
+  const { data: boxDetailByObc } = useQuery({
+    queryKey: ['wms-box-status-detail-quick', boxMatchedObcs.slice().sort().join('|')],
+    queryFn: async () => {
+      const perObc = await Promise.all(
+        boxMatchedObcs.map(obc => getBoxStatusDetail(obc).then(r => r?.data ?? []).catch(() => []))
+      )
+      const map = new Map()
+      boxMatchedObcs.forEach((obc, i) => map.set(obc, perObc[i]))
+      return map
+    },
+    enabled: boxMatchedObcs.length > 0,
+    staleTime: 15000,
+  })
+
+  function getValidatedInfo(result) {
+    if (!result.matchedBoxCode) return null
+    const rows = boxDetailByObc?.get(result.outboundOrderNo) || []
+    const variations = generateCodeVariations(result.matchedBoxCode).map(v => v.toLowerCase())
+    const row = rows.find(r => variations.includes((r.box_code || '').toLowerCase()))
+    if (!row || row.estado !== 'validada') return null
+    return row
+  }
+
+  function getValidatedBoxCount(outboundOrderNo) {
+    const rows = boxDetailByObc?.get(outboundOrderNo) || []
+    return rows.filter(r => r.estado === 'validada').length
   }
 
   return (
@@ -784,22 +843,29 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[58vh] overflow-y-auto scrollbar-thin pr-1">
             {results.map(r => {
               const tracking = trackingMap.get(r.outboundOrderNo)
-              const pct = tracking && (tracking.total_expected ?? 0) > 0
-                ? Math.min(100, Math.round(((tracking.total_scanned ?? 0) / tracking.total_expected) * 100))
+              const validatedBoxCount = getValidatedBoxCount(r.outboundOrderNo)
+              const totalExpected = tracking?.total_expected ?? r.outboundBoxCount ?? null
+              const scannedCount = tracking?.total_scanned ?? validatedBoxCount
+              const pct = (totalExpected ?? 0) > 0
+                ? Math.min(100, Math.round((scannedCount / totalExpected) * 100))
                 : null
-              const isComplete = tracking?.status === 'complete' || tracking?.status === 'partial' || (pct !== null && pct >= 100)
-              const isValidating = !isComplete && tracking?.status === 'validating'
+              const isComplete = tracking?.status === 'complete' || tracking?.status === 'partial'
+                || (pct !== null && pct >= 100)
+                || (totalExpected != null && validatedBoxCount >= totalExpected && totalExpected > 0)
+              const isValidating = !isComplete && (tracking?.status === 'validating' || validatedBoxCount > 0)
 
               let statusBadge = null
-              if (tracking) {
-                statusBadge = isComplete
-                  ? <StatusPill size="xs" className="shrink-0 bg-success-100 text-success-700">Completa</StatusPill>
-                  : isValidating
-                  ? <StatusPill size="xs" className="shrink-0 bg-primary-100 text-primary-700">Validando</StatusPill>
-                  : <StatusPill size="xs" className="shrink-0 bg-warm-100 text-warm-600">{tracking.status}</StatusPill>
+              if (isComplete) {
+                statusBadge = <StatusPill size="xs" className="shrink-0 bg-success-100 text-success-700">Completa</StatusPill>
+              } else if (isValidating) {
+                statusBadge = <StatusPill size="xs" className="shrink-0 bg-primary-100 text-primary-700">Validando</StatusPill>
+              } else if (tracking) {
+                statusBadge = <StatusPill size="xs" className="shrink-0 bg-warm-100 text-warm-600">{tracking.status}</StatusPill>
               } else {
                 statusBadge = <StatusPill size="xs" className="shrink-0 bg-warm-100 text-warm-500">{t('surtido.validacion.card_not_validated')}</StatusPill>
               }
+
+              const validatedInfo = getValidatedInfo(r)
 
               return (
                 <div key={r.outboundOrderNo} className="rounded-2xl border border-warm-200 bg-white shadow-sm hover:shadow-md hover:border-primary-200 transition-all overflow-hidden flex flex-col">
@@ -807,6 +873,28 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                     <span className="font-mono font-bold text-sm text-warm-900 truncate">{r.outboundOrderNo}</span>
                     {statusBadge}
                   </div>
+
+                  {r.matchedBoxCode && (
+                    <div className="px-4 py-2.5 border-b border-warm-100 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-semibold text-warm-700 text-xs truncate">{r.matchedBoxCode}</span>
+                        {!validatedInfo && (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-warm-100 text-warm-500 shrink-0">
+                            {t('surtido.validacion.card_not_validated')}
+                          </span>
+                        )}
+                      </div>
+                      {validatedInfo && (
+                        <div className="flex items-start gap-2 rounded-xl bg-success-50 border border-success-100 px-2.5 py-2">
+                          <ShieldCheck size={16} className="text-success-600 shrink-0 mt-0.5" />
+                          <div className="min-w-0 leading-snug">
+                            <p className="text-xs font-semibold text-success-700">{formatDateTimeTz(validatedInfo.updated_at)}</p>
+                            <p className="text-[11px] text-success-600 break-all">{validatedInfo.updated_by || '—'}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="px-4 py-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs flex-1">
                     <div>
@@ -832,7 +920,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                       <div className="flex items-center justify-between text-[10px]">
                         <span className="text-warm-400 uppercase tracking-wide">{t('surtido.validacion.card_progress')}</span>
                         <span className={`font-bold ${isComplete ? 'text-success-600' : 'text-primary-600'}`}>
-                          {tracking.total_scanned ?? 0}/{tracking.total_expected ?? '?'} · {pct}%
+                          {scannedCount}/{totalExpected ?? '?'} · {pct}%
                         </span>
                       </div>
                       <div className="w-full h-1.5 bg-warm-100 rounded-full overflow-hidden">

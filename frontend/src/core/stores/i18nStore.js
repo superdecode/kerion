@@ -1629,6 +1629,8 @@ const translations = {
     'rastreo.searchModal.result.ok': '通过',
     'rastreo.searchModal.result.duplicate': '重复',
     'rastreo.searchModal.result.rejected': '拒绝',
+    'rastreo.searchModal.result.not_found': '未在订单中找到',
+    'rastreo.searchModal.result.unexpected': '意外扫描',
     'rastreo.searchModal.placeholder': '输入箱号或订单号...',
     'rastreo.searchModal.emptyIdle': '输入箱号或订单号开始搜索',
     'rastreo.searchModal.loading': '搜索中...',
@@ -1758,6 +1760,8 @@ const translations = {
     'inventario.registros.delete_section_confirm': '将删除整个分区及其关联扫描记录。此操作无法撤销。',
     'inventario.registros.scanned_boxes': '已扫描箱数',
     'inventario.registros.no_registros':   '暂无记录',
+    'inventario.registros.ubicacionDestinoPlaceholder': '目标库位',
+    'inventario.registros.ubicacionInvalida': '目标库位无效，请从列表中选择。',
 
     // ── Inventario escaneo additions ───────────────────────────────────────
     'inventario.escaneo.session_type_title': '选择扫描类型',
@@ -5377,6 +5381,8 @@ const translations = {
     'rastreo.searchModal.result.ok': 'OK',
     'rastreo.searchModal.result.duplicate': 'Duplicado',
     'rastreo.searchModal.result.rejected': 'Rechazado',
+    'rastreo.searchModal.result.not_found': 'No encontrada en la orden',
+    'rastreo.searchModal.result.unexpected': 'Escaneo inesperado',
     'rastreo.searchModal.placeholder': 'Ingresa número de caja u orden...',
     'rastreo.searchModal.emptyIdle': 'Ingresa número de caja u orden para buscar',
     'rastreo.searchModal.loading': 'Buscando...',
@@ -5505,6 +5511,8 @@ const translations = {
     'inventario.registros.delete_section_confirm': 'Se eliminará toda la sección con sus registros escaneados asociados. esta acción no se puede deshacer.',
     'inventario.registros.scanned_boxes': 'cajas escaneadas',
     'inventario.registros.no_registros':   'No Hay Registros Guardados',
+    'inventario.registros.ubicacionDestinoPlaceholder': 'Ubicación destino',
+    'inventario.registros.ubicacionInvalida': 'Ubicación destino no válida. Selecciónala de la lista.',
     // ── Inventario escaneo additions ───────────────────────────────────────
     'inventario.escaneo.session_type_title': 'Selecciona Tipo de Sesión',
     'inventario.escaneo.session_type_locked':'El tipo no puede cambiarse una vez iniciada la sesión',
@@ -5678,7 +5686,7 @@ const translations = {
     'surtido.ordenes.status.pending_validation': 'Pendiente de Validación',
     // ── Surtido registros ──────────────────────────────────────────────────
     'surtido.registros.title':              'Registros de Validación',
-    'surtido.registros.search_placeholder': 'Buscar por orden, tercero u operador...',
+    'surtido.registros.search_placeholder': 'Buscar por orden, código de caja, tercero u operador...',
     'surtido.registros.order_no':           'Orden',
     'surtido.registros.third_order':        'Tercero',
     'surtido.registros.operator':           'Operador',

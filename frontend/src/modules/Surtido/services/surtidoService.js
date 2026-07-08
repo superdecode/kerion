@@ -97,5 +97,8 @@ export const updateBoxStatus = (obc, code, estado, notas) =>
 export const getBoxIncidents = (obc) =>
   api.get(`/wmshub/box-status-incidents/${encodeURIComponent(obc)}`).then(r => r.data)
 
+export const getBoxStatusDetail = (obc) =>
+  api.get(`/wmshub/box-status-detail/${encodeURIComponent(obc)}`).then(r => r.data)
+
 export const getScanOperators = () =>
   api.get('/wmshub/scan-operators').then(r => r.data)
