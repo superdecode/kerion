@@ -56,6 +56,10 @@ function fmtDt(v) {
   return fmtDateTime(v)
 }
 
+function getEventCodeKey(event) {
+  return normalizeCode(event?.normalized_code || event?.scanned_code || event?.matched_box_type || '')
+}
+
 function ObcHeader({ obc, status, t }) {
   const [copied, setCopied] = useState(false)
   const meta = STATUS_META[status] ?? STATUS_META.open
@@ -235,8 +239,44 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
     return m
   }, [events])
 
-  const validados  = events.filter(e => e.scan_result === 'ok')
-  const rechazados = events.filter(e => e.scan_result !== 'ok')
+  const { validados, rechazados } = useMemo(() => {
+    const sorted = [...events].sort((a, b) => {
+      const ta = new Date(a.scanned_at || a.scan_time || 0).getTime()
+      const tb = new Date(b.scanned_at || b.scan_time || 0).getTime()
+      return ta - tb
+    })
+
+    const seenValidated = new Set()
+    const validatedUnique = []
+    const rejectedAll = []
+
+    for (const event of sorted) {
+      if (event.scan_result !== 'ok') {
+        rejectedAll.push(event)
+        continue
+      }
+
+      const key = getEventCodeKey(event)
+      if (!key) {
+        validatedUnique.push(event)
+        continue
+      }
+
+      if (seenValidated.has(key)) {
+        rejectedAll.push({
+          ...event,
+          scan_result: 'duplicate',
+          duplicate_from_validated: true,
+        })
+        continue
+      }
+
+      seenValidated.add(key)
+      validatedUnique.push(event)
+    }
+
+    return { validados: validatedUnique, rechazados: rejectedAll }
+  }, [events])
 
   const sortedEvents = [...events].sort((a, b) => {
     const ta = new Date(a.scanned_at || a.scan_time || 0).getTime()
@@ -247,7 +287,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   const lastEventAt  = sortedEvents[sortedEvents.length - 1]?.scanned_at || sortedEvents[sortedEvents.length - 1]?.scan_time
 
   const totalExpected = session.total_expected ?? 0
-  const totalScanned  = session.total_scanned ?? validados.length
+  const totalScanned  = validados.length
   const destino      = wmsOrder?.receiverName || wmsOrder?.consignee || '—'
   const fechaEntrega = (wmsOrder?.expectedTime || wmsOrder?.outboundTime)
     ? fmtDt(wmsOrder?.expectedTime || wmsOrder?.outboundTime)

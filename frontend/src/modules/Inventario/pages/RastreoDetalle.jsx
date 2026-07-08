@@ -19,7 +19,8 @@ import {
   deleteRastreoOrden, getRastreoUsuarios, addCajaToOrden, deleteCaja,
   getCausasRastreo, bulkAssignCausa, resolverRastreoOrden,
 } from '../../../core/services/rastreoService'
-import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
+import { getOutboundDetail, getInventoryList } from '../../WmsHub/services/googleSheetsService'
+import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import RastreoSearchModal from '../components/RastreoSearchModal'
 
 const ESTADO_META = {
@@ -174,6 +175,11 @@ export default function RastreoDetalle() {
     enabled: !!data?.data?.orden?.outbound_order_no,
     staleTime: 10 * 60 * 1000,
   })
+  const { data: inventoryData } = useQuery({
+    queryKey: ['wms-box-stock'],
+    queryFn: getInventoryList,
+    staleTime: 5 * 60 * 1000,
+  })
 
   const { data: causasData } = useQuery({
     queryKey: ['rastreo-causas'],
@@ -203,7 +209,17 @@ export default function RastreoDetalle() {
   })
 
   const addCajaMutation = useMutation({
-    mutationFn: ({ orden_id, box_code }) => addCajaToOrden(orden_id, { box_code }),
+    mutationFn: ({ orden_id, box_code }) => {
+      const inventoryItem = inventoryMap.get(normalizeCodeFast(box_code || '')) || null
+      return addCajaToOrden(orden_id, {
+        box_code,
+        box_type: inventoryItem?.boxType || null,
+        ubicacion: inventoryItem?.cellNo || null,
+        medidas: inventoryItem?.measures || null,
+        producto: inventoryItem?.productName || null,
+        cantidad_disponible: inventoryItem?.availableAmount ?? null,
+      })
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['rastreo-detalle', folio] })
       setNewCajaCode('')
@@ -251,6 +267,19 @@ export default function RastreoDetalle() {
   const historial = data?.data?.historial || []
   const surtidoTracking = data?.data?.surtido_tracking || null
   const od = outboundData?.data
+  const inventoryRecords = inventoryData?.data?.records ?? inventoryData?.data ?? []
+  const inventoryMap = useMemo(() => {
+    const map = new Map()
+    for (const item of inventoryRecords) {
+      const barcode = normalizeCodeFast(item.customizeBarcode || '')
+      const boxType = normalizeCodeFast(item.boxType || '')
+      const customizeCode = normalizeCodeFast(item.customizeCode || '')
+      if (barcode && !map.has(barcode)) map.set(barcode, item)
+      if (boxType && !map.has(boxType)) map.set(boxType, item)
+      if (customizeCode && !map.has(customizeCode)) map.set(customizeCode, item)
+    }
+    return map
+  }, [inventoryRecords])
   const orderInfo = {
     customerCode: orden?.customer_code || od?.customerCode || null,
     receiverName: orden?.receiver_name || od?.receiverName || null,
@@ -263,11 +292,12 @@ export default function RastreoDetalle() {
   const outboundBoxTotal = od?.outboundBoxCount ?? od?.packageList?.length ?? od?.outboundBoxList?.length ?? cajas.length ?? null
   const notas = historial.filter(h => h.accion === 'nota')
   const resolveCandidates = cajas.filter(c => c.estado_caja !== 'cancelada')
+  const displayCajas = cajas
 
   const cajasStats = {
-    total: cajas.length,
-    localizadas: cajas.filter(c => c.estado_caja === 'localizada').length,
-    no_encontradas: cajas.filter(c => c.estado_caja === 'no_encontrada').length,
+    total: displayCajas.length,
+    localizadas: displayCajas.filter(c => c.estado_caja === 'localizada').length,
+    no_encontradas: displayCajas.filter(c => c.estado_caja === 'no_encontrada').length,
   }
 
   const resolveSelectedCount = useMemo(
@@ -395,12 +425,13 @@ export default function RastreoDetalle() {
   }
 
   const filteredCajas = useMemo(() => {
-    let list = cajas
+    let list = displayCajas
     if (cajaSearch.trim()) {
       const q = cajaSearch.trim().toLowerCase()
       list = list.filter(c =>
         c.box_code?.toLowerCase().includes(q) ||
         c.ubicacion?.toLowerCase().includes(q) ||
+        c.medidas?.toLowerCase().includes(q) ||
         c.producto?.toLowerCase().includes(q)
       )
     }
@@ -412,7 +443,7 @@ export default function RastreoDetalle() {
       })
     }
     return list
-  }, [cajas, cajaSearch, cajaSort])
+  }, [displayCajas, cajaSearch, cajaSort])
 
   const resolveVisibleCandidates = useMemo(() => {
     const q = resolveSearch.trim().toLowerCase()
@@ -428,7 +459,7 @@ export default function RastreoDetalle() {
   const isCompletadaOrCancelada = orden && (orden.estado === 'completada' || orden.estado === 'cancelada')
 
   const tabs = [
-    { key: 'cajas',    label: `${t('rastreo.detalle.cajas')} (${cajas.length})`,   icon: Package },
+    { key: 'cajas',    label: `${t('rastreo.detalle.cajas')} (${displayCajas.length})`,   icon: Package },
     { key: 'notas',    label: `${t('rastreo.detalle.notas')} (${notas.length})`,   icon: MessageSquare },
     { key: 'historial',label: t('rastreo.detalle.historial'),                      icon: History },
   ]
@@ -454,8 +485,20 @@ export default function RastreoDetalle() {
   return (
     <>
       <Header
-        title={orden.folio}
-        subtitle={t('rastreo.detalle.titulo')}
+        title={
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/Inventario/rastreo')}
+              className="shrink-0 rounded-lg p-1.5 text-warm-400 transition-colors hover:bg-warm-100 hover:text-warm-700"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="flex min-w-0 items-center gap-2 flex-wrap">
+              <span className="truncate font-mono text-base font-black text-warm-900 leading-none">{orden.folio}</span>
+              <EstadoChip estado={orden.estado} t={t} />
+            </div>
+          </div>
+        }
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -479,18 +522,8 @@ export default function RastreoDetalle() {
       />
 
       <div className="flex-1 overflow-y-auto">
-        <div className="px-5 pt-4">
-          <button
-            onClick={() => navigate('/Inventario/rastreo')}
-            className="flex items-center gap-1.5 text-xs text-warm-400 hover:text-warm-700 mb-4 transition-colors"
-          >
-            <ArrowLeft size={13} />
-            {t('rastreo.titulo')}
-          </button>
-        </div>
-
         {/* Header card: integrated summary + full-width order/surtido detail */}
-        <div className="px-5 mb-4">
+        <div className="px-5 pt-4 mb-4">
           <div className="overflow-hidden rounded-[28px] border border-warm-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_30%),linear-gradient(135deg,_rgba(255,255,255,0.99),_rgba(248,250,252,0.97))] shadow-[0_16px_44px_-34px_rgba(15,23,42,0.24)]">
             <div className="bg-white px-6 py-5 sm:px-7 sm:py-6">
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
@@ -851,6 +884,9 @@ export default function RastreoDetalle() {
                       <th className="table-header whitespace-nowrap">
                         <SortHeader label={t('rastreo.detalle.col.ubicacion')} field="ubicacion" sort={cajaSort} onSort={toggleSort} />
                       </th>
+                      <th className="table-header whitespace-nowrap">
+                        <SortHeader label={t('rastreo.detalle.col.medidas')} field="medidas" sort={cajaSort} onSort={toggleSort} />
+                      </th>
                       <th className="table-header whitespace-nowrap">{t('rastreo.detalle.col.producto')}</th>
                       <th className="table-header whitespace-nowrap text-center">{t('rastreo.detalle.col.surtido')}</th>
                       <th className="table-header whitespace-nowrap">{t('rastreo.detalle.col.anormalidad')}</th>
@@ -886,6 +922,9 @@ export default function RastreoDetalle() {
                         </td>
                         <td className="px-3 py-2.5">
                           <span className="font-mono text-xs text-warm-500">{c.ubicacion || t('rastreo.detalle.emptyDash')}</span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="text-xs text-warm-600">{c.medidas || t('rastreo.detalle.emptyDash')}</span>
                         </td>
                         <td className="px-3 py-2.5 max-w-[180px]">
                           <span className="text-xs text-warm-700 font-medium truncate block">{c.producto || t('rastreo.detalle.emptyDash')}</span>
@@ -973,7 +1012,7 @@ export default function RastreoDetalle() {
                     ))}
                     {filteredCajas.length === 0 && (
                       <tr>
-                        <td colSpan={isCompletadaOrCancelada ? 9 : 8} className="py-8 text-center text-xs text-warm-400">
+                        <td colSpan={isCompletadaOrCancelada ? 10 : 9} className="py-8 text-center text-xs text-warm-400">
                           {cajaSearch ? t('rastreo.detalle.noSearchResults') : t('rastreo.detalle.noBoxes')}
                         </td>
                       </tr>

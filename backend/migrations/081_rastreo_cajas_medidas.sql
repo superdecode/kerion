@@ -1,0 +1,2 @@
+ALTER TABLE rastreo_cajas
+ADD COLUMN IF NOT EXISTS medidas TEXT NULL;

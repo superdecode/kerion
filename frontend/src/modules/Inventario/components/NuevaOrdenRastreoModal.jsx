@@ -58,11 +58,13 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
     getInventoryList()
       .then(res => {
         const map = {}
-        ;(res?.data?.records || []).forEach(item => {
+        ;(res?.data?.records || res?.data || []).forEach(item => {
           const barcode = normalizeCodeFast(item.customizeBarcode || '')
           const boxType = normalizeCodeFast(item.boxType || '')
+          const customizeCode = normalizeCodeFast(item.customizeCode || '')
           if (barcode) map[barcode] = item
           if (boxType) map[boxType] = item
+          if (customizeCode) map[customizeCode] = item
         })
         setInvMap(map)
       })
@@ -154,6 +156,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
       box_code: code,
       box_type: gsItem?.boxType || null,
       ubicacion: gsItem?.cellNo || null,
+      medidas: gsItem?.measures || null,
       producto: gsItem?.productName || null,
       cantidad_disponible: gsItem?.availableAmount != null ? parseFloat(gsItem.availableAmount) : null,
     }])
@@ -176,6 +179,7 @@ export default function NuevaOrdenRastreoModal({ isOpen, onClose, usuarios = [],
             box_code: getOrderBoxCode(b),
             box_type: b.boxType || null,
             ubicacion: gsItem?.cellNo || null,
+            medidas: gsItem?.measures || null,
             producto: gsItem?.productName || null,
             cantidad_disponible: gsItem?.availableAmount != null ? parseFloat(gsItem.availableAmount) : null,
           }

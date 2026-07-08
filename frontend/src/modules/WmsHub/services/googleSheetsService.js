@@ -130,6 +130,47 @@ const INVENTORY_ALIASES = {
     'bin',
     'rack',
   ],
+  measures: [
+    'measures',
+    'measure',
+    'dimensions',
+    'dimension',
+    'size',
+    'spec',
+    'specification',
+    'medidas',
+    'medida',
+    'dimensiones',
+    'dimension_caja',
+    'box_dimensions',
+    'box_dimension',
+    'box_size',
+    'package_size',
+    '尺寸',
+    '规格',
+  ],
+  length: [
+    'length',
+    'largo',
+    '长',
+  ],
+  width: [
+    'width',
+    'ancho',
+    '宽',
+  ],
+  height: [
+    'height',
+    'alto',
+    '高',
+  ],
+  measureUnit: [
+    'measure_unit',
+    'dimension_unit',
+    'size_unit',
+    'unidad_medida',
+    'unidad',
+  ],
 }
 
 const OUTBOUND_ALIASES = {
@@ -202,12 +243,33 @@ function buildHeaderMap(headers, aliases) {
       if (idx !== -1) { map[field] = idx; break }
     }
   }
+  if (map.cellNo === undefined) {
+    map.cellNo = normed.findIndex(h => /(cell|location|ubicacion|库位|rack|bin)/.test(h))
+    if (map.cellNo === -1) delete map.cellNo
+  }
+  if (map.measures === undefined) {
+    map.measures = normed.findIndex(h => /(measure|dimension|spec|size|medid|dimens|尺寸|规格)/.test(h))
+    if (map.measures === -1) delete map.measures
+  }
   return map
 }
 
 function getField(row, map, field) {
   const idx = map[field]
   return idx !== undefined ? (row[idx] ?? '') : ''
+}
+
+function composeMeasures(row, map) {
+  const direct = getField(row, map, 'measures')
+  if (direct) return direct
+
+  const length = getField(row, map, 'length')
+  const width = getField(row, map, 'width')
+  const height = getField(row, map, 'height')
+  const unit = getField(row, map, 'measureUnit')
+  const parts = [length, width, height].map(v => String(v || '').trim()).filter(Boolean)
+  if (!parts.length) return ''
+  return `${parts.join(' × ')}${unit ? ` ${String(unit).trim()}` : ''}`.trim()
 }
 
 function readOutboundRecordCache() {
@@ -238,6 +300,7 @@ function mapRowToInventory(row, map) {
   const sku       = getField(row, map, 'customizeCode')
   const name      = getField(row, map, 'productName')
   const cellNo    = getField(row, map, 'cellNo')
+  const measures  = composeMeasures(row, map)
   return {
     customizeBarcode: getField(row, map, 'customizeBarcode'),
     availableAmount:  available,
@@ -246,6 +309,7 @@ function mapRowToInventory(row, map) {
     boxType:          getField(row, map, 'boxType'),
     productName:      name,
     cellNo,
+    measures,
     isAvailable:      available > 0,
     isBlocked:        locked > 0 && available === 0,
     // Mimic xlwms skuList shape

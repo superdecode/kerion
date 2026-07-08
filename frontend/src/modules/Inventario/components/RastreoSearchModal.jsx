@@ -113,7 +113,7 @@ function InventarioSection({ records, open, onToggle }) {
                 <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-primary-50/60 border-b border-primary-100">
                     <tr>
-                      {[t('rastreo.searchModal.col.codigoCaja'), t('rastreo.searchModal.col.ubicacion'), t('rastreo.searchModal.col.disponible'), t('rastreo.searchModal.col.bloqueado'), t('rastreo.searchModal.col.producto'), t('common.status')].map(h => (
+                      {[t('rastreo.searchModal.col.codigoCaja'), t('rastreo.searchModal.col.ubicacion'), t('rastreo.searchModal.col.medidas'), t('rastreo.searchModal.col.disponible'), t('rastreo.searchModal.col.bloqueado'), t('rastreo.searchModal.col.producto'), t('common.status')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-primary-600 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -125,6 +125,7 @@ function InventarioSection({ records, open, onToggle }) {
                           <CopyableCell text={r.customizeBarcode || r.barcode || '—'} className="font-mono font-medium text-warm-700" />
                         </td>
                         <td className="px-3 py-2.5 font-mono text-warm-600">{r.cellNo || r.cell_no || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-600">{r.measures || r.dimensions || r.size || '—'}</td>
                         <td className="px-3 py-2.5 text-warm-700">{r.availableAmount ?? r.available_stock ?? '—'}</td>
                         <td className="px-3 py-2.5 text-warm-500">{r.lockAmount ?? '—'}</td>
                         <td className="px-3 py-2.5 text-warm-600 max-w-[160px] truncate">{r.productName || r.product_name || '—'}</td>
@@ -831,7 +832,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
 
       // Filter GS inventory
       const invRecords = dedupeRecords(
-        (invRes?.data?.records || []).filter(r =>
+        ((invRes?.data?.records || invRes?.data || [])).filter(r =>
           codeMatches(r.customizeBarcode) || codeMatches(r.customizeCode) || codeMatches(r.boxType)
         ),
         r => [compactCode(r.customizeBarcode || r.customizeCode || r.boxType), normalizeCodeFast(r.cellNo || r.cell_no), r.status || ''].join('|')
