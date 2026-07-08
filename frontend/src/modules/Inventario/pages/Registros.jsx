@@ -231,6 +231,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
   const [expandedTarimaCode, setExpandedTarimaCode] = useState(null)
   const [editingScanId, setEditingScanId] = useState(null)
   const [editingCode, setEditingCode] = useState('')
+  const [editingCell, setEditingCell] = useState('')
   const [newScan, setNewScan] = useState({ scanned_code: '', scan_status: 'ok', group_assignment: 'auto' })
   const [duplicatePending, setDuplicatePending] = useState(null)
 
@@ -306,6 +307,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
     setExpandedTarimaCode(null)
     setEditingScanId(null)
     setEditingCode('')
+    setEditingCell('')
     setDuplicatePending(null)
   }, [initialTab, initialReadOnly, isOpen])
 
@@ -344,13 +346,15 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
   }
 
   const updateScanMut = useMutation({
-    mutationFn: ({ id, code }) => updateInventoryScan(id, {
+    mutationFn: ({ id, code, cell_no }) => updateInventoryScan(id, {
       scanned_code: code,
       normalized_code: code,
+      ...(cell_no !== undefined ? { cell_no } : {}),
     }),
     onSuccess: () => {
       setEditingScanId(null)
       setEditingCode('')
+      setEditingCell('')
       qc.invalidateQueries({ queryKey: ['wms-inventory-session', session?.id] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
@@ -634,7 +638,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                                       codes: [nextCode, sc.code2 || ''],
                                       displayCode: nextCode,
                                       excludeScanId: sc.id,
-                                      onAccept: () => updateScanMut.mutate({ id: sc.id, code: nextCode }),
+                                      onAccept: () => updateScanMut.mutate({ id: sc.id, code: nextCode, cell_no: editingCell.trim() }),
                                     })
                                   }}
                                 />
@@ -653,7 +657,27 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                               )}
                             </td>
                             <td className="table-cell">
-                              <span className="text-xs text-warm-500">{sc.cell_no || '—'}</span>
+                              {canEditScans && editingScanId === sc.id ? (
+                                <input
+                                  className="input-field h-8 text-xs"
+                                  value={editingCell}
+                                  placeholder={t('inventario.registros.ubicacionDestinoPlaceholder', 'Ubicación destino')}
+                                  onChange={(event) => setEditingCell(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key !== 'Enter') return
+                                    const nextCode = editingCode.trim()
+                                    if (!nextCode) return
+                                    confirmPotentialDuplicate({
+                                      codes: [nextCode, sc.code2 || ''],
+                                      displayCode: nextCode,
+                                      excludeScanId: sc.id,
+                                      onAccept: () => updateScanMut.mutate({ id: sc.id, code: nextCode, cell_no: editingCell.trim() }),
+                                    })
+                                  }}
+                                />
+                              ) : (
+                                <span className="text-xs text-warm-500">{sc.cell_no || '—'}</span>
+                              )}
                             </td>
                             <td className="table-cell">
                               <StatusPill className={meta.bg}>{t(meta.labelKey)}</StatusPill>
@@ -674,14 +698,14 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                                         codes: [nextCode, sc.code2 || ''],
                                         displayCode: nextCode,
                                         excludeScanId: sc.id,
-                                        onAccept: () => updateScanMut.mutate({ id: sc.id, code: nextCode }),
+                                        onAccept: () => updateScanMut.mutate({ id: sc.id, code: nextCode, cell_no: editingCell.trim() }),
                                       })
                                     }}
                                     title="Guardar">
                                     <CheckCircle2 className="w-4 h-4" />
                                   </button>
                                 ) : canEditScans ? (
-                                  <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => { setEditingScanId(sc.id); setEditingCode(sc.normalized_code || sc.scanned_code || '') }} title="Editar">
+                                  <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => { setEditingScanId(sc.id); setEditingCode(sc.normalized_code || sc.scanned_code || ''); setEditingCell(sc.cell_no || '') }} title="Editar">
                                     <Edit3 className="w-4 h-4" />
                                   </button>
                                 ) : null}

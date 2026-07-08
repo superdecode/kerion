@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kirion-v18'
+const CACHE_NAME = 'kirion-v19'
 const STATIC_ASSETS = [
   '/',
   '/logo.png',
@@ -89,7 +89,9 @@ self.addEventListener('fetch', (event) => {
         if (cached) return cached
         return fetch(request).then((response) => {
           if (response.ok) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()))
+            // Clone synchronously before the body is consumed by respondWith.
+            const copy = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
           }
           return response
         })
@@ -116,7 +118,9 @@ self.addEventListener('fetch', (event) => {
     fetch(request)
       .then((response) => {
         if (response.ok) {
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()))
+          // Clone synchronously before the body is consumed by respondWith.
+          const copy = response.clone()
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
         }
         return response
       })

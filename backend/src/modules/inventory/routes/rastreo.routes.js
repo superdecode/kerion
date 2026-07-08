@@ -1624,6 +1624,8 @@ router.post('/cajas/add',
       const orden = ordenRes.rows[0]
 
       // Check duplicate
+      const dupParams = [orden_id, cajaData.box_code, req.tenantId]
+      if (hasRastreoBoxType) dupParams.push(cajaData.box_type)
       const dupRes = await req.tQuery(
         `SELECT id
            FROM rastreo_cajas
@@ -1631,9 +1633,9 @@ router.post('/cajas/add',
             AND tenant_id = $3
             AND (
               UPPER(box_code) = UPPER($2)
-              ${hasRastreoBoxType ? "OR UPPER(COALESCE(box_type, '')) = UPPER($2) OR ($4 IS NOT NULL AND UPPER(COALESCE(box_type, '')) = UPPER($4))" : ''}
+              ${hasRastreoBoxType ? "OR UPPER(COALESCE(box_type, '')) = UPPER($2) OR ($4::text IS NOT NULL AND UPPER(COALESCE(box_type, '')) = UPPER($4::text))" : ''}
             )`,
-        [orden_id, cajaData.box_code, req.tenantId, cajaData.box_type]
+        dupParams
       )
       if (dupRes.rows.length) return res.status(409).json({ error: 'La caja ya existe en esta orden' })
 
