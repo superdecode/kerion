@@ -582,7 +582,11 @@ router.get('/buscar',
           searchParams
         )
         const invRegT = () => req.tQuery(
-          `SELECT sc.id, sc.scanned_code, sc.normalized_code, sc.code2, sc.scan_status, sc.cell_no,
+          // sc.cell_no is the SKU's current/official stock cell (a snapshot of the inventory
+          // list at scan time), not where this scan was actually registered. The location the
+          // operator was counting at is the session's origin_location — use that for display.
+          `SELECT sc.id, sc.scanned_code, sc.normalized_code, sc.code2, sc.scan_status,
+                  sess.origin_location AS cell_no,
                   sc.group_assignment, sc.scanned_at,
                   sess.id AS session_id, sess.scan_type,
                   u_op.nombre_completo AS operator_nombre,

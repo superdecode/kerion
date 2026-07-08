@@ -251,7 +251,7 @@ function EscaneoSection({ records, open, onToggle }) {
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.barcode || '—'} className="font-mono text-warm-700" />
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-warm-600">{r.cell_no || '—'}</td>
+                        <td className="px-3 py-2.5 font-mono text-warm-600">{r.origin_location || '—'}</td>
                         <td className="px-3 py-2.5">
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold
                             ${r.status === 'OK' ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-600'}`}>
