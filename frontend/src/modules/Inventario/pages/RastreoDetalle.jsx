@@ -883,22 +883,29 @@ export default function RastreoDetalle() {
                         <td className="px-3 py-2.5 text-center">
                           {c.validada_en_surtido ? (
                             <div className="flex flex-col items-center gap-0.5">
-                              <CheckCircle2 size={14} className="text-success-500" />
+                              <span className="inline-flex flex-col items-center rounded-xl bg-success-100 px-2 py-1 text-success-700">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold leading-none">
+                                  <CheckCircle2 size={12} className="text-success-500" />
+                                  {t('rastreo.detalle.surtidoValidada')}
+                                </span>
+                                {c.surtido_validacion?.surtido_validated_at && (
+                                  <span className="mt-0.5 whitespace-nowrap text-[9px] leading-none text-success-600/80">
+                                    {safeDate(c.surtido_validacion.surtido_validated_at)}
+                                  </span>
+                                )}
+                              </span>
                               {c.surtido_validacion?.surtido_operator_nombre && (
                                 <span className="max-w-[120px] truncate text-[10px] font-semibold text-warm-600" title={c.surtido_validacion.surtido_operator_nombre}>
                                   {c.surtido_validacion.surtido_operator_nombre}
                                 </span>
                               )}
-                              {c.surtido_validacion?.surtido_validated_at && (
-                                <span className="whitespace-nowrap text-[10px] text-warm-400">
-                                  {safeDate(c.surtido_validacion.surtido_validated_at)}
-                                </span>
-                              )}
                             </div>
                           ) : (
                             <div className="flex flex-col items-center gap-0.5">
-                              <XCircle size={14} className="text-warm-300" />
-                              <span className="text-[10px] text-warm-300">{t('rastreo.detalle.emptyDash')}</span>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-warm-100 px-2 py-0.5 text-[10px] font-semibold text-warm-500">
+                                <XCircle size={12} className="text-warm-300" />
+                                {t('rastreo.detalle.surtidoSinValidar')}
+                              </span>
                             </div>
                           )}
                         </td>
