@@ -1284,18 +1284,22 @@ router.get('/:folio',
         const rawTracking = trackingRes.rows[0] || null
         const cajaSurtidoRows = cajaSurtidoRes.rows || []
         const cajaSurtidoMap = new Map(cajaSurtidoRows.map(row => [row.rastreo_caja_id, row]))
-        cajasWithSurtido = cajasRes.rows.map(caja => ({
-          ...caja,
-          surtido_validacion: cajaSurtidoMap.get(caja.id) || null,
-        }))
+        cajasWithSurtido = cajasRes.rows.map(caja => {
+          const surtidoValidacion = cajaSurtidoMap.get(caja.id) || null
+          return {
+            ...caja,
+            validada_en_surtido: !!surtidoValidacion,
+            surtido_validacion: surtidoValidacion,
+          }
+        })
 
         const latestValidatedRow = [...cajaSurtidoRows].sort((a, b) => {
           const aTs = a?.surtido_validated_at ? new Date(a.surtido_validated_at).getTime() : 0
           const bTs = b?.surtido_validated_at ? new Date(b.surtido_validated_at).getTime() : 0
           return bTs - aTs
         })[0] || null
-        const validatedCount = cajaSurtidoRows.length
-        const totalBoxes = cajasRes.rows.length
+        const validatedCount = cajasWithSurtido.filter(caja => caja.validada_en_surtido).length
+        const totalBoxes = cajasWithSurtido.length
         const derivedStatus = validatedCount > 0
           ? (totalBoxes > 0 && validatedCount >= totalBoxes ? 'complete' : 'partial')
           : null
