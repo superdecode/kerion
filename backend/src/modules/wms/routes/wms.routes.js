@@ -404,7 +404,7 @@ async function findExistingOkEvent(queryFn, { tenantId, sessionId, normalizedCod
           UPPER(COALESCE(NULLIF(e.matched_box_type, ''), NULLIF(e.normalized_code, ''), NULLIF(e.scanned_code, ''))),
           '[^A-Z0-9]', '', 'g'
         ) = ANY($3::text[])
-      ORDER BY e.scanned_at ASC NULLS LAST, e.created_at ASC NULLS LAST, e.id ASC
+      ORDER BY e.scanned_at ASC NULLS LAST, e.id ASC
       LIMIT 1`,
     params
   )
