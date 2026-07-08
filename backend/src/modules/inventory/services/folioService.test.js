@@ -10,6 +10,9 @@ describe('rastreo folio generation', () => {
     expect(folio).toMatch(/^TK-\d{8}-0019$/)
     expect(tQuery.mock.calls[0][0]).toContain('MAX')
     expect(tQuery.mock.calls[0][0]).not.toContain('COUNT(*)')
+    expect(tQuery.mock.calls[0][0]).toContain('folio LIKE $2')
+    expect(tQuery.mock.calls[0][0]).not.toContain('created_at')
+    expect(tQuery.mock.calls[0][1][1]).toMatch(/^TK-\d{8}-%$/)
   })
 
   it('serializes and calculates the next sequence inside the transaction', async () => {
@@ -22,5 +25,6 @@ describe('rastreo folio generation', () => {
     expect(folio).toMatch(/^TK-\d{8}-0010$/)
     expect(query).toHaveBeenNthCalledWith(1, expect.stringContaining('pg_advisory_xact_lock'), expect.any(Array))
     expect(query.mock.calls[1][0]).toContain('MAX')
+    expect(query.mock.calls[1][0]).toContain('folio LIKE $2')
   })
 })

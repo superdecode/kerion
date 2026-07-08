@@ -6,8 +6,8 @@ export async function generateRastreoFolio(tQuery, tenantId) {
     `SELECT COALESCE(MAX(NULLIF(substring(folio FROM '([0-9]+)$'), '')::integer), 0) AS seq
      FROM rastreo_ordenes
      WHERE tenant_id = $1
-       AND to_char(created_at AT TIME ZONE 'America/Mexico_City', 'YYYYMMDD') = $2`,
-    [tenantId, today]
+       AND folio LIKE $2`,
+    [tenantId, `TK-${today}-%`]
   )
   const seq = parseInt(res.rows[0].seq, 10) + 1
   return `TK-${today}-${String(seq).padStart(4, '0')}`
@@ -25,8 +25,8 @@ export async function generateRastreoFolioForClient(client, tenantId) {
     `SELECT COALESCE(MAX(NULLIF(substring(folio FROM '([0-9]+)$'), '')::integer), 0) AS seq
      FROM rastreo_ordenes
      WHERE tenant_id = $1
-       AND to_char(created_at AT TIME ZONE 'America/Mexico_City', 'YYYYMMDD') = $2`,
-    [tenantId, today]
+       AND folio LIKE $2`,
+    [tenantId, `TK-${today}-%`]
   )
   const seq = parseInt(res.rows[0].seq, 10) + 1
   return `TK-${today}-${String(seq).padStart(4, '0')}`
