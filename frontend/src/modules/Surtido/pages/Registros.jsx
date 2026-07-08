@@ -19,7 +19,7 @@ import { fmtDateTime, fmtDate, fmtTimeShort, getToday, subtractDays } from '../.
 import {
   getScanSessions, getScanSession, getOutboundList, getRecords,
   updateScanEvent, deleteScanEvent, addManualScanEvent, getManualEntryReasons, deleteScanSession,
-  getOrderTrackingByOBC, getBoxIncidents, getScanOperators, getBoxStatusDetail,
+  getOrderTrackingByOBC, getBoxIncidents, getScanOperators, getBoxStatusDetail, updateScanSession,
 } from '../services/surtidoService'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import { normalizeCode, generateCodeVariations } from '../../Shared/Wms/normalizeCode'
@@ -51,6 +51,26 @@ function durationLabel(startedAt, endedAt) {
   return `${secs}s`
 }
 
+// Duration must reflect the actual scanning window (first scan → last scan), not the
+// session's started_at/completed_at — a session can stay "open" long after scanning stopped.
+function sessionDurationBounds(r) {
+  return {
+    start: r.first_scan_at || r.started_at,
+    end: r.last_scan_at || r.completed_at,
+  }
+}
+
+// 'with_discrepancies' only ever gets written by an operator explicitly forcing a close with
+// missing boxes (see finalizeMut). A session stored as 'complete' without the full count was
+// never actually finalized — it's stale data (e.g. an old takeover bug) and is really still
+// in progress, so it must read as "En Proceso", not "Con diferencias".
+function effectiveSessionStatus(r) {
+  const expected = Number(r.total_expected ?? 0)
+  const scanned = Number(r.total_scanned ?? 0)
+  if (r.status === 'complete' && expected > 0 && scanned < expected) return 'open'
+  return r.status
+}
+
 function fmtDt(v) {
   if (!v) return '—'
   return fmtDateTime(v)
@@ -78,7 +98,11 @@ function ObcHeader({ obc, status, t }) {
   )
 }
 
-function ScanTable({ events, showType = false, showUbicacion = false, t, editable = false, deletable = false, ubicacion, editingId, editingCode, onEditCodeChange, onStartEdit, onSaveEdit, onDelete }) {
+function ScanTable({
+  events, showType = false, showUbicacion = false, t, editable = false, deletable = false, ubicacion,
+  editingId, editingCode, onEditCodeChange, onStartEdit, onSaveEdit, onDelete,
+  ubicacionEditable = false, editingUbicacionId, editingUbicacionValue, onUbicacionValueChange, onStartEditUbicacion, onSaveUbicacion,
+}) {
   const showActions = editable || deletable
   if (events.length === 0) return (
     <div className="flex flex-col items-center justify-center py-10 gap-2 text-warm-400">
@@ -134,7 +158,28 @@ function ScanTable({ events, showType = false, showUbicacion = false, t, editabl
                 </td>
               )}
               {showUbicacion && (
-                <td className="px-3 py-2 font-mono text-xs text-accent-700 truncate">{ubicacion || '—'}</td>
+                <td className="px-3 py-2 font-mono text-xs text-accent-700 truncate">
+                  {ubicacionEditable && editingUbicacionId === e.id ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        className="input-field h-7 w-full text-xs font-mono"
+                        value={editingUbicacionValue}
+                        onChange={(event) => onUbicacionValueChange(event.target.value)}
+                        onKeyDown={(event) => event.key === 'Enter' && onSaveUbicacion(e)}
+                        autoFocus
+                      />
+                      <button className="p-1 rounded hover:bg-primary-50 text-primary-600 shrink-0" onClick={() => onSaveUbicacion(e)} title="Guardar">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : ubicacionEditable ? (
+                    <button type="button" className="truncate w-full text-left hover:text-accent-800" onClick={() => onStartEditUbicacion(e)} title="Editar ubicación">
+                      {e.ubicacion_nota || ubicacion || '—'}
+                    </button>
+                  ) : (
+                    <span className="truncate">{e.ubicacion_nota || ubicacion || '—'}</span>
+                  )}
+                </td>
               )}
               <td className="px-3 py-2 text-warm-400 tabular-nums">
                 {fmtDt(e.scanned_at || e.scan_time)}
@@ -179,6 +224,10 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   const [editingCode, setEditingCode] = useState('')
   const [newCode, setNewCode] = useState('')
   const [newReasonId, setNewReasonId] = useState('')
+  const [editingUbicacionId, setEditingUbicacionId] = useState(null)
+  const [editingUbicacionValue, setEditingUbicacionValue] = useState('')
+  const [editingSessionUbicacion, setEditingSessionUbicacion] = useState(false)
+  const [sessionUbicacionValue, setSessionUbicacionValue] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['surtido-session-detail', sessionId],
@@ -288,13 +337,16 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
 
   const totalExpected = session.total_expected ?? 0
   const totalScanned  = validados.length
+  const displayStatus = effectiveSessionStatus({ status: session.status, total_expected: totalExpected, total_scanned: totalScanned })
   const destino      = wmsOrder?.receiverName || wmsOrder?.consignee || '—'
   const fechaEntrega = (wmsOrder?.expectedTime || wmsOrder?.outboundTime)
     ? fmtDt(wmsOrder?.expectedTime || wmsOrder?.outboundTime)
     : '—'
   const referencia   = wmsOrder?.thirdOrderNo || wmsOrder?.referenceNo || '—'
   const tracking     = wmsOrder?.logisticsTrackNo || '—'
-  const editableSession = session.status === 'open'
+  // A session that only reads as "En Proceso" because it's stale (never really force-closed)
+  // must stay editable too — see effectiveSessionStatus.
+  const editableSession = displayStatus === 'open'
 
   const updateMut = useMutation({
     mutationFn: ({ id, code }) => updateScanEvent(id, {
@@ -312,6 +364,28 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   const deleteMut = useMutation({
     mutationFn: deleteScanEvent,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['surtido-session-detail', sessionId] }),
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  // Per-caja ubicacion override — updates only this single scan record.
+  const updateEventUbicacionMut = useMutation({
+    mutationFn: ({ id, ubicacion_nota }) => updateScanEvent(id, { ubicacion_nota }),
+    onSuccess: () => {
+      setEditingUbicacionId(null)
+      setEditingUbicacionValue('')
+      qc.invalidateQueries({ queryKey: ['surtido-session-detail', sessionId] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
+
+  // Order-level ubicacion edit — backend cascades this to every caja in the session.
+  const updateSessionUbicacionMut = useMutation({
+    mutationFn: (texto) => updateScanSession(sessionId, { ubicacion_nota: texto || null }),
+    onSuccess: () => {
+      setEditingSessionUbicacion(false)
+      qc.invalidateQueries({ queryKey: ['surtido-session-detail', sessionId] })
+      qc.invalidateQueries({ queryKey: ['surtido-sessions'] })
+    },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
 
@@ -337,6 +411,9 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
     setIsReadOnly(true)
     setEditingId(null)
     setEditingCode('')
+    setEditingUbicacionId(null)
+    setEditingUbicacionValue('')
+    setEditingSessionUbicacion(false)
   }, [initialTab, isOpen])
 
   const handleClose = () => { setDetailTab(initialTab); onClose() }
@@ -383,7 +460,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
       onClose={handleClose}
       title={isLoading
         ? <span className="text-warm-400 text-sm">{t('common.loading')}</span>
-        : <ObcHeader obc={session.outbound_order_no} status={session.status} t={t} />
+        : <ObcHeader obc={session.outbound_order_no} status={displayStatus} t={t} />
       }
       icon={BadgeCheck}
       size="xl"
@@ -466,15 +543,48 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
             </div>
           </div>
 
-          {/* Ubicacion row */}
-          {session.ubicacion_nota && (
+          {/* Ubicacion row — order-level edit cascades to every caja (see PUT /scan-session/:id).
+              Ubicacion may be edited regardless of session status; only the scan/code data is
+              locked once a session leaves 'open'. */}
+          {(session.ubicacion_nota || (!isReadOnly && canEdit)) && (
             <div className="flex items-center gap-2 rounded-xl bg-accent-50 border border-accent-100 px-3 py-2.5">
               <div className="w-6 h-6 rounded-lg bg-accent-100 flex items-center justify-center shrink-0">
                 <Eye className="w-3.5 h-3.5 text-accent-600" />
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-[10px] text-accent-500 uppercase tracking-wider font-bold">Ubicación</p>
-                <p className="text-sm font-mono font-semibold text-accent-700">{session.ubicacion_nota}</p>
+                {!isReadOnly && canEdit ? (
+                  editingSessionUbicacion ? (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <input
+                        className="input-field h-8 text-sm font-mono"
+                        value={sessionUbicacionValue}
+                        onChange={(event) => setSessionUbicacionValue(event.target.value)}
+                        onKeyDown={(event) => event.key === 'Enter' && updateSessionUbicacionMut.mutate(sessionUbicacionValue.trim())}
+                        autoFocus
+                      />
+                      <button
+                        className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-600 shrink-0"
+                        onClick={() => updateSessionUbicacionMut.mutate(sessionUbicacionValue.trim())}
+                        title="Guardar"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="flex items-center gap-1.5"
+                      onClick={() => { setSessionUbicacionValue(session.ubicacion_nota || ''); setEditingSessionUbicacion(true) }}
+                      title="Editar ubicación"
+                    >
+                      <span className="text-sm font-mono font-semibold text-accent-700">{session.ubicacion_nota || '—'}</span>
+                      <Edit3 className="w-3.5 h-3.5 text-accent-500 hover:text-accent-700 shrink-0" />
+                    </button>
+                  )
+                ) : (
+                  <p className="text-sm font-mono font-semibold text-accent-700">{session.ubicacion_nota}</p>
+                )}
               </div>
             </div>
           )}
@@ -543,6 +653,12 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
                 onStartEdit={(event) => { setEditingId(event.id); setEditingCode(event.normalized_code || event.scanned_code || '') }}
                 onSaveEdit={(event) => updateMut.mutate({ id: event.id, code: editingCode.trim() })}
                 onDelete={(event) => deleteMut.mutate(event.id)}
+                ubicacionEditable={!isReadOnly && canEdit}
+                editingUbicacionId={editingUbicacionId}
+                editingUbicacionValue={editingUbicacionValue}
+                onUbicacionValueChange={setEditingUbicacionValue}
+                onStartEditUbicacion={(event) => { setEditingUbicacionId(event.id); setEditingUbicacionValue(event.ubicacion_nota || session.ubicacion_nota || '') }}
+                onSaveUbicacion={(event) => updateEventUbicacionMut.mutate({ id: event.id, ubicacion_nota: editingUbicacionValue.trim() })}
               />
               {!isReadOnly && canEdit && (
                 <div className="grid grid-cols-[minmax(0,1fr)_12rem_auto] gap-2 rounded-xl border border-warm-100 bg-warm-50/70 p-3">
@@ -578,6 +694,12 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
               onStartEdit={(event) => { setEditingId(event.id); setEditingCode(event.normalized_code || event.scanned_code || '') }}
               onSaveEdit={(event) => updateMut.mutate({ id: event.id, code: editingCode.trim() })}
               onDelete={(event) => deleteMut.mutate(event.id)}
+              ubicacionEditable={!isReadOnly && canEdit}
+              editingUbicacionId={editingUbicacionId}
+              editingUbicacionValue={editingUbicacionValue}
+              onUbicacionValueChange={setEditingUbicacionValue}
+              onStartEditUbicacion={(event) => { setEditingUbicacionId(event.id); setEditingUbicacionValue(event.ubicacion_nota || session.ubicacion_nota || '') }}
+              onSaveUbicacion={(event) => updateEventUbicacionMut.mutate({ id: event.id, ubicacion_nota: editingUbicacionValue.trim() })}
             />
           )}
           {detailTab === 'incidencias' && (
@@ -1062,16 +1184,17 @@ export default function SurtidoRegistros() {
   function buildRegistrosRows(rows) {
     return rows.map(r => {
       const rejected = Math.max(0, (r.total_expected ?? 0) - (r.total_scanned ?? 0))
+      const { start, end } = sessionDurationBounds(r)
       return [
         r.outbound_order_no || '',
         r.operator_nombre || '',
-        r.started_at || '',
-        r.ended_at || '',
-        durationLabel(r.started_at, r.ended_at),
+        start || '',
+        end || '',
+        durationLabel(start, end),
         r.total_expected ?? 0,
         r.total_scanned ?? 0,
         rejected,
-        r.status || '',
+        effectiveSessionStatus(r) || '',
       ]
     })
   }
@@ -1389,7 +1512,7 @@ export default function SurtidoRegistros() {
                 </thead>
                 <tbody className="divide-y divide-warm-50">
                   {records.map(r => {
-                    const meta = STATUS_META[r.status] ?? STATUS_META.open
+                    const meta = STATUS_META[effectiveSessionStatus(r)] ?? STATUS_META.open
                     const pct = r.total_expected > 0
                       ? Math.min(100, Math.round(((r.total_scanned ?? 0) / r.total_expected) * 100))
                       : null
@@ -1439,7 +1562,7 @@ export default function SurtidoRegistros() {
                         <td className="table-cell hidden lg:table-cell">
                           <span className="text-warm-500 text-xs inline-flex items-center gap-1">
                             <Clock size={10} className="text-warm-300" />
-                            {durationLabel(r.started_at, r.ended_at)}
+                            {(() => { const b = sessionDurationBounds(r); return durationLabel(b.start, b.end) })()}
                           </span>
                         </td>
                         <td className="table-cell text-right">

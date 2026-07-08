@@ -5956,10 +5956,10 @@ const translations = {
     'surtido.ordenes.panel.incidencias_si':       'Sí',
     'surtido.ordenes.panel.incidencias_no':       'No',
     // ── Surtido registros status + result + detail ────────────────────────
-    'surtido.registros.status.open':               'En Curso',
+    'surtido.registros.status.open':               'En Proceso',
     'surtido.registros.status.complete':           'Completo',
     'surtido.registros.status.validating':         'En Curso',
-    'surtido.registros.status.with_discrepancies': 'Con Diferencias',
+    'surtido.registros.status.with_discrepancies': 'Parcial',
     'surtido.registros.status.cancelled':          'Cancelado',
     'surtido.registros.delete_session_title':      'Eliminar Validación',
     'surtido.registros.delete_session_confirm':    'Se eliminará toda la validación de la orden con todos sus registros escaneados. esta acción no se puede deshacer.',

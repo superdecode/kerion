@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
+import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import env from './config/env.js'
 import { query, tenantDB } from './config/database.js'
@@ -124,6 +125,10 @@ function isAllowedOrigin(origin) {
 
 // Security
 app.use(helmet())
+// gzip responses — large export payloads (tens of thousands of rows as JSON) shrink by
+// 70-85%, which meaningfully cuts transfer time and helps large exports finish within the
+// function's execution window.
+app.use(compression())
 app.use(cors({
   origin(origin, callback) {
     if (isAllowedOrigin(origin)) return callback(null, true)

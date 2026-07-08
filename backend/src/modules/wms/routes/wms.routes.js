@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import crypto from 'crypto'
+import { isDatabaseUnavailableError } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission, getPermissionLevel, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { getToday, instantDateInTZ } from '../../../shared/utils/dateUtils.js'
@@ -722,22 +723,49 @@ router.post('/scan-session',
             }
           })
         }
-        // Force takeover: Close old session
-        await req.tQuery(
-          `UPDATE pick_sessions SET status = 'complete', completed_at = now(), notes = 'Cerrada por takeover de otro operador' 
-           WHERE id = $1 AND tenant_id = $2`,
-          [s.id, req.tenantId]
+        // Force takeover: transfer the SAME session to the new operator instead of closing it
+        // and inserting a second row — an order must always map to exactly one pick_sessions record.
+        // (Previously this closed the old session as 'complete' unconditionally, which showed
+        // orders as completed even when far from fully validated.)
+        const takeoverNote = `Retomada por ${req.fullUser?.nombre_completo || req.user.email || 'otro operador'}`
+        const nextNotes = s.notes ? `${s.notes} | ${takeoverNote}` : takeoverNote
+        const transferred = await req.tQuery(
+          `UPDATE pick_sessions
+           SET operator_id = $1,
+               total_expected = GREATEST(total_expected, $2),
+               notes = $3,
+               updated_at = now()
+           WHERE id = $4 AND tenant_id = $5
+           RETURNING *`,
+          [req.user.id, total_expected || 0, nextNotes, s.id, req.tenantId]
         )
+        return res.json({ success: true, data: transferred.rows[0], reused: true })
       }
 
-      const result = await req.tQuery(
-        `INSERT INTO pick_sessions
-           (tenant_id, outbound_order_no, third_order_no, operator_id, status, total_expected, total_scanned)
-         VALUES ($1, $2, $3, $4, 'open', $5, 0)
-         RETURNING *`,
-        [req.tenantId, outbound_order_no, third_order_no || null, req.user.id, total_expected || 0]
-      )
-      res.status(201).json({ success: true, data: result.rows[0] })
+      try {
+        const result = await req.tQuery(
+          `INSERT INTO pick_sessions
+             (tenant_id, outbound_order_no, third_order_no, operator_id, status, total_expected, total_scanned)
+           VALUES ($1, $2, $3, $4, 'open', $5, 0)
+           RETURNING *`,
+          [req.tenantId, outbound_order_no, third_order_no || null, req.user.id, total_expected || 0]
+        )
+        return res.status(201).json({ success: true, data: result.rows[0] })
+      } catch (insertErr) {
+        // Unique index race: another request created the open session first — reuse it.
+        if (insertErr.code === '23505') {
+          const retry = await req.tQuery(
+            `SELECT s.*, u.nombre_completo as operator_nombre
+             FROM pick_sessions s
+             LEFT JOIN usuarios u ON u.id = s.operator_id
+             WHERE s.tenant_id = $1 AND s.outbound_order_no = $2 AND s.status = 'open'
+             LIMIT 1`,
+            [req.tenantId, outbound_order_no]
+          )
+          if (retry.rows.length > 0) return res.json({ success: true, data: retry.rows[0], reused: true })
+        }
+        throw insertErr
+      }
     } catch (err) {
       console.error('POST wmshub/scan-session error:', err.message)
       res.status(500).json({ success: false, error: 'Error creando sesión de escaneo' })
@@ -801,6 +829,8 @@ router.get('/scan-sessions',
         req.tQuery(
           `SELECT s.*,
                   COALESCE(stats.total_scanned, 0) AS total_scanned,
+                  scan_times.first_scan_at,
+                  scan_times.last_scan_at,
                   u.nombre_completo as operator_nombre,
                   COALESCE(ot.tiene_faltantes, false)     AS tiene_faltantes,
                   COALESCE(ot.tiene_anormalidades, false) AS tiene_anormalidades
@@ -816,6 +846,12 @@ router.get('/scan-sessions',
                AND scan_result = 'ok'
              GROUP BY session_id
            ) stats ON stats.session_id = s.id
+           LEFT JOIN (
+             SELECT session_id, MIN(scanned_at) AS first_scan_at, MAX(scanned_at) AS last_scan_at
+             FROM pick_events
+             WHERE tenant_id = $1
+             GROUP BY session_id
+           ) scan_times ON scan_times.session_id = s.id
            LEFT JOIN usuarios u ON u.id = s.operator_id
            LEFT JOIN pick_order_tracking ot
              ON ot.tenant_id = s.tenant_id AND ot.outbound_order_no = s.outbound_order_no
@@ -859,6 +895,8 @@ router.get('/scan-session/:id',
         req.tQuery(
           `SELECT s.*,
                   COALESCE(stats.total_scanned, 0) AS total_scanned,
+                  scan_times.first_scan_at,
+                  scan_times.last_scan_at,
                   u.nombre_completo as operator_nombre
            FROM pick_sessions s
            LEFT JOIN (
@@ -872,6 +910,12 @@ router.get('/scan-session/:id',
                AND scan_result = 'ok'
              GROUP BY session_id
            ) stats ON stats.session_id = s.id
+           LEFT JOIN (
+             SELECT session_id, MIN(scanned_at) AS first_scan_at, MAX(scanned_at) AS last_scan_at
+             FROM pick_events
+             WHERE tenant_id = $2
+             GROUP BY session_id
+           ) scan_times ON scan_times.session_id = s.id
            LEFT JOIN usuarios u ON u.id = s.operator_id
            WHERE s.id = $1 AND s.tenant_id = $2`,
           [req.params.id, req.tenantId]
@@ -897,7 +941,10 @@ router.get('/scan-session/:id',
 // PUT /api/wmshub/scan-session/:id — update (complete, add notes, update counts)
 router.put('/scan-session/:id',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.validacion', 'actualizar'),
+  requireAnyPermission([
+    { modulePath: 'surtido.validacion', action: 'actualizar' },
+    { modulePath: 'surtido.registros', action: 'actualizar' },
+  ]),
   async (req, res) => {
     try {
       const { status, notes, total_scanned, ubicacion_id, ubicacion_nota } = req.body
@@ -913,7 +960,12 @@ router.put('/scan-session/:id',
       const session = sessionRes.rows[0]
       const isAdmin = req.fullUser.es_admin_tenant === true ||
         (req.fullUser.es_admin_tenant === undefined && req.fullUser.rol_nombre === 'Administrador')
-      if (session.operator_id !== req.user.id && !isAdmin) {
+      // Editing only the ubicacion is allowed for anyone with 'actualizar' permission on this
+      // module, regardless of who ran the session or its status — it's a location correction,
+      // not scan data. Any other field (status/notes/total_scanned) still requires ownership.
+      const onlyUbicacionEdit = status === undefined && notes === undefined && total_scanned === undefined &&
+        (ubicacion_id !== undefined || ubicacion_nota !== undefined)
+      if (!onlyUbicacionEdit && session.operator_id !== req.user.id && !isAdmin) {
         return res.status(403).json({ success: false, error: 'No autorizado para modificar esta sesión' })
       }
 
@@ -937,6 +989,15 @@ router.put('/scan-session/:id',
         params
       )
       const updatedSession = result.rows[0]
+
+      // Order-level ubicacion edit cascades to every caja in the session. A per-caja override
+      // made afterwards via PUT /scan-event/:id still wins for that single box.
+      if (ubicacion_nota !== undefined) {
+        await req.tQuery(
+          `UPDATE pick_events SET ubicacion_nota = $1 WHERE session_id = $2 AND tenant_id = $3`,
+          [normalizeOptionalText(ubicacion_nota), req.params.id, req.tenantId]
+        )
+      }
 
       if (status === 'complete' || status === 'with_discrepancies') {
         const scanned = total_scanned !== undefined
@@ -1193,7 +1254,10 @@ router.post('/scan-event/manual',
 
 router.put('/scan-event/:id',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.validacion', 'actualizar'),
+  requireAnyPermission([
+    { modulePath: 'surtido.validacion', action: 'actualizar' },
+    { modulePath: 'surtido.registros', action: 'actualizar' },
+  ]),
   async (req, res) => {
     try {
       const eventRes = await req.tQuery(
@@ -1205,12 +1269,6 @@ router.put('/scan-event/:id',
       )
       if (eventRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Registro no encontrado' })
       const event = eventRes.rows[0]
-      if (event.status !== 'open') return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
-      const isEventAdmin = req.fullUser.es_admin_tenant === true ||
-        (req.fullUser.es_admin_tenant === undefined && req.fullUser.rol_nombre === 'Administrador')
-      if (event.operator_id !== req.user.id && !isEventAdmin) {
-        return res.status(403).json({ success: false, error: 'No autorizado para modificar este registro' })
-      }
 
       const {
         scanned_code,
@@ -1222,9 +1280,27 @@ router.put('/scan-event/:id',
         manual_reason_id,
         manual_reason_label,
         manual_notes,
+        ubicacion_nota,
       } = req.body
       if (scan_result !== undefined && !PICK_SCAN_RESULTS.has(String(scan_result))) {
         return res.status(400).json({ success: false, error: 'Resultado de escaneo inválido' })
+      }
+
+      // Editing only the ubicacion is allowed for anyone with 'actualizar' permission, on any
+      // caja regardless of session status or who scanned it — it's a location correction, not
+      // scan data. Any other field still requires the session to be open and the operator/admin
+      // ownership check.
+      const onlyUbicacionEdit = scanned_code === undefined && normalized_code === undefined &&
+        matched_sku === undefined && matched_box_type === undefined && scan_result === undefined &&
+        quantity === undefined && manual_reason_id === undefined && manual_reason_label === undefined &&
+        manual_notes === undefined && ubicacion_nota !== undefined
+      if (!onlyUbicacionEdit) {
+        if (event.status !== 'open') return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
+        const isEventAdmin = req.fullUser.es_admin_tenant === true ||
+          (req.fullUser.es_admin_tenant === undefined && req.fullUser.rol_nombre === 'Administrador')
+        if (event.operator_id !== req.user.id && !isEventAdmin) {
+          return res.status(403).json({ success: false, error: 'No autorizado para modificar este registro' })
+        }
       }
 
       let resolvedReasonId = manual_reason_id ?? event.manual_reason_id
@@ -1271,9 +1347,10 @@ router.put('/scan-event/:id',
              manual_reason_id = $7,
              manual_reason_label = $8,
              manual_notes = $9,
+             ubicacion_nota = $10,
              edited_at = now(),
-             edited_by = $10
-         WHERE id = $11
+             edited_by = $11
+         WHERE id = $12
          RETURNING *`,
         [
           normalizeOptionalText(scanned_code),
@@ -1285,6 +1362,7 @@ router.put('/scan-event/:id',
           resolvedReasonId || null,
           resolvedReasonLabel || null,
           manual_notes !== undefined ? normalizeOptionalText(manual_notes) : event.manual_notes ?? null,
+          ubicacion_nota !== undefined ? normalizeOptionalText(ubicacion_nota) : event.ubicacion_nota ?? null,
           req.user.id,
           req.params.id,
         ]
@@ -1524,25 +1602,33 @@ router.get('/inventory-session/:id',
   requirePermission('inventario.registros', 'ver'),
   async (req, res) => {
     try {
-      const [sessionRes, scansRes] = await Promise.all([
-        req.tQuery(
-          `SELECT s.*, u.nombre_completo as operator_nombre,
-                  ub.codigo as ubicacion_codigo, ub.nombre as ubicacion_nombre
-           FROM inv_sessions s
-           LEFT JOIN usuarios u ON u.id = s.operator_id
-           LEFT JOIN dev_ubicaciones ub ON ub.id = s.ubicacion_id
-           WHERE s.id = $1 AND s.tenant_id = $2`,
-          [req.params.id, req.tenantId]
-        ),
-        req.tQuery(
-          'SELECT * FROM inv_scans WHERE session_id = $1 ORDER BY scanned_at ASC',
-          [req.params.id]
-        ),
-      ])
-      if (sessionRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
-      res.json({ success: true, data: { session: sessionRes.rows[0], scans: scansRes.rows } })
+      // Uses the no-timeout export pool: a session's scan list can run into the tens of
+      // thousands of rows, which routinely exceeded the main pool's 12s statement_timeout.
+      const result = await req.tExportTransaction(async (client) => {
+        const [sessionRes, scansRes] = await Promise.all([
+          client.query(
+            `SELECT s.*, u.nombre_completo as operator_nombre,
+                    ub.codigo as ubicacion_codigo, ub.nombre as ubicacion_nombre
+             FROM inv_sessions s
+             LEFT JOIN usuarios u ON u.id = s.operator_id
+             LEFT JOIN dev_ubicaciones ub ON ub.id = s.ubicacion_id
+             WHERE s.id = $1 AND s.tenant_id = $2`,
+            [req.params.id, req.tenantId]
+          ),
+          client.query(
+            'SELECT * FROM inv_scans WHERE session_id = $1 ORDER BY scanned_at ASC',
+            [req.params.id]
+          ),
+        ])
+        return { sessionRes, scansRes }
+      })
+      if (result.sessionRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
+      res.json({ success: true, data: { session: result.sessionRes.rows[0], scans: result.scansRes.rows } })
     } catch (err) {
       console.error('GET wmshub/inventory-session/:id error:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ success: false, error: 'Servicio no disponible, intenta de nuevo en unos segundos' })
+      }
       res.status(500).json({ success: false, error: 'Error obteniendo sesión' })
     }
   }

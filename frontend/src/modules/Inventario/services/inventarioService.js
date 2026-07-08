@@ -13,8 +13,11 @@ export const saveInventorySession = (body) =>
 export const getInventorySessions = (params) =>
   api.get('/wmshub/inventory-sessions', { params }).then(r => r.data)
 
+// A session's scan list can run into the tens of thousands of rows — give it real headroom
+// instead of the default 15s client timeout (the backend query itself has no timeout either,
+// see req.tExportTransaction in wms.routes.js).
 export const getInventorySession = (id) =>
-  api.get(`/wmshub/inventory-session/${id}`).then(r => r.data)
+  api.get(`/wmshub/inventory-session/${id}`, { timeout: 120000 }).then(r => r.data)
 
 export const updateInventorySession = (id, body) =>
   api.patch(`/wmshub/inventory-session/${id}`, body).then(r => r.data)
