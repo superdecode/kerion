@@ -1282,17 +1282,35 @@ router.get('/:folio',
         ])
 
         const rawTracking = trackingRes.rows[0] || null
-        surtidoTracking = rawTracking
-          ? {
-              ...rawTracking,
-              surtidor_nombre: rawTracking.surtidor_nombre || rawTracking.surtidor_nombre_actual || null,
-            }
-          : null
-        const cajaSurtidoMap = new Map(cajaSurtidoRes.rows.map(row => [row.rastreo_caja_id, row]))
+        const cajaSurtidoRows = cajaSurtidoRes.rows || []
+        const cajaSurtidoMap = new Map(cajaSurtidoRows.map(row => [row.rastreo_caja_id, row]))
         cajasWithSurtido = cajasRes.rows.map(caja => ({
           ...caja,
           surtido_validacion: cajaSurtidoMap.get(caja.id) || null,
         }))
+
+        const latestValidatedRow = [...cajaSurtidoRows].sort((a, b) => {
+          const aTs = a?.surtido_validated_at ? new Date(a.surtido_validated_at).getTime() : 0
+          const bTs = b?.surtido_validated_at ? new Date(b.surtido_validated_at).getTime() : 0
+          return bTs - aTs
+        })[0] || null
+        const validatedCount = cajaSurtidoRows.length
+        const totalBoxes = cajasRes.rows.length
+        const derivedStatus = validatedCount > 0
+          ? (totalBoxes > 0 && validatedCount >= totalBoxes ? 'complete' : 'partial')
+          : null
+
+        surtidoTracking = rawTracking || latestValidatedRow
+          ? {
+              ...(rawTracking || {}),
+              surtidor_nombre: rawTracking?.surtidor_nombre || rawTracking?.surtidor_nombre_actual || null,
+              status: rawTracking?.status || derivedStatus || null,
+              validation_completed_at: latestValidatedRow?.surtido_validated_at || rawTracking?.validation_completed_at || null,
+              validated_by: latestValidatedRow?.surtido_operator_nombre || rawTracking?.validated_by || null,
+              validated_count: validatedCount,
+              total_boxes: totalBoxes,
+            }
+          : null
       }
 
       res.json({

@@ -689,9 +689,13 @@ export default function RastreoDetalle() {
                       {[
                         { label: t('rastreo.detalle.surtidorAsignado'), value: surtidoTracking.surtidor_nombre || t('rastreo.detalle.emptyDash'), icon: User },
                         { label: t('rastreo.detalle.fechaAsignacionSurtido'), value: safeDate(surtidoTracking.assigned_at) || t('rastreo.detalle.emptyDash'), icon: Clock },
-                        { label: t('rastreo.detalle.estadoSurtido'), value: surtidoTracking.status ? t(`surtido.ordenes.status.${surtidoTracking.status}`) : t('rastreo.detalle.emptyDash'), icon: CheckCircle2 },
-                        { label: t('rastreo.detalle.validacionSurtido'), value: safeDate(surtidoTracking.validation_completed_at) || t('rastreo.detalle.emptyDash'), icon: ScanBarcode },
-                        { label: t('rastreo.detalle.notasSurtido'), value: surtidoTracking.notes || t('rastreo.detalle.emptyDash'), icon: ClipboardList },
+                        {
+                          label: t('rastreo.detalle.cajasValidadasSurtido'),
+                          value: `${surtidoTracking.validated_count ?? 0} / ${surtidoTracking.total_boxes ?? 0}`,
+                          icon: Package,
+                        },
+                        { label: t('rastreo.detalle.ultimaValidacionSurtido'), value: safeDate(surtidoTracking.validation_completed_at) || t('rastreo.detalle.emptyDash'), icon: ScanBarcode },
+                        { label: t('rastreo.detalle.usuarioValidacion'), value: surtidoTracking.validated_by || t('rastreo.detalle.emptyDash'), icon: ClipboardList },
                       ].map(item => (
                         <div key={item.label} className="rounded-xl border border-white/80 bg-white/85 px-3 py-3">
                           <div className="flex items-start gap-2.5">
