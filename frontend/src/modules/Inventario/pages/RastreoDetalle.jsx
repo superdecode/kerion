@@ -489,222 +489,228 @@ export default function RastreoDetalle() {
           </button>
         </div>
 
-        {/* Header card: integrated summary + order detail */}
+        {/* Header card: integrated summary + full-width order/surtido detail */}
         <div className="px-5 mb-4">
           <div className="overflow-hidden rounded-[28px] border border-warm-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.10),_transparent_30%),linear-gradient(135deg,_rgba(255,255,255,0.99),_rgba(248,250,252,0.97))] shadow-[0_16px_44px_-34px_rgba(15,23,42,0.24)]">
-            <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_340px]">
-
-              <div className="bg-white px-6 py-6 sm:px-7 sm:py-7">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary-500">{t('rastreo.detalle.infoGeneral')}</p>
-
-                  <div className="mt-3 flex items-center gap-3 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/90 shadow-sm text-primary-600">
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      {orden.outbound_order_no ? (
-                        <CopyableCell text={orden.outbound_order_no} className="font-mono text-base font-black text-warm-900" />
-                      ) : (
-                        <span className="block text-xs italic text-warm-400">{t('rastreo.detalle.sinOrdenVinculada')}</span>
-                      )}
-                    </div>
+            <div className="bg-white px-6 py-5 sm:px-7 sm:py-6">
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/90 shadow-sm text-primary-600">
+                    <FileText className="h-4 w-4" />
                   </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-2xl border border-warm-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm text-primary-600">
-                          <Package className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">{t('rastreo.detalle.cajasRastreo')}</p>
-                          <p className="mt-1 text-sm font-bold text-warm-800">{cajasStats.total}</p>
-                          <p className="text-[10px] text-warm-400">{cajasStats.localizadas} {t('rastreo.detalle.loc')} • {cajasStats.no_encontradas} {t('rastreo.detalle.ne')}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-primary-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 shadow-sm text-primary-600">
-                          <Package className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600/70">{t('rastreo.detalle.cajasOrden')}</p>
-                          <p className="mt-1 text-sm font-bold text-warm-800">{outboundBoxTotal ?? '—'}</p>
-                          <p className="text-[10px] text-warm-400">{t('rastreo.detalle.cajasOrdenHint')}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-primary-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm text-primary-600">
-                          <Clock className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600/70">{t('common.date')}</p>
-                          <p className="mt-1 text-xs font-bold text-warm-800">
-                            {new Date(orden.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </p>
-                          <p className="text-[10px] text-warm-400">{t('rastreo.detalle.hace')} {elapsed(orden.created_at)}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-warm-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)] sm:col-span-2 xl:col-span-1">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm text-primary-600">
-                          <Crosshair className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">{t('rastreo.detalle.pendientes')}</p>
-                          <p className="mt-1 text-sm font-bold text-warm-800">{Math.max(cajasStats.total - cajasStats.localizadas - cajasStats.no_encontradas, 0)}</p>
-                          <p className="text-[10px] text-warm-400">{t('rastreo.detalle.pendientesHint')}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {orden.outbound_order_no && (
-                    <div className="mt-5 rounded-2xl border border-warm-100 bg-white p-4 shadow-[0_12px_24px_-28px_rgba(15,23,42,0.18)]">
-                      <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">
-                        {t('rastreo.detalle.resumenOrden')}
-                      </p>
-                      {loadingObd ? (
-                        <div className="flex items-center gap-2 text-xs text-warm-400">
-                          <Loader2 size={12} className="animate-spin" />
-                          {t('common.loading')}
-                        </div>
-                      ) : Object.values(orderInfo).some(Boolean) ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3">
-                          {[
-                            { label: t('rastreo.col.cliente'), value: orderInfo.customerCode },
-                            { label: t('rastreo.detalle.receptor'), value: orderInfo.receiverName },
-                            { label: t('rastreo.searchModal.col.fechaEntrega'), value: safeDate(orderInfo.outboundTime || orderInfo.expectedTime) },
-                            { label: t('rastreo.detalle.canalLogistico'), value: orderInfo.logisticsChannel },
-                          ].filter(f => f.value).map(f => (
-                            <div key={f.label} className="flex flex-col gap-0.5">
-                              <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">{f.label}</span>
-                              <span className="text-xs text-warm-700 font-medium">{f.value}</span>
-                            </div>
-                          ))}
-                          {orderInfo.logisticsTrackNo && (
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">{t('rastreo.detalle.tracking')}</span>
-                              <CopyableCell text={orderInfo.logisticsTrackNo} className="font-mono text-xs text-warm-600" />
-                            </div>
-                          )}
-                          {orderInfo.thirdOrderNo && (
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">{t('rastreo.detalle.refExterna')}</span>
-                              <CopyableCell text={orderInfo.thirdOrderNo} className="font-mono text-xs text-warm-600" />
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-warm-400">{t('rastreo.detalle.errorOrdenVinculada')}</p>
-                      )}
-                    </div>
-                  )}
-
-                  {orden.outbound_order_no && (
-                    <div className="mt-4 rounded-2xl border border-accent-100 bg-accent-50/35 p-4 shadow-[0_12px_24px_-28px_rgba(15,23,42,0.18)]">
-                      <div className="mb-3 flex items-center gap-2">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-accent-600 shadow-sm">
-                          <ClipboardList className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-600">{t('rastreo.detalle.surtidoSection')}</p>
-                          <p className="text-[11px] text-warm-500">{t('rastreo.detalle.surtidoSectionHint')}</p>
-                        </div>
-                      </div>
-                      {surtidoTracking ? (
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                          {[
-                            { label: t('rastreo.detalle.surtidorAsignado'), value: surtidoTracking.surtidor_nombre || t('rastreo.detalle.emptyDash'), icon: User },
-                            { label: t('rastreo.detalle.fechaAsignacionSurtido'), value: safeDate(surtidoTracking.assigned_at) || t('rastreo.detalle.emptyDash'), icon: Clock },
-                            { label: t('rastreo.detalle.estadoSurtido'), value: surtidoTracking.status ? t(`surtido.ordenes.status.${surtidoTracking.status}`) : t('rastreo.detalle.emptyDash'), icon: CheckCircle2 },
-                            { label: t('rastreo.detalle.validacionSurtido'), value: safeDate(surtidoTracking.validation_completed_at) || t('rastreo.detalle.emptyDash'), icon: ScanBarcode },
-                          ].map(item => (
-                            <div key={item.label} className="rounded-xl border border-white/80 bg-white/85 px-3 py-2.5">
-                              <div className="flex items-start gap-2.5">
-                                <item.icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-500" />
-                                <div className="min-w-0">
-                                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-warm-400">{item.label}</p>
-                                  <p className="mt-0.5 truncate text-xs font-semibold text-warm-800">{item.value}</p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                          {surtidoTracking.notes && (
-                            <div className="rounded-xl border border-warning-100 bg-white/90 px-3 py-2.5 sm:col-span-2 xl:col-span-4">
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-warning-600">{t('rastreo.detalle.notasSurtido')}</p>
-                              <p className="mt-1 whitespace-pre-wrap text-xs font-medium leading-5 text-warm-700">{surtidoTracking.notes}</p>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="rounded-xl border border-dashed border-accent-200 bg-white/70 px-3 py-3 text-xs text-warm-400">
-                          {t('rastreo.detalle.sinSurtidoTracking')}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t border-warm-200/80 bg-white px-6 py-6 lg:border-l lg:border-t-0">
-                <div className="flex h-full flex-col gap-4">
-                  <div className="rounded-2xl border border-warm-200 bg-white p-4 shadow-[0_14px_30px_-30px_rgba(15,23,42,0.28)]">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-warm-400">{t('rastreo.detalle.estadoOrden')}</p>
-                      {!canEdit && <EstadoChip estado={orden.estado} t={t} />}
-                    </div>
-                    {canEdit ? (
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="h-9 flex-1 rounded-xl border border-warm-200 bg-white px-3 text-xs font-medium text-warm-700 transition-all focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-                          value={orden.estado}
-                          onChange={handleEstadoChange}
-                          disabled={updateOrden.isPending || resolveOrdenMutation.isPending}
-                        >
-                          {getEstadoOptions(orden.estado).map((estado) => (
-                            <option key={estado} value={estado}>{t(ESTADO_META[estado].labelKey)}</option>
-                          ))}
-                        </select>
-                        {(updateOrden.isPending || resolveOrdenMutation.isPending) && <Loader2 size={14} className="animate-spin text-warm-300 flex-shrink-0" />}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="rounded-2xl border border-warm-200 bg-white p-4 shadow-[0_14px_30px_-30px_rgba(15,23,42,0.28)]">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-warm-400">{t('rastreo.detalle.responsable')}</p>
-                    {canEdit ? (
-                      <select
-                        className="h-9 w-full rounded-xl border border-warm-200 bg-white px-3 text-xs font-medium text-warm-700 transition-all focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-                        value={orden.asignado_a || ''}
-                        onChange={handleResponsableChange}
-                        disabled={updateOrden.isPending || resolveOrdenMutation.isPending}
-                      >
-                        <option value="">{t('rastreo.sinResponsable')}</option>
-                        {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre_completo}</option>)}
-                      </select>
+                  <div className="min-w-0 flex-1">
+                    {orden.outbound_order_no ? (
+                      <CopyableCell text={orden.outbound_order_no} className="font-mono text-base font-black text-warm-900" />
                     ) : (
-                      <div className="flex items-center gap-3 rounded-xl bg-warm-50 px-3 py-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-100 text-primary-600">
-                          <User size={15} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-warm-800">{orden.asignado_nombre || t('rastreo.sinResponsable')}</p>
-                          <p className="text-[11px] text-warm-400">{t('rastreo.detalle.responsableHint')}</p>
-                        </div>
-                      </div>
+                      <span className="block text-xs italic text-warm-400">{t('rastreo.detalle.sinOrdenVinculada')}</span>
                     )}
                   </div>
                 </div>
+
+                <div className="rounded-2xl border border-warm-200 bg-white p-2.5 shadow-[0_14px_30px_-30px_rgba(15,23,42,0.28)] xl:self-start">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-warm-400">{t('rastreo.detalle.estadoOrden')}</p>
+                        {!canEdit && <EstadoChip estado={orden.estado} t={t} />}
+                      </div>
+                      {canEdit ? (
+                        <div className="flex items-center gap-2">
+                          <select
+                            className="h-8 flex-1 rounded-xl border border-warm-200 bg-white px-2.5 text-xs font-medium text-warm-700 transition-all focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                            value={orden.estado}
+                            onChange={handleEstadoChange}
+                            disabled={updateOrden.isPending || resolveOrdenMutation.isPending}
+                          >
+                            {getEstadoOptions(orden.estado).map((estado) => (
+                              <option key={estado} value={estado}>{t(ESTADO_META[estado].labelKey)}</option>
+                            ))}
+                          </select>
+                          {(updateOrden.isPending || resolveOrdenMutation.isPending) && <Loader2 size={14} className="animate-spin text-warm-300 flex-shrink-0" />}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-warm-400">{t('rastreo.detalle.responsable')}</p>
+                      {canEdit ? (
+                        <select
+                          className="h-8 w-full rounded-xl border border-warm-200 bg-white px-2.5 text-xs font-medium text-warm-700 transition-all focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
+                          value={orden.asignado_a || ''}
+                          onChange={handleResponsableChange}
+                          disabled={updateOrden.isPending || resolveOrdenMutation.isPending}
+                        >
+                          <option value="">{t('rastreo.sinResponsable')}</option>
+                          {usuarios.map(u => <option key={u.id} value={u.id}>{u.nombre_completo}</option>)}
+                        </select>
+                      ) : (
+                        <div className="flex items-center gap-2 rounded-xl bg-warm-50 px-2.5 py-1.5">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-primary-100 text-primary-600">
+                            <User size={13} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-warm-800">{orden.asignado_nombre || t('rastreo.sinResponsable')}</p>
+                            <p className="text-[10px] text-warm-400">{t('rastreo.detalle.responsableHint')}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-warm-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm text-primary-600">
+                      <Package className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">{t('rastreo.detalle.cajasRastreo')}</p>
+                      <p className="mt-1 text-sm font-bold text-warm-800">{cajasStats.total}</p>
+                      <p className="text-[10px] text-warm-400">{cajasStats.no_encontradas} {t('rastreo.detalle.ne')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-success-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success-50 shadow-sm text-success-600">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-success-700/80">{t('rastreo.detalle.loc')}</p>
+                      <p className="mt-1 text-sm font-bold text-warm-800">{cajasStats.localizadas}</p>
+                      <p className="text-[10px] text-warm-400">{t('rastreo.detalle.pendientes')} {Math.max(cajasStats.total - cajasStats.localizadas - cajasStats.no_encontradas, 0)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-primary-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-50 shadow-sm text-primary-600">
+                      <ClipboardList className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600/70">{t('rastreo.detalle.estadoOrden')}</p>
+                      <div className="mt-1">
+                        <EstadoChip estado={orden.estado} t={t} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-primary-100 bg-white px-3 py-3 shadow-[0_10px_22px_-24px_rgba(15,23,42,0.22)]">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm text-primary-600">
+                      <Clock className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600/70">{t('common.date')}</p>
+                      <p className="mt-1 text-xs font-bold text-warm-800">
+                        {new Date(orden.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </p>
+                      <p className="text-[10px] text-warm-400">{t('rastreo.detalle.hace')} {elapsed(orden.created_at)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {orden.outbound_order_no && (
+                <div className="mt-5 rounded-2xl border border-warm-100 bg-white p-4 shadow-[0_12px_24px_-28px_rgba(15,23,42,0.18)]">
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600 shadow-sm">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-600">{t('rastreo.detalle.resumenOrden')}</p>
+                    </div>
+                  </div>
+                  {loadingObd ? (
+                    <div className="flex items-center gap-2 text-xs text-warm-400">
+                      <Loader2 size={12} className="animate-spin" />
+                      {t('common.loading')}
+                    </div>
+                  ) : Object.values(orderInfo).some(Boolean) ? (
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                      {[
+                        {
+                          label: t('rastreo.col.ordenSalida'),
+                          value: orden.outbound_order_no
+                            ? <CopyableCell text={orden.outbound_order_no} className="font-mono text-xs text-warm-700" />
+                            : t('rastreo.detalle.emptyDash'),
+                          icon: FileText,
+                        },
+                        { label: t('rastreo.col.cliente'), value: orderInfo.customerCode || t('rastreo.detalle.emptyDash'), icon: User },
+                        { label: t('rastreo.detalle.receptor'), value: orderInfo.receiverName || t('rastreo.detalle.emptyDash'), icon: Package },
+                        { label: t('rastreo.searchModal.col.fechaEntrega'), value: safeDate(orderInfo.outboundTime || orderInfo.expectedTime) || t('rastreo.detalle.emptyDash'), icon: Clock },
+                        {
+                          label: t('rastreo.detalle.tracking'),
+                          value: orderInfo.logisticsTrackNo
+                            ? <CopyableCell text={orderInfo.logisticsTrackNo} className="font-mono text-xs text-warm-700" />
+                            : (orderInfo.logisticsChannel || orderInfo.thirdOrderNo || t('rastreo.detalle.emptyDash')),
+                          note: orderInfo.logisticsChannel || orderInfo.thirdOrderNo || null,
+                          icon: ScanBarcode,
+                        },
+                      ].map((item) => (
+                        <div key={item.label} className="rounded-xl border border-warm-100 bg-warm-50/55 px-3 py-3">
+                          <div className="flex items-start gap-2.5">
+                            <item.icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary-500" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-warm-400">{item.label}</p>
+                              <div className="mt-0.5 text-xs font-semibold text-warm-800">{item.value}</div>
+                              {item.note && item.note !== item.value && (
+                                <p className="mt-1 truncate text-[10px] text-warm-400">{item.note}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-warm-400">{t('rastreo.detalle.errorOrdenVinculada')}</p>
+                  )}
+                </div>
+              )}
+
+              {orden.outbound_order_no && (
+                <div className="mt-4 rounded-2xl border border-accent-100 bg-accent-50/35 p-4 shadow-[0_12px_24px_-28px_rgba(15,23,42,0.18)]">
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-accent-600 shadow-sm">
+                      <ClipboardList className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-600">{t('rastreo.detalle.surtidoSection')}</p>
+                      <p className="text-[11px] text-warm-500">{t('rastreo.detalle.surtidoSectionHint')}</p>
+                    </div>
+                  </div>
+                  {surtidoTracking ? (
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                      {[
+                        { label: t('rastreo.detalle.surtidorAsignado'), value: surtidoTracking.surtidor_nombre || t('rastreo.detalle.emptyDash'), icon: User },
+                        { label: t('rastreo.detalle.fechaAsignacionSurtido'), value: safeDate(surtidoTracking.assigned_at) || t('rastreo.detalle.emptyDash'), icon: Clock },
+                        { label: t('rastreo.detalle.estadoSurtido'), value: surtidoTracking.status ? t(`surtido.ordenes.status.${surtidoTracking.status}`) : t('rastreo.detalle.emptyDash'), icon: CheckCircle2 },
+                        { label: t('rastreo.detalle.validacionSurtido'), value: safeDate(surtidoTracking.validation_completed_at) || t('rastreo.detalle.emptyDash'), icon: ScanBarcode },
+                        { label: t('rastreo.detalle.notasSurtido'), value: surtidoTracking.notes || t('rastreo.detalle.emptyDash'), icon: ClipboardList },
+                      ].map(item => (
+                        <div key={item.label} className="rounded-xl border border-white/80 bg-white/85 px-3 py-3">
+                          <div className="flex items-start gap-2.5">
+                            <item.icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-500" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-warm-400">{item.label}</p>
+                              <p className="mt-0.5 break-words text-xs font-semibold text-warm-800">{item.value}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-xl border border-dashed border-accent-200 bg-white/70 px-3 py-3 text-xs text-warm-400">
+                      {t('rastreo.detalle.sinSurtidoTracking')}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

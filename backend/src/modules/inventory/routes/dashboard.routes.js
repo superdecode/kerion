@@ -48,7 +48,8 @@ router.get('/',
         req.tQuery(
           `SELECT COUNT(*) AS activas
            FROM rastreo_ordenes
-           WHERE tenant_id = $1 AND estado NOT IN ('completado', 'cancelado')`,
+           WHERE tenant_id = $1
+             AND COALESCE(estado, '') NOT IN ('completado', 'completada', 'resuelta', 'cancelado', 'cancelada', 'cerrada')`,
           [req.tenantId]
         ),
         // Desglose de cajas por estado en rastreos activos
@@ -57,7 +58,7 @@ router.get('/',
            FROM rastreo_cajas rc
            JOIN rastreo_ordenes ro ON ro.id = rc.rastreo_orden_id
            WHERE rc.tenant_id = $1
-             AND ro.estado NOT IN ('completado', 'cancelado')
+             AND COALESCE(ro.estado, '') NOT IN ('completado', 'completada', 'resuelta', 'cancelado', 'cancelada', 'cerrada')
            GROUP BY rc.estado_caja
            ORDER BY cantidad DESC`,
           [req.tenantId]
@@ -74,8 +75,8 @@ router.get('/',
         req.tQuery(
           `SELECT
              COUNT(*) AS total,
-             COUNT(*) FILTER (WHERE estado = 'completado') AS completados,
-             COUNT(*) FILTER (WHERE estado = 'cancelado') AS cancelados
+             COUNT(*) FILTER (WHERE COALESCE(estado, '') IN ('completado', 'completada', 'resuelta')) AS completados,
+             COUNT(*) FILTER (WHERE COALESCE(estado, '') IN ('cancelado', 'cancelada', 'cerrada')) AS cancelados
            FROM rastreo_ordenes
            WHERE tenant_id = $1
              AND ${instantDateInTZ('created_at', tz)} BETWEEN $2 AND $3`,
@@ -85,7 +86,10 @@ router.get('/',
         req.tQuery(
           `SELECT
              COUNT(*) FILTER (WHERE ${instantDateInTZ('created_at', tz)} BETWEEN $2 AND $3) AS creados_semana,
-             COUNT(*) FILTER (WHERE estado = 'completado' AND ${instantDateInTZ('updated_at', tz)} BETWEEN $2 AND $3) AS cerrados_semana
+             COUNT(*) FILTER (
+               WHERE COALESCE(estado, '') IN ('completado', 'completada', 'resuelta', 'cancelado', 'cancelada', 'cerrada')
+                 AND ${instantDateInTZ('updated_at', tz)} BETWEEN $2 AND $3
+             ) AS cerrados_semana
            FROM rastreo_ordenes
            WHERE tenant_id = $1`,
           [req.tenantId, dateStart, dateEnd]
@@ -96,7 +100,7 @@ router.get('/',
              ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at))/3600)::numeric, 1) AS horas_promedio
            FROM rastreo_ordenes
            WHERE tenant_id = $1
-             AND estado = 'completado'
+             AND COALESCE(estado, '') IN ('completado', 'completada', 'resuelta')
              AND ${instantDateInTZ('created_at', tz)} BETWEEN $2 AND $3`,
           [req.tenantId, dateStart, dateEnd]
         ),
