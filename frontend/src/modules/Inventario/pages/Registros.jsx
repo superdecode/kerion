@@ -632,7 +632,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                 <div className="overflow-x-auto rounded-xl border border-warm-100">
                   <div className="max-h-96 overflow-y-auto scrollbar-thin">
                   <table className="w-full min-w-[520px] text-xs">
-                    <thead className="bg-warm-50 sticky top-0">
+                    <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                       <tr>
                         <th className={TH_CLASS}><span className={TH_TEXT}>Tarima</span></th>
                         <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>Disponible</span></th>
@@ -727,7 +727,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                 <div className="overflow-x-auto rounded-xl border border-warm-100">
                   <div className="max-h-[28rem] overflow-y-auto scrollbar-thin">
                   <table className="w-full min-w-[680px] text-xs">
-                    <thead className="bg-warm-50 sticky top-0">
+                    <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                       <tr>
                         <th className={TH_CLASS}><span className={TH_TEXT}>#</span></th>
                         <th className={TH_CLASS}><span className={TH_TEXT}>Tarima</span></th>
