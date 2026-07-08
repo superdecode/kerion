@@ -666,7 +666,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                                   <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
                                     <div className="px-4 pb-3 bg-warm-50/40">
                                       <table className="w-full text-xs">
-                                        <thead>
+                                        <thead className="bg-warm-50 sticky top-0 z-[5]">
                                           <tr className="text-warm-400 border-b border-warm-100">
                                             <th className="text-left py-1.5 pr-3 font-semibold">#</th>
                                             <th className="text-left pr-3 font-semibold">Código 1</th>
