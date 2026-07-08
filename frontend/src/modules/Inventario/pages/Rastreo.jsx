@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
@@ -40,6 +40,12 @@ function subtractDays(isoDate, days) {
   const date = new Date(`${isoDate}T12:00:00`)
   date.setDate(date.getDate() - days)
   return formatDateISO(date)
+}
+
+function parseStoredDate(value) {
+  if (!value) return null
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
 const ESTADO_META = {
@@ -210,21 +216,44 @@ export default function Rastreo() {
   const totalPages = data?.meta?.totalPages || 1
   const allOrdenes = allData?.data || []
 
+  const [deliverySortDir, setDeliverySortDir] = useState(null)
+  const toggleDeliverySort = () => setDeliverySortDir(prev => (prev === 'asc' ? 'desc' : 'asc'))
+
+  const displayedOrdenes = useMemo(() => {
+    if (!deliverySortDir) return ordenes
+    const getTime = (o) => {
+      const ts = parseStoredDate(o.outbound_delivery_at)?.getTime()
+      return ts ?? null
+    }
+    return [...ordenes].sort((a, b) => {
+      const ta = getTime(a)
+      const tb = getTime(b)
+      if (ta === null && tb === null) return 0
+      if (ta === null) return 1
+      if (tb === null) return -1
+      return deliverySortDir === 'asc' ? ta - tb : tb - ta
+    })
+  }, [ordenes, deliverySortDir])
+
   // Reset page when filters change
   const setFilter = useCallback((setter) => (val) => { setter(val); setPage(1); setSelected(new Set()) }, [])
 
   function exportToExcel() {
     const rows = ordenes.filter(o => selected.size === 0 || selected.has(o.id))
-    const header = ['Folio', 'Orden salida', 'Cliente', 'Cajas', 'Estado', 'Responsable', 'Creado']
-    const csvRows = [header, ...rows.map(o => [
+    const header = ['Folio', 'Creado', 'Orden salida', 'Fecha entrega', 'Cliente', 'Cajas', 'Estado', 'Responsable']
+    const csvRows = [header, ...rows.map(o => {
+      const deliveryDate = parseStoredDate(o.outbound_delivery_at)
+      return [
       o.folio,
+      new Date(o.created_at).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
       o.outbound_order_no || '',
+      deliveryDate ? deliveryDate.toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
       o.customer_code || '',
       o.total_cajas || 0,
       t(ESTADO_META[o.estado]?.labelKey || 'rastreo.col.estado'),
       o.asignado_nombre || '',
-      new Date(o.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }),
-    ])]
+      ]
+    })]
     const csv = csvRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -608,7 +637,7 @@ export default function Rastreo() {
 
             <div className="card overflow-hidden shadow-sm table-shell">
               <div className="overflow-x-auto table-scroll">
-              <table className="min-w-[700px] w-full text-sm">
+              <table className="min-w-[700px] w-full text-sm whitespace-nowrap">
                 <thead>
                   <tr className="bg-warm-50 border-b border-warm-100">
                     <th className="table-header w-10 text-center">
@@ -620,8 +649,22 @@ export default function Rastreo() {
                       />
                     </th>
                     <th className={TH}><SortableHeader label={t('rastreo.col.folio')} sortKey="folio" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
-                    <th className={TH}><SortableHeader label={t('rastreo.col.ordenSalida')} sortKey="outbound_order_no" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
                     <th className={TH}><SortableHeader label={t('rastreo.col.creado')} sortKey="created_at" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
+                    <th className={TH}><SortableHeader label={t('rastreo.col.ordenSalida')} sortKey="outbound_order_no" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
+                    <th className={`${TH} w-[112px]`}>
+                      <button
+                        type="button"
+                        onClick={toggleDeliverySort}
+                        className={`inline-flex items-center gap-1 transition-colors ${deliverySortDir ? 'text-primary-700' : 'text-warm-500 hover:text-warm-700'}`}
+                      >
+                        <span className="text-xs font-semibold uppercase tracking-wider leading-none">{t('rastreo.col.fechaEntrega')}</span>
+                        {deliverySortDir ? (
+                          deliverySortDir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />
+                        ) : (
+                          <ArrowUpDown size={11} className="opacity-60" />
+                        )}
+                      </button>
+                    </th>
                     <th className={TH}><SortableHeader label={t('rastreo.col.cliente')} sortKey="customer_code" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
                     <th className={TH}><SortableHeader label={t('rastreo.col.cajas')} sortKey="total_cajas" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
                     <th className={TH}><SortableHeader label={t('rastreo.col.estado')} sortKey="estado" currentKey={sortKey} currentDir={sortDir} onSort={handleSort} /></th>
@@ -632,7 +675,7 @@ export default function Rastreo() {
                 <tbody className="divide-y divide-warm-50">
                   {ordenes.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-14 text-center text-xs text-warm-400">
+                      <td colSpan={10} className="py-14 text-center text-xs text-warm-400">
                         <Crosshair size={24} className="mx-auto mb-2 text-warm-200" />
                         {t('rastreo.noOrdenes')}
                         {hasActiveFilters && (
@@ -640,7 +683,7 @@ export default function Rastreo() {
                         )}
                       </td>
                     </tr>
-                  ) : ordenes.map(o => (
+                  ) : displayedOrdenes.map(o => (
                     <tr
                       key={o.id}
                       className={`table-row group cursor-pointer ${selected.has(o.id) ? 'bg-primary-50/40' : ''}`}
@@ -661,6 +704,14 @@ export default function Rastreo() {
                         <CopyableCell text={o.folio} className="font-mono font-semibold text-xs text-primary-700" />
                       </td>
 
+                      {/* Creado */}
+                      <td className="table-cell">
+                        <div className="leading-tight">
+                          <p className="text-xs text-warm-600">{new Date(o.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
+                          <p className="text-[11px] text-warm-400">{new Date(o.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                      </td>
+
                       {/* Orden salida */}
                       <td className="table-cell">
                         {o.outbound_order_no
@@ -668,11 +719,18 @@ export default function Rastreo() {
                           : <span className="text-xs text-warm-300">—</span>}
                       </td>
 
-                      {/* Creado */}
-                      <td className="table-cell">
-                        <span className="text-xs text-warm-600">
-                          {new Date(o.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}
-                        </span>
+                      {/* Fecha entrega de la orden de salida */}
+                      <td className="table-cell w-[112px]">
+                        {(() => {
+                          const deliveryDate = parseStoredDate(o.outbound_delivery_at)
+                          if (!deliveryDate) return <span className="text-xs text-warm-300">—</span>
+                          return (
+                            <div className="leading-tight">
+                              <p className="text-[11px] text-warm-600">{deliveryDate.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
+                              <p className="text-[10px] text-warm-400">{deliveryDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</p>
+                            </div>
+                          )
+                        })()}
                       </td>
 
                       {/* Cliente */}

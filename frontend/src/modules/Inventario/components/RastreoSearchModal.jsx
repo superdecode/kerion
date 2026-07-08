@@ -33,10 +33,9 @@ const INVENTORY_STATUS_LABELS = {
 }
 
 // Two sources feed this section's rows (see rastreo.routes.js /buscar):
-// pick_events.scan_result is one of ok/unexpected/duplicate/not_found; the
-// pick_box_status-derived rows synthesize a virtual 'rejected' value (from
-// estado='faltante'). The map only had ok/duplicate/rejected, so real
-// not_found/unexpected rows fell back to a blank generic "Estado" badge.
+// real pick_events plus selected pick_box_status incident rows. Box statuses
+// sent to rastreo (estado='rastreo') are intentionally excluded there so they
+// only appear in the rastreo section, not as fake surtido validations.
 const SCAN_RESULT_LABELS = {
   ok: 'rastreo.searchModal.result.ok',
   duplicate: 'rastreo.searchModal.result.duplicate',

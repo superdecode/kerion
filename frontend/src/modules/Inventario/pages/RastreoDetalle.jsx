@@ -251,6 +251,15 @@ export default function RastreoDetalle() {
   const historial = data?.data?.historial || []
   const surtidoTracking = data?.data?.surtido_tracking || null
   const od = outboundData?.data
+  const orderInfo = {
+    customerCode: orden?.customer_code || od?.customerCode || null,
+    receiverName: orden?.receiver_name || od?.receiverName || null,
+    outboundTime: orden?.outbound_delivery_at || od?.outboundTime || od?.expectedTime || null,
+    expectedTime: orden?.outbound_delivery_at || od?.expectedTime || od?.outboundTime || null,
+    logisticsChannel: orden?.logistics_channel || od?.logisticsChannel || null,
+    logisticsTrackNo: orden?.logistics_track_no || od?.logisticsTrackNo || od?.trackingNo || null,
+    thirdOrderNo: orden?.third_order_no || od?.thirdOrderNo || null,
+  }
   const outboundBoxTotal = od?.outboundBoxCount ?? od?.packageList?.length ?? od?.outboundBoxList?.length ?? cajas.length ?? null
   const notas = historial.filter(h => h.accion === 'nota')
   const resolveCandidates = cajas.filter(c => c.estado_caja !== 'cancelada')
@@ -494,11 +503,10 @@ export default function RastreoDetalle() {
                       <FileText className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400">{t('rastreo.detalle.infoOrden')}</p>
                       {orden.outbound_order_no ? (
-                        <CopyableCell text={orden.outbound_order_no} className="mt-1 font-mono text-base font-black text-warm-900" />
+                        <CopyableCell text={orden.outbound_order_no} className="font-mono text-base font-black text-warm-900" />
                       ) : (
-                        <span className="mt-1 block text-xs italic text-warm-400">{t('rastreo.detalle.sinOrdenVinculada')}</span>
+                        <span className="block text-xs italic text-warm-400">{t('rastreo.detalle.sinOrdenVinculada')}</span>
                       )}
                     </div>
                   </div>
@@ -569,29 +577,29 @@ export default function RastreoDetalle() {
                           <Loader2 size={12} className="animate-spin" />
                           {t('common.loading')}
                         </div>
-                      ) : od ? (
+                      ) : Object.values(orderInfo).some(Boolean) ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3">
                           {[
-                            { label: t('rastreo.col.cliente'), value: od.customerCode },
-                            { label: t('rastreo.detalle.receptor'), value: od.receiverName },
-                            { label: t('rastreo.searchModal.col.fechaEntrega'), value: safeDate(od.outboundTime || od.expectedTime) },
-                            { label: t('rastreo.detalle.canalLogistico'), value: od.logisticsChannel },
+                            { label: t('rastreo.col.cliente'), value: orderInfo.customerCode },
+                            { label: t('rastreo.detalle.receptor'), value: orderInfo.receiverName },
+                            { label: t('rastreo.searchModal.col.fechaEntrega'), value: safeDate(orderInfo.outboundTime || orderInfo.expectedTime) },
+                            { label: t('rastreo.detalle.canalLogistico'), value: orderInfo.logisticsChannel },
                           ].filter(f => f.value).map(f => (
                             <div key={f.label} className="flex flex-col gap-0.5">
                               <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">{f.label}</span>
                               <span className="text-xs text-warm-700 font-medium">{f.value}</span>
                             </div>
                           ))}
-                          {(od.logisticsTrackNo || od.trackingNo) && (
+                          {orderInfo.logisticsTrackNo && (
                             <div className="flex flex-col gap-0.5">
                               <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">{t('rastreo.detalle.tracking')}</span>
-                              <CopyableCell text={od.logisticsTrackNo || od.trackingNo} className="font-mono text-xs text-warm-600" />
+                              <CopyableCell text={orderInfo.logisticsTrackNo} className="font-mono text-xs text-warm-600" />
                             </div>
                           )}
-                          {od.thirdOrderNo && (
+                          {orderInfo.thirdOrderNo && (
                             <div className="flex flex-col gap-0.5">
                               <span className="text-[10px] uppercase tracking-wider text-warm-400 font-medium">{t('rastreo.detalle.refExterna')}</span>
-                              <CopyableCell text={od.thirdOrderNo} className="font-mono text-xs text-warm-600" />
+                              <CopyableCell text={orderInfo.thirdOrderNo} className="font-mono text-xs text-warm-600" />
                             </div>
                           )}
                         </div>

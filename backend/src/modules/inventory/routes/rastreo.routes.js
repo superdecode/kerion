@@ -872,11 +872,14 @@ router.get('/buscar',
         normalizeCode(row.outbound_order_no),
         row.scan_result || '',
       ].join('|')))
-      const filteredPickStatusRows = pickStatusRows.filter(row => !pickEventKeys.has([
-        canonicalCodeKey(row.normalized_code || row.scanned_code || row.matched_box_type),
-        normalizeCode(row.outbound_order_no),
-        row.scan_result || '',
-      ].join('|')))
+      const filteredPickStatusRows = pickStatusRows.filter(row => {
+        if (row.box_status === 'rastreo') return false
+        return !pickEventKeys.has([
+          canonicalCodeKey(row.normalized_code || row.scanned_code || row.matched_box_type),
+          normalizeCode(row.outbound_order_no),
+          row.scan_result || '',
+        ].join('|'))
+      })
       const datasets = [
         ...invRes.rows,
         ...invRegRes.rows,
@@ -1414,6 +1417,11 @@ router.post('/',
       const {
         outbound_order_no,
         customer_code,
+        receiver_name,
+        logistics_track_no,
+        third_order_no,
+        logistics_channel,
+        outbound_delivery_at,
         asignado_a,
         notas,
         cajas = [],
@@ -1477,11 +1485,25 @@ router.post('/',
         folio = await generateRastreoFolioForClient(client, req.tenantId)
         const ordenRes = await client.query(
           `INSERT INTO rastreo_ordenes
-             (tenant_id, folio, outbound_order_no, customer_code, asignado_a, creado_por, notas)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)
+             (tenant_id, folio, outbound_order_no, customer_code, receiver_name,
+              logistics_track_no, third_order_no, logistics_channel, outbound_delivery_at,
+              asignado_a, creado_por, notas)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
            RETURNING id`,
-          [req.tenantId, folio, outbound_order_no || null, customer_code || null,
-           asignadoId, userId, notas || null]
+          [
+            req.tenantId,
+            folio,
+            normalizeOptionalText(outbound_order_no),
+            normalizeOptionalText(customer_code),
+            normalizeOptionalText(receiver_name),
+            normalizeOptionalText(logistics_track_no),
+            normalizeOptionalText(third_order_no),
+            normalizeOptionalText(logistics_channel),
+            normalizeOptionalText(outbound_delivery_at),
+            asignadoId,
+            userId,
+            normalizeOptionalText(notas),
+          ]
         )
         ordenId = ordenRes.rows[0].id
 
