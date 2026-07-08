@@ -52,6 +52,7 @@ const ESTADO_META = {
   borrador:   { cls: 'bg-warm-100 text-warm-500 border-warm-200',          dot: 'bg-warm-300',    labelKey: 'rastreo.estado.borrador' },
   abierta:    { cls: 'bg-primary-100 text-primary-700 border-primary-200', dot: 'bg-primary-400', labelKey: 'rastreo.estado.abierta' },
   en_proceso: { cls: 'bg-warning-100 text-warning-700 border-warning-200', dot: 'bg-warning-500', labelKey: 'rastreo.estado.en_proceso' },
+  parcial:    { cls: 'bg-accent-100 text-accent-700 border-accent-200',    dot: 'bg-accent-500',  labelKey: 'rastreo.estado.parcial' },
   completada: { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', labelKey: 'rastreo.estado.completada' },
   cancelada:  { cls: 'bg-warm-100 text-warm-500 border-warm-200',          dot: 'bg-warm-400',    labelKey: 'rastreo.estado.cancelada' },
 }
@@ -93,17 +94,19 @@ function SortableHeader({ label, sortKey, currentKey, currentDir, onSort }) {
 function getEstadoOptionsForRow(estado) {
   switch (estado) {
     case 'borrador':
-      return ['borrador', 'abierta', 'en_proceso', 'cancelada']
+      return ['borrador', 'abierta', 'en_proceso', 'parcial', 'cancelada']
     case 'abierta':
-      return ['abierta', 'en_proceso', 'completada', 'cancelada']
+      return ['abierta', 'en_proceso', 'parcial', 'completada', 'cancelada']
     case 'en_proceso':
-      return ['en_proceso', 'completada', 'cancelada']
+      return ['en_proceso', 'parcial', 'completada', 'cancelada']
+    case 'parcial':
+      return ['parcial', 'en_proceso', 'completada', 'cancelada']
     case 'completada':
-      return ['completada', 'cancelada']
+      return ['completada', 'parcial', 'cancelada']
     case 'cancelada':
-      return ['cancelada', 'completada']
+      return ['cancelada', 'parcial', 'completada']
     default:
-      return ['abierta', 'en_proceso', 'completada', 'cancelada']
+      return ['abierta', 'en_proceso', 'parcial', 'completada', 'cancelada']
   }
 }
 

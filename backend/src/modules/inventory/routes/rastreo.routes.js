@@ -13,20 +13,22 @@ const STATUS_ALIASES = {
   cerrada: 'cancelada',
 }
 
-const VALID_ESTADOS = ['abierta', 'en_proceso', 'completada', 'cancelada']
+const VALID_ESTADOS = ['abierta', 'en_proceso', 'parcial', 'completada', 'cancelada']
 
 const ESTADO_LABELS = {
   abierta: 'Abierta',
   en_proceso: 'En proceso',
+  parcial: 'Parcial',
   completada: 'Completada',
   cancelada: 'Cancelada',
 }
 
 const ESTADO_TRANSITIONS = {
-  abierta: new Set(['en_proceso', 'completada', 'cancelada']),
-  en_proceso: new Set(['completada', 'cancelada']),
-  completada: new Set(['cancelada']),
-  cancelada: new Set(['completada']),
+  abierta: new Set(['en_proceso', 'parcial', 'completada', 'cancelada']),
+  en_proceso: new Set(['parcial', 'completada', 'cancelada']),
+  parcial: new Set(['en_proceso', 'completada', 'cancelada']),
+  completada: new Set(['parcial', 'cancelada']),
+  cancelada: new Set(['parcial', 'completada']),
 }
 
 const tableColumnCache = new Map()
@@ -1463,21 +1465,28 @@ router.post('/resolver',
           )
         }
 
+        const totalFound = updates.filter(u => u.found).length
+        const totalMissing = updates.length - totalFound
+        const finalEstado = normalizedEstado === 'completada' && totalMissing > 0
+          ? 'parcial'
+          : normalizedEstado
+
         await client.query(
           `UPDATE rastreo_ordenes SET estado = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
-          [persistEstado(normalizedEstado), orden_id, req.tenantId]
+          [persistEstado(finalEstado), orden_id, req.tenantId]
         )
 
-        const notFoundCount = updates.filter(u => !u.found).length
-        const desc = `Orden marcada como ${normalizedEstado}. Localizadas: ${updates.length - notFoundCount}, No encontradas: ${notFoundCount}`
+        const desc = `Orden marcada como ${finalEstado}. Localizadas: ${totalFound}, No encontradas: ${totalMissing}`
         await client.query(
           `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, accion, descripcion, actor_id)
            VALUES ($1,$2,'resuelta',$3,$4)`,
           [req.tenantId, orden_id, desc, userId]
         )
+
+        res.locals.finalEstado = finalEstado
       })
 
-      res.json({ success: true })
+      res.json({ success: true, data: { final_estado: res.locals.finalEstado || normalizedEstado } })
     } catch (err) {
       console.error('[rastreo.resolver]', err.message)
       res.status(err.status || 500).json({ error: err.message || 'Error al resolver orden' })

@@ -21,6 +21,14 @@ const ESTADO_GROUPS = [
     cardHover: 'hover:border-amber-300/60 hover:shadow-[0_4px_12px_-4px_rgba(245,158,11,0.12)]',
   },
   {
+    key: 'parcial',
+    labelKey: 'rastreo.group.parcial',
+    headerCls: 'bg-gradient-to-r from-accent-500 to-violet-500 text-white',
+    bodyCls: 'bg-accent-50/25 border-accent-200/50',
+    dotCls: 'bg-accent-500',
+    cardHover: 'hover:border-accent-300/60 hover:shadow-[0_4px_12px_-4px_rgba(168,85,247,0.12)]',
+  },
+  {
     key: 'completada',
     labelKey: 'rastreo.group.completada',
     headerCls: 'bg-gradient-to-r from-success-500 to-emerald-500 text-white',
@@ -82,7 +90,7 @@ export default function RastreoCards({ ordenes }) {
   })
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
       {ESTADO_GROUPS.map(group => (
         <div key={group.key} className={`rounded-2xl border overflow-hidden shadow-sm ${group.bodyCls}`}>
           <div className={`px-4 py-3 flex items-center justify-between ${group.headerCls}`}>

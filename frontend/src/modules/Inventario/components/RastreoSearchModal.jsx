@@ -21,6 +21,7 @@ const BOX_STATUS_LABELS = {
 const ORDER_STATUS_LABELS = {
   abierta: 'rastreo.estado.abierta',
   en_proceso: 'rastreo.estado.en_proceso',
+  parcial: 'rastreo.estado.parcial',
   completada: 'rastreo.estado.completada',
   cancelada: 'rastreo.estado.cancelada',
 }

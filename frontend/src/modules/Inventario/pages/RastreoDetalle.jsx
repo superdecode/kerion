@@ -27,6 +27,7 @@ const ESTADO_META = {
   borrador:   { cls: 'bg-warm-100 text-warm-500 border-warm-200',          dot: 'bg-warm-300',    labelKey: 'rastreo.estado.borrador' },
   abierta:    { cls: 'bg-primary-100 text-primary-700 border-primary-200', dot: 'bg-primary-500', labelKey: 'rastreo.estado.abierta' },
   en_proceso: { cls: 'bg-warning-100 text-warning-700 border-warning-200', dot: 'bg-warning-500', labelKey: 'rastreo.estado.en_proceso' },
+  parcial:    { cls: 'bg-accent-100 text-accent-700 border-accent-200',    dot: 'bg-accent-500',  labelKey: 'rastreo.estado.parcial' },
   completada: { cls: 'bg-success-100 text-success-700 border-success-200', dot: 'bg-success-500', labelKey: 'rastreo.estado.completada' },
   cancelada:  { cls: 'bg-warm-100 text-warm-500 border-warm-200',          dot: 'bg-warm-400',    labelKey: 'rastreo.estado.cancelada' },
 }
@@ -59,17 +60,19 @@ const ACCION_DOT = {
 function getEstadoOptions(estado) {
   switch (estado) {
     case 'borrador':
-      return ['borrador', 'abierta', 'en_proceso', 'cancelada']
+      return ['borrador', 'abierta', 'en_proceso', 'parcial', 'cancelada']
     case 'abierta':
-      return ['abierta', 'en_proceso', 'completada', 'cancelada']
+      return ['abierta', 'en_proceso', 'parcial', 'completada', 'cancelada']
     case 'en_proceso':
-      return ['en_proceso', 'completada', 'cancelada']
+      return ['en_proceso', 'parcial', 'completada', 'cancelada']
+    case 'parcial':
+      return ['parcial', 'en_proceso', 'completada', 'cancelada']
     case 'completada':
-      return ['completada', 'cancelada']
+      return ['completada', 'parcial', 'cancelada']
     case 'cancelada':
-      return ['cancelada', 'completada']
+      return ['cancelada', 'parcial', 'completada']
     default:
-      return ['abierta', 'en_proceso', 'completada', 'cancelada']
+      return ['abierta', 'en_proceso', 'parcial', 'completada', 'cancelada']
   }
 }
 
@@ -310,22 +313,25 @@ export default function RastreoDetalle() {
       const isCancelling = targetEstado === 'cancelada'
       if (isCancelling) {
         await updateRastreoOrden(orden.id, { estado: targetEstado })
-        return
+        return targetEstado
       }
       const updates = resolveCandidates.map(caja => ({
         caja_id: caja.id,
         found: resolveMode === 'all' ? true : !!selection[caja.id],
         causa_rastreo_id: causas[caja.id] || null,
       }))
-      await resolverRastreoOrden({ orden_id: orden.id, target_estado: targetEstado, updates })
+      const response = await resolverRastreoOrden({ orden_id: orden.id, target_estado: targetEstado, updates })
+      return response?.data?.final_estado || targetEstado
     },
-    onSuccess: (_, { targetEstado }) => {
+    onSuccess: (finalEstado, { targetEstado }) => {
       qc.invalidateQueries({ queryKey: ['rastreo-detalle', folio] })
       setResolveModalOpen(false)
       setResolveSearch('')
       setResolveCausas({})
       setResolveBulkCausa('')
-      toast.success(targetEstado === 'cancelada'
+      toast.success(finalEstado === 'parcial'
+        ? t('rastreo.toast.ordenParcial')
+        : targetEstado === 'cancelada'
         ? t('rastreo.toast.ordenCancelada')
         : t('rastreo.toast.ordenCompletada'))
     },
