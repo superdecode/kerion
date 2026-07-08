@@ -143,6 +143,10 @@ function dateKeyInTZ(value, tz = DEFAULT_TZ) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(date).replace(/-/g, '')
 }
 
+function compactCanonicalCode(raw) {
+  return normalizeScanCode(raw).replace(/[^A-Z0-9]/g, '')
+}
+
 function requireAnyPermission(requirements) {
   return (req, res, next) => {
     const user = req.fullUser
@@ -309,9 +313,14 @@ async function refreshPickSessionTotals(req, sessionId) {
      SET total_scanned = COALESCE(stats.total_scanned, 0),
          updated_at = now()
      FROM (
-       SELECT session_id, COALESCE(SUM(quantity), 0) AS total_scanned
+       SELECT session_id,
+              COUNT(DISTINCT REGEXP_REPLACE(
+                UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
+                '[^A-Z0-9]', '', 'g'
+              )) AS total_scanned
        FROM pick_events
-       WHERE session_id = $1 AND scan_result = 'ok'
+       WHERE session_id = $1
+         AND scan_result = 'ok'
        GROUP BY session_id
      ) stats
      WHERE s.id = $1 AND s.tenant_id = $2`,
@@ -367,6 +376,39 @@ async function refreshPickSessionTotals(req, sessionId) {
        updated_at = now()`,
     [req.tenantId, completedSession.outbound_order_no, completedSession.third_order_no || null, userNombre]
   )
+}
+
+async function findExistingOkEvent(queryFn, { tenantId, sessionId, normalizedCode, matchedBoxType, scannedCode, excludeEventId = null }) {
+  const candidates = [...new Set([
+    compactCanonicalCode(matchedBoxType || ''),
+    compactCanonicalCode(normalizedCode || ''),
+    compactCanonicalCode(scannedCode || ''),
+  ].filter(Boolean))]
+  if (!candidates.length) return null
+
+  const params = [sessionId, tenantId, candidates]
+  let excludeSql = ''
+  if (excludeEventId) {
+    params.push(excludeEventId)
+    excludeSql = 'AND e.id <> $4'
+  }
+
+  const result = await queryFn(
+    `SELECT e.id, e.scan_result, e.normalized_code, e.matched_box_type, e.scanned_code
+       FROM pick_events e
+      WHERE e.session_id = $1
+        AND e.tenant_id = $2
+        AND e.scan_result = 'ok'
+        ${excludeSql}
+        AND REGEXP_REPLACE(
+          UPPER(COALESCE(NULLIF(e.matched_box_type, ''), NULLIF(e.normalized_code, ''), NULLIF(e.scanned_code, ''))),
+          '[^A-Z0-9]', '', 'g'
+        ) = ANY($3::text[])
+      ORDER BY e.scanned_at ASC NULLS LAST, e.created_at ASC NULLS LAST, e.id ASC
+      LIMIT 1`,
+    params
+  )
+  return result.rows[0] || null
 }
 
 const BOX_STATUS_TRANSITIONS = {
@@ -757,10 +799,23 @@ router.get('/scan-sessions',
       const where = conditions.join(' AND ')
       const [sessionsRes, countRes] = await Promise.all([
         req.tQuery(
-          `SELECT s.*, u.nombre_completo as operator_nombre,
+          `SELECT s.*,
+                  COALESCE(stats.total_scanned, 0) AS total_scanned,
+                  u.nombre_completo as operator_nombre,
                   COALESCE(ot.tiene_faltantes, false)     AS tiene_faltantes,
                   COALESCE(ot.tiene_anormalidades, false) AS tiene_anormalidades
            FROM pick_sessions s
+           LEFT JOIN (
+             SELECT session_id,
+                    COUNT(DISTINCT REGEXP_REPLACE(
+                      UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
+                      '[^A-Z0-9]', '', 'g'
+                    )) AS total_scanned
+             FROM pick_events
+             WHERE tenant_id = $1
+               AND scan_result = 'ok'
+             GROUP BY session_id
+           ) stats ON stats.session_id = s.id
            LEFT JOIN usuarios u ON u.id = s.operator_id
            LEFT JOIN pick_order_tracking ot
              ON ot.tenant_id = s.tenant_id AND ot.outbound_order_no = s.outbound_order_no
@@ -802,8 +857,21 @@ router.get('/scan-session/:id',
     try {
       const [sessionRes, eventsRes] = await Promise.all([
         req.tQuery(
-          `SELECT s.*, u.nombre_completo as operator_nombre
+          `SELECT s.*,
+                  COALESCE(stats.total_scanned, 0) AS total_scanned,
+                  u.nombre_completo as operator_nombre
            FROM pick_sessions s
+           LEFT JOIN (
+             SELECT session_id,
+                    COUNT(DISTINCT REGEXP_REPLACE(
+                      UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
+                      '[^A-Z0-9]', '', 'g'
+                    )) AS total_scanned
+             FROM pick_events
+             WHERE tenant_id = $2
+               AND scan_result = 'ok'
+             GROUP BY session_id
+           ) stats ON stats.session_id = s.id
            LEFT JOIN usuarios u ON u.id = s.operator_id
            WHERE s.id = $1 AND s.tenant_id = $2`,
           [req.params.id, req.tenantId]
@@ -970,6 +1038,20 @@ router.post('/scan-event',
       }
 
       const normCode = normalizeScanCode(normalized_code || scanned_code)
+      let effectiveScanResult = scan_result
+      if (scan_result === 'ok') {
+        const existingOk = await findExistingOkEvent(
+          (sql, params) => req.tQuery(sql, params),
+          {
+            tenantId: req.tenantId,
+            sessionId: session_id,
+            normalizedCode: normCode,
+            matchedBoxType: matched_box_type,
+            scannedCode: scanned_code,
+          }
+        )
+        if (existingOk) effectiveScanResult = 'duplicate'
+      }
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
@@ -983,7 +1065,7 @@ router.post('/scan-event',
           normCode,
           normalizeOptionalText(matched_sku),
           normalizeOptionalText(matched_box_type),
-          scan_result,
+          effectiveScanResult,
           parsePositiveInt(quantity, 1),
           input_method || 'scanner',
           manual_reason_id || null,
@@ -994,7 +1076,7 @@ router.post('/scan-event',
 
       await refreshPickSessionTotals(req, session_id)
 
-      if (scan_result === 'ok') {
+      if (effectiveScanResult === 'ok') {
         const obc = sessionCheck.rows[0].outbound_order_no
         if (obc && normCode) {
           const updatedBy = req.user.email || String(req.user.id)
@@ -1054,11 +1136,23 @@ router.post('/scan-event/manual',
 
       const reason = reasonRes.rows[0]
       const normCodeManual = normalizeScanCode(normalized_code || scanned_code)
+      let effectiveManualResult = 'ok'
+      const existingOk = await findExistingOkEvent(
+        (sql, params) => req.tQuery(sql, params),
+        {
+          tenantId: req.tenantId,
+          sessionId: session_id,
+          normalizedCode: normCodeManual,
+          matchedBoxType: matched_box_type,
+          scannedCode: scanned_code,
+        }
+      )
+      if (existingOk) effectiveManualResult = 'duplicate'
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
             input_method, manual_reason_id, manual_reason_label, manual_notes)
-         VALUES ($1, $2, $3, $4, $5, $6, 'ok', $7, 'manual', $8, $9, $10)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', $9, $10, $11)
          RETURNING *`,
         [
           session_id,
@@ -1067,6 +1161,7 @@ router.post('/scan-event/manual',
           normCodeManual,
           normalizeOptionalText(matched_sku),
           normalizeOptionalText(matched_box_type),
+          effectiveManualResult,
           parsePositiveInt(quantity, 1),
           reason.id,
           reason.nombre,
@@ -1074,7 +1169,7 @@ router.post('/scan-event/manual',
         ]
       )
       await refreshPickSessionTotals(req, session_id)
-      if (session.outbound_order_no && normCodeManual) {
+      if (effectiveManualResult === 'ok' && session.outbound_order_no && normCodeManual) {
         const updatedByManual = req.user.email || String(req.user.id)
         const manualVariants = new Set([normCodeManual])
         if (normCodeManual.includes('-')) manualVariants.add(normCodeManual.replace(/-/g, '/'))
@@ -1145,6 +1240,26 @@ router.put('/scan-event/:id',
         resolvedReasonLabel = reasonRes.rows[0].nombre
       }
 
+      const nextNormalizedCode = normalizeOptionalText(normalized_code) || event.normalized_code || scanned_code || event.scanned_code
+      const nextMatchedBoxType = matched_box_type !== undefined ? normalizeOptionalText(matched_box_type) : event.matched_box_type
+      const nextScannedCode = normalizeOptionalText(scanned_code) || event.scanned_code
+      let nextScanResult = scan_result || event.scan_result
+
+      if (nextScanResult === 'ok') {
+        const existingOk = await findExistingOkEvent(
+          (sql, params) => req.tQuery(sql, params),
+          {
+            tenantId: req.tenantId,
+            sessionId: event.session_id,
+            normalizedCode: nextNormalizedCode,
+            matchedBoxType: nextMatchedBoxType,
+            scannedCode: nextScannedCode,
+            excludeEventId: req.params.id,
+          }
+        )
+        if (existingOk) nextScanResult = 'duplicate'
+      }
+
       const result = await req.tQuery(
         `UPDATE pick_events
          SET scanned_code = COALESCE($1, scanned_code),
@@ -1165,7 +1280,7 @@ router.put('/scan-event/:id',
           normalizeOptionalText(normalized_code),
           matched_sku !== undefined ? normalizeOptionalText(matched_sku) : event.matched_sku ?? null,
           matched_box_type !== undefined ? normalizeOptionalText(matched_box_type) : event.matched_box_type ?? null,
-          scan_result || null,
+          nextScanResult || null,
           quantity !== undefined ? parsePositiveInt(quantity, 1) : null,
           resolvedReasonId || null,
           resolvedReasonLabel || null,
