@@ -14,10 +14,11 @@ import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
 import StatusPill from '../../../core/components/common/StatusPill'
+import CopyableCell from '../../../core/components/common/CopyableCell'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { fmtDateTime, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
+import { fmtDateTime, fmtDate, fmtTimeShort, getToday, subtractDays, toDateKey } from '../../../core/utils/dateFormat'
 import { getTimeBounds } from '../utils/timeBounds'
 import {
   getInventorySessions, getInventorySession, deleteInventorySession,
@@ -532,8 +533,8 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: t('inventario.registros.operator'), value: sessionData.operator_nombre || '—', Icon: User },
-              { label: 'Fecha inicio', value: scanBounds.start ? fmtDateTime(scanBounds.start) : '—', Icon: Clock },
-              { label: 'Fecha final', value: scanBounds.end ? fmtDateTime(scanBounds.end) : '—', Icon: Clock },
+              { label: 'Fecha inicio', raw: scanBounds.start, Icon: Clock },
+              { label: 'Fecha final', raw: scanBounds.end, Icon: Clock },
               { label: 'Tarimas', value: totals.tarimas, Icon: Boxes },
               { label: t('inventario.registros.total'), value: totals.total, Icon: Package2 },
               { label: t('inventario.escaneo.time_label'), value: duration, Icon: Timer },
@@ -586,8 +587,15 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                       </ul>
                     )}
                   </div>
+                ) : card.label.includes('Fecha') ? (
+                  card.raw ? (
+                    <div>
+                      <p className="text-sm font-semibold text-warm-700">{fmtDate(card.raw)}</p>
+                      <p className="text-xs text-warm-500 tabular-nums">{fmtTimeShort(card.raw)}</p>
+                    </div>
+                  ) : <p className="text-sm font-semibold text-warm-400">—</p>
                 ) : (
-                  <p className={card.label.includes('Fecha') ? 'font-mono text-xs font-medium text-warm-600' : 'text-sm font-semibold text-warm-700 truncate'}>{card.value}</p>
+                  <p className="text-sm font-semibold text-warm-700 truncate">{card.value}</p>
                 )}
               </div>
               )
@@ -675,14 +683,14 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                                               <tr key={sc.id || i} className="border-b border-warm-50 last:border-0">
                                                 <td className="py-1.5 pr-3 text-warm-400">{i + 1}</td>
                                                 <td className="pr-3">
-                                                  <span className="font-mono text-xs font-semibold text-warm-700">{sc.normalized_code}</span>
+                                                  <CopyableCell text={sc.normalized_code} className="font-mono text-xs font-semibold text-warm-700" />
                                                 </td>
                                                 <td className="pr-3">
                                                   {sc.code2 ? (
-                                                    <span className="font-mono text-xs text-warm-500">
-                                                      {sc.was_swapped && <span className="text-accent-600 font-bold mr-1">SWAP</span>}
-                                                      {sc.code2}
-                                                    </span>
+                                                    <div className="flex items-center">
+                                                      {sc.was_swapped && <span className="text-accent-600 font-bold mr-1 text-xs">SWAP</span>}
+                                                      <CopyableCell text={sc.code2} className="font-mono text-xs text-warm-500" />
+                                                    </div>
                                                   ) : (
                                                     <span className="text-warm-300">—</span>
                                                   )}
@@ -761,15 +769,15 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                                   }}
                                 />
                               ) : (
-                                <span className="font-mono text-xs font-semibold text-warm-700">{sc.normalized_code}</span>
+                                <CopyableCell text={sc.normalized_code} className="font-mono text-xs font-semibold text-warm-700" />
                               )}
                             </td>
                             <td className="table-cell">
                               {sc.code2 ? (
-                                <p className="font-mono text-xs text-warm-500">
-                                  {sc.was_swapped && <span className="text-accent-600 font-bold mr-1">SWAP</span>}
-                                  {sc.code2}
-                                </p>
+                                <div className="flex items-center">
+                                  {sc.was_swapped && <span className="text-accent-600 font-bold mr-1 text-xs">SWAP</span>}
+                                  <CopyableCell text={sc.code2} className="font-mono text-xs text-warm-500" />
+                                </div>
                               ) : (
                                 <span className="text-warm-300">—</span>
                               )}
@@ -1347,9 +1355,12 @@ export default function InventarioRegistros() {
                             </span>
                           </td>
                           <td className="table-cell">
-                            <span className="text-warm-600 text-xs tabular-nums">
-                              {(r.started_at || r.created_at) ? fmtDateTime(r.started_at || r.created_at) : '—'}
-                            </span>
+                            {(r.started_at || r.created_at) ? (
+                              <div className="flex flex-col leading-snug">
+                                <span className="text-warm-700 text-xs tabular-nums font-medium">{fmtDate(r.started_at || r.created_at)}</span>
+                                <span className="text-warm-400 text-[11px] tabular-nums">{fmtTimeShort(r.started_at || r.created_at)}</span>
+                              </div>
+                            ) : <span className="text-warm-400 text-xs">—</span>}
                           </td>
                           <td className="table-cell hidden md:table-cell text-warm-600 text-xs">
                             {r.operator_nombre || '—'}

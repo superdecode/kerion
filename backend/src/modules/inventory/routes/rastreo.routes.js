@@ -583,10 +583,12 @@ router.get('/buscar',
         )
         const invRegT = () => req.tQuery(
           // sc.cell_no is the SKU's current/official stock cell (a snapshot of the inventory
-          // list at scan time), not where this scan was actually registered. The location the
-          // operator was counting at is the session's origin_location — use that for display.
+          // list at scan time), not where this scan was actually registered. The session tracks
+          // both: origin_location (free text — where the operator counted from) and ubicacion_id
+          // (the scanned destino location). Show both instead of the stock snapshot.
           `SELECT sc.id, sc.scanned_code, sc.normalized_code, sc.code2, sc.scan_status,
-                  sess.origin_location AS cell_no,
+                  sess.origin_location,
+                  ub.codigo AS ubicacion_destino_codigo, ub.nombre AS ubicacion_destino_nombre,
                   sc.group_assignment, sc.scanned_at,
                   sess.id AS session_id, sess.scan_type,
                   u_op.nombre_completo AS operator_nombre,
@@ -594,6 +596,7 @@ router.get('/buscar',
            FROM inv_scans sc
            JOIN inv_sessions sess ON sess.id = sc.session_id
            LEFT JOIN usuarios u_op ON u_op.id = sess.operator_id
+           LEFT JOIN dev_ubicaciones ub ON ub.id = sess.ubicacion_id
            WHERE sess.tenant_id = $1
              AND ${registrosWhere}
            ORDER BY

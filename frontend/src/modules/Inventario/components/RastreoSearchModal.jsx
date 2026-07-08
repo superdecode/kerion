@@ -371,7 +371,7 @@ function InventarioRegistrosSection({ records, open, onToggle }) {
                 <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-sky-50/70 border-b border-sky-100">
                     <tr>
-                      {[t('rastreo.detalle.col.codigo'), t('rastreo.searchModal.col.code2'), t('rastreo.detalle.col.ubicacion'), t('common.status'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
+                      {[t('rastreo.detalle.col.codigo'), t('rastreo.searchModal.col.code2'), t('rastreo.searchModal.col.origen'), t('rastreo.searchModal.col.destino'), t('common.status'), t('rastreo.searchModal.col.operador'), t('common.date')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-sky-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -385,7 +385,8 @@ function InventarioRegistrosSection({ records, open, onToggle }) {
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.code2 || '—'} className="font-mono text-warm-500" />
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-warm-600">{r.cell_no || '—'}</td>
+                        <td className="px-3 py-2.5 font-mono text-warm-600">{r.origin_location || '—'}</td>
+                        <td className="px-3 py-2.5 font-mono text-warm-600">{r.ubicacion_destino_codigo || '—'}</td>
                         <td className="px-3 py-2.5">
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
                             r.scan_status === 'ok' ? 'bg-success-100 text-success-700'
@@ -877,7 +878,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
       const dedupedDbData = {
         ...dbData,
         inventario_escaneo: dedupeRecords(dbData.inventario_escaneo, r => [compactCode(r.barcode), normalizeCodeFast(r.cell_no), r.status || ''].join('|')),
-        inventario_registros: dedupeRecords(dbData.inventario_registros, r => [compactCode(r.normalized_code || r.scanned_code), compactCode(r.code2), normalizeCodeFast(r.cell_no), r.scan_status || ''].join('|')),
+        inventario_registros: dedupeRecords(dbData.inventario_registros, r => [compactCode(r.normalized_code || r.scanned_code), compactCode(r.code2), normalizeCodeFast(r.origin_location), normalizeCodeFast(r.ubicacion_destino_codigo), r.scan_status || ''].join('|')),
         surtido_validacion: dedupeRecords(dbData.surtido_validacion, r => [compactCode(r.scanned_code || r.normalized_code || r.matched_box_type), normalizeCodeFast(r.outbound_order_no), r.scan_result || ''].join('|')),
         surtido_validacion_estado: dedupeRecords(dbData.surtido_validacion_estado, r => [compactCode(r.scanned_code || r.normalized_code || r.matched_box_type), normalizeCodeFast(r.outbound_order_no), r.box_status || r.scan_result || ''].join('|')),
         rastreo: dedupeRecords(dbData.rastreo, r => [compactCode(r.box_code || r.box_code_normalized || r.box_type), normalizeCodeFast(r.folio), normalizeCodeFast(r.outbound_order_no)].join('|')),
