@@ -271,18 +271,24 @@ router.get('/orders/:id/export-data',
         }
 
         if (scope === 'detalle' || scope === 'all') {
+          // Previously a LATERAL subquery ran once PER LINE filtering by (line_id, tenant_id) —
+          // that pair isn't a prefix of any index on inbound_scan_events (which lead with
+          // order_id), so each of the 36k+ per-line lookups fell back to scanning the tenant's
+          // entire scan-event history. Pre-aggregating the whole order's events once (matching
+          // idx_inbound_scan_events_order_result_scanned exactly) and joining back in memory
+          // turns that into a single indexed scan regardless of line count.
           const linesRes = await client.query(
-            `SELECT l.*, u.nombre_completo AS validated_by_nombre,
-                    last_event.ubicacion AS validation_ubicacion
+            `WITH last_events AS (
+               SELECT DISTINCT ON (line_id) line_id, ubicacion
+               FROM inbound_scan_events
+               WHERE order_id = $1 AND tenant_id = $2 AND resultado = 'correcto' AND line_id IS NOT NULL
+               ORDER BY line_id, scanned_at DESC
+             )
+             SELECT l.*, u.nombre_completo AS validated_by_nombre,
+                    le.ubicacion AS validation_ubicacion
              FROM inbound_lines l
              LEFT JOIN usuarios u ON u.id = l.validated_by
-             LEFT JOIN LATERAL (
-               SELECT e.ubicacion
-               FROM inbound_scan_events e
-               WHERE e.line_id = l.id AND e.tenant_id = l.tenant_id AND e.resultado = 'correcto'
-               ORDER BY e.scanned_at DESC
-               LIMIT 1
-             ) last_event ON true
+             LEFT JOIN last_events le ON le.line_id = l.id
              WHERE l.order_id=$1 AND l.tenant_id=$2
              ORDER BY l.created_at ASC, l.id ASC`,
             [orderId, tenantId]
