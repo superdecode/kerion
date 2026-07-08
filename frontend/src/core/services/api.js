@@ -4,7 +4,7 @@ import { captureApiError } from './errorTelemetry'
 
 function buildSameOriginApiUrl(pathname = '/api') {
   const normalizedPath = pathname.startsWith('/') ? pathname : `/${pathname}`
-  return new URL(normalizedPath, window.location.origin).toString()
+  return normalizedPath.endsWith('/') ? normalizedPath : `${normalizedPath}/`
 }
 
 function resolveApiBaseUrl() {
