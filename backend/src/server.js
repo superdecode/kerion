@@ -139,12 +139,17 @@ app.use(cors({
 }))
 
 // Rate limiting — global (all /api routes)
+// /auth/me is a cheap, authenticated, read-only background poll (permission
+// sync + focus/reconnect refresh) hit by every open tab/device tenant-wide.
+// A busy warehouse floor with several scanners behind one NAT IP shares this
+// single bucket and was tripping 429s on this poll specifically — excluding
+// it doesn't open any abuse surface since it still requires a valid JWT.
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: parseInt(process.env.API_RATE_LIMIT_MAX, 10) || 1200,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.originalUrl?.startsWith('/api/recepcion'),
+  skip: (req) => req.originalUrl?.startsWith('/api/recepcion') || req.originalUrl?.startsWith('/api/auth/me'),
   message: { error: 'Demasiadas solicitudes, intenta más tarde' }
 })
 app.use('/api', generalLimiter)

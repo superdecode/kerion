@@ -675,9 +675,23 @@ router.get('/proxy/sheet',
       } catch { /* non-fatal: fall through to Google fetch */ }
 
       // Full miss — fetch from Google, cache in memory + DB
-      const text = await fetchAndCacheSheet(req.tenantId, normalizedUrl, dbWriter)
-      const entry = _csvCache.get(cacheKey)
-      send(text, 'miss', entry?.rowCount || 0)
+      try {
+        const text = await fetchAndCacheSheet(req.tenantId, normalizedUrl, dbWriter)
+        const entry = _csvCache.get(cacheKey)
+        return send(text, 'miss', entry?.rowCount || 0)
+      } catch (fetchErr) {
+        // Google Sheets is down/slow/timing out and there's no fresh cache —
+        // fall back to the last known-good snapshot in Postgres even if it's
+        // expired, instead of a hard 502. Stale inventory/outbound data is far
+        // more useful to warehouse staff mid-shift than an outright failure.
+        const staleRes = await req.tQuery(`SELECT data FROM wms_cache WHERE key = $1`, [pgKey]).catch(() => null)
+        if (staleRes?.rows?.length > 0) {
+          const { text, rowCount } = staleRes.rows[0].data
+          setCsvCache(cacheKey, text, rowCount)
+          return send(text, 'stale-error', rowCount)
+        }
+        throw fetchErr
+      }
     } catch (err) {
       console.error('GET wmshub/proxy/sheet error:', err.message)
       res.status(502).json({ success: false, error: 'No se pudo obtener la hoja de cálculo' })
