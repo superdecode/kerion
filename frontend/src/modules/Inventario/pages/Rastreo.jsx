@@ -20,6 +20,8 @@ import {
   deleteRastreoOrden, updateRastreoOrden,
   bulkUpdateEstado, bulkUpdateResponsable,
 } from '../../../core/services/rastreoService'
+import { getOutboundList } from '../../WmsHub/services/googleSheetsService'
+import { normalizeCodeFast } from '../../Shared/Wms/normalizeCode'
 import NuevaOrdenRastreoModal from '../components/NuevaOrdenRastreoModal'
 import RastreoKanban from '../components/RastreoKanban'
 import RastreoCards from '../components/RastreoCards'
@@ -213,6 +215,24 @@ export default function Rastreo() {
     enabled: view !== 'tabla',
     keepPreviousData: true,
   })
+
+  // Orders created before the outbound-snapshot fields existed (or via the "sin orden" flow)
+  // have no stored fecha_entrega — fall back to the live WMS sheet by outbound_order_no,
+  // same source used at creation time and the same fallback RastreoDetalle.jsx already applies.
+  const { data: wmsOutboundData } = useQuery({
+    queryKey: ['wms-outbound'],
+    queryFn: getOutboundList,
+    staleTime: 5 * 60 * 1000,
+  })
+  const wmsOutboundByOrderNo = useMemo(() => {
+    const records = wmsOutboundData?.data?.records || []
+    const map = new Map()
+    records.forEach(r => {
+      const key = normalizeCodeFast(r.outboundOrderNo || '')
+      if (key) map.set(key, r)
+    })
+    return map
+  }, [wmsOutboundData])
 
   const ordenes = data?.data || []
   const total = data?.meta?.total || 0
@@ -725,7 +745,12 @@ export default function Rastreo() {
                       {/* Fecha entrega de la orden de salida */}
                       <td className="table-cell w-[112px]">
                         {(() => {
-                          const deliveryDate = parseStoredDate(o.outbound_delivery_at)
+                          const wmsMatch = o.outbound_order_no
+                            ? wmsOutboundByOrderNo.get(normalizeCodeFast(o.outbound_order_no))
+                            : null
+                          const deliveryDate = parseStoredDate(
+                            o.outbound_delivery_at || wmsMatch?.outboundTime || wmsMatch?.expectedTime
+                          )
                           if (!deliveryDate) return <span className="text-xs text-warm-300">—</span>
                           return (
                             <div className="leading-tight">
