@@ -23,7 +23,7 @@ const env = {
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   JWT_SECRET: process.env.JWT_SECRET || 'dev_secret_change_in_production',
   JWT_ADMIN_SECRET: process.env.JWT_ADMIN_SECRET || 'dev_admin_secret_change_in_production',
-  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '24h',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '30d',
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173',
   // Multi-tenant
   TENANT_BASE_DOMAIN: process.env.TENANT_BASE_DOMAIN || 'localhost',

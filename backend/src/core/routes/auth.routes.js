@@ -396,7 +396,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 
     const newHash = await bcrypt.hash(new_password, 12)
     await queryAuthWithRetry(
-      'UPDATE usuarios SET password_hash = $1 WHERE id = $2 AND tenant_id = $3',
+      'UPDATE usuarios SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP WHERE id = $2 AND tenant_id = $3',
       [newHash, req.user.id, req.user.tenant_id]
     )
     await auditLog(req, 'CHANGE_PASSWORD', 'usuario', req.user.id, null)

@@ -59,7 +59,7 @@ router.put('/:id',
       const { nombre, descripcion, permisos } = req.body
 
       const result = await req.tQuery(
-        `UPDATE roles SET nombre = $1, descripcion = $2, permisos = $3
+        `UPDATE roles SET nombre = $1, descripcion = $2, permisos = $3, permisos_changed_at = CURRENT_TIMESTAMP
          WHERE id = $4 AND tenant_id = $5 RETURNING *`,
         [nombre, descripcion, JSON.stringify(permisos), id, req.tenantId]
       )

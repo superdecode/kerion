@@ -511,6 +511,8 @@ function PasswordResetModal({ isOpen, onClose, user }) {
 // ═══════════ USERS TAB ═══════════
 function UsersTab({ canEdit, canDel }) {
   const [search, setSearch] = useState('')
+  const [estadoFilter, setEstadoFilter] = useState('')
+  const [rolFilter, setRolFilter] = useState('')
   const [editUser, setEditUser] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [resetUser, setResetUser] = useState(null)
@@ -525,9 +527,10 @@ function UsersTab({ canEdit, canDel }) {
   const users = data?.usuarios || data?.users || []
   const roles = rolesData?.roles || []
 
-  const filtered = search
-    ? users.filter(u => u.nombre_completo?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()) || u.codigo?.toLowerCase().includes(search.toLowerCase()))
-    : users
+  const filtered = users
+    .filter(u => !search || u.nombre_completo?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()) || u.codigo?.toLowerCase().includes(search.toLowerCase()))
+    .filter(u => !estadoFilter || (estadoFilter === 'ACTIVO' ? isActive(u) : !isActive(u)))
+    .filter(u => !rolFilter || String(u.rol_id) === rolFilter)
 
   const toggleMutation = useMutation({
     mutationFn: (user) => api.put(`/users/${user.id}`, {
@@ -555,6 +558,17 @@ function UsersTab({ canEdit, canDel }) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('admin.searchUsers')}
             className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-warm-200 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100" />
         </div>
+        <select value={estadoFilter} onChange={e => setEstadoFilter(e.target.value)}
+          className="select-field !w-auto">
+          <option value="">{t('admin.allStatuses')}</option>
+          <option value="ACTIVO">{t('common.active')}</option>
+          <option value="INACTIVO">{t('common.inactive')}</option>
+        </select>
+        <select value={rolFilter} onChange={e => setRolFilter(e.target.value)}
+          className="select-field !w-auto">
+          <option value="">{t('admin.allRoles')}</option>
+          {roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+        </select>
         <span className="badge bg-warm-100 text-warm-500">{filtered.length} {t('admin.users')}</span>
         {canEdit && (
           <button onClick={() => setShowCreate(true)} className="btn-primary inline-flex items-center gap-2 ml-auto">
@@ -647,7 +661,7 @@ function UsersTab({ canEdit, canDel }) {
       {/* Delete User Confirm */}
       <DeleteConfirmModal
         item={deleteTarget}
-        message={deleteTarget ? `${t('admin.confirmDeleteUser')} "${deleteTarget.nombre_completo}"` : ''}
+        message={deleteTarget ? `${t('admin.confirmDeleteUser')} "${deleteTarget.nombre_completo}". Esta acción es permanente: el usuario desaparecerá del listado y su correo (${deleteTarget.email}) quedará disponible para crear un usuario nuevo. El historial de actividad se conserva.` : ''}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => { deleteMutation.mutate(deleteTarget.id); setDeleteTarget(null) }}
         loading={deleteMutation.isPending}

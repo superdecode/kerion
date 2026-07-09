@@ -71,19 +71,33 @@ export async function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Token inválido o expirado' })
   }
 
-  // Check token blacklist — fatal on DB error: a revoked token must never
-  // silently pass through just because the blacklist table is unreachable.
+  // Check token blacklist plus the two events that must force re-login even on
+  // a long-lived (30-day) token: the user's password changed, or their role's
+  // permissions changed. Both are dedicated timestamps compared against the
+  // token's issued-at — see migration 097. Fatal on DB error: a revoked/stale
+  // token must never silently pass through just because a check is unreachable.
   if (decoded.jti) {
     try {
-      const blacklisted = await query(
-        'SELECT 1 FROM token_blacklist WHERE token_jti = $1 LIMIT 1',
-        [decoded.jti]
+      const result = await query(
+        `SELECT
+           EXISTS(SELECT 1 FROM token_blacklist WHERE token_jti = $1) AS blacklisted,
+           (SELECT password_changed_at FROM usuarios WHERE id = $2) AS password_changed_at,
+           (SELECT permisos_changed_at FROM roles WHERE id = $3) AS permisos_changed_at`,
+        [decoded.jti, decoded.id, decoded.rol_id || null]
       )
-      if (blacklisted.rows.length > 0) {
+      const row = result.rows[0] || {}
+      if (row.blacklisted) {
         return res.status(401).json({ error: 'Token revocado' })
       }
+      const issuedAtMs = (decoded.iat || 0) * 1000
+      if (row.password_changed_at && new Date(row.password_changed_at).getTime() > issuedAtMs) {
+        return res.status(401).json({ error: 'Tu contraseña cambió. Inicia sesión de nuevo.', code: 'PASSWORD_CHANGED' })
+      }
+      if (row.permisos_changed_at && new Date(row.permisos_changed_at).getTime() > issuedAtMs) {
+        return res.status(401).json({ error: 'Los permisos de tu rol cambiaron. Inicia sesión de nuevo.', code: 'ROLE_PERMISSIONS_CHANGED' })
+      }
     } catch (err) {
-      console.error('[auth] Token blacklist check failed:', err.message)
+      console.error('[auth] Token validity check failed:', err.message)
       return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo' })
     }
   }

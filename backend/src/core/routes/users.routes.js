@@ -17,7 +17,7 @@ router.get('/',
                 r.nombre as rol_nombre
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id
-         WHERE u.tenant_id = $1
+         WHERE u.tenant_id = $1 AND u.deleted_at IS NULL
          ORDER BY u.created_at DESC`,
         [req.tenantId]
       )
@@ -104,10 +104,10 @@ router.put('/:id',
 
       if (password) {
         const passwordHash = await bcrypt.hash(password, 10)
-        updateQuery += `, password_hash = $5 WHERE id = $6 AND tenant_id = $7 RETURNING id, codigo, nombre_completo, email, rol_id, estado`
+        updateQuery += `, password_hash = $5, password_changed_at = CURRENT_TIMESTAMP WHERE id = $6 AND tenant_id = $7 AND deleted_at IS NULL RETURNING id, codigo, nombre_completo, email, rol_id, estado`
         params.push(passwordHash, id, req.tenantId)
       } else {
-        updateQuery += ` WHERE id = $5 AND tenant_id = $6 RETURNING id, codigo, nombre_completo, email, rol_id, estado`
+        updateQuery += ` WHERE id = $5 AND tenant_id = $6 AND deleted_at IS NULL RETURNING id, codigo, nombre_completo, email, rol_id, estado`
         params.push(id, req.tenantId)
       }
 
@@ -140,7 +140,7 @@ router.post('/:id/reset-password',
       }
       const passwordHash = await bcrypt.hash(password, 10)
       const result = await req.tQuery(
-        'UPDATE usuarios SET password_hash = $1 WHERE id = $2 AND tenant_id = $3 RETURNING id, nombre_completo',
+        'UPDATE usuarios SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL RETURNING id, nombre_completo',
         [passwordHash, id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' })
@@ -153,7 +153,12 @@ router.post('/:id/reset-password',
   }
 )
 
-// DELETE /api/users/:id (soft delete - set INACTIVO)
+// DELETE /api/users/:id — permanent delete.
+// The row itself is never physically removed (dozens of tables FK to usuarios.id,
+// some ON DELETE RESTRICT, e.g. guias, alertas_duplicados — a real DELETE would fail
+// for any user with activity). Instead: snapshot the user into audit_log, mangle the
+// email to free it up for reuse, and mark deleted_at so it disappears from the list.
+// Reversible deactivation (estado=INACTIVO) is handled separately by PUT /:id.
 router.delete('/:id',
   authenticateToken, loadFullUser,
   requirePermission('global.administracion', 'eliminar'),
@@ -162,23 +167,42 @@ router.delete('/:id',
       const { id } = req.params
 
       if (parseInt(id) === req.user.id) {
-        return res.status(400).json({ error: 'No puedes desactivar tu propio usuario' })
+        return res.status(400).json({ error: 'No puedes eliminar tu propio usuario' })
       }
 
-      const targetRes = await req.tQuery('SELECT id, is_default, es_admin_tenant FROM usuarios WHERE id = $1 AND tenant_id = $2', [id, req.tenantId])
+      const targetRes = await req.tQuery(
+        `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id, u.estado, u.is_default, u.es_admin_tenant,
+                r.nombre as rol_nombre
+         FROM usuarios u
+         LEFT JOIN roles r ON u.rol_id = r.id
+         WHERE u.id = $1 AND u.tenant_id = $2 AND u.deleted_at IS NULL`,
+        [id, req.tenantId]
+      )
       if (targetRes.rows.length === 0) {
         return res.status(404).json({ error: 'Usuario no encontrado' })
       }
-      if (targetRes.rows[0].is_default || targetRes.rows[0].es_admin_tenant) {
-        return res.status(409).json({ error: 'No se puede desactivar un usuario protegido' })
+      const target = targetRes.rows[0]
+      if (target.is_default || target.es_admin_tenant) {
+        return res.status(409).json({ error: 'No se puede eliminar un usuario protegido' })
       }
 
-      await req.tQuery(`UPDATE usuarios SET estado = 'INACTIVO' WHERE id = $1 AND tenant_id = $2`, [id, req.tenantId])
-      auditLog(req, 'USER_DEACTIVATE', 'usuario', parseInt(id), null)
-      res.json({ success: true, message: 'Usuario desactivado' })
+      const tombstoneEmail = `deleted_${id}_${Date.now()}@removed.invalid`
+      await req.tQuery(
+        `UPDATE usuarios SET email = $1, estado = 'INACTIVO', deleted_at = CURRENT_TIMESTAMP WHERE id = $2 AND tenant_id = $3`,
+        [tombstoneEmail, id, req.tenantId]
+      )
+      auditLog(req, 'USER_DELETE', 'usuario', parseInt(id), {
+        codigo: target.codigo,
+        nombre_completo: target.nombre_completo,
+        email: target.email,
+        rol_id: target.rol_id,
+        rol_nombre: target.rol_nombre,
+        estado_previo: target.estado,
+      })
+      res.json({ success: true, message: 'Usuario eliminado. El correo queda disponible para un nuevo usuario.' })
     } catch (error) {
       console.error('Delete user error:', error)
-      res.status(500).json({ error: 'Error desactivando usuario' })
+      res.status(500).json({ error: 'Error eliminando usuario' })
     }
   }
 )

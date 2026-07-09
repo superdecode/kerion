@@ -113,7 +113,16 @@ export default function UserMenu({ compact = false }) {
     try {
       await api.post('/auth/change-password', { current_password: current, new_password: nuevo })
       setChangePassSuccess(true)
-      setTimeout(() => { setChangePassOpen(false); resetChangePass() }, 1500)
+      // Changing the password invalidates the current session server-side (any
+      // token issued before this moment is now rejected) — log out proactively
+      // with a clear message instead of letting the next request fail silently.
+      setTimeout(async () => {
+        setChangePassOpen(false)
+        resetChangePass()
+        await logout()
+        useToastStore.getState().success(t('auth.passwordChangedRelogin'))
+        navigate('/login', { replace: true })
+      }, 1500)
     } catch (err) {
       setChangePassError(err.response?.data?.error || t('auth.changePasswordError'))
     } finally {
