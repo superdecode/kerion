@@ -12,6 +12,7 @@ import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
 import StatusPill from '../../../core/components/common/StatusPill'
+import CopyableCell from '../../../core/components/common/CopyableCell'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -117,10 +118,10 @@ function ScanTable({
           <tr>
             <th className={`${TH_CLASS} w-10`}><span className={TH_TEXT}>#</span></th>
             <th className={`${TH_CLASS} w-[36%]`}><span className={TH_TEXT}>{t('surtido.validacion.code_header')}</span></th>
-            {showType && <th className={`${TH_CLASS} w-[14%]`}><span className={TH_TEXT}>Tipo</span></th>}
-            {showUbicacion && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Ubicación</span></th>}
-            <th className={`${TH_CLASS} w-[24%]`}><span className={TH_TEXT}>Fecha escaneo</span></th>
-            {showActions && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Acciones</span></th>}
+            {showType && <th className={`${TH_CLASS} w-[14%]`}><span className={TH_TEXT}>{t('surtido.registros.detail.type')}</span></th>}
+            {showUbicacion && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>{t('surtido.registros.detail.location')}</span></th>}
+            <th className={`${TH_CLASS} w-[24%]`}><span className={TH_TEXT}>{t('surtido.registros.detail.scanDate')}</span></th>
+            {showActions && <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>{t('common.actions')}</span></th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-warm-50">
@@ -139,7 +140,7 @@ function ScanTable({
                   />
                 ) : (
                   <span className="inline-flex items-center gap-1.5 flex-wrap">
-                    {e.normalized_code || e.scanned_code}
+                    <CopyableCell text={e.normalized_code || e.scanned_code} className="gap-1" />
                     {e.input_method === 'manual' && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-warning-100 text-warning-700 border border-warning-200 leading-none normal-case tracking-normal">
                         {t('surtido.validacion.manual_chip')}
@@ -168,12 +169,12 @@ function ScanTable({
                         onKeyDown={(event) => event.key === 'Enter' && onSaveUbicacion(e)}
                         autoFocus
                       />
-                      <button className="p-1 rounded hover:bg-primary-50 text-primary-600 shrink-0" onClick={() => onSaveUbicacion(e)} title="Guardar">
+                      <button className="p-1 rounded hover:bg-primary-50 text-primary-600 shrink-0" onClick={() => onSaveUbicacion(e)} title={t('common.save')}>
                         <CheckCircle2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   ) : ubicacionEditable ? (
-                    <button type="button" className="truncate w-full text-left hover:text-accent-800" onClick={() => onStartEditUbicacion(e)} title="Editar ubicación">
+                    <button type="button" className="truncate w-full text-left hover:text-accent-800" onClick={() => onStartEditUbicacion(e)} title={t('surtido.registros.detail.editLocationTitle')}>
                       {e.ubicacion_nota || ubicacion || '—'}
                     </button>
                   ) : (
@@ -189,17 +190,17 @@ function ScanTable({
                   <div className="flex items-center gap-1">
                     {editable && (
                       editingId === e.id ? (
-                        <button className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 hover:text-primary-700 transition-colors" onClick={() => onSaveEdit(e)} title="Guardar">
+                        <button className="p-2 rounded-lg hover:bg-primary-50 text-primary-600 hover:text-primary-700 transition-colors" onClick={() => onSaveEdit(e)} title={t('common.save')}>
                           <CheckCircle2 className="w-4 h-4" />
                         </button>
                       ) : (
-                        <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => onStartEdit(e)} title="Editar">
+                        <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => onStartEdit(e)} title={t('common.edit')}>
                           <Edit3 className="w-4 h-4" />
                         </button>
                       )
                     )}
                     {(editable || deletable) && (
-                      <button className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors" onClick={() => onDelete(e)} title="Eliminar">
+                      <button className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors" onClick={() => onDelete(e)} title={t('common.delete')}>
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
@@ -450,7 +451,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
       ws['!cols'] = [{ wch: 20 }, { wch: 30 }]
       XLSX.utils.book_append_sheet(wb, ws, 'Detalle')
       XLSX.writeFile(wb, `surtido_${session.outbound_order_no || sessionId}_${getToday()}.xlsx`)
-      toast.success('Exportación completada')
+      toast.success(t('surtido.registros.detail.exportSuccess'))
     } catch { toast.error(t('toast.error')) }
   }
 
@@ -497,7 +498,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
           {/* Row 1: delivery info */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
-              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">Fecha entrega</p>
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{t('surtido.registros.detail.deliveryDate')}</p>
               {(wmsOrder?.expectedTime || wmsOrder?.outboundTime) ? (
                 <div>
                   <p className="text-sm font-semibold text-warm-700">{fmtDate(wmsOrder.expectedTime || wmsOrder.outboundTime)}</p>
@@ -506,9 +507,9 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
               ) : <p className="text-sm font-semibold text-warm-400">—</p>}
             </div>
             {[
-              { l: 'Destino',    v: destino },
-              { l: 'Referencia', v: referencia },
-              { l: 'Tracking',   v: tracking },
+              { l: t('surtido.registros.detail.destination'), v: destino },
+              { l: t('surtido.registros.detail.reference'),   v: referencia },
+              { l: t('surtido.registros.detail.tracking'),    v: tracking },
             ].map(f => (
               <div key={f.l} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
                 <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{f.l}</p>
@@ -520,12 +521,12 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
           {/* Row 2: operational info */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
-              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">Validador</p>
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{t('surtido.registros.detail.validator')}</p>
               <p className="text-sm font-semibold text-warm-700 truncate">{session.operator_nombre || '—'}</p>
             </div>
             {[
-              { l: 'Inicio', raw: session.started_at },
-              { l: 'Final',  raw: session.ended_at ?? session.completed_at },
+              { l: t('surtido.registros.detail.start'), raw: session.started_at },
+              { l: t('surtido.registros.detail.end'),   raw: session.ended_at ?? session.completed_at },
             ].map(f => (
               <div key={f.l} className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
                 <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{f.l}</p>
@@ -538,7 +539,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
               </div>
             ))}
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
-              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">Duración</p>
+              <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{t('surtido.registros.detail.duration')}</p>
               <p className="text-sm font-semibold text-warm-700">{durationLabel(firstEventAt, lastEventAt)}</p>
             </div>
           </div>
@@ -552,7 +553,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
                 <Eye className="w-3.5 h-3.5 text-accent-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-accent-500 uppercase tracking-wider font-bold">Ubicación</p>
+                <p className="text-[10px] text-accent-500 uppercase tracking-wider font-bold">{t('surtido.registros.detail.location')}</p>
                 {!isReadOnly && canEdit ? (
                   editingSessionUbicacion ? (
                     <div className="flex items-center gap-1.5 mt-0.5">
@@ -566,7 +567,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
                       <button
                         className="p-1.5 rounded-lg hover:bg-primary-50 text-primary-600 shrink-0"
                         onClick={() => updateSessionUbicacionMut.mutate(sessionUbicacionValue.trim())}
-                        title="Guardar"
+                        title={t('common.save')}
                       >
                         <CheckCircle2 className="w-4 h-4" />
                       </button>
@@ -576,7 +577,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
                       type="button"
                       className="flex items-center gap-1.5"
                       onClick={() => { setSessionUbicacionValue(session.ubicacion_nota || ''); setEditingSessionUbicacion(true) }}
-                      title="Editar ubicación"
+                      title={t('surtido.registros.detail.editLocationTitle')}
                     >
                       <span className="text-sm font-mono font-semibold text-accent-700">{session.ubicacion_nota || '—'}</span>
                       <Edit3 className="w-3.5 h-3.5 text-accent-500 hover:text-accent-700 shrink-0" />
@@ -602,7 +603,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
             <div className="bg-primary-50 rounded-xl px-3 py-2.5 border border-primary-100 flex items-start gap-2">
               <User size={13} className="text-primary-400 shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <p className="text-[10px] text-primary-400 uppercase tracking-wider font-bold mb-0.5">Nota de orden</p>
+                <p className="text-[10px] text-primary-400 uppercase tracking-wider font-bold mb-0.5">{t('surtido.registros.detail.orderNote')}</p>
                 <p className="text-xs text-primary-700">{trackingNotes}</p>
               </div>
             </div>
@@ -630,7 +631,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
               className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
                 detailTab === 'incidencias' ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
               }`}>
-              <AlertTriangle size={12} /> Incidencias
+              <AlertTriangle size={12} /> {t('surtido.registros.detail.incidents')}
               {incidencias.length > 0 && (
                 <span className="bg-warning-100 text-warning-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{incidencias.length}</span>
               )}
@@ -664,16 +665,16 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
                 <div className="grid grid-cols-[minmax(0,1fr)_12rem_auto] gap-2 rounded-xl border border-warm-100 bg-warm-50/70 p-3">
                   <input
                     className="input-field text-sm font-mono"
-                    placeholder="Codigo"
+                    placeholder={t('surtido.registros.detail.codePlaceholder')}
                     value={newCode}
                     onChange={(event) => setNewCode(event.target.value)}
                   />
                   <select className="input-field text-sm" value={newReasonId} onChange={(event) => setNewReasonId(event.target.value)}>
-                    <option value="">Motivo</option>
+                    <option value="">{t('surtido.registros.detail.reasonPlaceholder')}</option>
                     {getRecords(reasonsData).map((reason) => <option key={reason.id} value={String(reason.id)}>{reason.nombre}</option>)}
                   </select>
                   <button className="btn-primary" disabled={!newCode.trim() || !newReasonId || createMut.isPending} onClick={() => createMut.mutate()}>
-                    Agregar
+                    {t('surtido.registros.detail.add')}
                   </button>
                 </div>
               )}
@@ -731,11 +732,11 @@ function IncidenciasTable({ incidencias, eventTypeMap, t }) {
       <table className="w-full table-fixed text-xs">
         <thead className="bg-warm-50 sticky top-0 z-10 border-b border-warm-100">
           <tr>
-            <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Tipo Caja</span></th>
-            <th className={`${TH_CLASS} w-[30%]`}><span className={TH_TEXT}>Código Caja</span></th>
-            <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>Estatus</span></th>
-            <th className={`${TH_CLASS} w-[22%]`}><span className={TH_TEXT}>Fecha Cambio</span></th>
-            <th className={`${TH_CLASS}`}><span className={TH_TEXT}>Usuario</span></th>
+            <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>{t('surtido.registros.detail.incidentBoxType')}</span></th>
+            <th className={`${TH_CLASS} w-[30%]`}><span className={TH_TEXT}>{t('surtido.registros.detail.incidentBoxCode')}</span></th>
+            <th className={`${TH_CLASS} w-[18%]`}><span className={TH_TEXT}>{t('common.status')}</span></th>
+            <th className={`${TH_CLASS} w-[22%]`}><span className={TH_TEXT}>{t('surtido.registros.detail.incidentChangeDate')}</span></th>
+            <th className={`${TH_CLASS}`}><span className={TH_TEXT}>{t('surtido.registros.detail.incidentUser')}</span></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-warm-50">
@@ -747,7 +748,7 @@ function IncidenciasTable({ incidencias, eventTypeMap, t }) {
                   {eventTypeMap[inc.box_code] || '—'}
                 </td>
                 <td className="px-3 py-2 font-mono font-semibold text-warm-700 truncate">
-                  {inc.box_code}
+                  <CopyableCell text={inc.box_code} className="gap-1" />
                 </td>
                 <td className="px-3 py-2">
                   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.cls}`}>
