@@ -8,7 +8,7 @@ import {
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
   ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck, ShieldCheck,
   MapPin, XOctagon, Plus, Edit3, X, AlertTriangle, Copy, Check,
-  PanelRightClose, PanelRightOpen, Save, PartyPopper, Layers,
+  PanelRightClose, PanelRightOpen, Save, PartyPopper, Layers, Database,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import Modal from '../../../core/components/common/Modal'
