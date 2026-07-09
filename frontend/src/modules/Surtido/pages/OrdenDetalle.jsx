@@ -584,7 +584,10 @@ export default function OrdenDetalle() {
     wmsRecord?.outboundBoxCount ?? wmsRecord?.packageCount ?? wmsRecord?.totalQty ??
     d?.outboundBoxCount ?? d?.packageCount ?? d?.totalQty ?? tracking?.total_expected ?? 0
   )
-  const totalScanned = sessions.reduce((sum, s) => sum + (s.total_scanned || 0), 0)
+  // total_scanned comes back as a string (BIGINT from a COUNT(DISTINCT ...) — node-pg doesn't
+  // auto-cast BIGINT to Number to avoid precision loss), so `sum + s.total_scanned` was doing
+  // string concatenation ("0" + "1" = "01") instead of addition. Coerce explicitly.
+  const totalScanned = sessions.reduce((sum, s) => sum + Number(s.total_scanned || 0), 0)
   const is100Percent = totalExpected > 0 && totalScanned >= totalExpected
   const displayStatus = (is100Percent && status !== 'complete' && status !== 'partial' && status !== 'cancelled') ? 'complete' : status
   const statusMeta = STATUS_META[displayStatus] ?? STATUS_META.pending_assignment
