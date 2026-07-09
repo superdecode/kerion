@@ -1377,6 +1377,12 @@ const { data: reasonsData } = useQuery({
 
   const addEventMut = useMutation({
     mutationFn: addScanEvent,
+    onSuccess: () => {
+      // A scan can be the one that completes the order (refreshPickSessionTotals flips
+      // pick_order_tracking server-side) — invalidate so Ordenes reflects it immediately
+      // instead of serving its cached pre-completion status for up to 5 minutes.
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+    },
     onError: (err, vars) => {
       if (err.response?.status === 404) {
         clearSession()
@@ -1408,6 +1414,8 @@ const { data: reasonsData } = useQuery({
       setManualEntry({ code: '', reasonId: '', notes: '' })
       setShowManualEntry(false)
       toast.success(t('surtido.validacion.manual_entry_saved'))
+      // Same reasoning as addEventMut: a manual entry can complete the order too.
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })

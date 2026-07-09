@@ -1146,6 +1146,9 @@ export default function Ordenes() {
       await refreshSheet('outbound')
       setSheetTs(getCacheTimestamp('outbound'))
       qc.invalidateQueries({ queryKey: ['wms-outbound'] })
+      // Validation status/counts are cached under this key with a 5min staleTime — refresh
+      // must force it too, otherwise a just-completed order keeps showing as pendiente.
+      qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
     } finally {
       setRefreshing(false)
     }
