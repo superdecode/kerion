@@ -549,10 +549,7 @@ export default function RastreoDetalle() {
                 <div className="rounded-2xl border border-warm-200 bg-white p-2.5 shadow-[0_14px_30px_-30px_rgba(15,23,42,0.28)] xl:self-start">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div>
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-warm-400">{t('rastreo.detalle.estadoOrden')}</p>
-                        {!canEdit && <EstadoChip estado={orden.estado} t={t} />}
-                      </div>
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-warm-400">{t('rastreo.detalle.estadoOrden')}</p>
                       {canEdit ? (
                         <div className="flex items-center gap-2">
                           <select
@@ -567,7 +564,11 @@ export default function RastreoDetalle() {
                           </select>
                           {(updateOrden.isPending || resolveOrdenMutation.isPending) && <Loader2 size={14} className="animate-spin text-warm-300 flex-shrink-0" />}
                         </div>
-                      ) : null}
+                      ) : (
+                        <div className="flex h-8 items-center rounded-xl bg-warm-50 px-2.5">
+                          <EstadoChip estado={orden.estado} t={t} />
+                        </div>
+                      )}
                     </div>
 
                     <div>
