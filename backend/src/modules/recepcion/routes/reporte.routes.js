@@ -7,7 +7,7 @@ const router = Router()
 // GET /orders/:id/lista-recepcion
 router.get('/orders/:id/lista-recepcion',
   authenticateToken, loadFullUser,
-  requirePermission('recepcion.recibir', 'crear'),
+  requirePermission('recepcion.recibir', 'ver'),
   async (req, res) => {
     try {
       const orderRes = await req.tQuery(

@@ -8,7 +8,7 @@ const router = Router()
 // GET /api/inventory/dashboard?fecha_inicio=&fecha_fin=
 router.get('/',
   authenticateToken, loadFullUser,
-  requirePermission('inventario.registros', 'actualizar'),
+  requirePermission('inventario.registros', 'ver'),
   async (req, res) => {
     try {
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'

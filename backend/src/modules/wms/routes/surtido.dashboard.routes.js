@@ -33,7 +33,7 @@ function getTrendBucket(fechaInicio, fechaFin) {
 // GET /api/wmshub/dashboard?fecha_inicio=&fecha_fin=&bucket=
 router.get('/',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.ordenes', 'actualizar'),
+  requirePermission('surtido.ordenes', 'ver'),
   async (req, res) => {
     try {
       const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
