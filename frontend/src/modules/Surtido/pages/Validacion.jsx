@@ -1074,30 +1074,50 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
       try {
         const s = JSON.parse(saved)
         if (s.obc && s.sessionId) {
+          const restoreLocally = () => {
+            setObc(s.obc); setSessionId(s.sessionId); setSessionStart(new Date(s.sessionStart))
+            setCounts(s.counts || { ok: 0, rejected: 0 })
+            setItemCounts(new Map(s.itemCountsArr || []))
+            setSelectedUbicacion(s.ubicacion || null)
+            setUbicacionConfirmed(s.ubicacionConfirmed || !!s.ubicacion)
+            setStep('session')
+            onUpdateTab({ obc: s.obc, step: 'session' })
+          }
+          const discardAndRestart = () => {
+            sessionStorage.removeItem(storageKey)
+            setObc(s.obc); setStep('session'); setAutoStartPending(true)
+            onUpdateTab({ obc: s.obc, step: 'session' })
+          }
+
+          // Offline at mount: no way to verify against the server, and there's
+          // nothing worse we can do than trust local state — restore it so
+          // scanning can resume and queue instead of getting stuck forever
+          // waiting on a network call that can't succeed.
+          if (useOfflineStore.getState().status === 'offline') {
+            restoreLocally()
+            return
+          }
+
           // Verify the stored session is still open before trusting it
           getScanSession(s.sessionId)
             .then(res => {
               const session = res?.data?.session ?? res?.data ?? res
               if (session?.status === 'open') {
-                setObc(s.obc); setSessionId(s.sessionId); setSessionStart(new Date(s.sessionStart))
-                setCounts(s.counts || { ok: 0, rejected: 0 })
-                setItemCounts(new Map(s.itemCountsArr || []))
-                setSelectedUbicacion(s.ubicacion || null)
-                setUbicacionConfirmed(s.ubicacionConfirmed || !!s.ubicacion)
-                setStep('session')
-                onUpdateTab({ obc: s.obc, step: 'session' })
+                restoreLocally()
               } else {
                 // Session closed/completed — clear storage and restart
-                sessionStorage.removeItem(storageKey)
-                setObc(s.obc); setStep('session'); setAutoStartPending(true)
-                onUpdateTab({ obc: s.obc, step: 'session' })
+                discardAndRestart()
               }
             })
-            .catch(() => {
-              // Session not found in DB — clear and restart
-              sessionStorage.removeItem(storageKey)
-              setObc(s.obc); setStep('session'); setAutoStartPending(true)
-              onUpdateTab({ obc: s.obc, step: 'session' })
+            .catch((err) => {
+              // No server response (offline/connection dropped mid-check) — we can't
+              // confirm the session is gone, so don't discard in-progress work.
+              if (!err.response) {
+                restoreLocally()
+                return
+              }
+              // Definitive response from the server (e.g. 404) — safe to discard.
+              discardAndRestart()
             })
           return
         }
@@ -1312,6 +1332,18 @@ const { data: reasonsData } = useQuery({
     }, 30000)
     return () => clearInterval(interval)
   }, []) // stable — never recreated
+
+  // Keep the sessionStorage snapshot current as scans come in — otherwise a reload
+  // mid-session (common on handheld devices with unstable connectivity) restores
+  // stale counts from session creation time, making completed scans look lost.
+  useEffect(() => {
+    if (!sessionId || !obc || !sessionStart) return
+    sessionStorage.setItem(storageKey, JSON.stringify({
+      obc, sessionId, sessionStart: sessionStart.toISOString(),
+      counts, itemCountsArr: [...itemCounts.entries()],
+      ubicacion: selectedUbicacion, ubicacionConfirmed,
+    }))
+  }, [sessionId, obc, sessionStart, counts, itemCounts, selectedUbicacion, ubicacionConfirmed, storageKey])
 
   const persistSession = (newObc, newSessionId, newStart, ubicacion) => {
     sessionStorage.setItem(storageKey, JSON.stringify({
