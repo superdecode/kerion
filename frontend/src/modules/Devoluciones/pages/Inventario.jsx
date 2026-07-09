@@ -811,6 +811,7 @@ export default function Inventario() {
         ubicaciones={ubicaciones}
         onSaved={() => qc.invalidateQueries({ queryKey: ['dev-ubicaciones'] })}
         onImportClick={() => setShowImportUbicaciones(true)}
+        defaultArea="devoluciones"
       />
       <AjusteModal
         isOpen={showAjuste}

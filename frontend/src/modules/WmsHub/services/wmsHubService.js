@@ -25,8 +25,8 @@ export const searchUbicaciones = (q, modulo = 'inventario') =>
 export const saveSheetConfig = ({ sheet_inventory_url, sheet_outbound_url }) =>
   api.post('/wmshub/config/sheets', { sheet_inventory_url, sheet_outbound_url }).then(r => r.data)
 
-export const createUbicacion = ({ codigo, nombre, descripcion = '' }) =>
-  api.post('/wmshub/ubicaciones', { codigo, nombre, descripcion }).then(r => r.data)
+export const createUbicacion = ({ codigo, nombre, descripcion = '', area }) =>
+  api.post('/wmshub/ubicaciones', { codigo, nombre, descripcion, area }).then(r => r.data)
 
 export const updateUbicacion = (id, payload) =>
   api.put(`/wmshub/ubicaciones/${id}`, payload).then(r => r.data)

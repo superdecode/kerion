@@ -2859,14 +2859,16 @@ router.post('/ubicaciones',
       const nombre = normalizeOptionalText(req.body?.nombre) || codigo
       const descripcion = normalizeOptionalText(req.body?.descripcion)
       const activo = req.body?.activo !== false
+      const areaInput = normalizeOptionalText(req.body?.area)
+      const area = ['devoluciones', 'inventario'].includes(areaInput) ? areaInput : 'inventario'
 
       if (!codigo || !nombre) {
         return res.status(400).json({ success: false, error: 'codigo y nombre son requeridos' })
       }
 
       const result = await req.tQuery(
-        `INSERT INTO dev_ubicaciones (codigo, nombre, descripcion, activo, tenant_id)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO dev_ubicaciones (codigo, nombre, descripcion, activo, area, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (tenant_id, codigo)
          DO UPDATE
            SET nombre = EXCLUDED.nombre,
@@ -2874,7 +2876,7 @@ router.post('/ubicaciones',
                activo = EXCLUDED.activo,
                updated_at = now()
          RETURNING *`,
-        [codigo, nombre, descripcion, Boolean(activo), req.tenantId]
+        [codigo, nombre, descripcion, Boolean(activo), area, req.tenantId]
       )
 
       res.status(201).json({ success: true, ubicacion: result.rows[0] })
@@ -2897,6 +2899,8 @@ router.put('/ubicaciones/:id',
       const nombre = normalizeOptionalText(req.body?.nombre) || codigo
       const descripcion = normalizeOptionalText(req.body?.descripcion)
       const activo = req.body?.activo !== false
+      const areaInput = normalizeOptionalText(req.body?.area)
+      const area = ['devoluciones', 'inventario'].includes(areaInput) ? areaInput : null
 
       if (!codigo || !nombre) {
         return res.status(400).json({ success: false, error: 'codigo y nombre son requeridos' })
@@ -2908,10 +2912,11 @@ router.put('/ubicaciones/:id',
                 nombre = $2,
                 descripcion = $3,
                 activo = $4,
+                area = COALESCE($5, area),
                 updated_at = now()
-          WHERE id = $5 AND tenant_id = $6
+          WHERE id = $6 AND tenant_id = $7
           RETURNING *`,
-        [codigo, nombre, descripcion, Boolean(activo), req.params.id, req.tenantId]
+        [codigo, nombre, descripcion, Boolean(activo), area, req.params.id, req.tenantId]
       )
 
       if (!result.rows.length) {

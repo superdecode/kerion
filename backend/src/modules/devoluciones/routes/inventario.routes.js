@@ -862,13 +862,14 @@ router.post('/ubicaciones',
   requirePermission('devoluciones.inventario', 'actualizar'),
   async (req, res) => {
     try {
-      const { codigo, nombre, descripcion = '', activo = true } = req.body
+      const { codigo, nombre, descripcion = '', activo = true, area: areaInput } = req.body
       if (!codigo || !nombre) return res.status(400).json({ error: 'codigo y nombre son requeridos' })
+      const area = ['devoluciones', 'inventario'].includes(areaInput) ? areaInput : 'devoluciones'
       const result = await req.tQuery(
-        `INSERT INTO dev_ubicaciones (codigo, nombre, descripcion, activo, tenant_id)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO dev_ubicaciones (codigo, nombre, descripcion, activo, area, tenant_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [codigo.trim(), nombre.trim(), descripcion || null, Boolean(activo), req.tenantId]
+        [codigo.trim(), nombre.trim(), descripcion || null, Boolean(activo), area, req.tenantId]
       )
       res.status(201).json({ ubicacion: result.rows[0] })
     } catch (error) {
@@ -883,13 +884,14 @@ router.put('/ubicaciones/:id',
   requirePermission('devoluciones.inventario', 'actualizar'),
   async (req, res) => {
     try {
-      const { codigo, nombre, descripcion = '', activo = true } = req.body
+      const { codigo, nombre, descripcion = '', activo = true, area: areaInput } = req.body
+      const area = ['devoluciones', 'inventario'].includes(areaInput) ? areaInput : null
       const result = await req.tQuery(
         `UPDATE dev_ubicaciones
-         SET codigo = $1, nombre = $2, descripcion = $3, activo = $4, updated_at = now()
-         WHERE id = $5 AND tenant_id = $6
+         SET codigo = $1, nombre = $2, descripcion = $3, activo = $4, area = COALESCE($5, area), updated_at = now()
+         WHERE id = $6 AND tenant_id = $7
          RETURNING *`,
-        [codigo.trim(), nombre.trim(), descripcion || null, Boolean(activo), req.params.id, req.tenantId]
+        [codigo.trim(), nombre.trim(), descripcion || null, Boolean(activo), area, req.params.id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Ubicacion no encontrada' })
       res.json({ ubicacion: result.rows[0] })
@@ -977,8 +979,8 @@ router.post('/ubicaciones/importar',
 
         try {
           const result = await req.tQuery(
-            `INSERT INTO dev_ubicaciones (codigo, nombre, descripcion, tenant_id)
-             VALUES ($1, $2, $3, $4)
+            `INSERT INTO dev_ubicaciones (codigo, nombre, descripcion, area, tenant_id)
+             VALUES ($1, $2, $3, 'devoluciones', $4)
              ON CONFLICT (codigo, tenant_id)
              DO UPDATE SET
                nombre = EXCLUDED.nombre,

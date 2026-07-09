@@ -1005,6 +1005,7 @@ export default function EntradaDetalle() {
         onClose={() => setShowUbicaciones(false)}
         ubicaciones={ubicaciones}
         allowManagement={canManageUbicaciones}
+        defaultArea="devoluciones"
         onSelect={(ubicacion) => {
           setSelectedUbicacionEvent({ ubicacion, nonce: Date.now() })
         }}

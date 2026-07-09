@@ -1,10 +1,16 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutGrid, Upload, Trash2, Search, X, Plus, AlertTriangle, Check, Loader2 } from 'lucide-react'
+import { LayoutGrid, Upload, Trash2, Search, X, Plus, AlertTriangle, Check, Loader2, ToggleRight, ToggleLeft } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import { createUbicacion, deleteUbicacion, updateUbicacion } from '../services/devolucionesService'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+
+const AREA_LABEL_KEYS = { devoluciones: 'dev.inv_ubicaciones.area.devoluciones', inventario: 'dev.inv_ubicaciones.area.inventario' }
+const AREA_BADGE_CLS = {
+  devoluciones: 'bg-purple-100 text-purple-700',
+  inventario: 'bg-primary-100 text-primary-700',
+}
 
 function Toggle({ checked, onChange }) {
   const { t } = useI18nStore()
@@ -36,6 +42,7 @@ export default function InventarioUbicacionesModal({
   serviceOverrides = null,
   onSearchChange = null,
   loading = false,
+  defaultArea = 'inventario',
 }) {
   const toast = useToastStore()
   const { t } = useI18nStore()
@@ -45,6 +52,9 @@ export default function InventarioUbicacionesModal({
   const [deletingId, setDeletingId] = useState(null)
   const [deleteRow, setDeleteRow] = useState(null)
   const [search, setSearch] = useState('')
+  const [areaFilter, setAreaFilter] = useState('')
+  const [selected, setSelected] = useState(() => new Set())
+  const [bulkRunning, setBulkRunning] = useState(false)
   const locationServices = {
     createUbicacion,
     updateUbicacion,
@@ -56,19 +66,56 @@ export default function InventarioUbicacionesModal({
   // so the received `ubicaciones` are already filtered — skip client filtering.
   const serverSearch = typeof onSearchChange === 'function'
   const filtered = useMemo(() => {
-    if (serverSearch) return ubicaciones
-    const q = search.toLowerCase().trim()
-    if (!q) return ubicaciones
-    return ubicaciones.filter(u =>
-      u.codigo?.toLowerCase().includes(q) || u.nombre?.toLowerCase().includes(q)
-    )
-  }, [ubicaciones, search, serverSearch])
+    let rows = ubicaciones
+    if (!serverSearch) {
+      const q = search.toLowerCase().trim()
+      if (q) {
+        rows = rows.filter(u =>
+          u.codigo?.toLowerCase().includes(q) || u.nombre?.toLowerCase().includes(q)
+        )
+      }
+    }
+    if (areaFilter) rows = rows.filter(u => (u.area || 'inventario') === areaFilter)
+    return rows
+  }, [ubicaciones, search, serverSearch, areaFilter])
+
+  // Only offer areas that actually have at least one location — a tenant that
+  // never created any Devoluciones location shouldn't see an empty option.
+  const availableAreas = useMemo(() => new Set(ubicaciones.map(u => u.area || 'inventario')), [ubicaciones])
+  useEffect(() => {
+    if (areaFilter && !availableAreas.has(areaFilter)) setAreaFilter('')
+  }, [areaFilter, availableAreas])
+
+  // Selection only ever holds ids that are currently visible — clear anything
+  // that fell out of view when the filter changes, so bulk actions never
+  // silently apply to rows the user can no longer see.
+  useEffect(() => {
+    const visibleIds = new Set(filtered.map(u => u.id))
+    setSelected(prev => {
+      const next = new Set([...prev].filter(id => visibleIds.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [filtered])
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(u => selected.has(u.id))
+
+  const toggleSelectAll = () => {
+    setSelected(allFilteredSelected ? new Set() : new Set(filtered.map(u => u.id)))
+  }
+
+  const toggleSelectRow = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   const handleSave = async () => {
     if (!codigo.trim()) return
     setSaving(true)
     try {
-      await locationServices.createUbicacion({ codigo: codigo.trim(), nombre: codigo.trim() })
+      await locationServices.createUbicacion({ codigo: codigo.trim(), nombre: codigo.trim(), area: defaultArea })
       setCodigo('')
       setShowForm(false)
       toast.success(t('dev.inv_ubicaciones.toast.creada'))
@@ -94,6 +141,30 @@ export default function InventarioUbicacionesModal({
     }
   }
 
+  const handleBulkSetActivo = async (activo) => {
+    const rows = filtered.filter(u => selected.has(u.id))
+    if (rows.length === 0) return
+    setBulkRunning(true)
+    try {
+      const results = await Promise.allSettled(rows.map(row => locationServices.updateUbicacion(row.id, {
+        codigo: row.codigo,
+        nombre: row.nombre || row.codigo,
+        descripcion: row.descripcion || '',
+        activo,
+      })))
+      const failed = results.filter(r => r.status === 'rejected').length
+      if (failed > 0) {
+        toast.error(t('dev.inv_ubicaciones.bulk.toast_failed').replace('{failed}', failed).replace('{total}', rows.length))
+      } else {
+        toast.success(t(activo ? 'dev.inv_ubicaciones.bulk.toast_activated' : 'dev.inv_ubicaciones.bulk.toast_deactivated').replace('{n}', rows.length))
+      }
+      setSelected(new Set())
+      onSaved?.()
+    } finally {
+      setBulkRunning(false)
+    }
+  }
+
   const handleDelete = async () => {
     if (!deleteRow) return
     setDeletingId(deleteRow.id)
@@ -113,6 +184,7 @@ export default function InventarioUbicacionesModal({
 
   const totalActivas = ubicaciones.filter(u => u.activo !== false).length
   const canSelect = typeof onSelect === 'function'
+  const colCount = allowManagement ? 7 : 6
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={t('dev.inv_ubicaciones.title')} icon={LayoutGrid} size="lg-wide">
@@ -135,6 +207,17 @@ export default function InventarioUbicacionesModal({
               </button>
             )}
           </div>
+          {availableAreas.size > 1 && (
+            <select
+              value={areaFilter}
+              onChange={e => setAreaFilter(e.target.value)}
+              className="shrink-0 text-xs rounded-xl border border-warm-200 bg-warm-50 px-2.5 py-1.5 text-warm-700 outline-none focus:ring-2 focus:ring-primary-200 cursor-pointer"
+            >
+              <option value="">{t('dev.inv_ubicaciones.area.todas')}</option>
+              {availableAreas.has('devoluciones') && <option value="devoluciones">{t('dev.inv_ubicaciones.area.devoluciones')}</option>}
+              {availableAreas.has('inventario') && <option value="inventario">{t('dev.inv_ubicaciones.area.inventario')}</option>}
+            </select>
+          )}
           <div className="text-xs text-warm-500 shrink-0">
             <span className="font-semibold text-warm-700">{totalActivas}</span> {t('dev.inv_ubicaciones.activas')}
             <span className="text-warm-300 mx-1">·</span>
@@ -167,6 +250,47 @@ export default function InventarioUbicacionesModal({
             </div>
           )}
         </div>
+
+        {/* Barra de acción masiva — solo aplica sobre lo que está filtrado/visible */}
+        <AnimatePresence initial={false}>
+          {allowManagement && selected.size > 0 && (
+            <motion.div
+              key="bulk-bar"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.15 }}
+              className="overflow-hidden"
+            >
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-primary-200 bg-primary-50 px-4 py-2.5">
+                <span className="text-xs font-semibold text-primary-700">
+                  {t('common.bulk.selected').replace('{n}', selected.size)}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleBulkSetActivo(true)}
+                    disabled={bulkRunning}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-success-100 text-success-700 hover:bg-success-200 disabled:opacity-50 transition-colors"
+                  >
+                    {bulkRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ToggleRight className="w-3.5 h-3.5" />}
+                    {t('dev.inv_ubicaciones.bulk.activate')}
+                  </button>
+                  <button
+                    onClick={() => handleBulkSetActivo(false)}
+                    disabled={bulkRunning}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-warm-200 text-warm-700 hover:bg-warm-300 disabled:opacity-50 transition-colors"
+                  >
+                    {bulkRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ToggleLeft className="w-3.5 h-3.5" />}
+                    {t('dev.inv_ubicaciones.bulk.deactivate')}
+                  </button>
+                  <button onClick={() => setSelected(new Set())} className="text-warm-400 hover:text-warm-600 px-1" title={t('dev.inv_ubicaciones.bulk.clear')}>
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Formulario creación (colapsable) */}
         <AnimatePresence initial={false}>
@@ -214,8 +338,19 @@ export default function InventarioUbicacionesModal({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wider text-warm-500 border-b border-warm-100 bg-warm-50/50">
+                {allowManagement && (
+                  <th className="px-4 py-2.5 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded border-warm-300 text-primary-600 focus:ring-primary-300 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-2.5">{t('dev.inv_ubicaciones.col.codigo')}</th>
                 <th className="px-4 py-2.5">{t('dev.inv_ubicaciones.col.nombre')}</th>
+                <th className="px-4 py-2.5">{t('dev.inv_ubicaciones.col.area')}</th>
                 <th className="px-4 py-2.5 text-right">{t('dev.inv_ubicaciones.col.pcs')}</th>
                 <th className="px-4 py-2.5 text-center">{allowManagement ? t('dev.inv_ubicaciones.col.activa') : t('dev.inv_ubicaciones.col.estado')}</th>
                 <th className="px-4 py-2.5 text-right">{t('dev.inv_ubicaciones.col.acciones')}</th>
@@ -224,25 +359,41 @@ export default function InventarioUbicacionesModal({
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center">
+                  <td colSpan={colCount} className="px-4 py-10 text-center">
                     <Loader2 className="w-5 h-5 animate-spin text-primary-500 mx-auto" />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-warm-400 text-sm">
+                  <td colSpan={colCount} className="px-4 py-10 text-center text-warm-400 text-sm">
                     {search ? t('dev.inv_ubicaciones.sin_resultados') : t('dev.inv_ubicaciones.sin_datos')}
                   </td>
                 </tr>
               ) : filtered.map(row => {
                 const stock = row.pcs_en_stock ?? row.pcs_stock ?? 0
                 const isActive = row.activo !== false
+                const area = row.area || 'inventario'
 
                 return (
                   <tr key={row.id} className={`border-b border-warm-50 last:border-0 transition-colors ${isActive ? 'hover:bg-primary-100' : 'bg-warm-50/30 opacity-70'}`}>
+                    {allowManagement && (
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(row.id)}
+                          onChange={() => toggleSelectRow(row.id)}
+                          className="rounded border-warm-300 text-primary-600 focus:ring-primary-300 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="px-4 py-3 code-main">{row.codigo}</td>
                     <td className="px-4 py-3 text-warm-700">{row.nombre}
                       {row.descripcion && <span className="text-warm-400 text-xs ml-1.5">· {row.descripcion}</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`badge ${AREA_BADGE_CLS[area] || AREA_BADGE_CLS.inventario}`}>
+                        {AREA_LABEL_KEYS[area] ? t(AREA_LABEL_KEYS[area]) : area}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className={`text-sm font-bold ${stock > 0 ? 'text-success-700' : 'text-warm-400'}`}>{stock}</span>

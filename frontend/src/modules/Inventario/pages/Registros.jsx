@@ -1483,6 +1483,7 @@ export default function InventarioRegistros() {
           qc.invalidateQueries({ queryKey: ['wms-ubicaciones-admin'] })
         }}
         serviceOverrides={{ createUbicacion, updateUbicacion, deleteUbicacion }}
+        defaultArea="inventario"
       />
     </div>
   )
