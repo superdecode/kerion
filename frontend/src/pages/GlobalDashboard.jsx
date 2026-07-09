@@ -178,23 +178,24 @@ export default function GlobalDashboard() {
     <div className="flex flex-col h-full">
       <Header title={t('nav.dashboard')} subtitle={t('app.subtitle')} />
 
-      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 flex flex-col gap-4 sm:gap-5">
 
-        {/* Welcome banner */}
+        {/* Welcome banner — stacks vertically on mobile so the greeting and the
+            stat pills don't get crushed into one unbreakable row */}
         <motion.div
           variants={bannerVariants}
           initial="hidden"
           animate="visible"
-          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 via-primary-700 to-accent-700 px-7 py-5 text-white shadow-xl"
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 via-primary-700 to-accent-700 px-4 sm:px-7 py-4 sm:py-5 text-white shadow-xl"
         >
           <div className="pointer-events-none absolute -right-12 -top-12 w-56 h-56 rounded-full bg-white/5 blur-3xl" />
           <div className="pointer-events-none absolute -left-8 -bottom-12 w-48 h-48 rounded-full bg-accent-400/10 blur-2xl" />
           <div className="pointer-events-none absolute right-1/3 top-0 w-64 h-full bg-primary-400/5 blur-2xl" />
 
-          <div className="relative flex items-center justify-between gap-6">
-            <div>
+          <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-6">
+            <div className="min-w-0">
               <motion.p
-                className="text-xl font-extrabold tracking-tight"
+                className="text-lg sm:text-xl font-extrabold tracking-tight truncate"
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.15, duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
@@ -212,23 +213,23 @@ export default function GlobalDashboard() {
             </div>
 
             <motion.div
-              className="flex items-center gap-2.5"
+              className="flex items-center gap-2 sm:gap-2.5"
               initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             >
-              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 backdrop-blur-sm border border-white/10">
-                <LayoutGrid className="w-4 h-4 text-primary-200" />
-                <div>
-                  <p className="text-base font-extrabold leading-none">{modules.length}</p>
-                  <p className="text-[10px] text-primary-200 mt-0.5">{t('globalDash.activeModules')}</p>
+              <div className="flex flex-1 sm:flex-none items-center gap-2 rounded-xl bg-white/10 px-3 sm:px-4 py-2 sm:py-2.5 backdrop-blur-sm border border-white/10">
+                <LayoutGrid className="w-4 h-4 text-primary-200 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm sm:text-base font-extrabold leading-none">{modules.length}</p>
+                  <p className="text-[10px] text-primary-200 mt-0.5 truncate">{t('globalDash.activeModules')}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 backdrop-blur-sm border border-white/10">
-                <Clock className="w-4 h-4 text-primary-200" />
-                <div>
-                  <p className="text-base font-extrabold leading-none">{fmtTimeShort(new Date())}</p>
-                  <p className="text-[10px] text-primary-200 mt-0.5">{fmtDateShort(new Date())}</p>
+              <div className="flex flex-1 sm:flex-none items-center gap-2 rounded-xl bg-white/10 px-3 sm:px-4 py-2 sm:py-2.5 backdrop-blur-sm border border-white/10">
+                <Clock className="w-4 h-4 text-primary-200 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm sm:text-base font-extrabold leading-none tabular-nums">{fmtTimeShort(new Date())}</p>
+                  <p className="text-[10px] text-primary-200 mt-0.5 truncate">{fmtDateShort(new Date())}</p>
                 </div>
               </div>
             </motion.div>
@@ -247,7 +248,7 @@ export default function GlobalDashboard() {
           </motion.p>
 
           <motion.div
-            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5"
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3.5"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -258,7 +259,7 @@ export default function GlobalDashboard() {
                 <motion.div key={mod.id} variants={cardVariants} whileHover={{ y: -3, transition: { duration: 0.2 } }}>
                   <Link
                     to={mod.path}
-                    className="group relative flex flex-col gap-3.5 overflow-hidden rounded-2xl border border-warm-100 bg-white p-5 shadow-sm transition-shadow duration-300 hover:shadow-lg h-full"
+                    className="group relative flex flex-col gap-2.5 sm:gap-3.5 overflow-hidden rounded-2xl border border-warm-100 bg-white p-3.5 sm:p-5 shadow-sm transition-shadow duration-300 hover:shadow-lg h-full"
                   >
                     <div
                       className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"
@@ -267,13 +268,13 @@ export default function GlobalDashboard() {
 
                     <div className="relative flex items-center justify-between">
                       <div
-                        className="flex h-11 w-11 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110"
+                        className="flex h-9 w-9 sm:h-11 sm:w-11 items-center justify-center rounded-xl shadow-md transition-transform duration-300 group-hover:scale-110 shrink-0"
                         style={{ background: `linear-gradient(135deg, ${mod.from}, ${mod.to})` }}
                       >
-                        <Icon className="h-5 w-5 text-white" />
+                        <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                       </div>
                       <div
-                        className="flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-0 translate-x-1"
+                        className="hidden sm:flex h-7 w-7 items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-0 translate-x-1"
                         style={{ background: mod.light, border: `1px solid ${mod.ring}` }}
                       >
                         <ArrowUpRight className="h-3.5 w-3.5" style={{ color: mod.from }} />
@@ -281,8 +282,8 @@ export default function GlobalDashboard() {
                     </div>
 
                     <div className="relative">
-                      <p className="text-sm font-bold text-warm-800 leading-snug">{t(mod.nameKey)}</p>
-                      <p className="mt-1 text-[11px] leading-relaxed text-warm-400 line-clamp-2">{t(mod.descriptionKey)}</p>
+                      <p className="text-xs sm:text-sm font-bold text-warm-800 leading-snug">{t(mod.nameKey)}</p>
+                      <p className="mt-1 text-[10px] sm:text-[11px] leading-relaxed text-warm-400 line-clamp-2">{t(mod.descriptionKey)}</p>
                     </div>
 
                     <div
