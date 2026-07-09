@@ -69,6 +69,7 @@ import SurtidoRegistros from './modules/Surtido/pages/Registros'
 // WMS Hub Module
 import WMSHubConfiguracion from './modules/WmsHub/pages/Configuracion'
 import GlobalPreloader from './core/components/common/GlobalPreloader'
+import TenantGuard from './core/components/common/TenantGuard'
 
 // Anormalidades Module
 import AnormRegistro from './modules/Anormalidades/pages/Registro'
@@ -357,8 +358,10 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AppRoutes />
-        <GlobalPreloader />
+        <TenantGuard>
+          <AppRoutes />
+          <GlobalPreloader />
+        </TenantGuard>
       </BrowserRouter>
     </QueryClientProvider>
   )

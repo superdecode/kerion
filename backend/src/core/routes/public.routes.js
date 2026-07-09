@@ -2,6 +2,7 @@ import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import env from '../../config/env.js'
 import { query } from '../../config/database.js'
+import { resolveTenantIdFromRequest } from './auth.routes.js'
 
 const router = Router()
 
@@ -151,6 +152,26 @@ router.post('/renewal-request', signupLimiter, async (req, res) => {
     res.json({ success: true })
   } catch {
     res.json({ success: true })
+  }
+})
+
+// GET /api/public/tenant-status — checks whether the current host resolves to a
+// registered tenant, so the frontend can block loading on unknown/mistyped subdomains
+// before any login attempt happens.
+router.get('/tenant-status', async (req, res) => {
+  try {
+    const tenant = await resolveTenantIdFromRequest(req)
+    if (!tenant) {
+      return res.status(404).json({ valid: false, code: 'TENANT_NOT_FOUND' })
+    }
+    if (tenant.blocked) {
+      return res.status(200).json({ valid: false, code: 'TENANT_BLOCKED', status: tenant.status })
+    }
+    res.json({ valid: true, slug: tenant.slug, status: tenant.status })
+  } catch (err) {
+    console.error('[public/tenant-status]', err)
+    // Fail-open on unexpected errors — don't block the whole app over a transient issue.
+    res.json({ valid: true })
   }
 })
 

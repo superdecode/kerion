@@ -115,7 +115,7 @@ function isLocalDevHost(host) {
   return withoutPort === 'localhost' || withoutPort === '127.0.0.1' || withoutPort === '0.0.0.0'
 }
 
-async function resolveTenantIdFromRequest(req) {
+export async function resolveTenantIdFromRequest(req) {
   // x-forwarded-host takes priority (Vercel sets this to the public hostname)
   const rawHost = req.headers['x-forwarded-host'] || req.headers['host'] || ''
   const host = rawHost.split(',')[0].trim()
@@ -216,7 +216,10 @@ router.post('/login', async (req, res) => {
 
     const tenant = await resolveTenantIdFromRequest(req)
     if (!tenant) {
-      return res.status(401).json({ error: 'Credenciales inválidas' })
+      return res.status(404).json({
+        error: 'Este enlace no corresponde a ninguna empresa registrada. Verifica la URL o contacta a soporte.',
+        code: 'TENANT_NOT_FOUND',
+      })
     }
     if (tenant.blocked) {
       return res.status(403).json({ error: 'Cuenta no disponible. Contacta a soporte.' })
