@@ -31,19 +31,6 @@ import GestionCausasRastreoModal from '../components/GestionCausasRastreoModal'
 const TH = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
 
-function formatDateISO(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function subtractDays(isoDate, days) {
-  const date = new Date(`${isoDate}T12:00:00`)
-  date.setDate(date.getDate() - days)
-  return formatDateISO(date)
-}
-
 function parseStoredDate(value) {
   if (!value) return null
   const parsed = new Date(value)
@@ -134,7 +121,6 @@ export default function Rastreo() {
   const [estadoCajaFilter, setEstadoCajaFilter] = useState([])
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
-  const [datePreset, setDatePreset] = useState('')
   const [sortKey, setSortKey] = useState('created_at')
   const [sortDir, setSortDir] = useState('desc')
 
@@ -294,7 +280,6 @@ export default function Rastreo() {
     setEstadoCajaFilter([])
     setFechaDesde('')
     setFechaHasta('')
-    setDatePreset('')
     setPage(1)
     setSelected(new Set())
   }
@@ -424,79 +409,39 @@ export default function Rastreo() {
 
       {/* Filter bar */}
       <div className="sticky top-[3.5rem] z-[9] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2 space-y-2">
-        {/* Row 1: date range + Nueva Orden */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5">
-            <Calendar className="w-3.5 h-3.5 text-warm-400 shrink-0" />
-            <input
-              type="date"
-              className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              value={fechaDesde}
-              onChange={e => { setDatePreset(''); setFechaDesde(e.target.value); setPage(1) }}
-            />
-            <span className="text-warm-300 text-xs">→</span>
-            <input
-              type="date"
-              className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              value={fechaHasta}
-              onChange={e => { setDatePreset(''); setFechaHasta(e.target.value); setPage(1) }}
-            />
-            {(fechaDesde || fechaHasta) && (
-              <button onClick={() => { setDatePreset(''); setFechaDesde(''); setFechaHasta(''); setPage(1) }}>
-                <X size={11} className="text-warm-400 hover:text-warm-600" />
-              </button>
-            )}
-          </div>
-
-          {[
-            { label: t('shortcut.today'), d: 0 },
-            { label: t('shortcut.7days'), d: 7 },
-            { label: t('shortcut.30days'), d: 30 },
-          ].map(({ label, d }) => {
-            const today = formatDateISO(new Date())
-            return (
-              <button
-                key={label}
-                onClick={() => {
-                  const end = today
-                  const start = d === 0 ? today : subtractDays(today, d)
-                  setDatePreset(String(d))
-                  setFechaDesde(start)
-                  setFechaHasta(end)
-                  setPage(1)
-                }}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
-                  datePreset === String(d)
-                    ? 'bg-primary-50 text-primary-700 border-primary-200'
-                    : 'bg-warm-100 text-warm-600 border-warm-200 hover:bg-warm-200'
-                }`}
-              >
-                {label}
-              </button>
-            )
-          })}
-
-          <div className="flex-1" />
-
-          {canCreate && (
-            <button
-              onClick={() => setShowModal(true)}
-              className="h-10 px-4 rounded-xl bg-primary-600 text-white inline-flex items-center gap-2 text-sm font-semibold hover:bg-primary-700 transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
-            >
-              <Plus size={14} />
-              {t('rastreo.nuevaOrden')}
+        {/* Row 1: date range (no quick shortcuts) */}
+        <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5 w-fit">
+          <Calendar className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+          <input
+            type="date"
+            className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            value={fechaDesde}
+            onChange={e => { setFechaDesde(e.target.value); setPage(1) }}
+          />
+          <span className="text-warm-300 text-xs">→</span>
+          <input
+            type="date"
+            className="text-xs outline-none bg-transparent text-warm-700 w-[110px] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            value={fechaHasta}
+            onChange={e => { setFechaHasta(e.target.value); setPage(1) }}
+          />
+          {(fechaDesde || fechaHasta) && (
+            <button onClick={() => { setFechaDesde(''); setFechaHasta(''); setPage(1) }}>
+              <X size={11} className="text-warm-400 hover:text-warm-600" />
             </button>
           )}
         </div>
 
-        {/* Row 2: filters + search + view toggles */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Row 2: dropdown filters — 2-column grid on mobile so it compacts
+            into clean rows instead of overflowing; Nueva Orden sits in the
+            grid right next to the filters. Reverts to a plain flex row on sm+. */}
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 max-sm:[&_button]:min-w-0">
           <MultiSelect
             placeholder={t('rastreo.filter.orderStatus')}
             options={Object.entries(ESTADO_META).map(([k, m]) => ({ value: k, label: t(m.labelKey) }))}
             selected={estadosFilter}
             onChange={setFilter(setEstadosFilter)}
-            className="min-w-[138px] sm:min-w-[160px]"
+            className="w-full sm:w-auto sm:min-w-[160px]"
           />
 
           <MultiSelect
@@ -505,7 +450,7 @@ export default function Rastreo() {
             options={usuarios.map(u => ({ value: String(u.id), label: u.nombre_completo }))}
             selected={responsableFilter}
             onChange={setFilter(setResponsableFilter)}
-            className="min-w-[138px] sm:min-w-[160px]"
+            className="w-full sm:w-auto sm:min-w-[160px]"
           />
 
           <MultiSelect
@@ -514,9 +459,22 @@ export default function Rastreo() {
             options={Object.entries(ESTADO_CAJA_META).map(([k, m]) => ({ value: k, label: t(m.labelKey) }))}
             selected={estadoCajaFilter}
             onChange={setFilter(setEstadoCajaFilter)}
-            className="min-w-[138px] sm:min-w-[160px]"
+            className="w-full sm:w-auto sm:min-w-[160px]"
           />
 
+          {canCreate && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl bg-primary-600 text-white inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold hover:bg-primary-700 transition-all shadow-sm hover:shadow-md active:scale-[0.98] w-full sm:w-auto sm:ml-1"
+            >
+              <Plus size={14} />
+              <span className="truncate">{t('rastreo.nuevaOrden')}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Row 3: search + clear + view toggles */}
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-[11px] sm:px-3 h-9 sm:h-10 flex-1 min-w-[220px] sm:min-w-[260px] max-w-[300px] sm:max-w-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
             <Search className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-warm-400 shrink-0" />
             <input
