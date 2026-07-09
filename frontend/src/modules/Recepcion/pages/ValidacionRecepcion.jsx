@@ -1941,11 +1941,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 <button
                   type="button"
                   onClick={() => {
+                    if (isOffline) { toast.error('Cambiar ubicación requiere conexión a internet'); return }
                     setEditUbicacionModal({ from: g.ubicacion || null, eventId: null, scope: 'group' })
                     setEditUbicacionValue((g.ubicacion || '').toUpperCase())
                   }}
-                  className={`p-2 mr-1.5 rounded-lg transition-colors shrink-0 ${isActive ? 'text-primary-400 hover:bg-primary-100 hover:text-primary-700' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
-                  title={t('rec.val.ubicacion.edit')}
+                  disabled={isOffline}
+                  className={`p-2 mr-1.5 rounded-lg transition-colors shrink-0 disabled:opacity-35 disabled:cursor-not-allowed ${isActive ? 'text-primary-400 hover:bg-primary-100 hover:text-primary-700' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
+                  title={isOffline ? 'Requiere conexión a internet' : t('rec.val.ubicacion.edit')}
                 >
                   <Edit3 size={11} />
                 </button>
@@ -2170,10 +2172,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 {withTarimas && (
                   <button
                     type="button"
-                    onClick={() => { setTarimaTransferModal({ open: true, fromNum: ts.num, fromBases: ts.bases }); setTransferToTarima('') }}
-                    disabled={ts.empty}
-                    className={`p-2 mr-2 rounded-lg transition-colors shrink-0 ${isActive ? 'text-white/60 hover:bg-white/20 hover:text-white' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
-                    title={t('rec.tarimas.transfer.btn')}
+                    onClick={() => {
+                      if (isOffline) { toast.error('Transferir tarima requiere conexión a internet'); return }
+                      setTarimaTransferModal({ open: true, fromNum: ts.num, fromBases: ts.bases }); setTransferToTarima('')
+                    }}
+                    disabled={ts.empty || isOffline}
+                    className={`p-2 mr-2 rounded-lg transition-colors shrink-0 disabled:opacity-35 disabled:cursor-not-allowed ${isActive ? 'text-white/60 hover:bg-white/20 hover:text-white' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
+                    title={isOffline ? 'Requiere conexión a internet' : t('rec.tarimas.transfer.btn')}
                   >
                     <ArrowRightLeft size={11} />
                   </button>
@@ -2775,12 +2780,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                                                 <button
                                                   type="button"
                                                   onClick={() => {
+                                                    if (isOffline) { toast.error('Cambiar ubicación requiere conexión a internet'); return }
                                                     setEditUbicacionModal({ from: h.ubicacion || null, eventId: h.id, scope: 'event' })
                                                     setEditUbicacionValue((h.ubicacion || '').toUpperCase())
                                                   }}
-                                                  disabled={relocateUbicacionMut.isPending || updateScanLocationMut.isPending}
+                                                  disabled={isOffline || relocateUbicacionMut.isPending || updateScanLocationMut.isPending}
                                                   className="p-1 rounded-md text-primary-500 hover:bg-primary-50 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-                                                  title={t('rec.val.ubicacion.edit')}
+                                                  title={isOffline ? 'Requiere conexión a internet' : t('rec.val.ubicacion.edit')}
                                                 >
                                                   <Edit3 className="w-3 h-3" />
                                                 </button>
@@ -2894,12 +2900,13 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                                     <button
                                       type="button"
                                       onClick={() => {
+                                        if (isOffline) { toast.error('Cambiar ubicación requiere conexión a internet'); return }
                                         setEditUbicacionModal({ from: h.ubicacion || null, eventId: h.id, scope: 'event' })
                                         setEditUbicacionValue((h.ubicacion || '').toUpperCase())
                                       }}
-                                      disabled={relocateUbicacionMut.isPending || updateScanLocationMut.isPending}
+                                      disabled={isOffline || relocateUbicacionMut.isPending || updateScanLocationMut.isPending}
                                       className="p-1.5 rounded-lg text-primary-600 hover:bg-primary-50 disabled:opacity-30 disabled:cursor-not-allowed"
-                                      title={t('rec.val.ubicacion.edit')}
+                                      title={isOffline ? 'Requiere conexión a internet' : t('rec.val.ubicacion.edit')}
                                     >
                                       <Edit3 className="w-3.5 h-3.5" />
                                     </button>
@@ -3447,6 +3454,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             </button>
             <button
               onClick={async () => {
+                if (isOffline) { toast.error('Transferir tarima requiere conexión a internet'); return }
                 const toNum = parseInt(transferToTarima)
                 if (!toNum || toNum === tarimaTransferModal.fromNum) return
                 const nextMap = new Map(lockedTarimaMap)
@@ -3465,10 +3473,10 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   // handled by mutation toast
                 }
               }}
-              disabled={!transferToTarima || parseInt(transferToTarima) === tarimaTransferModal.fromNum || saveValidationConfigMut.isPending}
+              disabled={isOffline || !transferToTarima || parseInt(transferToTarima) === tarimaTransferModal.fromNum || saveValidationConfigMut.isPending}
               className="btn-primary disabled:opacity-50"
             >
-              {saveValidationConfigMut.isPending ? t('common.loading') : t('rec.tarimas.transfer.confirm')}
+              {isOffline ? 'Sin conexión' : saveValidationConfigMut.isPending ? t('common.loading') : t('rec.tarimas.transfer.confirm')}
             </button>
           </div>
         }
@@ -3513,6 +3521,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             <button onClick={() => { setEditUbicacionModal(null); setEditUbicacionValue('') }} className="btn-ghost">{t('common.cancel')}</button>
             <button
               onClick={() => {
+                if (isOffline) { toast.error('Cambiar ubicación requiere conexión a internet'); return }
                 const nextLocation = editUbicacionValue.trim().toUpperCase()
                 if (editUbicacionModal?.scope === 'event' && editUbicacionModal?.eventId) {
                   updateScanLocationMut.mutate({ eventId: editUbicacionModal.eventId, ubicacion: nextLocation })
@@ -3521,6 +3530,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 relocateUbicacionMut.mutate({ from: editUbicacionModal?.from || '', to: nextLocation })
               }}
               disabled={
+                isOffline ||
                 !editUbicacionValue.trim() ||
                 editUbicacionValue.trim().toUpperCase() === String(editUbicacionModal?.from || '').trim().toUpperCase() ||
                 relocateUbicacionMut.isPending ||
@@ -3528,7 +3538,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               }
               className="btn-primary"
             >
-              {(relocateUbicacionMut.isPending || updateScanLocationMut.isPending) ? t('admin.saving') : t('common.save')}
+              {isOffline ? 'Sin conexión' : (relocateUbicacionMut.isPending || updateScanLocationMut.isPending) ? t('admin.saving') : t('common.save')}
             </button>
           </div>
         }
@@ -3551,6 +3561,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               onKeyDown={e => {
                 const nextLocation = editUbicacionValue.trim().toUpperCase()
                 if (e.key === 'Enter' && nextLocation && nextLocation !== String(editUbicacionModal?.from || '').trim().toUpperCase()) {
+                  if (isOffline) { toast.error('Cambiar ubicación requiere conexión a internet'); return }
                   if (editUbicacionModal?.scope === 'event' && editUbicacionModal?.eventId) {
                     updateScanLocationMut.mutate({ eventId: editUbicacionModal.eventId, ubicacion: nextLocation })
                     return

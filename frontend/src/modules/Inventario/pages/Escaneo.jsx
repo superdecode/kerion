@@ -1725,7 +1725,7 @@ export default function Escaneo() {
         throw new Error('No hay registros para la tarima seleccionada')
       }
 
-      return saveInventorySession({
+      const payload = {
         scan_type: tab.scanType,
         ubicacion_id: saveVars.ubicacionId ?? ubicacionId ?? null,
         tarima_code: null,
@@ -1740,9 +1740,26 @@ export default function Escaneo() {
           scanned_at: item.ts ? new Date(item.ts).toISOString() : null,
           group_assignment: isClasificacion ? getItemGroup(item) : 'unificado',
         })),
+      }
+
+      // Offline: queue immediately instead of letting axios hang for its full
+      // timeout against a dead connection — that's what made this look "stuck
+      // saving" without ever actually persisting anything.
+      if (useOfflineStore.getState().status === 'offline') {
+        useOfflineStore.getState().enqueueModule({ type: 'inventario_session', payload })
+        return Promise.resolve({ queuedOffline: true })
+      }
+
+      return saveInventorySession(payload).catch((error) => {
+        // Went offline mid-request (no server response) — queue instead of losing the scans.
+        if (!error.response) {
+          useOfflineStore.getState().enqueueModule({ type: 'inventario_session', payload })
+          return { queuedOffline: true }
+        }
+        throw error
       })
     },
-    onSuccess: (_, vars) => {
+    onSuccess: (result, vars) => {
       playSound('complete')
       const saveVars = typeof vars === 'string' ? { group: vars } : (vars || {})
       const clasifGroup = saveVars.group || null
@@ -1762,16 +1779,14 @@ export default function Escaneo() {
       } else {
         closeTab(activeTabId)
       }
-      toast.success(t('inventario.escaneo.session_started'))
+      toast.success(result?.queuedOffline
+        ? 'Sin conexión — guardado localmente, se sincronizará al reconectar'
+        : t('inventario.escaneo.session_started'))
       setTimeout(() => scanRef.current?.focus(), 80)
     },
     onError: (error) => {
-      if (useOfflineStore.getState().status === 'offline') {
-        toast.error('Sin conexión — conecta a Internet para guardar la sesión')
-      } else {
-        const message = error?.response?.data?.error || error?.message || t('toast.error')
-        toast.error(message)
-      }
+      const message = error?.response?.data?.error || error?.message || t('toast.error')
+      toast.error(message)
     },
   })
 
