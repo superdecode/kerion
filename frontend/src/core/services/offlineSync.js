@@ -3,7 +3,7 @@ import { useOfflineStore } from '../stores/offlineStore'
 import { addScanEvent } from '../../modules/Surtido/services/surtidoService'
 import { saveInventorySession } from '../../modules/Inventario/services/inventarioService'
 import { addOrderScan, addFolioScan } from '../../modules/Despacho/services/despachoService'
-import { scanCode } from '../../modules/Recepcion/services/recepcionService'
+import { scanCode, relocateScanEvents } from '../../modules/Recepcion/services/recepcionService'
 
 let syncInProgress = false
 
@@ -119,6 +119,13 @@ export async function syncModuleQueue() {
         } else if (item.type === 'recepcion_scan') {
           const { orderId, ...payload } = item.payload
           await scanCode(orderId, payload)
+        } else if (item.type === 'recepcion_relocate_ubicacion') {
+          // Any scans queued after this action already carry the corrected
+          // ubicacion locally (see relocateQueuedRecepcionScans) — this only
+          // needs to catch records that were already persisted server-side
+          // before the device went offline.
+          const { orderId, from, to } = item.payload
+          await relocateScanEvents(orderId, from, to)
         }
         store.dequeueModule(item.id)
         synced++

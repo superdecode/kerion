@@ -502,7 +502,12 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       const ubicacion = scan.ubicacion || fallbackUbicacion || null
       if (scan.id && persistedIds.has(String(scan.id))) return
       if (persistedCodeLocationKeys.has(`${normalizedCode}:${String(ubicacion || '')}`)) return
-      const key = `${scan.id || ''}:${normalizedCode}:${String(ubicacion || '')}:${scan.scannedAt || ''}`
+      // Prefer id alone when present: an offline scan gets the same offlineId in
+      // both `history` (set synchronously) and the moduleQueue entry (stamped a
+      // moment later inside enqueueModule), so their scannedAt timestamps can
+      // differ by a few ms — including scannedAt in the key broke the match and
+      // showed every offline scan twice until reconnect resolved it via server data.
+      const key = scan.id ? `id:${scan.id}` : `${normalizedCode}:${String(ubicacion || '')}:${scan.scannedAt || ''}`
       if (localSeen.has(key)) return
       localSeen.add(key)
       entries.push({
@@ -1386,15 +1391,36 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
   })
 
   const relocateUbicacionMut = useMutation({
-    mutationFn: ({ from, to }) => relocateScanEvents(id, from, to),
+    mutationFn: ({ from, to }) => {
+      if (useOfflineStore.getState().status === 'offline') {
+        // Fix not-yet-synced scans in the local queue so they sync with the
+        // corrected location, patch the current session's local history so the
+        // count/grouping reflects it immediately, and queue the same relocation
+        // for the server so it also catches anything already persisted before
+        // the device went offline — replayed on reconnect in FIFO order, after
+        // the (already-corrected) queued scans.
+        const queuedTouched = useOfflineStore.getState().relocateQueuedRecepcionScans(id, from, to)
+        setHistory((prev) => prev.map((item) => item.ubicacion === from ? { ...item, ubicacion: to.toUpperCase() } : item))
+        useOfflineStore.getState().enqueueModule({
+          type: 'recepcion_relocate_ubicacion',
+          payload: { orderId: id, from, to },
+        })
+        return Promise.resolve({ offline: true, updated: queuedTouched })
+      }
+      return relocateScanEvents(id, from, to)
+    },
     onSuccess: (data, { to }) => {
       if (selectedUbicacion === editUbicacionModal?.from) {
         setSelectedUbicacion(to.toUpperCase())
       }
       setEditUbicacionModal(null)
       setEditUbicacionValue('')
-      qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
-      toast.success(`${t('rec.val.ubicacion.edit')} (${data.updated} escaneos)`)
+      if (data.offline) {
+        toast.success('Cambio guardado sin conexión — se sincronizará al reconectar')
+      } else {
+        qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
+        toast.success(`${t('rec.val.ubicacion.edit')} (${data.updated} escaneos)`)
+      }
     },
     onError: () => toast.error(t('toast.error')),
   })
@@ -1941,13 +1967,11 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                 <button
                   type="button"
                   onClick={() => {
-                    if (isOffline) { toast.error('Cambiar ubicación requiere conexión a internet'); return }
                     setEditUbicacionModal({ from: g.ubicacion || null, eventId: null, scope: 'group' })
                     setEditUbicacionValue((g.ubicacion || '').toUpperCase())
                   }}
-                  disabled={isOffline}
-                  className={`p-2 mr-1.5 rounded-lg transition-colors shrink-0 disabled:opacity-35 disabled:cursor-not-allowed ${isActive ? 'text-primary-400 hover:bg-primary-100 hover:text-primary-700' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
-                  title={isOffline ? 'Requiere conexión a internet' : t('rec.val.ubicacion.edit')}
+                  className={`p-2 mr-1.5 rounded-lg transition-colors shrink-0 ${isActive ? 'text-primary-400 hover:bg-primary-100 hover:text-primary-700' : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'}`}
+                  title={isOffline ? t('rec.val.ubicacion.edit') + ' (sin conexión — se sincronizará al reconectar)' : t('rec.val.ubicacion.edit')}
                 >
                   <Edit3 size={11} />
                 </button>
@@ -3521,16 +3545,16 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             <button onClick={() => { setEditUbicacionModal(null); setEditUbicacionValue('') }} className="btn-ghost">{t('common.cancel')}</button>
             <button
               onClick={() => {
-                if (isOffline) { toast.error('Cambiar ubicación requiere conexión a internet'); return }
                 const nextLocation = editUbicacionValue.trim().toUpperCase()
                 if (editUbicacionModal?.scope === 'event' && editUbicacionModal?.eventId) {
+                  if (isOffline) { toast.error('Editar un escaneo puntual requiere conexión a internet'); return }
                   updateScanLocationMut.mutate({ eventId: editUbicacionModal.eventId, ubicacion: nextLocation })
                   return
                 }
                 relocateUbicacionMut.mutate({ from: editUbicacionModal?.from || '', to: nextLocation })
               }}
               disabled={
-                isOffline ||
+                (isOffline && editUbicacionModal?.scope === 'event') ||
                 !editUbicacionValue.trim() ||
                 editUbicacionValue.trim().toUpperCase() === String(editUbicacionModal?.from || '').trim().toUpperCase() ||
                 relocateUbicacionMut.isPending ||
@@ -3538,7 +3562,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               }
               className="btn-primary"
             >
-              {isOffline ? 'Sin conexión' : (relocateUbicacionMut.isPending || updateScanLocationMut.isPending) ? t('admin.saving') : t('common.save')}
+              {isOffline && editUbicacionModal?.scope === 'event' ? 'Sin conexión' : (relocateUbicacionMut.isPending || updateScanLocationMut.isPending) ? t('admin.saving') : t('common.save')}
             </button>
           </div>
         }
@@ -3561,8 +3585,8 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               onKeyDown={e => {
                 const nextLocation = editUbicacionValue.trim().toUpperCase()
                 if (e.key === 'Enter' && nextLocation && nextLocation !== String(editUbicacionModal?.from || '').trim().toUpperCase()) {
-                  if (isOffline) { toast.error('Cambiar ubicación requiere conexión a internet'); return }
                   if (editUbicacionModal?.scope === 'event' && editUbicacionModal?.eventId) {
+                    if (isOffline) { toast.error('Editar un escaneo puntual requiere conexión a internet'); return }
                     updateScanLocationMut.mutate({ eventId: editUbicacionModal.eventId, ubicacion: nextLocation })
                     return
                   }

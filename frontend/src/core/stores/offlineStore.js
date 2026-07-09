@@ -78,6 +78,30 @@ export const useOfflineStore = create(
 
       dequeueModule: (id) =>
         set((s) => ({ moduleQueue: s.moduleQueue.filter((i) => i.id !== id) })),
+
+      /**
+       * Rewrites the ubicacion on any not-yet-synced recepcion_scan queue items
+       * for this order that still carry `from`, so they sync with the corrected
+       * location instead of the one that was active when they were scanned.
+       * Returns how many queued items were touched.
+       */
+      relocateQueuedRecepcionScans: (orderId, from, to) => {
+        let touched = 0
+        set((s) => ({
+          moduleQueue: s.moduleQueue.map((item) => {
+            if (
+              item.type === 'recepcion_scan' &&
+              String(item.payload?.orderId) === String(orderId) &&
+              String(item.payload?.ubicacion || '') === String(from || '')
+            ) {
+              touched += 1
+              return { ...item, payload: { ...item.payload, ubicacion: to } }
+            }
+            return item
+          }),
+        }))
+        return touched
+      },
     }),
     {
       name: 'wms-offline-queue',
