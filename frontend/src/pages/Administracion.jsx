@@ -551,38 +551,92 @@ function UsersTab({ canEdit, canDel }) {
 
   return (
     <div>
-      {/* Top bar */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-md">
+      {/* Top bar — wraps onto multiple rows on mobile instead of overflowing */}
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-5">
+        <div className="relative w-full sm:flex-1 sm:max-w-md order-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('admin.searchUsers')}
             className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-warm-200 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100" />
         </div>
         <select value={estadoFilter} onChange={e => setEstadoFilter(e.target.value)}
-          className="select-field !w-auto">
+          className="select-field !w-auto order-2 flex-1 sm:flex-none">
           <option value="">{t('admin.allStatuses')}</option>
           <option value="ACTIVO">{t('common.active')}</option>
           <option value="INACTIVO">{t('common.inactive')}</option>
         </select>
         <select value={rolFilter} onChange={e => setRolFilter(e.target.value)}
-          className="select-field !w-auto">
+          className="select-field !w-auto order-3 flex-1 sm:flex-none">
           <option value="">{t('admin.allRoles')}</option>
           {roles.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
         </select>
-        <span className="badge bg-warm-100 text-warm-500">{filtered.length} {t('admin.users')}</span>
+        <span className="badge bg-warm-100 text-warm-500 order-4 shrink-0">{filtered.length} {t('admin.users')}</span>
         {canEdit && (
-          <button onClick={() => setShowCreate(true)} className="btn-primary inline-flex items-center gap-2 ml-auto">
+          <button onClick={() => setShowCreate(true)} className="btn-primary inline-flex items-center gap-2 order-5 ml-auto shrink-0">
             <Plus className="w-4 h-4" /> {t('admin.newUser')}
           </button>
         )}
       </div>
 
-      {/* Users table */}
+      {/* Users list */}
       {isLoading ? <LoadingSpinner text={t('admin.loadingUsers')} /> : usersError ? (
         <div className="card p-6 text-center text-warm-500">{t('admin.errorUsers')}</div>
       ) : (
         <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile: compact 2-row card per user — a wide table forced into a
+              narrow viewport was overflowing/squishing instead of scrolling. */}
+          <div className="md:hidden divide-y divide-warm-100">
+            {filtered.map(u => {
+              const initials = u.nombre_completo?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '?'
+              const role = roles.find(r => r.id === u.rol_id)
+              return (
+                <div key={u.id} className="p-3 flex flex-col gap-2">
+                  {/* Row 1: avatar + name + email */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-400 to-primary-600 text-white flex items-center justify-center text-[11px] font-bold shadow-sm shrink-0">
+                      {initials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-warm-800 text-sm truncate">{u.nombre_completo}</p>
+                      <p className="text-xs text-warm-500 truncate">{u.email}</p>
+                    </div>
+                  </div>
+                  {/* Row 2: código + rol + estado badges, actions */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                      <span className="font-mono text-[10px] text-warm-400 shrink-0">{u.codigo}</span>
+                      <span className="badge bg-primary-100 text-primary-700 text-[10px]">{role?.nombre || u.rol_nombre || t('admin.sinRol')}</span>
+                      <span className={`badge text-[10px] ${isActive(u) ? 'bg-success-100 text-success-700' : 'bg-danger-100 text-danger-700'}`}>
+                        {isActive(u) ? t('common.active') : t('common.inactive')}
+                      </span>
+                    </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <button onClick={() => setEditUser(u)} className="p-1.5 rounded-lg hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-all" title={t('common.edit')}>
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => toggleMutation.mutate(u)}
+                          className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400 hover:text-warm-600 transition-all" title={isActive(u) ? t('admin.deactivate') : t('admin.activate')}>
+                          {isActive(u) ? <ToggleRight className="w-3.5 h-3.5 text-success-500" /> : <ToggleLeft className="w-3.5 h-3.5 text-warm-400" />}
+                        </button>
+                        <button onClick={() => setResetUser(u)} className="p-1.5 rounded-lg hover:bg-warning-50 text-warm-400 hover:text-warning-600 transition-all" title={t('admin.resetPassword')}>
+                          <Key className="w-3.5 h-3.5" />
+                        </button>
+                        {canDel && !u.is_default && (
+                          <button onClick={() => setDeleteTarget(u)}
+                            className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all" title={t('common.delete')}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop: full table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gradient-to-r from-warm-50 to-purple-50 border-b border-warm-200">
