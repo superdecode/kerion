@@ -840,7 +840,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
         )}
 
         {results && results.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[58vh] overflow-y-auto scrollbar-thin pr-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {results.map(r => {
               const tracking = trackingMap.get(r.outboundOrderNo)
               const validatedBoxCount = getValidatedBoxCount(r.outboundOrderNo)

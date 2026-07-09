@@ -999,12 +999,16 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
               </div>
 
               <div className="flex min-w-0 flex-1 gap-2">
-                <div className="relative min-w-0 flex-1 rounded-full border border-warm-200 bg-white shadow-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
-                  <Search size={15} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-warm-400" />
+                {/* Flex siblings (not absolutely-positioned overlays) so the input's
+                    available width always shrinks around the buttons instead of a
+                    fixed pr-* budget that overlapped/crushed the text area on narrow
+                    (mobile) viewports. */}
+                <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-warm-200 bg-white pl-4 pr-1.5 shadow-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
+                  <Search size={15} className="shrink-0 text-warm-400" />
                   <input
                     ref={inputRef}
                     autoFocus
-                    className="block w-full rounded-full border-0 bg-transparent py-3 pl-12 pr-44 text-sm text-warm-700 outline-none placeholder-warm-300"
+                    className="min-w-0 flex-1 border-0 bg-transparent py-3 pl-2 text-sm text-warm-700 outline-none placeholder-warm-300"
                     placeholder={t('rastreo.searchModal.placeholder')}
                     value={query}
                     onChange={e => setQuery(e.target.value)}
@@ -1020,7 +1024,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                         setOpenSections({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true })
                         inputRef.current?.focus()
                       }}
-                      className="absolute right-[7.25rem] top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-warm-400 transition-colors hover:bg-warm-100 hover:text-warm-600"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-warm-400 transition-colors hover:bg-warm-100 hover:text-warm-600"
                       aria-label={t('common.clear')}
                     >
                       <X size={14} />
@@ -1029,10 +1033,10 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                   <button
                     onClick={handleSearch}
                     disabled={loading || !query.trim()}
-                    className="absolute right-1 top-1/2 inline-flex h-10 -translate-y-1/2 items-center gap-1.5 rounded-full bg-primary-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary-600 px-3 sm:px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                    {t('common.search')}
+                    <span className="hidden sm:inline">{t('common.search')}</span>
                   </button>
                 </div>
               </div>
