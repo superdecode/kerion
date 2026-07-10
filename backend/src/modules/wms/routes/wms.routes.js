@@ -867,10 +867,15 @@ router.get('/scan-sessions',
       if (outbound_order_no) {
         const searchTerm = `%${outbound_order_no}%`
         const normalizedSearch = normalizeScanCode(outbound_order_no)
+        const compactSearch = compactCanonicalCode(normalizedSearch || outbound_order_no)
         const searchConditions = [`s.outbound_order_no ILIKE $${p++}`]
         params.push(searchTerm)
 
         if (normalizedSearch) {
+          if (compactSearch) {
+            searchConditions.push(`REGEXP_REPLACE(UPPER(COALESCE(s.outbound_order_no, '')), '[^A-Z0-9]', '', 'g') = $${p++}`)
+            params.push(compactSearch)
+          }
           searchConditions.push(`EXISTS (
             SELECT 1
             FROM pick_events e
@@ -880,10 +885,14 @@ router.get('/scan-sessions',
                 e.scanned_code ILIKE $${p}
                 OR e.normalized_code ILIKE $${p}
                 OR e.normalized_code = $${p + 1}
+                OR REGEXP_REPLACE(
+                  UPPER(COALESCE(NULLIF(e.matched_box_type, ''), NULLIF(e.normalized_code, ''), NULLIF(e.scanned_code, ''))),
+                  '[^A-Z0-9]', '', 'g'
+                ) = $${p + 2}
               )
           )`)
-          params.push(searchTerm, normalizedSearch)
-          p += 2
+          params.push(searchTerm, normalizedSearch, compactSearch || normalizedSearch)
+          p += 3
         }
 
         conditions.push(`(${searchConditions.join(' OR ')})`)

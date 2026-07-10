@@ -132,6 +132,10 @@ function normalizeComparable(value) {
   return String(value ?? '').trim().toLowerCase()
 }
 
+function compactSearchValue(value) {
+  return normalizeCodeFast(value).replace(/[^A-Z0-9]/g, '').toLowerCase()
+}
+
 function compareValues(a, b) {
   const aNum = Number(a)
   const bNum = Number(b)
@@ -1250,6 +1254,7 @@ export default function Ordenes() {
   ), [allWmsRecords])
 
   const q = search.trim().toLowerCase()
+  const qCompact = compactSearchValue(search)
 
   function matchesDateFilter(dateStr, requireDate = false) {
     if (!dateStr) return !(requireDate && (dateFrom || dateTo))
@@ -1334,11 +1339,12 @@ export default function Ordenes() {
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(r.outboundOrderNo)) return false
     if (q) {
       const haystack = [r.outboundOrderNo, r.customerCode, r.thirdOrderNo, r.receiverName, r.logisticsChannel].join(' ').toLowerCase()
-      if (!haystack.includes(q)) return false
+      const compactHaystack = [r.outboundOrderNo, r.thirdOrderNo].map(compactSearchValue).join(' ')
+      if (!haystack.includes(q) && (!qCompact || !compactHaystack.includes(qCompact))) return false
     }
     return true
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [combinedRecords, trackingMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo, dateMode])
+  }), [combinedRecords, trackingMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, qCompact, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo, dateMode])
 
   const filteredValidacion = useMemo(() => trackingList.filter(tr => {
     if (filterStatus && tr.status !== filterStatus) return false
@@ -1359,11 +1365,12 @@ export default function Ordenes() {
     if (bulkSearchCodes.length > 0 && !bulkSearchCodes.includes(tr.outbound_order_no)) return false
     if (q) {
       const haystack = [tr.outbound_order_no, getSurtidorName(tr), wms?.customerCode, wms?.thirdOrderNo, wms?.receiverName].filter(Boolean).join(' ').toLowerCase()
-      if (!haystack.includes(q)) return false
+      const compactHaystack = [tr.outbound_order_no, wms?.thirdOrderNo].map(compactSearchValue).join(' ')
+      if (!haystack.includes(q) && (!qCompact || !compactHaystack.includes(qCompact))) return false
     }
     return true
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [trackingList, wmsMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo, dateMode])
+  }), [trackingList, wmsMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, qCompact, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo, dateMode])
 
   const activeRecords = filteredWms
   const total       = activeRecords.length
