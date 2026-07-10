@@ -7,7 +7,12 @@ import { X, AlertTriangle, Camera } from 'lucide-react'
 // the ~150kb zxing decoder out of the main bundle entirely.
 let zxingPromise = null
 function loadZXing() {
-  if (!zxingPromise) zxingPromise = import('@zxing/browser')
+  if (!zxingPromise) {
+    zxingPromise = Promise.all([
+      import('@zxing/browser'),
+      import('@zxing/library'),
+    ]).then(([browser, library]) => ({ ...browser, ...library }))
+  }
   return zxingPromise
 }
 
@@ -42,12 +47,50 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
           err.code = 'UNSUPPORTED'
           throw err
         }
-        const { BrowserMultiFormatReader } = await loadZXing()
+        const {
+          BrowserMultiFormatReader,
+          BarcodeFormat,
+          DecodeHintType,
+        } = await loadZXing()
         if (cancelled) return
-        const reader = new BrowserMultiFormatReader()
+
+        const hints = new Map()
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.QR_CODE,
+          BarcodeFormat.DATA_MATRIX,
+          BarcodeFormat.AZTEC,
+          BarcodeFormat.PDF_417,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.CODE_39,
+          BarcodeFormat.CODE_93,
+          BarcodeFormat.CODABAR,
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.ITF,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.RSS_14,
+          BarcodeFormat.RSS_EXPANDED,
+        ])
+        hints.set(DecodeHintType.TRY_HARDER, true)
+        hints.set(DecodeHintType.ASSUME_GS1, true)
+
+        const reader = new BrowserMultiFormatReader(hints, {
+          delayBetweenScanAttempts: 80,
+          delayBetweenScanSuccess: 500,
+          tryPlayVideoTimeout: 8000,
+        })
 
         const controls = await reader.decodeFromConstraints(
-          { video: { facingMode: { ideal: 'environment' } }, audio: false },
+          {
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              aspectRatio: { ideal: 1.7777777778 },
+            },
+            audio: false,
+          },
           videoRef.current,
           (result) => {
             if (result && !cancelled) handleDetected(result.getText())
@@ -58,6 +101,20 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
         )
         if (cancelled) { controls.stop(); return }
         controlsRef.current = controls
+        const track = videoRef.current?.srcObject?.getVideoTracks?.()?.[0]
+        if (track?.applyConstraints) {
+          const capabilities = track.getCapabilities?.() || {}
+          const advanced = []
+          if (capabilities.focusMode?.includes?.('continuous')) {
+            advanced.push({ focusMode: 'continuous' })
+          }
+          if (typeof capabilities.zoom?.max === 'number' && capabilities.zoom.max >= 1.5) {
+            advanced.push({ zoom: Math.min(2, capabilities.zoom.max) })
+          }
+          if (advanced.length > 0) {
+            track.applyConstraints({ advanced }).catch(() => {})
+          }
+        }
         setStatus('scanning')
       } catch (err) {
         if (cancelled) return
@@ -129,15 +186,16 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
 
         {status === 'scanning' && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="relative w-64 h-64 max-w-[70vw] max-h-[70vw]">
-              <div className="absolute inset-0 rounded-2xl border border-white/20" />
+            <div className="relative w-[78vw] max-w-[22rem] h-[11rem] sm:w-80 sm:h-56">
+              <div className="absolute inset-0 rounded-[1.75rem] border border-white/20" />
+              <div className="absolute inset-x-[19%] inset-y-[14%] rounded-[1.4rem] border border-dashed border-white/15" />
               {CORNER_POSITIONS.map((cls) => (
                 <div key={cls} className={`absolute w-9 h-9 border-primary-400 ${cls}`} />
               ))}
               <motion.div
-                className="absolute left-1 right-1 h-0.5 rounded-full bg-primary-400"
+                className="absolute left-2 right-2 h-0.5 rounded-full bg-primary-400"
                 style={{ boxShadow: '0 0 12px 2px rgba(46,87,254,0.75)' }}
-                animate={{ top: ['4%', '94%', '4%'] }}
+                animate={{ top: ['10%', '88%', '10%'] }}
                 transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
               />
             </div>
