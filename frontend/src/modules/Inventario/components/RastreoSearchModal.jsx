@@ -740,38 +740,46 @@ function RecepcionSection({ records, open, onToggle }) {
                 <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-violet-50/70 border-b border-violet-100">
                     <tr>
-                      {['Cód. caja', 'SKU', 'Folio entrada', t('common.status'), 'Validador', 'Validación'].map(h => (
+                      {['Cód. caja', 'SKU / Tipo', 'Folio entrada', 'Estado / Registro', 'Usuario', 'Fecha'].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-violet-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-violet-50">
                     {records.map((r, i) => (
-                      <tr key={r.id || i} className="hover:bg-primary-100 transition-colors">
+                      <tr key={`${r.recepcion_tipo_registro || 'linea'}-${r.id || i}`} className="hover:bg-primary-100 transition-colors">
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.custom_box_barcode || '—'} className="font-mono text-warm-700" />
                         </td>
-                        <td className="px-3 py-2.5 text-warm-600">{r.sku || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-600">
+                          {r.recepcion_tipo_registro === 'otros'
+                            ? (r.otros_tipo || '—')
+                            : (r.sku || r.box_type || '—')}
+                        </td>
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.folio || r.inbound_order_no || '—'} className="font-mono font-semibold text-primary-700" />
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
-                            r.estado_validacion === 'validada' ? 'bg-success-100 text-success-700'
-                              : r.estado_validacion === 'faltante' ? 'bg-danger-100 text-danger-600'
-                                : 'bg-warm-100 text-warm-600'
-                          }`}>
-                            {t(INBOUND_ESTADO_LABELS[r.estado_validacion] || 'common.status')}
-                          </span>
+                          {r.recepcion_tipo_registro === 'otros' ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-violet-100 text-violet-700">
+                              {t('rec.otros.tab')}
+                            </span>
+                          ) : (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
+                              r.estado_validacion === 'validada' ? 'bg-success-100 text-success-700'
+                                : r.estado_validacion === 'faltante' ? 'bg-danger-100 text-danger-600'
+                                  : 'bg-warm-100 text-warm-600'
+                            }`}>
+                              {t(INBOUND_ESTADO_LABELS[r.estado_validacion] || 'common.status')}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2.5 text-warm-600">
-                          {r.estado_validacion === 'validada'
-                            ? (r.validated_by_nombre || '—')
-                            : '—'}
+                          {r.validated_by_nombre || '—'}
                         </td>
                         <td className="px-3 py-2.5 text-warm-500 whitespace-nowrap">
-                          {r.estado_validacion === 'validada' && r.validated_at
-                            ? fmtDateTime(r.validated_at)
+                          {r.validated_at || r.created_at
+                            ? fmtDateTime(r.validated_at || r.created_at)
                             : '—'}
                         </td>
                       </tr>
@@ -884,7 +892,12 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
         surtido_validacion: dedupeRecords(dbData.surtido_validacion, r => [compactCode(r.scanned_code || r.normalized_code || r.matched_box_type), normalizeCodeFast(r.outbound_order_no), r.scan_result || ''].join('|')),
         surtido_validacion_estado: dedupeRecords(dbData.surtido_validacion_estado, r => [compactCode(r.scanned_code || r.normalized_code || r.matched_box_type), normalizeCodeFast(r.outbound_order_no), r.box_status || r.scan_result || ''].join('|')),
         rastreo: dedupeRecords(dbData.rastreo, r => [compactCode(r.box_code || r.box_code_normalized || r.box_type), normalizeCodeFast(r.folio), normalizeCodeFast(r.outbound_order_no)].join('|')),
-        recepcion: dedupeRecords(dbData.recepcion, r => [compactCode(r.custom_box_barcode || r.box_type), normalizeCodeFast(r.folio || r.inbound_order_no), normalizeCodeFast(r.sku)].join('|')),
+        recepcion: dedupeRecords(dbData.recepcion, r => [
+          r.recepcion_tipo_registro || 'linea',
+          compactCode(r.custom_box_barcode || r.box_type || r.otros_tipo),
+          normalizeCodeFast(r.folio || r.inbound_order_no),
+          normalizeCodeFast(r.sku || r.otros_tipo),
+        ].join('|')),
         anormalidades: dedupeRecords(dbData.anormalidades, r => [normalizeCodeFast(r.folio), compactCode(r.codigo || r.sku || r.contenedor_orden), normalizeCodeFast(r.estado)].join('|')),
         despacho: dedupeRecords(dbData.despacho, r => [compactCode(r.codigo_caja), normalizeCodeFast(r.folio_numero), normalizeCodeFast(r.outbound_order_no || r.matched_order_no)].join('|')),
         despacho_ordenes: dedupeRecords(dbData.despacho_ordenes, r => [normalizeCodeFast(r.outbound_order_no), normalizeCodeFast(r.folio_numero)].join('|')),
