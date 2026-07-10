@@ -1748,6 +1748,7 @@ export default function SurtidoRegistros() {
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.expected')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.validated')}</span></th>
                     <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.status')}</span></th>
+                    <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.col.ubicacion')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
                   </tr>
                 </thead>
@@ -1762,6 +1763,7 @@ export default function SurtidoRegistros() {
                       <td className="table-cell text-right"><div className="h-3 w-8 rounded bg-warm-100 animate-pulse ml-auto" /></td>
                       <td className="table-cell text-right"><div className="h-3 w-8 rounded bg-warm-100 animate-pulse ml-auto" /></td>
                       <td className="table-cell"><div className="h-5 w-20 rounded-full bg-warm-100 animate-pulse" /></td>
+                      <td className="table-cell hidden lg:table-cell"><div className="h-3 w-16 rounded bg-warm-100 animate-pulse" /></td>
                       <td className="table-cell text-right"><div className="h-3 w-12 rounded bg-warm-100 animate-pulse ml-auto" /></td>
                     </tr>
                   ))}
@@ -1833,6 +1835,7 @@ export default function SurtidoRegistros() {
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.expected')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.validated')}</span></th>
                     <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.status')}</span></th>
+                    <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.col.ubicacion')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
                   </tr>
                 </thead>
@@ -1908,6 +1911,7 @@ export default function SurtidoRegistros() {
                         <td className="table-cell">
                           <StatusPill className={meta.cls}>{resolveStatusLabel(t, meta.labelKey)}</StatusPill>
                         </td>
+                        <td className="table-cell hidden lg:table-cell font-mono text-xs text-accent-700 truncate">{r.ubicacion_nota || '—'}</td>
                         <td className="table-cell text-right">
                           <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                             <button

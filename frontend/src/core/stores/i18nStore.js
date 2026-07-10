@@ -1917,6 +1917,7 @@ const translations = {
     'surtido.registros.validated':          '已复核',
     'surtido.registros.rejected':           '已拒绝',
     'surtido.registros.status':             '状态',
+    'surtido.registros.col.ubicacion':      '库位',
 
     // ── Permissions ────────────────────────────────────────────────────────
     'perm.group.wms':            'WMS',
@@ -5774,6 +5775,7 @@ const translations = {
     'surtido.registros.validated':          'Validados',
     'surtido.registros.rejected':           'Rechazados',
     'surtido.registros.status':             'Estado',
+    'surtido.registros.col.ubicacion':      'Ubicación',
     // ── Permissions ────────────────────────────────────────────────────────
     'perm.group.wms':            'WMS',
     'perm.sub.wms.hub':          'Conexión',
