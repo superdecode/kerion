@@ -11,7 +11,14 @@ function loadZXing() {
     zxingPromise = Promise.all([
       import('@zxing/browser'),
       import('@zxing/library'),
-    ]).then(([browser, library]) => ({ ...browser, ...library }))
+    ]).then(([browser, library]) => {
+      // Both packages export classes named BrowserMultiFormatReader/BrowserCodeReader/etc.
+      // @zxing/library's versions are bitmap-only (no getUserMedia/video streaming methods
+      // like decodeFromConstraints) — @zxing/browser's versions are the real camera-capable
+      // ones. library must spread first so browser's matching keys win the merge, otherwise
+      // decodeFromConstraints silently doesn't exist and the scanner never starts.
+      return { ...library, ...browser }
+    })
   }
   return zxingPromise
 }
@@ -281,11 +288,11 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
               <div className="absolute inset-x-[12%] top-1/2 h-px -translate-y-1/2 bg-white/10" />
               <div className="absolute left-1/2 inset-y-[12%] w-px -translate-x-1/2 bg-white/10" />
               <motion.div
-                className="absolute left-[10%] right-[10%] h-[2px] rounded-full bg-primary-400/90"
-                style={{ boxShadow: '0 0 12px 2px rgba(46,87,254,0.55)' }}
-                animate={{ top: ['14%', '86%', '14%'], opacity: [0.65, 1, 0.65] }}
-                transition={{ duration: 1.7, repeat: Infinity, ease: 'easeInOut' }}
-                initial={{ top: '14%' }}
+                className="absolute left-[8%] right-[8%] h-[2.5px] rounded-full bg-primary-400/90"
+                style={{ boxShadow: '0 0 14px 3px rgba(46,87,254,0.6)' }}
+                initial={{ top: '9%', opacity: 0.7 }}
+                animate={{ top: '91%', opacity: 1 }}
+                transition={{ duration: 1.4, repeat: Infinity, repeatType: 'mirror', ease: 'easeInOut' }}
               />
             </div>
           </div>
