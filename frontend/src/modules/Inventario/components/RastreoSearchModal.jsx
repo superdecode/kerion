@@ -1091,7 +1091,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                     </button>
                   )}
                   <button
-                    onClick={handleSearch}
+                    onClick={() => handleSearch()}
                     disabled={loading || !query.trim()}
                     className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary-600 px-3 sm:px-5 text-sm font-semibold text-white transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >

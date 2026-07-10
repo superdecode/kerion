@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Boxes, Clock, MapPin, Package2, ScanBarcode, Search } from 'lucide-react'
+import { AlertTriangle, Boxes, Clock, MapPin, Package2, ScanBarcode, ScanLine, Search } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
+import BarcodeScannerModal from '../../../core/components/common/BarcodeScannerModal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getInventoryCodeSearch, getBoxStock } from '../services/inventarioService'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
@@ -23,6 +24,7 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
   const [isSearching, setIsSearching] = useState(false)
   const [searchError, setSearchError] = useState(null)
   const [results, setResults] = useState({ stock: [], matches: [], sessions: [] })
+  const [scannerOpen, setScannerOpen] = useState(false)
 
   useEffect(() => {
     if (!isOpen) return
@@ -74,15 +76,27 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
 
   const hasResults = results.stock.length > 0 || results.matches.length > 0
 
+  function handleScanResult(text) {
+    setScannerOpen(false)
+    setQuery(text)
+    doSearch(text)
+  }
+
   return (
+    <>
     <Modal isOpen={isOpen} onClose={onClose} title="Búsqueda rápida de código" icon={Search} size="xl">
       <div className="space-y-4">
         <div className="flex gap-2">
           <div className="flex h-12 flex-1 items-center gap-2 rounded-2xl border-2 border-warm-200 bg-warm-50 px-4 transition-all focus-within:rounded-2xl focus-within:border-primary-400 focus-within:ring-4 focus-within:ring-primary-100 focus-within:shadow-sm">
-            <span className="inline-flex items-center gap-1.5 sm:hidden shrink-0 rounded-xl bg-white/90 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-primary-600 shadow-sm">
-              <ScanBarcode className="h-3.5 w-3.5" />
-              Escáner
-            </span>
+            <button
+              type="button"
+              onClick={() => setScannerOpen(true)}
+              className="sm:hidden shrink-0 -ml-0.5 p-0.5 text-primary-600 hover:text-primary-700 transition-colors"
+              aria-label="Escanear código con cámara"
+              title="Escanear código"
+            >
+              <ScanLine size={18} />
+            </button>
             <ScanBarcode className="hidden h-4 w-4 shrink-0 text-warm-300 sm:block" />
             <input
               ref={inputRef}
@@ -252,5 +266,11 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
         )}
       </div>
     </Modal>
+    <BarcodeScannerModal
+      isOpen={scannerOpen}
+      onClose={() => setScannerOpen(false)}
+      onScan={handleScanResult}
+    />
+    </>
   )
 }
