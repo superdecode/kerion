@@ -739,7 +739,7 @@ router.get('/buscar',
         const inboundT = () => req.tQuery(
           `WITH recepcion_matches AS (
              SELECT
-               il.id,
+               il.id::text AS id,
                'linea'::text AS recepcion_tipo_registro,
                il.order_id,
                il.custom_box_barcode,
@@ -766,7 +766,7 @@ router.get('/buscar',
              UNION ALL
 
              SELECT
-               n.id,
+               n.id::text AS id,
                'otros'::text AS recepcion_tipo_registro,
                n.order_id,
                n.codigo AS custom_box_barcode,

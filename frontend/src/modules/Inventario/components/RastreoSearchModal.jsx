@@ -802,6 +802,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
   const [searchMode, setSearchMode] = useState('exact')
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState(null)
+  const [searchError, setSearchError] = useState(null)
   const [gsInv, setGsInv] = useState(null)
   const [gsSurtido, setGsSurtido] = useState(null)
   const [openSections, setOpenSections] = useState({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true })
@@ -837,6 +838,7 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
     if (!q) return
     setLoading(true)
     setResults(null)
+    setSearchError(null)
     setGsInv(null)
     setGsSurtido(null)
 
@@ -961,7 +963,8 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
         anormLen ? 'anormalidades' : null
       setOpenSections({ inv: false, surtido: false, escaneo: false, registros: false, validacion: false, rastreo: false, recepcion: false, anormalidades: false, despacho: false, despachoOrdenes: false, ...(firstKey ? { [firstKey]: true } : {}) })
     } catch (err) {
-      setResults({ inventario_escaneo: [], inventario_registros: [], surtido_validacion: [], surtido_validacion_estado: [], rastreo: [], recepcion: [], anormalidades: [], despacho: [], despacho_ordenes: [], meta: null })
+      setResults(null)
+      setSearchError(err?.response?.data?.error || err?.message || t('toast.error'))
     } finally {
       setLoading(false)
     }
@@ -1117,7 +1120,14 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
 
           {/* Results */}
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-            {!results && !loading && (
+            {searchError && !loading && (
+              <div className="flex items-start gap-3 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-500" />
+                <p className="text-danger-700">{searchError}</p>
+              </div>
+            )}
+
+            {!results && !searchError && !loading && (
               <div className="flex flex-col items-center justify-center py-12 gap-2 text-warm-300">
                 <Search size={32} />
                 <p className="text-sm">{t('rastreo.searchModal.emptyIdle')}</p>
