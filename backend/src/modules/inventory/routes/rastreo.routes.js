@@ -1827,7 +1827,7 @@ router.patch('/:id',
 
       res.json({ success: true })
     } catch (err) {
-      console.error('[rastreo.update]', err.message)
+      console.error('[rastreo.update]', err.message, err.code || '', err.detail || '')
       res.status(500).json({ error: 'Error al actualizar orden' })
     }
   }
