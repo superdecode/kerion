@@ -87,6 +87,8 @@ function playScanSound() {
 export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
   const videoRef = useRef(null)
   const controlsRef = useRef(null)
+  const detectedRef = useRef(false)
+  const confirmedTextRef = useRef('')
   const [status, setStatus] = useState('starting') // starting | scanning | error
   const [errorMsg, setErrorMsg] = useState('')
   const [successFlash, setSuccessFlash] = useState(false)
@@ -99,6 +101,8 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
     setErrorMsg('')
     setSuccessFlash(false)
     setDetectionPulse(null)
+    detectedRef.current = false
+    confirmedTextRef.current = ''
 
     async function start() {
       try {
@@ -153,15 +157,8 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
           },
           videoRef.current,
           (result) => {
-            if (result && !cancelled) {
-              const pointPosition = getPointPosition(result, videoRef.current)
-              if (pointPosition) {
-                setDetectionPulse({
-                  ...pointPosition,
-                  key: Date.now(),
-                })
-              }
-              handleDetected(result.getText())
+            if (result && !cancelled && !detectedRef.current) {
+              handleDetected(result)
             }
             // A "not found" error fires on every frame with no code in view —
             // that's the normal scanning state, not a failure. Only errors
@@ -170,6 +167,11 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
         )
         if (cancelled) { controls.stop(); return }
         controlsRef.current = controls
+        if (detectedRef.current) {
+          controls.stop()
+          controlsRef.current = null
+          return
+        }
         const track = videoRef.current?.srcObject?.getVideoTracks?.()?.[0]
         if (track?.applyConstraints) {
           const capabilities = track.getCapabilities?.() || {}
@@ -203,15 +205,28 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
       controlsRef.current?.stop()
       controlsRef.current = null
       setDetectionPulse(null)
+      detectedRef.current = false
+      confirmedTextRef.current = ''
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
-  function handleDetected(text) {
-    if (!controlsRef.current) return // already handled this frame batch
-    const normalizedText = String(text || '').trim()
-    if (!normalizedText) return
-    controlsRef.current.stop()
+  function handleDetected(result) {
+    const rawText = typeof result === 'string' ? result : result?.getText?.()
+    const normalizedText = String(rawText || '').trim()
+    if (!normalizedText || detectedRef.current) return
+
+    detectedRef.current = true
+    confirmedTextRef.current = normalizedText
+    const pointPosition = getPointPosition(result, videoRef.current)
+    if (pointPosition) {
+      setDetectionPulse({
+        ...pointPosition,
+        key: Date.now(),
+      })
+    }
+
+    controlsRef.current?.stop()
     controlsRef.current = null
     if (navigator.vibrate) navigator.vibrate(200)
     playScanSound()
@@ -268,7 +283,7 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
               <motion.div
                 className="absolute left-[10%] right-[10%] h-[2px] rounded-full bg-primary-400/90"
                 style={{ boxShadow: '0 0 12px 2px rgba(46,87,254,0.55)' }}
-                animate={{ y: ['0%', '720%', '0%'], opacity: [0.65, 1, 0.65] }}
+                animate={{ top: ['14%', '86%', '14%'], opacity: [0.65, 1, 0.65] }}
                 transition={{ duration: 1.7, repeat: Infinity, ease: 'easeInOut' }}
                 initial={{ top: '14%' }}
               />
@@ -280,14 +295,14 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
           {detectionPulse && status === 'scanning' && (
             <motion.div
               key={detectionPulse.key}
-              className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-300 pointer-events-none"
+              className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-400 pointer-events-none"
               style={{ left: detectionPulse.left, top: detectionPulse.top }}
-              initial={{ scale: 0.35, opacity: 0.95, boxShadow: '0 0 0 0 rgba(110,231,183,0.85)' }}
-              animate={{ scale: 1, opacity: 1, boxShadow: '0 0 0 10px rgba(110,231,183,0)' }}
+              initial={{ scale: 0.35, opacity: 0.95, boxShadow: '0 0 0 0 rgba(46,87,254,0.82)' }}
+              animate={{ scale: 1, opacity: 1, boxShadow: '0 0 0 12px rgba(46,87,254,0)' }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.34, ease: 'easeOut' }}
             >
-              <div className="absolute inset-0 rounded-full bg-emerald-200/85" />
+              <div className="absolute inset-0 rounded-full bg-primary-300/85" />
             </motion.div>
           )}
         </AnimatePresence>
