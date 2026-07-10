@@ -9,6 +9,7 @@ const router = Router()
 const requireDespachoValidar = (action) => requireAnyPermission([
   { modulePath: 'despacho.validar', action },
   { modulePath: 'despacho.folios', action },
+  { modulePath: 'despacho.ordenes', action },
 ])
 
 async function generateFolioNumero(req) {

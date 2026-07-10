@@ -498,6 +498,7 @@ router.get('/sheets-urls',
     { modulePath: 'surtido.validacion', action: 'ver' },
     { modulePath: 'inventario.escaneo', action: 'ver' },
     { modulePath: 'despacho.folios', action: 'ver' },
+    { modulePath: 'despacho.ordenes', action: 'ver' },
   ]),
   async (req, res) => {
     try {
@@ -603,6 +604,7 @@ router.get('/proxy/sheet',
     { modulePath: 'surtido.registros', action: 'ver' },
     { modulePath: 'inventario.escaneo', action: 'ver' },
     { modulePath: 'despacho.folios', action: 'ver' },
+    { modulePath: 'despacho.ordenes', action: 'ver' },
   ]),
   async (req, res) => {
     try {
@@ -2334,7 +2336,11 @@ router.delete('/surtidores/:id',
 
 router.get('/order-tracking',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.ordenes', 'ver'),
+  requireAnyPermission([
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'ver' },
+  ]),
   async (req, res) => {
     try {
       const [trackingColumns, sessionColumns] = await Promise.all([
@@ -2368,7 +2374,11 @@ router.get('/order-tracking',
 
 router.get('/order-tracking/:obc',
   authenticateToken, loadFullUser,
-  requirePermission('surtido.validacion', 'ver'),
+  requireAnyPermission([
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'ver' },
+  ]),
   async (req, res) => {
     try {
       const [trackingColumns, sessionColumns] = await Promise.all([

@@ -7,7 +7,7 @@ import * as XLSX from 'xlsx'
 import { useFilterAutoCollapse } from '../../../core/hooks/useFilterAutoCollapse'
 import {
   Eye, Trash2, CheckCircle2, AlertTriangle, Ban, X, Package2, Loader2, AlertCircle,
-  User, Timer, Clock, ScanBarcode, Boxes, ChevronDown, ChevronUp,
+  User, Timer, Clock, ScanBarcode, ScanLine, Boxes, ChevronDown, ChevronUp,
   Search, XCircle, Download, Copy, Check, Edit3, LayoutGrid, MapPin,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
@@ -16,6 +16,7 @@ import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
 import StatusPill from '../../../core/components/common/StatusPill'
 import CopyableCell from '../../../core/components/common/CopyableCell'
+import BarcodeScannerModal from '../../../core/components/common/BarcodeScannerModal'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -943,6 +944,7 @@ export default function InventarioRegistros() {
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [showQuickSearch, setShowQuickSearch] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
   const [showManageUbicaciones, setShowManageUbicaciones] = useState(false)
   const [manageUbicSearch, setManageUbicSearch] = useState('')
   const [manageUbicSearchDebounced, setManageUbicSearchDebounced] = useState('')
@@ -1056,6 +1058,13 @@ export default function InventarioRegistros() {
       setSearch(value.trim())
       setPage(1)
     }, 300)
+  }
+
+  function handleScanResult(text) {
+    setScannerOpen(false)
+    setPage(1)
+    setSearchInput(text)
+    setSearch(text.trim())
   }
 
   const toggleSelect = (id) => setSelectedIds(prev => {
@@ -1199,12 +1208,25 @@ export default function InventarioRegistros() {
               )}
 
               <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 min-w-[240px] max-w-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100 focus-within:shadow-sm">
-                <Search className="w-3.5 h-3.5 text-warm-400 shrink-0" />
+                <Search className="hidden sm:block w-3.5 h-3.5 text-warm-400 shrink-0" />
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen(true)}
+                  className="sm:hidden shrink-0 -ml-0.5 text-primary-600 hover:text-primary-700 transition-colors"
+                  aria-label="Escanear código de barras o QR"
+                  title="Escanear código"
+                >
+                  <ScanLine size={16} />
+                </button>
                 <input
                   type="text"
                   value={searchInput}
                   onChange={e => handleSearch(e.target.value)}
                   placeholder="Buscar por sección, operador..."
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  autoComplete="off"
+                  spellCheck="false"
                   className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 placeholder:text-warm-400 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 />
                 {searchInput && (
@@ -1214,6 +1236,12 @@ export default function InventarioRegistros() {
                 )}
               </div>
             </div>
+
+            <BarcodeScannerModal
+              isOpen={scannerOpen}
+              onClose={() => setScannerOpen(false)}
+              onScan={handleScanResult}
+            />
 
             <div className="flex items-center gap-2">
               {canCreate && (

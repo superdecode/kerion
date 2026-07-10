@@ -144,7 +144,11 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
           BarcodeFormat.RSS_EXPANDED,
         ])
         hints.set(DecodeHintType.TRY_HARDER, true)
-        hints.set(DecodeHintType.ASSUME_GS1, true)
+        // Do NOT set ASSUME_GS1: for CODE_128 labels that start with an FNC1 (common on
+        // logistics/GS1-128 labels), it makes the decoder prepend a "]C1" symbology
+        // identifier and splice in raw GS (0x1D) separator characters — polluting the
+        // plain box code the app actually searches by, so a real scan matched nothing.
+        // Leaving it unset just drops the FNC1 silently and returns the clean payload.
 
         const reader = new BrowserMultiFormatReader(hints, {
           delayBetweenScanAttempts: 120,
