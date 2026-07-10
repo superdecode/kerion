@@ -17,6 +17,7 @@ import Modal from '../../../core/components/common/Modal'
 import { ErrorAlertModal } from '../../../core/components/common/ErrorAlertModal'
 import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import StatusPill from '../../../core/components/common/StatusPill'
+import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useInventarioStore } from '../stores/inventarioStore'
@@ -1566,6 +1567,7 @@ function SidePanel({ tab, items }) {
 /* ═══════════════════════════════════════════════════════════ */
 export default function Escaneo() {
   const { t } = useI18nStore()
+  const { hasPermission } = useAuthStore()
   const toast = useToastStore.getState()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -1584,6 +1586,7 @@ export default function Escaneo() {
   } = useInventarioStore()
 
   const isOffline = useOfflineStore((s) => s.status === 'offline')
+  const canQuickSearch = hasPermission('inventario.escaneo', 'ver') || hasPermission('inventario.registros', 'ver')
   const boxStockQuery = useBoxStock()
   const { isPending: isSyncing, pendingCount } = useAutoSync()
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('inventory'))
@@ -1986,7 +1989,22 @@ export default function Escaneo() {
   if (tabs.length === 0) {
     return (
       <div className="flex flex-col h-full">
-        <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')} actions={inventoryHeaderSummary} />
+        <Header
+          title={t('inventario.escaneo.title')}
+          subtitle={t('nav.inventario')}
+          actions={inventoryHeaderSummary}
+          quickSearch={canQuickSearch ? (
+            <button
+              type="button"
+              onClick={() => setShowQuickSearch(true)}
+              className="interactive-lift inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50"
+              title="Búsqueda rápida"
+              aria-label="Búsqueda rápida"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          ) : null}
+        />
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-2xl mx-auto">
             <motion.div className="text-center mb-8"
@@ -2045,6 +2063,10 @@ export default function Escaneo() {
             </motion.div>
           </div>
         </div>
+        <QuickCodeSearchModal
+          isOpen={showQuickSearch}
+          onClose={() => setShowQuickSearch(false)}
+        />
         <SessionTypeModal isOpen={showTypeModal} onStart={handleStartSession} onClose={() => setShowTypeModal(false)} />
       </div>
     )
@@ -2101,16 +2123,19 @@ export default function Escaneo() {
                 <span className="hidden md:inline">{t('common.finalize')}</span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setShowQuickSearch(true)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 bg-warm-100 text-warm-400 transition-all hover:bg-primary-50 hover:text-primary-600"
-              title="Búsqueda rápida"
-            >
-              <Search size={14} />
-            </button>
           </div>
         }
+        quickSearch={canQuickSearch ? (
+          <button
+            type="button"
+            onClick={() => setShowQuickSearch(true)}
+            className="interactive-lift inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50"
+            title="Búsqueda rápida"
+            aria-label="Búsqueda rápida"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        ) : null}
       />
 
       {/* Desktop tab bar */}

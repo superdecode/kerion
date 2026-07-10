@@ -23,7 +23,7 @@ import {
   getOrderTrackingByOBC, getBoxIncidents, getScanOperators, getBoxStatusDetail, updateScanSession,
 } from '../services/surtidoService'
 import MultiSelect from '../../../core/components/common/MultiSelect'
-import { normalizeCode, generateCodeVariations } from '../../Shared/Wms/normalizeCode'
+import { normalizeCode, generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
@@ -790,7 +790,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
 
   const { data: trackingData } = useQuery({
     queryKey: ['wms-scan-sessions-quick'],
-    queryFn: () => getScanSessions({ pageSize: 500 }),
+    queryFn: () => getScanSessions({ pageSize: 100 }),
     staleTime: 60000,
     enabled: isOpen,
   })
@@ -829,6 +829,21 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     return map
   }, [trackingData])
 
+  const searchableOutbound = useMemo(() => (
+    getRecords(outboundData).map((row) => ({
+      ...row,
+      _receiverName: String(row.receiverName || '').toLowerCase(),
+      _customizeCode: String(row.customizeCode || '').toLowerCase(),
+      _boxType: String(row.boxType || '').toLowerCase(),
+      _allCustomizeCodes: (row.allCustomizeCodes || []).map(code => String(code || '').toLowerCase()),
+      _orderTokens: [
+        String(row.outboundOrderNo || '').toLowerCase(),
+        String(row.thirdOrderNo || '').toLowerCase(),
+        String(row.logisticsTrackNo || '').toLowerCase(),
+      ],
+    }))
+  ), [outboundData])
+
   // Synchronous — filters already-loaded in-memory data, no network call
   function doSearch(q) {
     if (!q.trim()) return
@@ -839,27 +854,25 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
       pendingQueryRef.current = q
       return
     }
-    const all = getRecords(outboundData)
-    if (all.length === 0) {
+    if (searchableOutbound.length === 0) {
       setSearchError('La hoja de salidas no contiene registros. Verifica la configuracion en WmsHub.')
       setResults([])
       return
     }
-    const norm = q.trim().toLowerCase()
-    const variations = generateCodeVariations(q.trim()).map(v => v.toLowerCase())
+    const resolvedQuery = normalizeScanCode(q.trim()) || q.trim()
+    const norm = resolvedQuery.toLowerCase()
+    const variations = generateCodeVariations(resolvedQuery).map(v => v.toLowerCase())
     const matchesCode = (field) => {
       const f = (field || '').toLowerCase()
       return f.length > 0 && variations.some(v => f.includes(v))
     }
-    const filtered = all
+    const filtered = searchableOutbound
       .filter(r =>
-        matchesCode(r.outboundOrderNo) ||
-        matchesCode(r.thirdOrderNo) ||
-        matchesCode(r.logisticsTrackNo) ||
-        (r.receiverName || '').toLowerCase().includes(norm) ||
-        matchesCode(r.customizeCode) ||
-        matchesCode(r.boxType) ||
-        (r.allCustomizeCodes || []).some(c => matchesCode(c))
+        r._orderTokens.some(token => token && variations.some(v => token.includes(v))) ||
+        r._receiverName.includes(norm) ||
+        matchesCode(r._customizeCode) ||
+        matchesCode(r._boxType) ||
+        r._allCustomizeCodes.some(c => matchesCode(c))
       )
       .map(r => ({
         ...r,
@@ -1016,7 +1029,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                           <ShieldCheck size={16} className="text-success-600 shrink-0 mt-0.5" />
                           <div className="min-w-0 leading-snug">
                             <p className="text-xs font-semibold text-success-700">{fmtDateTime(validatedInfo.updated_at)}</p>
-                            <p className="text-[11px] text-success-600 break-all">{validatedInfo.updated_by || '—'}</p>
+                            <p className="text-[11px] text-success-600 break-all">{validatedInfo.updated_by_nombre || validatedInfo.updated_by || '—'}</p>
                           </div>
                         </div>
                       )}

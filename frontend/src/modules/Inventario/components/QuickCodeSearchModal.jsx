@@ -4,6 +4,7 @@ import Modal from '../../../core/components/common/Modal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getInventoryCodeSearch, getBoxStock } from '../services/inventarioService'
 import { fmtDateTime } from '../../../core/utils/dateFormat'
+import { normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 
 function formatSectionCode(code, fallbackDate) {
   const clean = String(code || '').trim()
@@ -31,8 +32,14 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
     setTimeout(() => inputRef.current?.focus(), 80)
   }, [isOpen])
 
+  function resolveSearchQuery(rawQuery) {
+    const trimmed = String(rawQuery || '').trim()
+    if (!trimmed) return ''
+    return normalizeScanCode(trimmed) || trimmed.toUpperCase()
+  }
+
   async function doSearch(rawQuery) {
-    const q = rawQuery.trim()
+    const q = resolveSearchQuery(rawQuery)
     if (!q) return
     setIsSearching(true)
     setSearchError(null)
@@ -72,7 +79,11 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
       <div className="space-y-4">
         <div className="flex gap-2">
           <div className="flex h-12 flex-1 items-center gap-2 rounded-2xl border-2 border-warm-200 bg-warm-50 px-4 transition-all focus-within:rounded-2xl focus-within:border-primary-400 focus-within:ring-4 focus-within:ring-primary-100 focus-within:shadow-sm">
-            <ScanBarcode className="h-4 w-4 shrink-0 text-warm-300" />
+            <span className="inline-flex items-center gap-1.5 sm:hidden shrink-0 rounded-xl bg-white/90 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-primary-600 shadow-sm">
+              <ScanBarcode className="h-3.5 w-3.5" />
+              Escáner
+            </span>
+            <ScanBarcode className="hidden h-4 w-4 shrink-0 text-warm-300 sm:block" />
             <input
               ref={inputRef}
               type="text"
@@ -81,7 +92,11 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
               value={query}
               onChange={(event) => { setQuery(event.target.value); setSearchError(null) }}
               onKeyDown={(event) => { if (event.key === 'Enter' && query.trim()) doSearch(query) }}
-              style={{ outline: 'none', boxShadow: 'none', WebkitBoxShadow: 'none' }}
+              inputMode="search"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              style={{ outline: 'none', boxShadow: 'none', WebkitBoxShadow: 'none', fontSize: '16px' }}
             />
           </div>
           <button
@@ -218,7 +233,7 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
                         <p className="text-warm-400 uppercase tracking-wide">Ubic. destino</p>
                         <p className="mt-0.5 inline-flex items-center gap-1 font-medium text-warm-700">
                           <MapPin className="h-3.5 w-3.5 text-accent-500" />
-                          {row.cell_no || '—'}
+                          {row.ubicacion_destino_codigo || row.ubicacion_destino_nombre || row.cell_no || '—'}
                         </p>
                       </div>
                       <div className="col-span-2">

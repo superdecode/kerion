@@ -919,6 +919,7 @@ export default function InventarioRegistros() {
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const canCreate = hasPermission('inventario.escaneo', 'crear')
+  const canQuickSearch = hasPermission('inventario.registros', 'ver') || hasPermission('inventario.escaneo', 'ver')
   const canExport = hasPermission('inventario.registros', 'editar')
   const canEdit = hasPermission('inventario.registros', 'actualizar')
   const canDelete = hasPermission('inventario.registros', 'eliminar')
@@ -1003,16 +1004,18 @@ export default function InventarioRegistros() {
       >
         <LayoutGrid className="w-3.5 h-3.5" /> {t('common.manage_locations')}
       </button>
-      <button
-        data-tour="inv-btn-quicksearch"
-        type="button"
-        onClick={() => setShowQuickSearch(true)}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-warm-100 text-warm-400 transition-all duration-200 hover:bg-primary-50 hover:text-primary-600"
-        title="Búsqueda rápida"
-        aria-label="Búsqueda rápida"
-      >
-        <Search className="w-4 h-4" />
-      </button>
+      {canQuickSearch && (
+        <button
+          data-tour="inv-btn-quicksearch"
+          type="button"
+          onClick={() => setShowQuickSearch(true)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 bg-warm-100 text-warm-400 transition-all hover:bg-primary-50 hover:text-primary-600"
+          title="Búsqueda rápida"
+          aria-label="Búsqueda rápida"
+        >
+          <Search size={14} />
+        </button>
+      )}
     </div>
   )
 

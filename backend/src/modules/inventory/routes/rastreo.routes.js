@@ -7,6 +7,8 @@ import { crearAnormalidadRastreo, crearAnormalidadRastreoConsolidada } from '../
 import { normalizeCode } from '../../../shared/utils/codeNormalization.js'
 
 const router = Router()
+const EXACT_RESULT_LIMIT = 120
+const FLEXIBLE_RESULT_LIMIT = 180
 
 const STATUS_ALIASES = {
   resuelta: 'completada',
@@ -526,6 +528,10 @@ router.get('/buscar',
       const q = (req.query.q || '').trim()
       const mode = req.query.mode === 'exact' ? 'exact' : 'flexible'
       if (!q) return res.status(400).json({ error: 'Parámetro q requerido' })
+      if (mode === 'flexible' && q.length < 3) {
+        return res.status(400).json({ error: 'La búsqueda flexible requiere al menos 3 caracteres' })
+      }
+      const resultLimit = mode === 'exact' ? EXACT_RESULT_LIMIT : FLEXIBLE_RESULT_LIMIT
       const tokens = getSearchTokens(q)
       const hasRastreoBoxType = await hasTableColumn(req.tQuery, 'rastreo_cajas', 'box_type')
       const rastreoMatchColumns = hasRastreoBoxType
@@ -578,7 +584,7 @@ router.get('/buscar',
                ELSE 4
              END,
              s.created_at DESC
-           LIMIT 1000`,
+           LIMIT ${resultLimit}`,
           searchParams
         )
         const invRegT = () => req.tQuery(
@@ -607,7 +613,7 @@ router.get('/buscar',
                ELSE 4
              END,
              sc.scanned_at DESC
-           LIMIT 1000`,
+           LIMIT ${resultLimit}`,
           searchParams
         )
         const pickT = () => req.tQuery(
@@ -631,7 +637,7 @@ router.get('/buscar',
                ELSE 4
              END,
              pe.scanned_at DESC
-           LIMIT 1000`,
+           LIMIT ${resultLimit}`,
           searchParams
         )
         const pickStatusT = () => req.tQuery(
@@ -685,7 +691,7 @@ router.get('/buscar',
                ELSE 3
              END,
              pbs.updated_at DESC
-           LIMIT 1000`,
+           LIMIT ${resultLimit}`,
           flexibleSearchParams
         )
         const rastreoT = () => req.tQuery(
@@ -727,7 +733,7 @@ router.get('/buscar',
                ELSE 4
              END,
              rc.updated_at DESC
-           LIMIT 1000`,
+           LIMIT ${resultLimit}`,
           searchParams
         )
         const inboundT = () => req.tQuery(
@@ -822,7 +828,7 @@ router.get('/buscar',
                ELSE 4
              END,
              created_at DESC
-           LIMIT 1000`,
+           LIMIT ${resultLimit}`,
           flexibleSearchParams
         )
         const anormT = () => req.tQuery(
@@ -908,7 +914,7 @@ router.get('/buscar',
                ELSE 3
              END,
              a.created_at DESC
-           LIMIT 1000`,
+           LIMIT ${resultLimit}`,
           flexibleSearchParams
         )
         const despT = () => req.tQuery(
@@ -962,7 +968,7 @@ router.get('/buscar',
                ELSE 4
              END,
              dos.created_at DESC
-           LIMIT 1000`,
+           LIMIT ${resultLimit}`,
           flexibleSearchParams
         )
         const despOrdenesT = () => req.tQuery(
@@ -982,7 +988,7 @@ router.get('/buscar',
                ELSE 4
              END,
              dfo.created_at DESC
-           LIMIT 1000`,
+           LIMIT ${resultLimit}`,
           searchParams
         )
       // Run the independent datasets in parallel with bounded concurrency so

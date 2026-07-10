@@ -37,6 +37,7 @@ const SCANNER_TOTAL_MS = 2000       // max total time first-char→Enter for sca
 const TABS_KEY = 'kirion_surtido_tabs'
 const ACTIVE_TAB_KEY = 'kirion_surtido_active_tab'
 const SESSION_KEY = (tabId) => `kirion_surtido_session_${tabId}`
+const LOCATION_MAX_LENGTH = 16
 
 function genId() { return Math.random().toString(36).slice(2, 9) }
 function safeParseJson(raw) {
@@ -46,6 +47,54 @@ function safeParseJson(raw) {
   } catch {
     return null
   }
+}
+
+function normalizeLocationValue(raw) {
+  if (!raw) return ''
+  return String(raw)
+    .trim()
+    .toUpperCase()
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    .replace(/[‐‑‒–—−]/g, '-')
+    .replace(/[／⁄]/g, '/')
+    .replace(/\s+/g, '')
+}
+
+function validateLocationValue(raw) {
+  const trimmed = String(raw || '').trim()
+  const normalized = normalizeLocationValue(trimmed)
+  const looksStructuredPayload =
+    /[{}[\]"]/u.test(trimmed)
+    || /(?:reference_id|ops_data|container_type|source|seller)/i.test(trimmed)
+
+  if (!normalized) {
+    return { ok: false, reason: 'empty', summary: 'La ubicacion esta vacia.', normalized: '' }
+  }
+  if (looksStructuredPayload) {
+    return {
+      ok: false,
+      reason: 'payload',
+      summary: 'Se detecto un payload de escaner y no una ubicacion valida.',
+      normalized,
+    }
+  }
+  if (!/^[A-Z0-9/-]+$/.test(normalized)) {
+    return {
+      ok: false,
+      reason: 'charset',
+      summary: 'La ubicacion solo permite letras, numeros, "-" y "/".',
+      normalized,
+    }
+  }
+  if (normalized.length > LOCATION_MAX_LENGTH) {
+    return {
+      ok: false,
+      reason: 'length',
+      summary: `La ubicacion excede el maximo permitido de ${LOCATION_MAX_LENGTH} caracteres.`,
+      normalized,
+    }
+  }
+  return { ok: true, normalized }
 }
 
 function buildDefaultTab(label) {
@@ -662,7 +711,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
 
   const { data: trackingData } = useQuery({
     queryKey: ['wms-scan-sessions-quick'],
-    queryFn: () => getScanSessions({ pageSize: 500 }),
+    queryFn: () => getScanSessions({ pageSize: 100 }),
     staleTime: 60000,
     enabled: isOpen,
   })
@@ -702,6 +751,21 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     return map
   }, [trackingData])
 
+  const searchableOutbound = useMemo(() => (
+    getRecords(outboundData).map((row) => ({
+      ...row,
+      _receiverName: String(row.receiverName || '').toLowerCase(),
+      _customizeCode: String(row.customizeCode || '').toLowerCase(),
+      _boxType: String(row.boxType || '').toLowerCase(),
+      _allCustomizeCodes: (row.allCustomizeCodes || []).map(code => String(code || '').toLowerCase()),
+      _orderTokens: [
+        String(row.outboundOrderNo || '').toLowerCase(),
+        String(row.thirdOrderNo || '').toLowerCase(),
+        String(row.logisticsTrackNo || '').toLowerCase(),
+      ],
+    }))
+  ), [outboundData])
+
   // Synchronous — filters already-loaded in-memory data, no network call
   function doSearch(q) {
     if (!q.trim()) return
@@ -712,27 +776,25 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
       pendingQueryRef.current = q
       return
     }
-    const all = getRecords(outboundData)
-    if (all.length === 0) {
+    if (searchableOutbound.length === 0) {
       setSearchError('La hoja de salidas no contiene registros. Verifica la configuracion en WmsHub.')
       setResults([])
       return
     }
-    const norm = q.trim().toLowerCase()
-    const variations = generateCodeVariations(q.trim()).map(v => v.toLowerCase())
+    const resolvedQuery = normalizeScanCode(q.trim()) || q.trim()
+    const norm = resolvedQuery.toLowerCase()
+    const variations = generateCodeVariations(resolvedQuery).map(v => v.toLowerCase())
     const matchesCode = (field) => {
       const f = (field || '').toLowerCase()
       return f.length > 0 && variations.some(v => f.includes(v))
     }
-    const filtered = all
+    const filtered = searchableOutbound
       .filter(r =>
-        matchesCode(r.outboundOrderNo) ||
-        matchesCode(r.thirdOrderNo) ||
-        matchesCode(r.logisticsTrackNo) ||
-        (r.receiverName || '').toLowerCase().includes(norm) ||
-        matchesCode(r.customizeCode) ||
-        matchesCode(r.boxType) ||
-        (r.allCustomizeCodes || []).some(c => matchesCode(c))
+        r._orderTokens.some(token => token && variations.some(v => token.includes(v))) ||
+        r._receiverName.includes(norm) ||
+        matchesCode(r._customizeCode) ||
+        matchesCode(r._boxType) ||
+        r._allCustomizeCodes.some(c => matchesCode(c))
       )
       .map(r => ({
         ...r,
@@ -893,7 +955,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                           <ShieldCheck size={16} className="text-success-600 shrink-0 mt-0.5" />
                           <div className="min-w-0 leading-snug">
                             <p className="text-xs font-semibold text-success-700">{formatDateTimeTz(validatedInfo.updated_at)}</p>
-                            <p className="text-[11px] text-success-600 break-all">{validatedInfo.updated_by || '—'}</p>
+                            <p className="text-[11px] text-success-600 break-all">{validatedInfo.updated_by_nombre || validatedInfo.updated_by || '—'}</p>
                           </div>
                         </div>
                       )}
@@ -1049,6 +1111,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [manualEntry, setManualEntry] = useState({ code: '', reasonId: '', notes: '' })
+  const [invalidLocationModal, setInvalidLocationModal] = useState({ open: false, raw: '', normalized: '', summary: '' })
   const locationRef = useRef(null)
   const autoFinalizeLockRef = useRef(false)
   const sessionCreateFiredRef = useRef(false)
@@ -1406,9 +1469,17 @@ const { data: reasonsData } = useQuery({
   }
 
   function tryConfirmUbicacion(raw) {
-    const val = raw.trim()
-    if (!val) return
-    updateUbicacionMut.mutate(val)
+    const validation = validateLocationValue(raw)
+    if (!validation.ok) {
+      setInvalidLocationModal({
+        open: true,
+        raw: String(raw || '').trim(),
+        normalized: validation.normalized || '',
+        summary: validation.summary,
+      })
+      return
+    }
+    updateUbicacionMut.mutate(validation.normalized)
   }
 
   const addEventMut = useMutation({
@@ -2096,6 +2167,44 @@ const { data: reasonsData } = useQuery({
           <p className="text-sm font-medium text-warm-600">{t('surtido.validacion.not_in_bd')}</p>
           <div className="bg-danger-50 border border-danger-200 rounded-2xl px-4 py-3">
             <p className="font-mono font-bold text-danger-700 text-lg break-all">{rejectedBoxModal.code}</p>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={invalidLocationModal.open}
+        onClose={() => setInvalidLocationModal({ open: false, raw: '', normalized: '', summary: '' })}
+        title="Ubicacion invalida"
+        icon={AlertTriangle}
+        footer={
+          <button
+            className="btn-danger w-full inline-flex items-center justify-center gap-2"
+            onClick={() => {
+              setInvalidLocationModal({ open: false, raw: '', normalized: '', summary: '' })
+              setTimeout(() => locationRef.current?.focus(), 80)
+            }}
+          >
+            <X size={14} /> {t('common.close')}
+          </button>
+        }
+      >
+        <div className="space-y-4 py-2">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-danger-100">
+            <AlertTriangle className="h-9 w-9 text-danger-600" />
+          </div>
+          <div className="space-y-2 text-center">
+            <p className="text-sm font-semibold text-danger-700">{invalidLocationModal.summary}</p>
+            <p className="text-xs text-warm-500">Regla unica: la ubicacion debe tener maximo 16 caracteres validos.</p>
+          </div>
+          <div className="space-y-2 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-danger-500">Entrada recibida</p>
+              <p className="break-all font-mono text-sm font-bold text-danger-700">{invalidLocationModal.raw || '—'}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-danger-500">Valor detectado</p>
+              <p className="break-all font-mono text-sm text-danger-700">{invalidLocationModal.normalized || '—'}</p>
+            </div>
           </div>
         </div>
       </Modal>

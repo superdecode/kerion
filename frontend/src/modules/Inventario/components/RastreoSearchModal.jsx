@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useQuery } from '@tanstack/react-query'
 import {
   X, Search, Loader2, Package, CheckCircle2, XCircle,
   ChevronDown, ChevronRight, BarChart2, ShoppingCart, AlertCircle, ClipboardList, Crosshair, Truck, Send, ScanLine,
@@ -806,6 +807,26 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
   const [openSections, setOpenSections] = useState({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true })
   const [scannerOpen, setScannerOpen] = useState(false)
   const inputRef = useRef(null)
+  const { data: inventoryListData } = useQuery({
+    queryKey: ['inventory-list-rastreo-quick'],
+    queryFn: getInventoryList,
+    staleTime: 5 * 60 * 1000,
+    enabled: isOpen,
+  })
+  const { data: outboundListData } = useQuery({
+    queryKey: ['outbound-list-rastreo-quick'],
+    queryFn: getOutboundList,
+    staleTime: 5 * 60 * 1000,
+    enabled: isOpen,
+  })
+  const cachedInventoryRecords = useMemo(
+    () => inventoryListData?.data?.records || inventoryListData?.data || [],
+    [inventoryListData]
+  )
+  const cachedOutboundRecords = useMemo(
+    () => outboundListData?.data?.records || [],
+    [outboundListData]
+  )
 
   function toggleSection(key) {
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }))
@@ -822,10 +843,14 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
     try {
       const [dbRes, invRes, outRes] = await Promise.all([
         buscarCaja(q, searchMode),
-        getInventoryList().catch(() => ({ data: { records: [] } })),
-        getOutboundList
-          ? getOutboundList().catch(() => ({ data: { records: [] } }))
-          : Promise.resolve({ data: { records: [] } }),
+        cachedInventoryRecords.length
+          ? Promise.resolve({ data: { records: cachedInventoryRecords } })
+          : getInventoryList().catch(() => ({ data: { records: [] } })),
+        cachedOutboundRecords.length
+          ? Promise.resolve({ data: { records: cachedOutboundRecords } })
+          : (getOutboundList
+              ? getOutboundList().catch(() => ({ data: { records: [] } }))
+              : Promise.resolve({ data: { records: [] } })),
       ])
 
       // Prepare query variants for selected mode

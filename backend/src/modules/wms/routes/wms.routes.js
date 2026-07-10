@@ -1885,7 +1885,7 @@ router.put('/inventory-scan/:id',
 router.get('/inventory-code-search',
   authenticateToken, loadFullUser,
   requireAnyPermission([
-    { modulePath: 'inventario.escaneo', action: 'crear' },
+    { modulePath: 'inventario.escaneo', action: 'ver' },
     { modulePath: 'inventario.registros', action: 'ver' },
   ]),
   async (req, res) => {
@@ -1910,11 +1910,15 @@ router.get('/inventory-code-search',
                 sc.scanned_at,
                 sess.tarima_code,
                 sess.scan_type,
+                sess.origin_location,
+                ub.codigo AS ubicacion_destino_codigo,
+                ub.nombre AS ubicacion_destino_nombre,
                 sess.completed_at,
                 u.nombre_completo AS operator_nombre
            FROM inv_scans sc
            JOIN inv_sessions sess ON sess.id = sc.session_id
            LEFT JOIN usuarios u ON u.id = sess.operator_id
+           LEFT JOIN dev_ubicaciones ub ON ub.id = sess.ubicacion_id AND ub.tenant_id = sess.tenant_id
           WHERE sess.tenant_id = $1
             AND (
               sc.scanned_code ILIKE $2
@@ -3095,9 +3099,13 @@ router.get('/box-status-detail/:obc',
   async (req, res) => {
     try {
       const result = await req.tQuery(
-        `SELECT box_code, estado, updated_by, updated_at
-         FROM pick_box_status
-         WHERE tenant_id = $1 AND outbound_order_no = $2`,
+        `SELECT pbs.box_code, pbs.estado, pbs.updated_by, pbs.updated_at,
+                COALESCE(u.nombre_completo, pbs.updated_by) AS updated_by_nombre
+         FROM pick_box_status pbs
+         LEFT JOIN usuarios u
+           ON u.tenant_id = pbs.tenant_id
+          AND lower(u.email) = lower(pbs.updated_by)
+         WHERE pbs.tenant_id = $1 AND pbs.outbound_order_no = $2`,
         [req.tenantId, req.params.obc]
       )
       res.json({ success: true, data: result.rows })
