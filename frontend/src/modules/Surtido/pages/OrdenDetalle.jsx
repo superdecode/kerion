@@ -589,9 +589,18 @@ export default function OrdenDetalle() {
   // string concatenation ("0" + "1" = "01") instead of addition. Coerce explicitly.
   const totalScanned = sessions.reduce((sum, s) => sum + Number(s.total_scanned || 0), 0)
   const is100Percent = totalExpected > 0 && totalScanned >= totalExpected
-  const displayStatus = (is100Percent && status !== 'complete' && status !== 'partial' && status !== 'cancelled') ? 'complete' : status
+  // A stored status of 'complete' can go stale — e.g. a scan failed to persist
+  // after a transient backend hiccup, or a box got reset after the order was
+  // first marked complete — leaving total_scanned below total_expected while
+  // the tracking row still says 'complete'. Showing "Completado" in that case
+  // (and hiding the Validar button below, since isClosedOrder gated it) left
+  // operators unable to get back into the scan screen to add the missing box.
+  const staleComplete = status === 'complete' && totalExpected > 0 && !is100Percent
+  const displayStatus = staleComplete
+    ? 'validating'
+    : (is100Percent && status !== 'complete' && status !== 'partial' && status !== 'cancelled') ? 'complete' : status
   const statusMeta = STATUS_META[displayStatus] ?? STATUS_META.pending_assignment
-  const isClosedOrder = status === 'complete' || status === 'partial' || is100Percent
+  const isClosedOrder = !staleComplete && (status === 'complete' || status === 'partial' || is100Percent)
 
   const referencia = d?.thirdOrderNo || d?.referenceNo || '—'
   const trackingNo = d?.logisticsTrackNo || d?.trackingNo || '—'

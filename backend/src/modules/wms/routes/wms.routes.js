@@ -242,6 +242,7 @@ function buildPickOrderTrackingSelectWithStats(columns) {
     if (column === 'outbound_order_no') return 'COALESCE(ot.outbound_order_no, stats.outbound_order_no) AS outbound_order_no'
     if (column === 'third_order_no') return 'COALESCE(ot.third_order_no, stats.third_order_no) AS third_order_no'
     if (column === 'status') return `COALESCE(ot.status, CASE WHEN COALESCE(stats.total_scanned, 0) >= COALESCE(stats.total_expected, 0) AND COALESCE(stats.total_expected, 0) > 0 THEN 'complete' ELSE 'validating' END) AS status`
+    if (column === 'validation_started_at') return 'COALESCE(ot.validation_started_at, stats.first_session_at) AS validation_started_at'
     if (column === 'validation_completed_at') return 'COALESCE(ot.validation_completed_at, stats.last_session_at) AS validation_completed_at'
     if (column === 'updated_at') return 'COALESCE(ot.updated_at, stats.last_session_at) AS updated_at'
     if (column === 'created_at') return 'COALESCE(ot.created_at, stats.first_session_at) AS created_at'
@@ -262,15 +263,23 @@ function buildPickSessionsStatsSubquery(sessionColumns, includeSessionCount = fa
       ? 'MAX(COALESCE(total_expected, 0)) as total_expected'
       : '0::bigint as total_expected'
   )
+  aggregates.push('SUM(COALESCE(rejected_stats.total_rejected, 0)) as total_rejected')
   aggregates.push(sessionColumns.has('third_order_no') ? 'MAX(third_order_no) as third_order_no' : 'NULL::text as third_order_no')
   aggregates.push(sessionColumns.has('started_at') ? 'MIN(started_at) as first_session_at' : 'NULL as first_session_at')
   aggregates.push(sessionColumns.has('updated_at') ? 'MAX(updated_at) as last_session_at' : sessionColumns.has('completed_at') ? 'MAX(completed_at) as last_session_at' : 'NULL as last_session_at')
   return `
-    SELECT outbound_order_no, tenant_id,
+    SELECT s.outbound_order_no, s.tenant_id,
            ${aggregates.join(',\n           ')}
-    FROM pick_sessions
-    WHERE tenant_id = $1
-    GROUP BY outbound_order_no, tenant_id
+    FROM pick_sessions s
+    LEFT JOIN (
+      SELECT session_id, COUNT(*) AS total_rejected
+      FROM pick_events
+      WHERE tenant_id = $1
+        AND scan_result <> 'ok'
+      GROUP BY session_id
+    ) rejected_stats ON rejected_stats.session_id = s.id
+    WHERE s.tenant_id = $1
+    GROUP BY s.outbound_order_no, s.tenant_id
   `
 }
 
@@ -710,22 +719,29 @@ router.post('/scan-session',
       const { outbound_order_no, third_order_no, total_expected, force } = req.body
       if (!outbound_order_no) return res.status(400).json({ success: false, error: 'outbound_order_no es requerido' })
 
-      // Integrity Check: Prevent concurrent validation
+      // An order must always map to exactly one pick_sessions record. Look up
+      // ANY existing session for this order — not just an 'open' one. The old
+      // 'open'-only lookup left a gap: the unique index only enforces
+      // uniqueness while status='open' (see pick_sessions_open_per_order), so
+      // a session that went stale-complete (a scan failed to persist right as
+      // the count hit total_expected, or a box got reset afterward) fell
+      // through to creating a brand new session — fragmenting the same
+      // order's progress across two rows instead of resuming the real one.
       const existing = await req.tQuery(
         `SELECT s.*, u.nombre_completo as operator_nombre
          FROM pick_sessions s
          LEFT JOIN usuarios u ON u.id = s.operator_id
-         WHERE s.tenant_id = $1 AND s.outbound_order_no = $2 AND s.status = 'open'
+         WHERE s.tenant_id = $1 AND s.outbound_order_no = $2
+         ORDER BY s.updated_at DESC
          LIMIT 1`,
         [req.tenantId, outbound_order_no]
       )
 
       if (existing.rows.length > 0) {
         const s = existing.rows[0]
-        if (Number(s.operator_id) === Number(req.user.id)) {
-          return res.json({ success: true, data: s, reused: true })
-        }
-        if (!force) {
+        const sameOperator = Number(s.operator_id) === Number(req.user.id)
+
+        if (s.status === 'open' && !sameOperator && !force) {
           return res.status(409).json({
             success: false,
             error: 'Esta orden ya está siendo validada',
@@ -738,15 +754,27 @@ router.post('/scan-session',
             }
           })
         }
-        // Force takeover: transfer the SAME session to the new operator instead of closing it
-        // and inserting a second row — an order must always map to exactly one pick_sessions record.
-        // (Previously this closed the old session as 'complete' unconditionally, which showed
-        // orders as completed even when far from fully validated.)
-        const takeoverNote = `Retomada por ${req.fullUser?.nombre_completo || req.user.email || 'otro operador'}`
-        const nextNotes = s.notes ? `${s.notes} | ${takeoverNote}` : takeoverNote
-        const transferred = await req.tQuery(
+
+        // Genuinely finished (not just stale) — hand it back as-is, don't reopen it.
+        const genuinelyComplete = s.status !== 'open' &&
+          Number(s.total_expected) > 0 && Number(s.total_scanned) >= Number(s.total_expected)
+        if (genuinelyComplete) {
+          return res.json({ success: true, data: s, reused: true })
+        }
+
+        // Reopen and reuse the single existing record — whether it's this operator
+        // resuming, a takeover (force / picking up an abandoned non-open session),
+        // or continuing one that had gone stale-complete short of total_expected.
+        const needsTakeoverNote = !sameOperator
+        const takeoverNote = needsTakeoverNote
+          ? `Retomada por ${req.fullUser?.nombre_completo || req.user.email || 'otro operador'}`
+          : null
+        const nextNotes = takeoverNote ? (s.notes ? `${s.notes} | ${takeoverNote}` : takeoverNote) : s.notes
+        const updated = await req.tQuery(
           `UPDATE pick_sessions
            SET operator_id = $1,
+               status = 'open',
+               completed_at = NULL,
                total_expected = GREATEST(total_expected, $2),
                notes = $3,
                updated_at = now()
@@ -754,7 +782,7 @@ router.post('/scan-session',
            RETURNING *`,
           [req.user.id, total_expected || 0, nextNotes, s.id, req.tenantId]
         )
-        return res.json({ success: true, data: transferred.rows[0], reused: true })
+        return res.json({ success: true, data: updated.rows[0], reused: true })
       }
 
       try {
@@ -844,6 +872,7 @@ router.get('/scan-sessions',
         req.tQuery(
           `SELECT s.*,
                   COALESCE(stats.total_scanned, 0) AS total_scanned,
+                  COALESCE(rejected_stats.total_rejected, 0) AS total_rejected,
                   scan_times.first_scan_at,
                   scan_times.last_scan_at,
                   u.nombre_completo as operator_nombre,
@@ -861,6 +890,13 @@ router.get('/scan-sessions',
                AND scan_result = 'ok'
              GROUP BY session_id
            ) stats ON stats.session_id = s.id
+           LEFT JOIN (
+             SELECT session_id, COUNT(*) AS total_rejected
+             FROM pick_events
+             WHERE tenant_id = $1
+               AND scan_result <> 'ok'
+             GROUP BY session_id
+           ) rejected_stats ON rejected_stats.session_id = s.id
            LEFT JOIN (
              SELECT session_id, MIN(scanned_at) AS first_scan_at, MAX(scanned_at) AS last_scan_at
              FROM pick_events
@@ -910,6 +946,7 @@ router.get('/scan-session/:id',
         req.tQuery(
           `SELECT s.*,
                   COALESCE(stats.total_scanned, 0) AS total_scanned,
+                  COALESCE(rejected_stats.total_rejected, 0) AS total_rejected,
                   scan_times.first_scan_at,
                   scan_times.last_scan_at,
                   u.nombre_completo as operator_nombre
@@ -925,6 +962,13 @@ router.get('/scan-session/:id',
                AND scan_result = 'ok'
              GROUP BY session_id
            ) stats ON stats.session_id = s.id
+           LEFT JOIN (
+             SELECT session_id, COUNT(*) AS total_rejected
+             FROM pick_events
+             WHERE tenant_id = $2
+               AND scan_result <> 'ok'
+             GROUP BY session_id
+           ) rejected_stats ON rejected_stats.session_id = s.id
            LEFT JOIN (
              SELECT session_id, MIN(scanned_at) AS first_scan_at, MAX(scanned_at) AS last_scan_at
              FROM pick_events
@@ -2302,7 +2346,10 @@ router.get('/order-tracking',
          SELECT ${buildPickOrderTrackingSelectWithStats(trackingColumns)}, s.nombre as surtidor_nombre_actual,
                 COALESCE(stats.session_count, 0) as session_count,
                 COALESCE(stats.total_scanned, 0) as total_scanned,
-                COALESCE(stats.total_expected, 0) as total_expected
+                COALESCE(stats.total_expected, 0) as total_expected,
+                COALESCE(stats.total_rejected, 0) as total_rejected,
+                stats.first_session_at,
+                stats.last_session_at
          FROM stats
          FULL JOIN pick_order_tracking ot
            ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
@@ -2333,7 +2380,10 @@ router.get('/order-tracking/:obc',
          SELECT ${buildPickOrderTrackingSelectWithStats(trackingColumns)}, s.nombre as surtidor_nombre_actual,
                 COALESCE(stats.session_count, 0) as session_count,
                 COALESCE(stats.total_scanned, 0) as total_scanned,
-                COALESCE(stats.total_expected, 0) as total_expected
+                COALESCE(stats.total_expected, 0) as total_expected,
+                COALESCE(stats.total_rejected, 0) as total_rejected,
+                stats.first_session_at,
+                stats.last_session_at
          FROM stats
          FULL JOIN pick_order_tracking ot
            ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id

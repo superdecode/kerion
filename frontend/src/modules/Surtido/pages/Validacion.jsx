@@ -6,11 +6,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, CheckCircle2, XCircle, AlertCircle, Loader2, Wifi, WifiOff,
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
-  ScanBarcode, Square, Timer, Zap, ChevronRight, BadgeCheck, ShieldCheck,
+  ScanBarcode, ScanLine, Square, Timer, Zap, ChevronRight, BadgeCheck, ShieldCheck,
   MapPin, XOctagon, Plus, Edit3, X, AlertTriangle, Copy, Check,
   PanelRightClose, PanelRightOpen, Save, PartyPopper, Layers, Database,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
+import BarcodeScannerModal from '../../../core/components/common/BarcodeScannerModal'
 import Modal from '../../../core/components/common/Modal'
 import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
@@ -24,7 +25,7 @@ import {
   getOutboundList, getOutboundDetail,
   createScanSession, updateScanSession, addScanEvent, addManualScanEvent, clearSessionEvents,
   getManualEntryReasons,
-  upsertOrderTracking, getScanSessions, getScanSession, getRecords, getBoxStatusDetail,
+  upsertOrderTracking, getScanSession, getRecords, getBoxStatusDetail, getOrderTracking,
 } from '../services/surtidoService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
 import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
@@ -210,41 +211,84 @@ const fmtDateTime = (value) => {
   return formatDateTimeTz(value)
 }
 
+function getHistoryTimeBounds(history) {
+  const timestamps = (history || []).map((item) => item?.ts).filter(Boolean)
+  if (timestamps.length === 0) return { first: null, last: null }
+  return {
+    first: timestamps.reduce((min, value) => (value < min ? value : min), timestamps[0]),
+    last: timestamps.reduce((max, value) => (value > max ? value : max), timestamps[0]),
+  }
+}
+
+function getValidationCodeKey({ normalized_code, scanned_code, matched_box_type, code }) {
+  return normalizeCodeFast(matched_box_type || normalized_code || scanned_code || code || '')
+}
+
+function buildCompletedSnapshot({
+  source,
+  reason = 'already_validated',
+  obc,
+  destino,
+  validatedBy,
+  scanned = 0,
+  expected = 0,
+  rejected = 0,
+  startedAt = null,
+  completedAt = null,
+}) {
+  const elapsed = startedAt && completedAt
+    ? Math.max(0, Math.floor((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000))
+    : 0
+  return {
+    source,
+    reason,
+    obc,
+    destino: destino || null,
+    validatedBy: validatedBy || null,
+    scanned: Number(scanned || 0),
+    expected: Number(expected || 0),
+    rejected: Number(rejected || 0),
+    missing: Math.max(0, Number(expected || 0) - Number(scanned || 0)),
+    progress: Number(expected || 0) > 0 ? Math.min(100, Math.round((Number(scanned || 0) / Number(expected || 0)) * 100)) : 0,
+    sessionStart: startedAt,
+    elapsed,
+    startedAt,
+    completedAt,
+  }
+}
+
 /* ─── Search step ─────────────────────────────────────────── */
 function SearchStep({ onFound }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const [input, setInput] = useState('')
   const [results, setResults] = useState(null)
-  const [loading, setLoading] = useState(false)
   const inputRef = useRef(null)
+  const { data: outboundData, isLoading: loading } = useQuery({
+    queryKey: ['outbound-list-validacion-search'],
+    queryFn: getOutboundList,
+    staleTime: 5 * 60 * 1000,
+  })
+  const allOrders = useMemo(() => getRecords(outboundData), [outboundData])
 
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80) }, [])
 
-  async function doSearch(q) {
+  function doSearch(q) {
     if (!q.trim()) return
-    setLoading(true)
-    try {
-      const data = await getOutboundList()
-      const all = getRecords(data)
-      const normQ = normalizeCodeFast(q.trim())
-      const lowerQ = q.trim().toLowerCase()
-      const filtered = all.filter(r => {
-        if ((r.outboundOrderNo || '').toLowerCase().includes(lowerQ)) return true
-        if ((r.thirdOrderNo || '').toLowerCase().includes(lowerQ)) return true
-        if ((r.logisticsTrackNo || '').toLowerCase().includes(lowerQ)) return true
-        if (normQ && normalizeCodeFast(r.customizeCode || '').includes(normQ)) return true
-        if (normQ && (r.allCustomizeCodes || []).some(c => normalizeCodeFast(c).includes(normQ))) return true
-        return false
-      })
-      if (filtered.length === 0) { toast.error(t('surtido.escaneo.order_not_found') + ': ' + q); setResults([]); return }
-      if (filtered.length === 1) { onFound(filtered[0].outboundOrderNo); return }
-      setResults(filtered)
-    } catch {
-      toast.error(t('toast.error'))
-    } finally {
-      setLoading(false)
-    }
+    if (allOrders.length === 0) return
+    const normQ = normalizeCodeFast(q.trim())
+    const lowerQ = q.trim().toLowerCase()
+    const filtered = allOrders.filter(r => {
+      if ((r.outboundOrderNo || '').toLowerCase().includes(lowerQ)) return true
+      if ((r.thirdOrderNo || '').toLowerCase().includes(lowerQ)) return true
+      if ((r.logisticsTrackNo || '').toLowerCase().includes(lowerQ)) return true
+      if (normQ && normalizeCodeFast(r.customizeCode || '').includes(normQ)) return true
+      if (normQ && (r.allCustomizeCodes || []).some(c => normalizeCodeFast(c).includes(normQ))) return true
+      return false
+    })
+    if (filtered.length === 0) { toast.error(t('surtido.escaneo.order_not_found') + ': ' + q); setResults([]); return }
+    if (filtered.length === 1) { onFound(filtered[0].outboundOrderNo); return }
+    setResults(filtered)
   }
 
   return (
@@ -698,6 +742,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [searchError, setSearchError] = useState(null)
+  const [scannerOpen, setScannerOpen] = useState(false)
   const inputRef = useRef(null)
   const pendingQueryRef = useRef(null)
 
@@ -709,9 +754,15 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     enabled: isOpen,
   })
 
+  // Single source of truth for "is this order already validated": the same unpaginated
+  // pick_order_tracking + pick_sessions-stats view Validacion.jsx itself relies on. This used
+  // to call getScanSessions({ pageSize: 100 }) — capped at the 100 most-recently-updated
+  // sessions — so an order validated a while ago could silently fall out of the page and show
+  // as "sin validar" here while Validacion.jsx (which checks per-order, uncapped) correctly
+  // showed it as already validated.
   const { data: trackingData } = useQuery({
-    queryKey: ['wms-scan-sessions-quick'],
-    queryFn: () => getScanSessions({ pageSize: 100 }),
+    queryKey: ['wms-order-tracking-quick'],
+    queryFn: getOrderTracking,
     staleTime: 60000,
     enabled: isOpen,
   })
@@ -850,64 +901,80 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     return rows.filter(r => r.estado === 'validada').length
   }
 
+  function handleScanResult(text) {
+    setScannerOpen(false)
+    setQuery(text)
+    doSearch(text)
+  }
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.validacion.quick_search_title')} icon={Search} size="lg">
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <div className="flex-1 flex items-center gap-2 h-12 bg-warm-50 border-2 border-warm-200 rounded-2xl px-4 transition-all focus-within:border-primary-400 focus-within:shadow-sm overflow-hidden">
-            <ScanBarcode className="w-4 h-4 text-warm-300 shrink-0" />
-            <input
-              ref={inputRef}
-              type="text"
-              autoCapitalize="off"
-              autoCorrect="off"
-              autoComplete="off"
-              spellCheck="false"
-              className="flex-1 min-w-0 h-full text-base bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-warm-300 font-mono tracking-wide"
-              placeholder={t('surtido.validacion.quick_search_placeholder')}
-              value={query}
-              onChange={e => { setQuery(e.target.value); setSearchError(null) }}
-              onKeyDown={e => { if (e.key === 'Enter' && query.trim()) doSearch(query.trim()) }}
-            />
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.validacion.quick_search_title')} icon={Search} size="lg">
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <div className="flex flex-1 min-w-0 items-center gap-1 h-12 bg-warm-50 border-2 border-warm-200 rounded-2xl pl-4 pr-2 transition-all focus-within:border-primary-400 focus-within:shadow-sm overflow-hidden">
+              <ScanBarcode className="hidden w-4 h-4 text-warm-300 shrink-0 sm:block" />
+              <button
+                type="button"
+                onClick={() => setScannerOpen(true)}
+                className="sm:hidden shrink-0 -ml-0.5 p-0.5 text-primary-600 hover:text-primary-700 transition-colors"
+                aria-label="Escanear codigo con camara"
+                title="Escanear codigo"
+              >
+                <ScanLine size={18} />
+              </button>
+              <input
+                ref={inputRef}
+                type="text"
+                autoCapitalize="off"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck="false"
+                className="flex-1 min-w-0 h-full text-base bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-warm-300 font-mono tracking-wide"
+                placeholder={t('surtido.validacion.quick_search_placeholder')}
+                value={query}
+                onChange={e => { setQuery(e.target.value); setSearchError(null) }}
+                onKeyDown={e => { if (e.key === 'Enter' && query.trim()) doSearch(query.trim()) }}
+              />
+            </div>
+            <motion.button
+              className="btn-primary px-5 h-12 shadow-glow"
+              onClick={() => doSearch(query.trim())}
+              disabled={!query.trim() || isLoadingSheet}
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+              {isLoadingSheet ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+            </motion.button>
           </div>
-          <motion.button
-            className="btn-primary px-5 h-12 shadow-glow"
-            onClick={() => doSearch(query.trim())}
-            disabled={!query.trim() || isLoadingSheet}
-            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
-            {isLoadingSheet ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-          </motion.button>
-        </div>
 
-        {isLoadingSheet && !searchError && results === null && (
-          <div className="text-center py-6 text-sm text-warm-400 flex items-center justify-center gap-2">
-            <Loader2 size={14} className="animate-spin" />
-            <span>Cargando datos de salidas...</span>
-          </div>
-        )}
+          {isLoadingSheet && !searchError && results === null && (
+            <div className="text-center py-6 text-sm text-warm-400 flex items-center justify-center gap-2">
+              <Loader2 size={14} className="animate-spin" />
+              <span>Cargando datos de salidas...</span>
+            </div>
+          )}
 
-        {searchError && (
-          <div className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 flex items-start gap-3 text-sm">
-            <AlertTriangle className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
-            <p className="text-danger-700 leading-snug">{searchError}</p>
-          </div>
-        )}
+          {searchError && (
+            <div className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 flex items-start gap-3 text-sm">
+              <AlertTriangle className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
+              <p className="text-danger-700 leading-snug">{searchError}</p>
+            </div>
+          )}
 
-        {!isLoadingSheet && !searchError && results === null && (
-          <div className="text-center py-10 text-sm text-warm-400">
-            {t('surtido.validacion.quick_search_hint')}
-          </div>
-        )}
+          {!isLoadingSheet && !searchError && results === null && (
+            <div className="text-center py-10 text-sm text-warm-400">
+              {t('surtido.validacion.quick_search_hint')}
+            </div>
+          )}
 
-        {!searchError && results && results.length === 0 && (
-          <div className="text-center py-10 text-sm text-warm-400">
-            {t('surtido.validacion.quick_search_empty')}
-          </div>
-        )}
+          {!searchError && results && results.length === 0 && (
+            <div className="text-center py-10 text-sm text-warm-400">
+              {t('surtido.validacion.quick_search_empty')}
+            </div>
+          )}
 
-        {results && results.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {results.map(r => {
+          {results && results.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {results.map(r => {
               const tracking = trackingMap.get(r.outboundOrderNo)
               const validatedBoxCount = getValidatedBoxCount(r.outboundOrderNo)
               const totalExpected = tracking?.total_expected ?? r.outboundBoxCount ?? null
@@ -1013,11 +1080,17 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                   </div>
                 </div>
               )
-            })}
-          </div>
-        )}
-      </div>
-    </Modal>
+              })}
+            </div>
+          )}
+        </div>
+      </Modal>
+      <BarcodeScannerModal
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={handleScanResult}
+      />
+    </>
   )
 }
 
@@ -1120,10 +1193,8 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const sidebarStorageKey = `kirion_surtido_validation_sidebar_${user?.id || 'guest'}`
   const sessionCompleteLocked = showCompletionModal || !!completionSnapshot
 
-  const firstScanTs = useMemo(() => {
-    const ts = history.map(h => h.ts).filter(Boolean)
-    return ts.length > 0 ? ts.reduce((min, t) => (t < min ? t : min), Infinity) : null
-  }, [history])
+  const historyTimeBounds = useMemo(() => getHistoryTimeBounds(history), [history])
+  const firstScanTs = historyTimeBounds.first
 
   const sessionElapsed = useSessionTimer(firstScanTs || sessionStart)
   const storageKey = SESSION_KEY(tabId)
@@ -1204,9 +1275,12 @@ const { data: reasonsData } = useQuery({
     queryFn: getManualEntryReasons,
     staleTime: STALE.CATALOG,
   })
+  // Single source of truth for "is this order already validated": the unpaginated
+  // pick_order_tracking + pick_sessions-stats view (see QuickSearchModal above for why the old
+  // getScanSessions({ pageSize: 100 }) call here was unreliable for orders outside the page).
   const { data: trackingData, status: trackingStatus } = useQuery({
     queryKey: ['wms-sessions-list'],
-    queryFn: () => getScanSessions({ pageSize: 100 }),
+    queryFn: getOrderTracking,
     staleTime: 60000,
     enabled: step === 'session',
   })
@@ -1255,6 +1329,45 @@ const { data: reasonsData } = useQuery({
   const [conflictDetails, setConflictDetails] = useState(null)
   const [rejectedBoxModal, setRejectedBoxModal] = useState({ open: false, code: '' })
   
+  // Rebuild local scan state (history/counts/itemCounts/dedupe set) from the session's
+  // authoritative pick_events on the server. Needed whenever we resume a session that
+  // already has progress but whose events never reached this browser's local storage
+  // (different device/tab, or storage was cleared when the session went non-'open') —
+  // without this the UI shows an empty session even though the backend correctly kept
+  // the single existing record instead of creating a new one.
+  const hydrateFromServerEvents = useCallback((events) => {
+    if (!events || events.length === 0) return
+    const sorted = [...events].sort((a, b) => new Date(a.scanned_at) - new Date(b.scanned_at))
+    const nextHistory = []
+    const nextItemCounts = new Map()
+    const okCodes = new Set()
+    const seenValidated = new Set()
+    let okCount = 0
+    let rejectedCount = 0
+    for (const e of sorted) {
+      const norm = e.normalized_code || e.scanned_code
+      const eventKey = getValidationCodeKey(e)
+      let result = e.scan_result === 'not_found' ? 'rejected' : e.scan_result
+      if (e.scan_result === 'ok' && eventKey && seenValidated.has(eventKey)) {
+        result = 'duplicate'
+      }
+      nextHistory.unshift({ code: norm, result, ts: new Date(e.scanned_at).getTime() })
+      if (result === 'ok') {
+        okCount += 1
+        if (eventKey) seenValidated.add(eventKey)
+        okCodes.add(eventKey || norm)
+        const matched = findMatchedItem(norm, packageMap, productMap)
+        if (matched) nextItemCounts.set(matched.displayCode, (nextItemCounts.get(matched.displayCode) || 0) + 1)
+      } else if (result === 'rejected' || result === 'duplicate') {
+        rejectedCount += 1
+      }
+    }
+    setHistory(nextHistory.slice(0, 500))
+    setItemCounts(nextItemCounts)
+    setCounts({ ok: okCount, rejected: rejectedCount })
+    scannedOkCodesRef.current = okCodes
+  }, [packageMap, productMap])
+
   const createSessionMut = useMutation({
     mutationFn: (force = false) => {
       const packageList = (detailData?.data ?? detailData)?.packageList ?? (detailData?.data ?? detailData)?.details ?? (detailData?.data ?? detailData)?.items ?? []
@@ -1267,14 +1380,62 @@ const { data: reasonsData } = useQuery({
       })
     },
     onSuccess: (data) => {
+      const s = data.data
+      // Firm lock: the backend only ever returns a non-'open' session here when it's genuinely
+      // finished (see the genuinelyComplete guard in POST /scan-session) — that order can never
+      // be reopened for scanning again, regardless of what any local/cached tracking state says.
+      const genuinelyComplete = s.status !== 'open' &&
+        Number(s.total_expected) > 0 && Number(s.total_scanned) >= Number(s.total_expected)
+      if (genuinelyComplete) {
+        setAutoStartPending(false)
+        sessionCreateFiredRef.current = false
+        setConflictDetails(null)
+        getScanSession(s.id)
+          .then((res) => {
+            const completedSession = res?.data?.session ?? res?.data ?? s
+            setCompletionSnapshot(buildCompletedSnapshot({
+              source: 'locked',
+              obc,
+              destino: (detailData?.data ?? detailData)?.receiverName || null,
+              validatedBy: completedSession.operator_nombre || s.operator_nombre || null,
+              scanned: completedSession.total_scanned ?? s.total_scanned,
+              expected: completedSession.total_expected ?? s.total_expected,
+              rejected: completedSession.total_rejected ?? 0,
+              startedAt: completedSession.first_scan_at || completedSession.started_at || s.started_at || null,
+              completedAt: completedSession.last_scan_at || completedSession.completed_at || completedSession.updated_at || s.completed_at || s.updated_at || null,
+            }))
+            setShowCompletionModal(true)
+          })
+          .catch(() => {
+            setCompletionSnapshot(buildCompletedSnapshot({
+              source: 'locked',
+              obc,
+              destino: (detailData?.data ?? detailData)?.receiverName || null,
+              validatedBy: s.operator_nombre || null,
+              scanned: s.total_scanned,
+              expected: s.total_expected,
+              rejected: 0,
+              startedAt: s.started_at || null,
+              completedAt: s.completed_at || s.updated_at || null,
+            }))
+            setShowCompletionModal(true)
+          })
+        return
+      }
       setConflictDetails(null)
-      const sid = data.data.id; const now = new Date()
+      const sid = s.id; const now = new Date()
       setSessionId(sid); setSessionStart(now); setStep('session')
       setSelectedUbicacion(null); setUbicacionConfirmed(false)
       autoFinalizeLockRef.current = false
       persistSession(obc, sid, now, null)
       upsertOrderTracking(obc, { status: 'validating' }).catch(() => {})
       onUpdateTab({ obc, step: 'session' })
+      if (data.reused) {
+        getScanSession(sid).then(res => hydrateFromServerEvents(res?.data?.events)).catch(() => {})
+      } else {
+        setHistory([]); setCounts({ ok: 0, rejected: 0 }); setItemCounts(new Map())
+        scannedOkCodesRef.current = new Set()
+      }
     },
     onError: (err) => {
       autoFinalizeLockRef.current = false
@@ -1292,6 +1453,7 @@ const { data: reasonsData } = useQuery({
           setSelectedUbicacion(null); setUbicacionConfirmed(false)
           persistSession(obc, existingSid, now, null)
           onUpdateTab({ obc, step: 'session' })
+          getScanSession(existingSid).then(res => hydrateFromServerEvents(res?.data?.events)).catch(() => {})
         } else {
           setConflictDetails(details)
         }
@@ -1304,43 +1466,58 @@ const { data: reasonsData } = useQuery({
   // Add render logic for the conflict modal
   // (Note: This component would need to be added to the JSX return as well)
 
+  // Derived synchronously at render time (not inside an effect) so both effects below see the
+  // same answer in the same commit — computing this independently inside each effect let them
+  // race: on the render where trackingData first arrives, the early-guard effect below would
+  // decide "already complete" and queue setAutoStartPending(false), but the session-create effect
+  // that follows it in this file still ran with the OLD autoStartPending value (state updates
+  // from an earlier effect aren't visible to a later effect in the same commit), so it fired
+  // createSessionMut anyway — briefly starting a live scan session behind the completion modal.
+  const existingTrackingForObc = useMemo(
+    () => getRecords(trackingData).find(s => s.outbound_order_no === obc),
+    [trackingData, obc]
+  )
+  const trackingAlreadyComplete = useMemo(() => {
+    if (!existingTrackingForObc) return false
+    const prevScanned = Number(existingTrackingForObc.total_scanned ?? 0)
+    const prevExpected = Number(existingTrackingForObc.total_expected ?? 0)
+    // Only a genuinely full count means there's nothing left to validate. A 'partial' tracking
+    // status means a prior session was force-closed with boxes still missing — that's still an
+    // incomplete order and must fall through to resuming the real session below, not get stuck
+    // showing a read-only "already validated" snapshot forever.
+    return prevExpected > 0 && prevScanned >= prevExpected
+  }, [existingTrackingForObc])
+
   // Early guard: fire as soon as tracking data is ready, no need to wait for detailData
   useEffect(() => {
     if (!autoStartPending || step !== 'session' || trackingStatus === 'pending' || sessionId) return
-    const existingTracking = getRecords(trackingData).find(s => s.outbound_order_no === obc)
-    if (!existingTracking) return
+    const existingTracking = existingTrackingForObc
+    if (!existingTracking || !trackingAlreadyComplete) return
     const prevScanned = Number(existingTracking.total_scanned ?? 0)
     const prevExpected = Number(existingTracking.total_expected ?? 0)
-    const alreadyComplete = existingTracking.status === 'complete' || existingTracking.status === 'partial' ||
-      (prevExpected > 0 && prevScanned >= prevExpected)
-    if (!alreadyComplete) return
     setAutoStartPending(false)
     setCounts({ ok: prevScanned, rejected: 0 })
-    const startedAt = existingTracking.validation_started_at || null
-    const completedAt = existingTracking.validation_completed_at || existingTracking.updated_at || null
-    const elapsedSecs = startedAt && completedAt
-      ? Math.floor((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000)
-      : 0
-    setCompletionSnapshot({
+    setCompletionSnapshot(buildCompletedSnapshot({
       source: 'history',
       obc,
+      destino: (detailData?.data ?? detailData)?.receiverName || null,
+      validatedBy: existingTracking.validated_by || null,
       scanned: prevScanned,
       expected: prevExpected,
-      rejected: 0,
-      missing: Math.max(0, prevExpected - prevScanned),
-      progress: prevExpected > 0 ? Math.min(100, Math.round((prevScanned / prevExpected) * 100)) : 0,
-      sessionStart: startedAt,
-      elapsed: elapsedSecs,
-      startedAt,
-      completedAt,
-    })
+      rejected: existingTracking.total_rejected ?? 0,
+      startedAt: existingTracking.first_session_at || existingTracking.validation_started_at || null,
+      completedAt: existingTracking.last_session_at || existingTracking.validation_completed_at || existingTracking.updated_at || null,
+    }))
     setShowCompletionModal(true)
-  }, [autoStartPending, step, trackingStatus, trackingData, obc, sessionId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoStartPending, step, trackingStatus, existingTrackingForObc, trackingAlreadyComplete, obc, sessionId, detailData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!autoStartPending || step !== 'session' || detailLoading || !detailData || sessionId || createSessionMut.isPending) return
     // Wait for tracking data before deciding — prevents creating duplicate sessions for already-validated orders
     if (trackingStatus === 'pending') return
+    // Already-complete orders are handled entirely by the early-guard effect above — never let
+    // this effect race it into starting a live session for an order that's genuinely finished.
+    if (trackingAlreadyComplete) return
     const validation = validateOrderBoxData(detailData)
     if (!validation.ok) {
       setAutoStartPending(false)
@@ -1364,11 +1541,14 @@ const { data: reasonsData } = useQuery({
     sessionCreateFiredRef.current = true
     setAutoStartPending(false)
     createSessionMut.mutate()
-  }, [autoStartPending, step, detailLoading, detailData, sessionId, createSessionMut.isPending, canCreate, t, trackingStatus, trackingData, obc]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoStartPending, step, detailLoading, detailData, sessionId, createSessionMut.isPending, canCreate, t, trackingStatus, trackingAlreadyComplete, obc]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!onSessionChange) return
-    if (step !== 'session' || !isActive) { onSessionChange(null); return }
+    // Wait for sessionId — otherwise these toolbar actions (Faltante/Cancelar/Finalizar) show up
+    // while the order is still being verified (pending overlay / already-validated check), before
+    // there's an actual session to act on.
+    if (step !== 'session' || !isActive || !sessionId) { onSessionChange(null); return }
     onSessionChange({
       pendingCount: surtidoPendingCount,
       isSyncing,
@@ -1377,7 +1557,7 @@ const { data: reasonsData } = useQuery({
       onCancel:   canDelete && !sessionCompleteLocked ? handleCancel : null,
       onFinalize: canUpdate && !sessionCompleteLocked && totalExpected > 0 && counts.ok < totalExpected ? () => setShowFinalize(true) : null,
     })
-  }, [step, isActive, surtidoPendingCount, isSyncing, sessionCompleteLocked, totalExpected, counts.ok, counts.rejected, canDelete, canUpdate]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, isActive, sessionId, surtidoPendingCount, isSyncing, sessionCompleteLocked, totalExpected, counts.ok, counts.rejected, canDelete, canUpdate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { isSyncingRef.current = isSyncing }, [isSyncing])
 
@@ -1548,15 +1728,6 @@ const { data: reasonsData } = useQuery({
     if (!canCreate || !rawCode.trim() || !sessionId) return
     const norm = normalizeScanCode(rawCode)
     if (!norm) return
-    const isDup = scannedOkCodesRef.current.has(norm)
-    if (isDup) {
-      playSound('duplicate')
-      setLastScan({ code: norm, result: 'duplicate' })
-      setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h].slice(0, 500))
-      toast.warning(t('surtido.validacion.duplicate') + ': ' + norm)
-      addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'duplicate', quantity: 1, _dedupeKey: `DUP_${norm}_${Date.now()}` })
-      return
-    }
     const matched = findMatchedItem(norm, packageMap, productMap)
     if (!matched) {
       playSound('error')
@@ -1567,8 +1738,18 @@ const { data: reasonsData } = useQuery({
       addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'not_found', quantity: 1, _dedupeKey: `NF_${norm}_${Date.now()}` })
       return
     }
+    const eventKey = getValidationCodeKey({ normalized_code: norm, matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null })
+    const isDup = scannedOkCodesRef.current.has(eventKey || norm)
+    if (isDup) {
+      playSound('duplicate')
+      setLastScan({ code: norm, result: 'duplicate' })
+      setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h].slice(0, 500))
+      toast.warning(t('surtido.validacion.duplicate') + ': ' + norm)
+      addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'duplicate', quantity: 1, _dedupeKey: `DUP_${norm}_${Date.now()}` })
+      return
+    }
     playSound('success')
-    scannedOkCodesRef.current.add(norm)
+    scannedOkCodesRef.current.add(eventKey || norm)
     setLastScan({ code: norm, result: 'ok' })
     setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
@@ -1590,8 +1771,17 @@ const { data: reasonsData } = useQuery({
       toast.error(t('surtido.validacion.not_in_bd') + ': ' + norm)
       return
     }
+    const eventKey = getValidationCodeKey({ normalized_code: norm, matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null })
+    if (scannedOkCodesRef.current.has(eventKey || norm)) {
+      playSound('duplicate')
+      setLastScan({ code: norm, result: 'duplicate' })
+      setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h].slice(0, 500))
+      setCounts(c => ({ ...c, rejected: c.rejected + 1 }))
+      toast.warning(t('surtido.validacion.duplicate') + ': ' + norm)
+      return
+    }
     playSound('success')
-    scannedOkCodesRef.current.add(norm)
+    scannedOkCodesRef.current.add(eventKey || norm)
     setLastScan({ code: norm, result: 'ok' })
     setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
@@ -1641,11 +1831,11 @@ const { data: reasonsData } = useQuery({
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
       qc.invalidateQueries({ queryKey: ['wms-sessions-list'] })
       autoFinalizeLockRef.current = true
-      const lastTs = history.length > 0 ? history[0].ts : Date.now()
-      const startTs = firstScanTs || sessionStart?.getTime()
+      const lastTs = historyTimeBounds.last || Date.now()
+      const startTs = historyTimeBounds.first || sessionStart?.getTime() || lastTs
       const startedAtIso = startTs ? new Date(startTs).toISOString() : null
       const completedAtIso = new Date(lastTs).toISOString()
-      const elapsedSecs = startTs ? Math.floor((lastTs - startTs) / 1000) : sessionElapsed
+      const elapsedSecs = Math.max(0, Math.floor((lastTs - startTs) / 1000))
       setCompletionSnapshot({
         source: vars?.source || 'manual',
         obc,
@@ -2369,127 +2559,190 @@ const { data: reasonsData } = useQuery({
       <Modal
         isOpen={!!conflictDetails}
         onClose={() => { setConflictDetails(null); setStep('search'); setObc(null) }}
-        title="Conflicto de validación"
+        title={t('surtido.validacion.conflict_title')}
         icon={AlertCircle}
         footer={
           <div className="flex gap-3 justify-end">
-            <button className="btn-ghost" onClick={() => { setConflictDetails(null); setStep('search'); setObc(null) }}>Cancelar</button>
+            <button className="btn-ghost" onClick={() => { setConflictDetails(null); setStep('search'); setObc(null) }}>{t('common.cancel')}</button>
             <button
               className="btn-danger inline-flex items-center gap-1.5"
               onClick={() => createSessionMut.mutate(true)}
               disabled={createSessionMut.isPending}
             >
               {createSessionMut.isPending ? <Loader2 size={14} className="animate-spin" /> : null}
-              Tomar control y continuar
+              {t('surtido.validacion.conflict_takeover')}
             </button>
           </div>
         }
       >
         <div className="space-y-3 text-sm text-warm-700">
-          <p>Esta orden ya está siendo validada por <strong>{conflictDetails?.operator}</strong>.</p>
-          <p>Inició el proceso el <strong>{conflictDetails?.started_at ? formatDateTimeTz(conflictDetails.started_at) : '—'}</strong>.</p>
-          <p className="font-semibold text-danger-600">¿Deseas tomar el control y continuar validando esta orden?</p>
+          <p>{t('surtido.validacion.conflict_body_operator')} <strong>{conflictDetails?.operator || '—'}</strong>.</p>
+          <p>{t('surtido.validacion.conflict_body_started')} <strong>{conflictDetails?.started_at ? formatDateTimeTz(conflictDetails.started_at) : '—'}</strong>.</p>
+          <p className="font-semibold text-danger-600">{t('surtido.validacion.conflict_body_confirm')}</p>
         </div>
       </Modal>
 
-      {/* Completion success modal */}
-      <Modal
-        isOpen={showCompletionModal}
-        onClose={() => {
-          setShowCompletionModal(false)
-          clearSession()
-        }}
-        title={t('surtido.validacion.complete_title')}
-        icon={PartyPopper}
-        size="lg"
-        footer={
-          <div className="flex flex-col sm:flex-row gap-3 justify-end w-full">
-            <button
-              className="btn-ghost"
-              onClick={() => {
-                setShowCompletionModal(false)
-                clearSession()
-              }}
-            >
-              {t('surtido.validacion.complete_save_close')}
-            </button>
-            <button
-              className="btn-primary inline-flex items-center gap-2"
-              onClick={() => {
-                setShowCompletionModal(false)
-                clearSession()
-                onNewOrder?.()
-              }}
-            >
-              <ScanBarcode size={14} />
-              {t('surtido.validacion.complete_new_order')}
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-success-200 bg-success-50/80 p-5 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm ring-8 ring-success-100">
-              <CheckCircle2 className="h-8 w-8 text-success-600" />
-            </div>
-            <p className="text-lg font-bold text-success-700">{t('surtido.validacion.complete_message')}</p>
-            <p className="mt-1 text-sm text-success-600">{t('surtido.validacion.complete_hint')}</p>
-          </div>
+      {/* Completion / already-validated lock modal */}
+      {(() => {
+        const isLocked = completionSnapshot?.reason === 'already_validated'
+        return (
+          <Modal
+            isOpen={showCompletionModal}
+            onClose={() => {
+              setShowCompletionModal(false)
+              clearSession()
+            }}
+            title={isLocked ? t('surtido.validacion.already_validated_title') : t('surtido.validacion.complete_title')}
+            icon={isLocked ? CheckCircle2 : PartyPopper}
+            size="md"
+            footer={
+              <div className="flex flex-col sm:flex-row gap-3 justify-end w-full">
+                <button
+                  className="btn-ghost h-10"
+                  onClick={() => {
+                    setShowCompletionModal(false)
+                    clearSession()
+                  }}
+                >
+                  {isLocked ? t('surtido.validacion.close_only') : t('surtido.validacion.complete_save_close')}
+                </button>
+                {!isLocked && (
+                  <button
+                    className="btn-primary inline-flex h-10 items-center gap-2"
+                    onClick={() => {
+                      setShowCompletionModal(false)
+                      clearSession()
+                      onNewOrder?.()
+                    }}
+                  >
+                    <ScanBarcode size={14} />
+                    {t('surtido.validacion.complete_new_order')}
+                  </button>
+                )}
+              </div>
+            }
+          >
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-success-200 bg-success-50/80 px-4 py-4 text-center">
+                <motion.div
+                  className="relative mx-auto mb-3 flex h-14 w-14 items-center justify-center"
+                  initial={{ y: 0, scale: 1 }}
+                  animate={isLocked
+                    ? { y: [0, -5, 0], scale: [1, 1.04, 1] }
+                    : { y: [0, -8, 0, -3, 0], scale: [1, 1.06, 1, 1.02, 1] }}
+                  transition={{
+                    duration: isLocked ? 1.6 : 1.1,
+                    ease: [0.22, 1, 0.36, 1],
+                    repeat: Infinity,
+                    repeatDelay: isLocked ? 1.6 : 2.2,
+                  }}
+                >
+                  <motion.span
+                    className="absolute inset-[-10px] rounded-full bg-success-300/40 blur-xl"
+                    initial={{ opacity: 0, scale: 0.85 }}
+                    animate={isLocked
+                      ? { opacity: [0, 0.12, 0.28, 0], scale: [0.9, 0.95, 1.18, 1.28] }
+                      : { opacity: [0, 0.1, 0.14, 0.34, 0], scale: [0.88, 0.94, 1, 1.22, 1.3] }}
+                    transition={{
+                      duration: isLocked ? 1.6 : 1.1,
+                      ease: [0.22, 1, 0.36, 1],
+                      repeat: Infinity,
+                      repeatDelay: isLocked ? 1.6 : 2.2,
+                      times: isLocked ? [0, 0.3, 0.58, 1] : [0, 0.28, 0.5, 0.72, 1],
+                    }}
+                  />
+                  {isLocked && (
+                    <motion.span
+                      className="absolute inset-0 rounded-full bg-success-300"
+                      initial={{ opacity: 0.55, scale: 0.85 }}
+                      animate={{ opacity: 0, scale: 1.55 }}
+                      transition={{ duration: 1.1, ease: 'easeOut' }}
+                    />
+                  )}
+                  <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-sm ring-4 ring-success-100">
+                    <CheckCircle2 className="h-7 w-7 text-success-600" />
+                  </div>
+                </motion.div>
+                <p className="text-base font-bold leading-snug text-success-700 sm:text-lg">
+                  {isLocked ? t('surtido.validacion.already_validated_message') : t('surtido.validacion.complete_message')}
+                </p>
+                {!isLocked && (
+                  <p className="mt-1 text-sm leading-snug text-success-600">{t('surtido.validacion.complete_hint')}</p>
+                )}
+              </div>
 
-          <div className="rounded-2xl border border-warm-200 bg-gradient-to-br from-warm-50 to-white p-4 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-warm-400 font-semibold">{t('surtido.validacion.order_label')}</p>
-                <p className="mt-0.5 font-mono text-sm font-bold text-primary-700 break-all">{completionSnapshot?.obc ?? obc}</p>
-              </div>
-              <span className={`badge text-[9px] shrink-0 ${(completionSnapshot?.progress ?? progress) >= 100 ? 'bg-success-100 text-success-700' : 'bg-warning-100 text-warning-700'}`}>
-                {(completionSnapshot?.progress ?? progress) >= 100 ? 'Completa' : 'Con diferencias'}
-              </span>
-            </div>
-
-            {selectedUbicacion && (
-              <div className="flex items-center gap-2 rounded-xl bg-white border border-warm-100 px-3 py-2 text-xs">
-                <MapPin size={12} className="text-accent-600 shrink-0" />
-                <span className="font-mono font-semibold text-accent-700">{selectedUbicacion}</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-3 gap-2 border-t border-warm-100 pt-3">
-              <div className="text-center">
-                <p className="text-xl font-extrabold text-success-600 tabular-nums">{completionSnapshot?.scanned ?? counts.ok}</p>
-                <p className="text-[9px] text-warm-400 uppercase tracking-wide mt-0.5">{t('surtido.escaneo.scanned')}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-extrabold text-warm-600 tabular-nums">{completionSnapshot?.expected ?? totalExpected}</p>
-                <p className="text-[9px] text-warm-400 uppercase tracking-wide mt-0.5">{t('surtido.escaneo.expected')}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xl font-extrabold text-danger-500 tabular-nums">{completionSnapshot?.rejected ?? counts.rejected}</p>
-                <p className="text-[9px] text-warm-400 uppercase tracking-wide mt-0.5">{t('surtido.validacion.rejected_abbr')}</p>
-              </div>
-            </div>
-
-            <div className="space-y-1.5 border-t border-warm-100 pt-3 text-xs">
-              {completionSnapshot?.startedAt && (
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-warm-400">Inicio</span>
-                  <span className="font-mono text-warm-600">{fmtDateTime(completionSnapshot.startedAt)}</span>
+              <div className="rounded-2xl border border-warm-200 bg-gradient-to-br from-warm-50 to-white px-4 py-3.5 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-warm-400 font-semibold">{t('surtido.validacion.order_label')}</p>
+                    <p className="mt-0.5 font-mono text-[15px] font-bold leading-tight text-primary-700 break-all">{completionSnapshot?.obc ?? obc}</p>
+                  </div>
+                  <span className={`badge text-[9px] shrink-0 ${(completionSnapshot?.progress ?? progress) >= 100 ? 'bg-success-100 text-success-700' : 'bg-warning-100 text-warning-700'}`}>
+                    {(completionSnapshot?.progress ?? progress) >= 100
+                      ? t('surtido.ordenes.session_status.complete')
+                      : t('surtido.ordenes.session_status.with_discrepancies')}
+                  </span>
                 </div>
-              )}
-              {completionSnapshot?.completedAt && (
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-warm-400">Fin</span>
-                  <span className="font-mono text-warm-600">{fmtDateTime(completionSnapshot.completedAt)}</span>
+
+                {completionSnapshot?.destino && (
+                  <div className="flex items-center gap-2 rounded-xl bg-white border border-warm-100 px-3 py-2 text-sm min-w-0">
+                    <MapPin size={12} className="text-accent-600 shrink-0" />
+                    <span className="text-warm-400 uppercase tracking-wide text-[9px] font-semibold shrink-0">{t('surtido.validacion.destino_label')}</span>
+                    <span className="font-semibold text-warm-700 truncate min-w-0 flex-1">{completionSnapshot.destino}</span>
+                  </div>
+                )}
+
+                {selectedUbicacion && (
+                  <div className="flex items-center gap-2 rounded-xl bg-white border border-warm-100 px-3 py-2 text-sm">
+                    <MapPin size={12} className="text-accent-600 shrink-0" />
+                    <span className="font-mono font-semibold text-accent-700">{selectedUbicacion}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-2 border-t border-warm-100 pt-3">
+                  <div className="text-center">
+                    <p className="text-lg font-extrabold text-success-600 tabular-nums sm:text-xl">{completionSnapshot?.scanned ?? counts.ok}</p>
+                    <p className="mt-0.5 text-[10px] text-warm-400 uppercase tracking-wide">{t('surtido.escaneo.scanned')}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-extrabold text-warm-600 tabular-nums sm:text-xl">{completionSnapshot?.expected ?? totalExpected}</p>
+                    <p className="mt-0.5 text-[10px] text-warm-400 uppercase tracking-wide">{t('surtido.escaneo.expected')}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-extrabold text-danger-500 tabular-nums sm:text-xl">{completionSnapshot?.rejected ?? counts.rejected}</p>
+                    <p className="mt-0.5 text-[10px] text-warm-400 uppercase tracking-wide">{t('surtido.validacion.rejected_abbr')}</p>
+                  </div>
                 </div>
-              )}
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-warm-400">{t('surtido.validacion.time_label')}</span>
-                <span className="font-mono font-bold text-warm-800">{fmtElapsed(completionSnapshot?.elapsed ?? sessionElapsed)}</span>
+
+                <div className="space-y-2 border-t border-warm-100 pt-3 text-sm">
+                  {completionSnapshot?.startedAt && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-warm-400 shrink-0">{t('surtido.validacion.start_label')}</span>
+                      <span className="font-mono text-warm-600 truncate min-w-0 text-right text-[13px]">{fmtDateTime(completionSnapshot.startedAt)}</span>
+                    </div>
+                  )}
+                  {completionSnapshot?.completedAt && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-warm-400 shrink-0">{t('surtido.validacion.end_label')}</span>
+                      <span className="font-mono text-warm-600 truncate min-w-0 text-right text-[13px]">{fmtDateTime(completionSnapshot.completedAt)}</span>
+                    </div>
+                  )}
+                  {completionSnapshot?.validatedBy && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-warm-400 shrink-0">{t('surtido.validacion.validated_by_label')}</span>
+                      <span className="font-semibold text-warm-800 truncate min-w-0 text-right">{completionSnapshot.validatedBy}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-warm-400 shrink-0">{t('surtido.validacion.time_label')}</span>
+                    <span className="font-mono font-bold text-warm-800 text-[15px]">{fmtElapsed(completionSnapshot?.elapsed ?? sessionElapsed)}</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      </Modal>
+          </Modal>
+        )
+      })()}
     </div>
   )
 }

@@ -6,9 +6,10 @@ import * as XLSX from 'xlsx'
 import {
   X, CheckCircle2, XCircle, AlertTriangle, Copy, Check,
   Clock, ScanBarcode, Package2, BadgeCheck, User, Timer, ShieldCheck,
-  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Edit3, Trash2, Search, ChevronRight, ChevronUp, ChevronDown,
+  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Edit3, Trash2, Search, ScanLine, ChevronRight, ChevronUp, ChevronDown,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
+import BarcodeScannerModal from '../../../core/components/common/BarcodeScannerModal'
 import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
 import StatusPill from '../../../core/components/common/StatusPill'
@@ -777,6 +778,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [searchError, setSearchError] = useState(null)
+  const [scannerOpen, setScannerOpen] = useState(false)
   const inputRef = useRef(null)
   const pendingQueryRef = useRef(null)
 
@@ -928,60 +930,76 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
     return rows.filter(r => r.estado === 'validada').length
   }
 
+  function handleScanResult(text) {
+    setScannerOpen(false)
+    setQuery(text)
+    doSearch(text)
+  }
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.validacion.quick_search_title')} icon={Search} size="lg">
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <div className="flex-1 flex items-center gap-2 h-12 bg-warm-50 border-2 border-warm-200 rounded-2xl px-4 transition-all focus-within:border-primary-400 focus-within:shadow-sm overflow-hidden">
-            <ScanBarcode className="w-4 h-4 text-warm-300 shrink-0" />
-            <input
-              ref={inputRef}
-              type="text"
-              className="flex-1 min-w-0 h-full text-base bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-warm-300 font-mono tracking-wide"
-              placeholder={t('surtido.validacion.quick_search_placeholder')}
-              value={query}
-              onChange={e => { setQuery(e.target.value); setSearchError(null) }}
-              onKeyDown={e => { if (e.key === 'Enter' && query.trim()) doSearch(query.trim()) }}
-            />
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.validacion.quick_search_title')} icon={Search} size="lg">
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <div className="flex flex-1 min-w-0 items-center gap-1 h-12 bg-warm-50 border-2 border-warm-200 rounded-2xl pl-4 pr-2 transition-all focus-within:border-primary-400 focus-within:shadow-sm overflow-hidden">
+              <ScanBarcode className="hidden w-4 h-4 text-warm-300 shrink-0 sm:block" />
+              <button
+                type="button"
+                onClick={() => setScannerOpen(true)}
+                className="sm:hidden shrink-0 -ml-0.5 p-0.5 text-primary-600 hover:text-primary-700 transition-colors"
+                aria-label="Escanear codigo con camara"
+                title="Escanear codigo"
+              >
+                <ScanLine size={18} />
+              </button>
+              <input
+                ref={inputRef}
+                type="text"
+                className="flex-1 min-w-0 h-full text-base bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-warm-300 font-mono tracking-wide"
+                placeholder={t('surtido.validacion.quick_search_placeholder')}
+                value={query}
+                onChange={e => { setQuery(e.target.value); setSearchError(null) }}
+                onKeyDown={e => { if (e.key === 'Enter' && query.trim()) doSearch(query.trim()) }}
+              />
+            </div>
+            <button
+              className="btn-primary px-5 h-12 shadow-glow"
+              onClick={() => doSearch(query.trim())}
+              disabled={!query.trim() || isLoadingSheet}
+            >
+              {isLoadingSheet ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+            </button>
           </div>
-          <button
-            className="btn-primary px-5 h-12 shadow-glow"
-            onClick={() => doSearch(query.trim())}
-            disabled={!query.trim() || isLoadingSheet}
-          >
-            {isLoadingSheet ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-          </button>
-        </div>
 
-        {isLoadingSheet && !searchError && results === null && (
-          <div className="text-center py-6 text-sm text-warm-400 flex items-center justify-center gap-2">
-            <Loader2 size={14} className="animate-spin" />
-            <span>Cargando datos de salidas...</span>
-          </div>
-        )}
+          {isLoadingSheet && !searchError && results === null && (
+            <div className="text-center py-6 text-sm text-warm-400 flex items-center justify-center gap-2">
+              <Loader2 size={14} className="animate-spin" />
+              <span>Cargando datos de salidas...</span>
+            </div>
+          )}
 
-        {searchError && (
-          <div className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 flex items-start gap-3 text-sm">
-            <AlertTriangle className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
-            <p className="text-danger-700 leading-snug">{searchError}</p>
-          </div>
-        )}
+          {searchError && (
+            <div className="rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 flex items-start gap-3 text-sm">
+              <AlertTriangle className="w-4 h-4 text-danger-500 shrink-0 mt-0.5" />
+              <p className="text-danger-700 leading-snug">{searchError}</p>
+            </div>
+          )}
 
-        {!isLoadingSheet && !searchError && results === null && (
-          <div className="text-center py-10 text-sm text-warm-400">
-            {t('surtido.validacion.quick_search_hint')}
-          </div>
-        )}
+          {!isLoadingSheet && !searchError && results === null && (
+            <div className="text-center py-10 text-sm text-warm-400">
+              {t('surtido.validacion.quick_search_hint')}
+            </div>
+          )}
 
-        {!searchError && results && results.length === 0 && (
-          <div className="text-center py-10 text-sm text-warm-400">
-            {t('surtido.validacion.quick_search_empty')}
-          </div>
-        )}
+          {!searchError && results && results.length === 0 && (
+            <div className="text-center py-10 text-sm text-warm-400">
+              {t('surtido.validacion.quick_search_empty')}
+            </div>
+          )}
 
-        {results && results.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[58vh] overflow-y-auto scrollbar-thin pr-1">
-            {results.map(r => {
+          {results && results.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[58vh] overflow-y-auto scrollbar-thin pr-1">
+              {results.map(r => {
               const tracking = trackingMap.get(r.outboundOrderNo)
               const validatedBoxCount = getValidatedBoxCount(r.outboundOrderNo)
               const totalExpected = tracking?.total_expected ?? r.outboundBoxCount ?? null
@@ -1087,11 +1105,17 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                   </div>
                 </div>
               )
-            })}
-          </div>
-        )}
-      </div>
-    </Modal>
+              })}
+            </div>
+          )}
+        </div>
+      </Modal>
+      <BarcodeScannerModal
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={handleScanResult}
+      />
+    </>
   )
 }
 

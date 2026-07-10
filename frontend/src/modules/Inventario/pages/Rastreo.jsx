@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
+import { useFilterAutoCollapse } from '../../../core/hooks/useFilterAutoCollapse'
 import {
   Plus, LayoutList, LayoutGrid, Users, Search,
   Eye, Trash2, X, Package, User, Crosshair, BookOpen,
-  Calendar, ChevronDown, RefreshCw, FileDown, ArrowUpDown, ArrowUp, ArrowDown,
+  Calendar, ChevronDown, ChevronUp, RefreshCw, FileDown, ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import MultiSelect from '../../../core/components/common/MultiSelect'
@@ -113,6 +114,7 @@ export default function Rastreo() {
   // Pagination
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
 
   // Filters
   const [search, setSearch] = useState('')
@@ -391,7 +393,7 @@ export default function Rastreo() {
             <button
               data-tour="inv-btn-gestion-causas"
               onClick={() => setShowCausas(true)}
-              className="btn-ghost text-xs flex items-center gap-1.5"
+              className="hidden sm:inline-flex btn-ghost text-xs items-center gap-1.5"
             >
               <BookOpen size={14} />
               {t('rastreo.causas.btnGestion')}
@@ -408,7 +410,15 @@ export default function Rastreo() {
       />
 
       {/* Filter bar */}
-      <div className="sticky top-[3.5rem] z-[9] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60 px-5 py-2 space-y-2">
+      <div className="sticky top-[3.5rem] z-[9] bg-white/80 backdrop-blur-2xl border-b border-warm-100/60">
+        <button
+          onClick={() => setFiltersExpanded(v => !v)}
+          className="sm:hidden w-full flex items-center justify-between px-5 py-2 hover:bg-warm-50/80 transition-colors"
+        >
+          <span className="text-xs font-semibold text-warm-600">Filtros</span>
+          {filtersExpanded ? <ChevronUp size={14} className="text-warm-400" /> : <ChevronDown size={14} className="text-warm-400" />}
+        </button>
+        <div className={`${filtersExpanded ? '' : 'hidden sm:block'} px-5 py-2 space-y-2`}>
         {/* Row 1: date range (no quick shortcuts) */}
         <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 py-1.5 w-fit">
           <Calendar className="w-3.5 h-3.5 text-warm-400 shrink-0" />
@@ -517,6 +527,7 @@ export default function Rastreo() {
               </button>
             ))}
           </div>
+        </div>
         </div>
       </div>
 

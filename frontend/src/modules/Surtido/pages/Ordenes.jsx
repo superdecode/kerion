@@ -1857,13 +1857,15 @@ export default function Ordenes() {
       <Header title={t('surtido.ordenes.title')} subtitle={t('nav.surtido_wms')}
         actions={
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            <DataSyncStatus
-              records={allWmsRecords.length}
-              updatedAt={sheetTs}
-              partial={isPartial}
-              onRefresh={handleRefresh}
-              refreshing={refreshing}
-            />
+            <div className="hidden sm:block">
+              <DataSyncStatus
+                records={allWmsRecords.length}
+                updatedAt={sheetTs}
+                partial={isPartial}
+                onRefresh={handleRefresh}
+                refreshing={refreshing}
+              />
+            </div>
             {canUpdateOrders && (
               <button data-tour="sur-btn-surtidores" className="hidden sm:inline-flex btn-ghost text-xs items-center gap-1.5" onClick={() => setShowSurtidoresModal(true)}>
                 <Users size={14} /> {t('surtido.ordenes.manage_surtidores')}
@@ -2643,20 +2645,12 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
               <ClipboardList size={13} />
             </button>
           )}
-          {canValidate && (
-            isClosedOrder ? (
-              <button title={t('surtido.ordenes.viewRecords')}
-                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-warm-500 hover:text-warm-700 hover:bg-warm-100 border border-transparent transition-all"
-                onClick={e => { e.stopPropagation(); onView(obc) }}>
-                <Database size={13} />
-              </button>
-            ) : (
-              <button title={t('surtido.ordenes.validate_btn')}
-                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-primary-600 hover:text-primary-800 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
-                onClick={e => { e.stopPropagation(); onValidate(obc) }}>
-                <ScanBarcode size={13} />
-              </button>
-            )
+          {canValidate && !isClosedOrder && (
+            <button title={t('surtido.ordenes.validate_btn')}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-primary-600 hover:text-primary-800 hover:bg-primary-50 border border-transparent hover:border-primary-200 transition-all"
+              onClick={e => { e.stopPropagation(); onValidate(obc) }}>
+              <ScanBarcode size={13} />
+            </button>
           )}
         </div>
       </td>
