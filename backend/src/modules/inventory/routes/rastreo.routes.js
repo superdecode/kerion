@@ -19,7 +19,7 @@ const ESTADO_LABELS = {
   abierta: 'Abierta',
   en_proceso: 'En proceso',
   parcial: 'Parcial',
-  completada: 'Completada',
+  completada: 'Finalizada',
   cancelada: 'Cancelada',
 }
 
@@ -578,7 +578,7 @@ router.get('/buscar',
                ELSE 4
              END,
              s.created_at DESC
-           LIMIT 30`,
+           LIMIT 1000`,
           searchParams
         )
         const invRegT = () => req.tQuery(
@@ -607,7 +607,7 @@ router.get('/buscar',
                ELSE 4
              END,
              sc.scanned_at DESC
-           LIMIT 30`,
+           LIMIT 1000`,
           searchParams
         )
         const pickT = () => req.tQuery(
@@ -631,7 +631,7 @@ router.get('/buscar',
                ELSE 4
              END,
              pe.scanned_at DESC
-           LIMIT 50`,
+           LIMIT 1000`,
           searchParams
         )
         const pickStatusT = () => req.tQuery(
@@ -685,7 +685,7 @@ router.get('/buscar',
                ELSE 3
              END,
              pbs.updated_at DESC
-           LIMIT 50`,
+           LIMIT 1000`,
           flexibleSearchParams
         )
         const rastreoT = () => req.tQuery(
@@ -727,30 +727,103 @@ router.get('/buscar',
                ELSE 4
              END,
              rc.updated_at DESC
-           LIMIT 100`,
+           LIMIT 1000`,
           searchParams
         )
         const inboundT = () => req.tQuery(
-          `SELECT il.id, il.custom_box_barcode, il.box_type, il.sku, il.qty_per_box,
-                  il.estado_validacion, il.validated_at, il.created_at,
-                  u_val.nombre_completo AS validated_by_nombre,
-                  io.folio, io.cliente, io.inbound_order_no, io.tracking_no, io.estado AS orden_estado,
-                  ${buildMatchCase(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)} AS match_type
-           FROM inbound_lines il
-           JOIN inbound_orders io ON io.id = il.order_id
-           LEFT JOIN usuarios u_val ON u_val.id = il.validated_by AND u_val.tenant_id = io.tenant_id
-           WHERE io.tenant_id = $1
-             AND ${inboundWhere}
+          `WITH recepcion_matches AS (
+             SELECT
+               il.id,
+               'linea'::text AS recepcion_tipo_registro,
+               il.order_id,
+               il.custom_box_barcode,
+               il.box_type,
+               il.sku,
+               il.qty_per_box,
+               il.estado_validacion,
+               il.validated_at,
+               il.created_at,
+               il.box_type AS otros_tipo,
+               u_val.nombre_completo AS validated_by_nombre,
+               io.folio,
+               io.cliente,
+               io.inbound_order_no,
+               io.tracking_no,
+               io.estado AS orden_estado,
+               ${buildMatchCase(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)} AS match_type
+             FROM inbound_lines il
+             JOIN inbound_orders io ON io.id = il.order_id
+             LEFT JOIN usuarios u_val ON u_val.id = il.validated_by AND u_val.tenant_id = io.tenant_id
+             WHERE io.tenant_id = $1
+               AND ${inboundWhere}
+
+             UNION ALL
+
+             SELECT
+               n.id,
+               'otros'::text AS recepcion_tipo_registro,
+               n.order_id,
+               n.codigo AS custom_box_barcode,
+               NULL::text AS box_type,
+               NULL::text AS sku,
+               NULL::numeric AS qty_per_box,
+               NULL::text AS estado_validacion,
+               n.created_at AS validated_at,
+               n.created_at,
+               n.tipo AS otros_tipo,
+               u_nov.nombre_completo AS validated_by_nombre,
+               io.folio,
+               io.cliente,
+               io.inbound_order_no,
+               io.tracking_no,
+               io.estado AS orden_estado,
+               CASE
+                 WHEN UPPER(COALESCE(n.codigo, '')) = ANY($2::text[])
+                   OR UPPER(COALESCE(n.tipo, '')) = ANY($2::text[])
+                   OR UPPER(COALESCE(io.inbound_order_no, '')) = ANY($2::text[]) THEN 'exact'
+                 WHEN REGEXP_REPLACE(UPPER(COALESCE(n.codigo, '')), '[^A-Z0-9]', '', 'g') = $3
+                   OR REGEXP_REPLACE(UPPER(COALESCE(n.tipo, '')), '[^A-Z0-9]', '', 'g') = $3 THEN 'normalized'
+                 WHEN $6::boolean AND COALESCE($4::text, '') <> ''
+                   AND (
+                     REGEXP_REPLACE(UPPER(COALESCE(n.codigo, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                     OR REGEXP_REPLACE(UPPER(COALESCE(n.tipo, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   ) THEN 'base'
+                 ELSE 'partial'
+               END AS match_type
+             FROM inbound_novedades n
+             JOIN inbound_orders io ON io.id = n.order_id
+             LEFT JOIN usuarios u_nov ON u_nov.id = n.created_by AND u_nov.tenant_id = io.tenant_id
+             WHERE io.tenant_id = $1
+               AND (
+                 UPPER(COALESCE(n.codigo, '')) = ANY($2::text[])
+                 OR UPPER(COALESCE(n.tipo, '')) = ANY($2::text[])
+                 OR UPPER(COALESCE(io.inbound_order_no, '')) = ANY($2::text[])
+                 OR REGEXP_REPLACE(UPPER(COALESCE(n.codigo, '')), '[^A-Z0-9]', '', 'g') = $3
+                 OR REGEXP_REPLACE(UPPER(COALESCE(n.tipo, '')), '[^A-Z0-9]', '', 'g') = $3
+                 OR (
+                   $6::boolean AND COALESCE($4::text, '') <> ''
+                   AND (
+                     REGEXP_REPLACE(UPPER(COALESCE(n.codigo, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                     OR REGEXP_REPLACE(UPPER(COALESCE(n.tipo, '')), '[^A-Z0-9]', '', 'g') LIKE $4::text || '%'
+                   )
+                 )
+                 OR ($6::boolean AND n.codigo ILIKE ANY($5::text[]))
+                 OR ($6::boolean AND n.tipo ILIKE ANY($5::text[]))
+                 OR ($6::boolean AND io.inbound_order_no ILIKE ANY($5::text[]))
+               )
+           )
+           SELECT *
+           FROM recepcion_matches
            ORDER BY
-             CASE ${buildMatchCase(['il.custom_box_barcode', 'il.box_type', 'io.inbound_order_no'], matchParams)}
+             CASE match_type
                WHEN 'exact' THEN 1
                WHEN 'normalized' THEN 2
                WHEN 'base' THEN 3
                ELSE 4
              END,
-             il.created_at DESC
-           LIMIT 100`,
-          searchParams
+             created_at DESC
+           LIMIT 1000`,
+          flexibleSearchParams
         )
         const anormT = () => req.tQuery(
           `SELECT a.id, a.folio, a.codigo, a.descripcion, a.contenedor_orden,
@@ -835,7 +908,7 @@ router.get('/buscar',
                ELSE 3
              END,
              a.created_at DESC
-           LIMIT 30`,
+           LIMIT 1000`,
           flexibleSearchParams
         )
         const despT = () => req.tQuery(
@@ -889,7 +962,7 @@ router.get('/buscar',
                ELSE 4
              END,
              dos.created_at DESC
-           LIMIT 50`,
+           LIMIT 1000`,
           flexibleSearchParams
         )
         const despOrdenesT = () => req.tQuery(
@@ -909,7 +982,7 @@ router.get('/buscar',
                ELSE 4
              END,
              dfo.created_at DESC
-           LIMIT 50`,
+           LIMIT 1000`,
           searchParams
         )
       // Run the independent datasets in parallel with bounded concurrency so
@@ -1474,16 +1547,21 @@ router.post('/resolver',
 
         const totalFound = updates.filter(u => u.found).length
         const totalMissing = updates.length - totalFound
-        const finalEstado = normalizedEstado === 'completada' && totalMissing > 0
-          ? 'parcial'
-          : normalizedEstado
+        // Every box passed through this resolver gets an explicit final state
+        // (localizada or no_encontrada, with an anormalidad raised for the
+        // missing ones above) — the order itself should close as whatever the
+        // user explicitly chose, even if some boxes ended up not found.
+        // Silently downgrading to 'parcial' here left orders with any missing
+        // box stuck in a non-terminal state forever, since a resolve here is
+        // the terminal action for every candidate box.
+        const finalEstado = normalizedEstado
 
         await client.query(
           `UPDATE rastreo_ordenes SET estado = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
           [persistEstado(finalEstado), orden_id, req.tenantId]
         )
 
-        const desc = `Orden marcada como ${finalEstado}. Localizadas: ${totalFound}, No encontradas: ${totalMissing}`
+        const desc = `Orden marcada como ${ESTADO_LABELS[finalEstado] || finalEstado}. Localizadas: ${totalFound}, No encontradas: ${totalMissing}`
         await client.query(
           `INSERT INTO rastreo_historial (tenant_id, rastreo_orden_id, accion, descripcion, actor_id)
            VALUES ($1,$2,'resuelta',$3,$4)`,
