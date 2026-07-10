@@ -2,9 +2,10 @@ import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Search, Loader2, Package, CheckCircle2, XCircle,
-  ChevronDown, ChevronRight, BarChart2, ShoppingCart, AlertCircle, ClipboardList, Crosshair, Truck, Send,
+  ChevronDown, ChevronRight, BarChart2, ShoppingCart, AlertCircle, ClipboardList, Crosshair, Truck, Send, ScanLine,
 } from 'lucide-react'
 import CopyableCell from '../../../core/components/common/CopyableCell'
+import BarcodeScannerModal from '../../../core/components/common/BarcodeScannerModal'
 import { buscarCaja } from '../../../core/services/rastreoService'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { getInventoryList, getOutboundList } from '../../WmsHub/services/googleSheetsService'
@@ -795,14 +796,15 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
   const [gsInv, setGsInv] = useState(null)
   const [gsSurtido, setGsSurtido] = useState(null)
   const [openSections, setOpenSections] = useState({ inv: true, surtido: true, escaneo: true, registros: true, validacion: true, rastreo: true, recepcion: true, anormalidades: true, despacho: true, despachoOrdenes: true })
+  const [scannerOpen, setScannerOpen] = useState(false)
   const inputRef = useRef(null)
 
   function toggleSection(key) {
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  async function handleSearch() {
-    const q = query.trim()
+  async function handleSearch(overrideQuery) {
+    const q = (overrideQuery ?? query).trim()
     if (!q) return
     setLoading(true)
     setResults(null)
@@ -943,9 +945,16 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
     (results?.recepcion?.length || 0) + (results?.anormalidades?.length || 0) + (results?.despacho?.length || 0) +
     (results?.despacho_ordenes?.length || 0)
 
+  function handleScanResult(text) {
+    setScannerOpen(false)
+    setQuery(text)
+    handleSearch(text)
+  }
+
   if (!isOpen) return null
 
   return (
+    <>
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
@@ -1004,7 +1013,16 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                     fixed pr-* budget that overlapped/crushed the text area on narrow
                     (mobile) viewports. */}
                 <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-warm-200 bg-white pl-4 pr-1.5 shadow-sm transition-all focus-within:border-primary-400 focus-within:ring-2 focus-within:ring-primary-100">
-                  <Search size={15} className="shrink-0 text-warm-400" />
+                  <Search size={15} className="hidden sm:block shrink-0 text-warm-400" />
+                  <button
+                    type="button"
+                    onClick={() => setScannerOpen(true)}
+                    className="sm:hidden shrink-0 -ml-0.5 p-0.5 text-primary-600 hover:text-primary-700 transition-colors"
+                    aria-label="Escanear código de barras o QR"
+                    title="Escanear código"
+                  >
+                    <ScanLine size={18} />
+                  </button>
                   <input
                     ref={inputRef}
                     autoFocus
@@ -1167,5 +1185,11 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
         </motion.div>
       </motion.div>
     </AnimatePresence>
+    <BarcodeScannerModal
+      isOpen={scannerOpen}
+      onClose={() => setScannerOpen(false)}
+      onScan={handleScanResult}
+    />
+    </>
   )
 }
