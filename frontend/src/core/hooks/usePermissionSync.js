@@ -56,7 +56,7 @@ export function usePermissionSync() {
   useEffect(() => {
     if (!isAuthenticated) return
 
-    const { isModuleEnabled } = useAuthStore.getState()
+    const { isModuleEnabled, enabledModules } = useAuthStore.getState()
 
     // Find the module for current path
     const currentRoute = MODULE_ROUTES.find(r => location.pathname === r.path ||
@@ -68,7 +68,15 @@ export function usePermissionSync() {
     const permPrefix = currentRoute.module.split('.')[0]
     const moduleCode = PERM_TO_MODULE[permPrefix] ?? permPrefix
     const hasPermission = canView(currentRoute.module)
-    const isModuleActive = ['admin', 'super-admin', 'global', 'sistema'].includes(permPrefix) || isModuleEnabled(moduleCode)
+    // An empty enabledModules array can mean "tenant genuinely has none enabled"
+    // OR "not hydrated yet" — e.g. right after a fresh mobile load, before the
+    // persisted store finishes rehydrating or /auth/me has responded (slower on
+    // mobile networks). Treating that transient empty state as a hard denial was
+    // kicking users back to the dashboard a few seconds after entering any module.
+    // Only enforce the entitlement check once we actually have module data.
+    const isModuleActive = ['admin', 'super-admin', 'global', 'sistema'].includes(permPrefix) ||
+      enabledModules.length === 0 ||
+      isModuleEnabled(moduleCode)
 
     if (!hasPermission || !isModuleActive) {
       // User lost access/module disabled, redirect to allowed route
