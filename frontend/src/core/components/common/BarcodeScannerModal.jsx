@@ -23,6 +23,47 @@ const CORNER_POSITIONS = [
   'bottom-0 right-0 border-b-[3px] border-r-[3px] rounded-br-2xl',
 ]
 
+function getOverlayFromResult(result, videoElement) {
+  const points = result?.getResultPoints?.() || []
+  const videoWidth = videoElement?.videoWidth || 0
+  const videoHeight = videoElement?.videoHeight || 0
+  const clientWidth = videoElement?.clientWidth || 0
+  const clientHeight = videoElement?.clientHeight || 0
+
+  if (points.length === 0 || !videoWidth || !videoHeight || !clientWidth || !clientHeight) {
+    return null
+  }
+
+  const scale = Math.max(clientWidth / videoWidth, clientHeight / videoHeight)
+  const scaledWidth = videoWidth * scale
+  const scaledHeight = videoHeight * scale
+  const offsetX = (scaledWidth - clientWidth) / 2
+  const offsetY = (scaledHeight - clientHeight) / 2
+
+  const normalized = points
+    .map((point) => ({
+      x: point.getX() * scale - offsetX,
+      y: point.getY() * scale - offsetY,
+    }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+
+  if (normalized.length === 0) return null
+
+  const xs = normalized.map((point) => point.x)
+  const ys = normalized.map((point) => point.y)
+  const minX = Math.max(0, Math.min(...xs) - 28)
+  const maxX = Math.min(clientWidth, Math.max(...xs) + 28)
+  const minY = Math.max(0, Math.min(...ys) - 28)
+  const maxY = Math.min(clientHeight, Math.max(...ys) + 28)
+
+  return {
+    left: minX,
+    top: minY,
+    width: Math.max(56, maxX - minX),
+    height: Math.max(56, maxY - minY),
+  }
+}
+
 // Full-screen camera scanner for barcodes and QR codes. Uses getUserMedia +
 // ZXing (pure JS, no WASM/native API dependency) so it works on older
 // browsers/WebViews that don't implement the native BarcodeDetector API.
@@ -32,6 +73,7 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
   const [status, setStatus] = useState('starting') // starting | scanning | error
   const [errorMsg, setErrorMsg] = useState('')
   const [successFlash, setSuccessFlash] = useState(false)
+  const [detectedArea, setDetectedArea] = useState(null)
 
   useEffect(() => {
     if (!isOpen) return undefined
@@ -39,6 +81,7 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
     setStatus('starting')
     setErrorMsg('')
     setSuccessFlash(false)
+    setDetectedArea(null)
 
     async function start() {
       try {
@@ -76,7 +119,7 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
         hints.set(DecodeHintType.ASSUME_GS1, true)
 
         const reader = new BrowserMultiFormatReader(hints, {
-          delayBetweenScanAttempts: 80,
+          delayBetweenScanAttempts: 120,
           delayBetweenScanSuccess: 500,
           tryPlayVideoTimeout: 8000,
         })
@@ -93,7 +136,10 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
           },
           videoRef.current,
           (result) => {
-            if (result && !cancelled) handleDetected(result.getText())
+            if (result && !cancelled) {
+              setDetectedArea(getOverlayFromResult(result, videoRef.current))
+              handleDetected(result.getText())
+            }
             // A "not found" error fires on every frame with no code in view —
             // that's the normal scanning state, not a failure. Only errors
             // thrown by decodeFromConstraints itself (caught below) matter.
@@ -107,9 +153,6 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
           const advanced = []
           if (capabilities.focusMode?.includes?.('continuous')) {
             advanced.push({ focusMode: 'continuous' })
-          }
-          if (typeof capabilities.zoom?.max === 'number' && capabilities.zoom.max >= 1.5) {
-            advanced.push({ zoom: Math.min(2, capabilities.zoom.max) })
           }
           if (advanced.length > 0) {
             track.applyConstraints({ advanced }).catch(() => {})
@@ -136,6 +179,7 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
       cancelled = true
       controlsRef.current?.stop()
       controlsRef.current = null
+      setDetectedArea(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
@@ -166,7 +210,8 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
       </div>
 
       <div className="relative flex-1 overflow-hidden">
-        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" muted playsInline autoPlay />
+        <div className="absolute inset-0 bg-black" />
+        <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover bg-black" muted playsInline autoPlay />
 
         {status === 'error' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/95 px-8 text-center">
@@ -186,21 +231,42 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
 
         {status === 'scanning' && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="relative w-[78vw] max-w-[22rem] h-[11rem] sm:w-80 sm:h-56">
-              <div className="absolute inset-0 rounded-[1.75rem] border border-white/20" />
-              <div className="absolute inset-x-[19%] inset-y-[14%] rounded-[1.4rem] border border-dashed border-white/15" />
+            <div className="relative w-[72vw] h-[72vw] max-w-[19rem] max-h-[19rem] sm:w-80 sm:h-80">
+              <div className="absolute inset-0 rounded-[2rem] border border-white/20 bg-black/10 backdrop-blur-[1px]" />
+              <div className="absolute inset-[11%] rounded-[1.5rem] border border-white/10" />
               {CORNER_POSITIONS.map((cls) => (
                 <div key={cls} className={`absolute w-9 h-9 border-primary-400 ${cls}`} />
               ))}
+              <div className="absolute inset-x-[12%] top-1/2 h-px -translate-y-1/2 bg-white/10" />
+              <div className="absolute left-1/2 inset-y-[12%] w-px -translate-x-1/2 bg-white/10" />
               <motion.div
-                className="absolute left-2 right-2 h-0.5 rounded-full bg-primary-400"
-                style={{ boxShadow: '0 0 12px 2px rgba(46,87,254,0.75)' }}
-                animate={{ top: ['10%', '88%', '10%'] }}
-                transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute left-[10%] right-[10%] h-[2px] rounded-full bg-primary-400/90"
+                style={{ boxShadow: '0 0 12px 2px rgba(46,87,254,0.55)' }}
+                animate={{ top: ['14%', '86%', '14%'], opacity: [0.65, 1, 0.65] }}
+                transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
               />
             </div>
           </div>
         )}
+
+        <AnimatePresence>
+          {detectedArea && status === 'scanning' && (
+            <motion.div
+              className="absolute rounded-[1.4rem] border border-emerald-300/90 bg-emerald-400/10 pointer-events-none"
+              style={detectedArea}
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1, boxShadow: '0 0 0 1px rgba(110,231,183,0.65), 0 0 24px rgba(16,185,129,0.38)' }}
+              exit={{ opacity: 0, scale: 1.04 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+            >
+              <motion.div
+                className="absolute inset-0 rounded-[1.4rem] border border-emerald-200/80"
+                animate={{ opacity: [0.35, 1, 0.35] }}
+                transition={{ duration: 0.55, repeat: 1, ease: 'easeInOut' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {successFlash && (
@@ -222,7 +288,7 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
       </div>
 
       <p className="text-center text-white/60 text-xs py-3 shrink-0 px-6">
-        {status === 'scanning' ? 'Apunta la cámara al código de barras o QR' : ' '}
+        {status === 'scanning' ? 'Escanea QR o código de barras dentro del cuadro, en vertical u horizontal' : ' '}
       </p>
     </div>,
     document.body
