@@ -1131,9 +1131,30 @@ router.get('/',
       let p = 2
 
       if (search) {
-        where += ` AND (ro.folio ILIKE $${p} OR ro.outbound_order_no ILIKE $${p} OR ro.customer_code ILIKE $${p})`
-        params.push(`%${search}%`)
-        p++
+        // Box codes can be scanned/stored with either separator ("64942255/156" vs
+        // "64942255-156"), and this list search previously only matched order-level
+        // fields (folio/outbound_order_no/customer_code) — box codes weren't searched
+        // at all. Match box codes too, comparing on a separator-stripped form so "-"
+        // and "/" are interchangeable.
+        const searchCompact = search.replace(/[^A-Za-z0-9]/g, '')
+        where += ` AND (
+          ro.folio ILIKE $${p} OR ro.outbound_order_no ILIKE $${p} OR ro.customer_code ILIKE $${p}
+          OR EXISTS (
+            SELECT 1 FROM rastreo_cajas rc
+            WHERE rc.rastreo_orden_id = ro.id
+              AND rc.tenant_id = ro.tenant_id
+              AND (
+                rc.box_code ILIKE $${p}
+                OR rc.box_code_normalized ILIKE $${p}
+                OR (
+                  $${p + 1} <> ''
+                  AND REGEXP_REPLACE(UPPER(COALESCE(rc.box_code_normalized, rc.box_code, '')), '[^A-Z0-9]', '', 'g') LIKE '%' || $${p + 1} || '%'
+                )
+              )
+          )
+        )`
+        params.push(`%${search}%`, searchCompact.toUpperCase())
+        p += 2
       }
 
       // Support comma-separated estados
