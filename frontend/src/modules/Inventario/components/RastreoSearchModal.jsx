@@ -192,7 +192,7 @@ function SurtidoSection({ records, open, onToggle }) {
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.outboundOrderNo || '—'} className="font-mono font-semibold text-primary-700" />
                         </td>
-                        <td className="px-3 py-2.5 text-warm-600">{r.customerCode || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-600">{r.receiverName || r.consignee || '—'}</td>
                         <td className="px-3 py-2.5 text-warm-500">
                           {r.expectedTime || r.outboundTime
                             ? fmtDateTime(r.expectedTime || r.outboundTime)
@@ -513,7 +513,7 @@ function DespachoSection({ records, open, onToggle }) {
                 <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-orange-50/70 border-b border-orange-100">
                     <tr>
-                      {['Cód. caja', 'Folio despacho', 'OBC', 'Cliente', t('common.date')].map(h => (
+                      {['Cód. caja', 'Folio despacho', 'OBC', 'Destino', t('common.date')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-orange-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -530,7 +530,7 @@ function DespachoSection({ records, open, onToggle }) {
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.outbound_order_no || r.matched_order_no || '—'} className="font-mono text-warm-600" />
                         </td>
-                        <td className="px-3 py-2.5 text-warm-600 max-w-[120px] truncate">{r.cliente || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-600 max-w-[120px] truncate">{r.destinatario || '—'}</td>
                         <td className="px-3 py-2.5 text-warm-400">
                           {r.created_at ? new Date(r.created_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
                         </td>
@@ -588,7 +588,7 @@ function DespachoOrdenesSection({ records, open, onToggle }) {
                 <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-teal-50/70 border-b border-teal-100">
                     <tr>
-                      {['OBC / Orden', 'Folio despacho', 'Cliente', 'Bultos', 'Estado orden', 'Estado folio', t('common.date')].map(h => (
+                      {['OBC / Orden', 'Folio despacho', 'Destino', 'Bultos', 'Estado orden', 'Estado folio', t('common.date')].map(h => (
                         <th key={h} className="text-left px-3 py-2 font-semibold text-teal-700 uppercase tracking-wide text-[10px]">{h}</th>
                       ))}
                     </tr>
@@ -602,7 +602,7 @@ function DespachoOrdenesSection({ records, open, onToggle }) {
                         <td className="px-3 py-2.5">
                           <CopyableCell text={r.folio_numero || '—'} className="font-mono text-warm-600" />
                         </td>
-                        <td className="px-3 py-2.5 text-warm-600 max-w-[120px] truncate">{r.cliente || '—'}</td>
+                        <td className="px-3 py-2.5 text-warm-600 max-w-[120px] truncate">{r.destinatario || '—'}</td>
                         <td className="px-3 py-2.5 text-warm-600">{r.bultos ?? '—'}</td>
                         <td className="px-3 py-2.5">
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${
@@ -1008,6 +1008,10 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                   <input
                     ref={inputRef}
                     autoFocus
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    autoComplete="off"
+                    spellCheck="false"
                     className="min-w-0 flex-1 border-0 bg-transparent py-3 pl-2 text-sm text-warm-700 outline-none placeholder-warm-300"
                     placeholder={t('rastreo.searchModal.placeholder')}
                     value={query}

@@ -841,7 +841,7 @@ router.get('/buscar',
         const despT = () => req.tQuery(
           `SELECT dos.id, dos.codigo_caja, dos.matched_order_no, dos.created_at,
                   df.folio_numero,
-                  dfo.outbound_order_no, dfo.cliente,
+                  dfo.outbound_order_no, dfo.cliente, dfo.destinatario,
                   CASE
                     WHEN UPPER(COALESCE(dos.codigo_caja, '')) = ANY($2::text[])
                       OR UPPER(COALESCE(df.folio_numero, '')) = ANY($2::text[])
@@ -893,7 +893,7 @@ router.get('/buscar',
           flexibleSearchParams
         )
         const despOrdenesT = () => req.tQuery(
-          `SELECT dfo.id, dfo.outbound_order_no, dfo.cliente, dfo.bultos, dfo.peso_kg,
+          `SELECT dfo.id, dfo.outbound_order_no, dfo.cliente, dfo.destinatario, dfo.bultos, dfo.peso_kg,
                   dfo.estado AS orden_estado, dfo.notas, dfo.created_at,
                   df.folio_numero, df.estado AS folio_estado, df.fecha_salida,
                   ${buildMatchCase(['dfo.outbound_order_no', 'df.folio_numero'], matchParams)} AS match_type

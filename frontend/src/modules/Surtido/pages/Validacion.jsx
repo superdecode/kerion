@@ -797,6 +797,10 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
             <input
               ref={inputRef}
               type="text"
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck="false"
               className="flex-1 min-w-0 h-full text-base bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-warm-300 font-mono tracking-wide"
               placeholder={t('surtido.validacion.quick_search_placeholder')}
               value={query}
@@ -975,7 +979,7 @@ function MissingList({ items, itemCounts, t }) {
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="Buscar codigo..."
-          className="flex-1 min-w-0 text-xs bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 text-warm-700 placeholder:text-warm-300"
+          className="flex-1 min-w-0 text-sm bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 text-warm-700 placeholder:text-warm-300"
         />
         {q && <button onClick={() => setQ('')} className="text-warm-400 hover:text-warm-600"><X size={12} /></button>}
       </div>
@@ -2012,7 +2016,7 @@ const { data: reasonsData } = useQuery({
                 value={sessionSearch}
                 onChange={e => setSessionSearch(e.target.value)}
                 placeholder={t('common.search')}
-                className="flex-1 min-w-0 text-xs outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               />
               {(sessionSearch || sessionStatusFilter) && (
                 <button

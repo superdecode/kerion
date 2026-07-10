@@ -2084,6 +2084,10 @@ export default function Ordenes() {
               <Search size={13} className="text-warm-400 shrink-0" />
               <input
                 type="text"
+                autoCapitalize="off"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck="false"
                 className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 placeholder={t('surtido.ordenes.search_placeholder')}
                 value={searchInput}

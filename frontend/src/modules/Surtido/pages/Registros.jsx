@@ -133,7 +133,7 @@ function ScanTable({
               <td className="px-3 py-2 font-mono font-semibold text-warm-700 truncate">
                 {editable && editingId === e.id ? (
                   <input
-                    className="input-field h-8 w-full text-xs font-mono"
+                    className="input-field h-8 w-full text-sm font-mono"
                     value={editingCode}
                     onChange={(event) => onEditCodeChange(event.target.value)}
                     onKeyDown={(event) => event.key === 'Enter' && onSaveEdit(e)}
@@ -163,7 +163,7 @@ function ScanTable({
                   {ubicacionEditable && editingUbicacionId === e.id ? (
                     <div className="flex items-center gap-1">
                       <input
-                        className="input-field h-7 w-full text-xs font-mono"
+                        className="input-field h-7 w-full text-sm font-mono"
                         value={editingUbicacionValue}
                         onChange={(event) => onUbicacionValueChange(event.target.value)}
                         onKeyDown={(event) => event.key === 'Enter' && onSaveUbicacion(e)}
@@ -1374,6 +1374,10 @@ export default function SurtidoRegistros() {
             <ScanBarcode size={13} className="text-warm-400 shrink-0" />
             <input
               type="text"
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
+              spellCheck="false"
               className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
               placeholder={t('surtido.registros.search_placeholder')}
               value={searchInput}

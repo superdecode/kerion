@@ -1886,7 +1886,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             value={ubicacionSearch}
             onChange={e => setUbicacionSearch(e.target.value)}
             placeholder={t('rec.val.ubicacion.panel.search')}
-            className="flex-1 min-w-0 bg-transparent text-xs text-warm-700 outline-none placeholder:text-warm-400 font-mono"
+            className="flex-1 min-w-0 bg-transparent text-sm text-warm-700 outline-none placeholder:text-warm-400 font-mono"
           />
           {ubicacionSearch && (
             <button type="button" onClick={() => setUbicacionSearch('')} className="text-warm-300 hover:text-warm-500 shrink-0">
@@ -2090,7 +2090,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             value={tarimaSearch}
             onChange={e => setTarimaSearch(e.target.value)}
             placeholder={t('rec.tarimas.panel.search')}
-            className="flex-1 min-w-0 bg-transparent text-xs text-warm-700 outline-none focus-visible:ring-0 placeholder:text-warm-400 font-mono"
+            className="flex-1 min-w-0 bg-transparent text-sm text-warm-700 outline-none focus-visible:ring-0 placeholder:text-warm-400 font-mono"
           />
           {tarimaSearch && (
             <button type="button" onClick={() => setTarimaSearch('')} className="text-warm-300 hover:text-warm-500 transition-colors shrink-0">
