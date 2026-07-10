@@ -595,14 +595,24 @@
     max-width: 100%;
   }
 
-  /* Modals: ensure they don't exceed viewport */
-  [class*="fixed"][class*="inset"] > * {
+  /* Modals: ensure the content panel doesn't exceed viewport. Excludes
+     children that themselves carry an inset-* class (the backdrop overlay
+     sitting alongside the panel) — capping the backdrop's width left a
+     visible strip of the page's background showing through on one side. */
+  [class*="fixed"][class*="inset"] > *:not([class*="inset"]) {
     max-width: calc(100vw - 1.5rem);
     overflow-x: hidden;
   }
 
   /* Slightly tighter body text on mobile */
   .text-base { font-size: 0.8125rem !important; line-height: 1.4 !important; }
+
+  /* Form fields must never drop below 16px on mobile regardless of the
+     density rule above — anything smaller triggers iOS Safari's
+     auto-zoom-on-focus, which is what "text-base is safe at 18px" was
+     supposed to prevent before this override silently undid it. */
+  .text-base:is(input, textarea, select) { font-size: 1rem !important; line-height: 1.4 !important; }
+
   .text-lg   { font-size: 0.9375rem !important; }
   .text-xl   { font-size: 1rem !important; }
   .text-2xl  { font-size: 1.125rem !important; }
