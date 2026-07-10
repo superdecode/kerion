@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx'
 import {
   X, CheckCircle2, XCircle, AlertTriangle, Copy, Check,
   Clock, ScanBarcode, Package2, BadgeCheck, User, Timer, ShieldCheck,
-  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Edit3, Trash2, Search, ScanLine, ChevronRight, ChevronUp, ChevronDown,
+  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Edit3, Trash2, Search, ScanLine, ChevronRight, ChevronUp, ChevronDown, ListFilter,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import BarcodeScannerModal from '../../../core/components/common/BarcodeScannerModal'
@@ -80,6 +80,39 @@ function fmtDt(v) {
 
 function getEventCodeKey(event) {
   return normalizeCode(event?.normalized_code || event?.scanned_code || event?.matched_box_type || '')
+}
+
+function parseBulkCodes(text) {
+  return Array.from(new Set(
+    String(text || '')
+      .split(/[\n,;]+/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+  ))
+}
+
+function normalizeOrderNo(value) {
+  return String(value || '').trim().toUpperCase()
+}
+
+function getDominantLocation(events = [], fallback = '') {
+  const counts = new Map()
+  events
+    .filter((event) => event.scan_result === 'ok')
+    .forEach((event) => {
+      const location = String(event.ubicacion_nota || '').trim()
+      if (!location) return
+      const current = counts.get(location) || { count: 0, firstAt: event.scanned_at || '', firstId: event.id || 0 }
+      counts.set(location, { ...current, count: current.count + 1 })
+    })
+
+  if (counts.size === 0) return fallback || ''
+
+  return [...counts.entries()]
+    .sort((a, b) => {
+      if (b[1].count !== a[1].count) return b[1].count - a[1].count
+      return String(a[1].firstAt).localeCompare(String(b[1].firstAt)) || Number(a[1].firstId) - Number(b[1].firstId)
+    })[0][0]
 }
 
 function ObcHeader({ obc, status, t }) {
@@ -213,6 +246,51 @@ function ScanTable({
         </tbody>
       </table>
     </div>
+  )
+}
+
+function BulkSearchModal({ isOpen, onClose, onApply, initialValue }) {
+  const { t } = useI18nStore()
+  const [value, setValue] = useState(initialValue || '')
+
+  useEffect(() => {
+    if (isOpen) setValue(initialValue || '')
+  }, [isOpen, initialValue])
+
+  const codes = useMemo(() => parseBulkCodes(value), [value])
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('surtido.ordenes.bulk_search_title')}
+      icon={ListFilter}
+      footer={
+        <div className="flex gap-3 justify-end">
+          <button className="btn-ghost" onClick={() => setValue('')}>{t('common.clear')}</button>
+          <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
+          <button
+            className="btn-primary inline-flex items-center gap-1.5 whitespace-nowrap"
+            onClick={() => { onApply(value, codes); onClose() }}
+            disabled={codes.length === 0}
+          >
+            {t('surtido.ordenes.bulk_search_apply')}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <textarea
+          className="input-field min-h-48 w-full resize-none text-sm font-mono"
+          placeholder={t('surtido.ordenes.bulk_search_placeholder')}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <p className="text-xs font-semibold text-warm-500">
+          {codes.length} {t('surtido.ordenes.bulk_search_detected')}
+        </p>
+      </div>
+    </Modal>
   )
 }
 
@@ -1149,24 +1227,77 @@ export default function SurtidoRegistros() {
   const [deleteConfirmSession, setDeleteConfirmSession] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [exportingBulk, setExportingBulk] = useState(false)
+  const [exportingDetailBulk, setExportingDetailBulk] = useState(false)
   const [showQuickSearch, setShowQuickSearch] = useState(false)
+  const [bulkSearchOpen, setBulkSearchOpen] = useState(false)
+  const [bulkSearchText, setBulkSearchText] = useState('')
+  const [bulkSearchCodes, setBulkSearchCodes] = useState([])
   const handledDeepLinkRef = useRef('')
 
-  const obcActive = !!search.trim()
+  const bulkSearchSet = useMemo(
+    () => new Set(bulkSearchCodes.map(normalizeOrderNo).filter(Boolean)),
+    [bulkSearchCodes]
+  )
+  const bulkActive = bulkSearchCodes.length > 0
+  const obcActive = !!search.trim() || bulkActive
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['surtido-sessions', { page, pageSize, search: search.trim(), statusFilter, operatorFilter, dateFrom: obcActive ? null : dateFrom, dateTo: obcActive ? null : dateTo }],
-    queryFn: () => getScanSessions({
-      page,
-      pageSize,
-      outbound_order_no: search.trim() || undefined,
-      status: statusFilter || undefined,
-      operator_ids: operatorFilter.length > 0 ? operatorFilter.join(',') : undefined,
-      fecha_inicio: obcActive ? undefined : (dateFrom || undefined),
-      fecha_fin: obcActive ? undefined : (dateTo || undefined),
-    }),
+    queryKey: ['surtido-sessions', { page, pageSize, search: search.trim(), bulkSearchCodes, statusFilter, operatorFilter, dateFrom: obcActive ? null : dateFrom, dateTo: obcActive ? null : dateTo }],
+    queryFn: async () => {
+      const baseParams = {
+        status: statusFilter || undefined,
+        operator_ids: operatorFilter.length > 0 ? operatorFilter.join(',') : undefined,
+        fecha_inicio: obcActive ? undefined : (dateFrom || undefined),
+        fecha_fin: obcActive ? undefined : (dateTo || undefined),
+      }
+
+      if (bulkActive) {
+        const responses = await Promise.all(
+          bulkSearchCodes.map((code) => getScanSessions({
+            ...baseParams,
+            page: 1,
+            pageSize: 100,
+            outbound_order_no: code,
+          }))
+        )
+        const seen = new Set()
+        const records = responses
+          .flatMap((payload) => getRecords(payload))
+          .filter((record) => bulkSearchSet.has(normalizeOrderNo(record.outbound_order_no)))
+          .filter((record) => {
+            if (!record?.id || seen.has(record.id)) return false
+            seen.add(record.id)
+            return true
+          })
+
+        return {
+          success: true,
+          data: {
+            records,
+            total: records.length,
+            page: 1,
+            pageSize: Math.max(records.length, 1),
+          },
+        }
+      }
+
+      return getScanSessions({
+        ...baseParams,
+        page,
+        pageSize,
+        outbound_order_no: search.trim() || undefined,
+      })
+    },
     staleTime: 30000,
     retry: 0,
     enabled: backendOnline,
+  })
+
+  const { data: wmsData } = useQuery({
+    queryKey: ['wms-outbound'],
+    queryFn: getOutboundList,
+    staleTime: 5 * 60 * 1000,
+    enabled: backendOnline && canExport,
+    retry: 0,
   })
 
   const { data: operatorsData } = useQuery({
@@ -1179,7 +1310,14 @@ export default function SurtidoRegistros() {
 
   const records = getRecords(data)
   const total = data?.data?.total ?? 0
-  const totalPages = Math.ceil(total / pageSize) || 1
+  const totalPages = bulkActive ? 1 : (Math.ceil(total / pageSize) || 1)
+  const wmsMap = useMemo(() => {
+    const map = new Map()
+    getRecords(wmsData).forEach((record) => {
+      if (record?.outboundOrderNo) map.set(normalizeOrderNo(record.outboundOrderNo), record)
+    })
+    return map
+  }, [wmsData])
 
   const deleteSessionMut = useMutation({
     mutationFn: deleteScanSession,
@@ -1195,6 +1333,9 @@ export default function SurtidoRegistros() {
   const clearFilters = () => {
     setSearchInput('')
     setSearch('')
+    setBulkSearchText('')
+    setBulkSearchCodes([])
+    setSelectedIds(new Set())
     setStatusFilter('')
     setOperatorFilter([])
     setDateFrom(thirtyDaysAgo)
@@ -1211,6 +1352,15 @@ export default function SurtidoRegistros() {
   const visibleRecordIds = useMemo(() => records.map((record) => record.id), [records])
   const allVisibleSelected = visibleRecordIds.length > 0 && visibleRecordIds.every((id) => selectedIds.has(id))
   const someVisibleSelected = visibleRecordIds.some((id) => selectedIds.has(id))
+
+  useEffect(() => {
+    if (!bulkActive || isLoading || isFetching) return
+    setSelectedIds((prev) => {
+      if (prev.size === visibleRecordIds.length && visibleRecordIds.every((id) => prev.has(id))) return prev
+      return new Set(visibleRecordIds)
+    })
+  }, [bulkActive, isLoading, isFetching, visibleRecordIds])
+
   const toggleSelectAll = () => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -1219,26 +1369,73 @@ export default function SurtidoRegistros() {
       return next
     })
   }
-  function buildRegistrosRows(rows) {
+
+  const handleApplyBulkSearch = (value, codes) => {
+    const normalizedCodes = codes.map(normalizeOrderNo).filter(Boolean)
+    setBulkSearchText(value)
+    setBulkSearchCodes(normalizedCodes)
+    setSearchInput('')
+    setSearch('')
+    setPage(1)
+    setSelectedIds(new Set())
+  }
+
+  function buildRegistrosRows(rows, detailMap = new Map()) {
     return rows.map(r => {
-      const rejected = Math.max(0, (r.total_expected ?? 0) - (r.total_scanned ?? 0))
+      const wms = wmsMap.get(normalizeOrderNo(r.outbound_order_no)) || {}
+      const rejected = Number(r.total_rejected ?? 0)
       const { start, end } = sessionDurationBounds(r)
+      const detailEvents = detailMap.get(r.id) || []
       return [
         r.outbound_order_no || '',
+        wms.customerCode || wms.customerName || '',
+        wms.receiverName || '',
+        wms.logisticsChannel || '',
+        wms.thirdOrderNo || wms.referenceNo || '',
+        wms.logisticsTrackNo || wms.trackingNo || '',
+        wms.outboundTime || '',
+        wms.orderCreateTime || '',
+        wms.outboundBoxCount ?? wms.packageCount ?? '',
         r.operator_nombre || '',
-        start || '',
-        end || '',
+        start ? fmtDateTime(start) : '',
+        end ? fmtDateTime(end) : '',
+        getDominantLocation(detailEvents, r.ubicacion_nota || ''),
         durationLabel(start, end),
         r.total_expected ?? 0,
         r.total_scanned ?? 0,
         rejected,
-        effectiveSessionStatus(r) || '',
+        resolveStatusLabel(t, STATUS_META[effectiveSessionStatus(r)]?.labelKey, 'common.status'),
+        r.notes || '',
       ]
     })
   }
 
-  const REGISTROS_HEADERS = ['Orden WMS', 'Operador', 'Inicio', 'Final', 'Duración', 'Esperado', 'Validado', 'Rechazado', 'Estado']
-  const COL_WIDTHS = [{ wch: 20 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 16 }]
+  const REGISTROS_HEADERS = [
+    'Orden WMS',
+    'Cliente',
+    'Destino',
+    'Canal',
+    'Referencia',
+    'Tracking',
+    'Fecha entrega',
+    'Fecha creación',
+    'Cajas orden',
+    'Validador',
+    'Inicio validación',
+    'Hora validación',
+    'Ubicación',
+    'Duración',
+    'Esperado',
+    'Validado',
+    'Rechazado',
+    'Estado',
+    'Notas',
+  ]
+  const COL_WIDTHS = [
+    { wch: 20 }, { wch: 18 }, { wch: 22 }, { wch: 16 }, { wch: 18 }, { wch: 18 },
+    { wch: 18 }, { wch: 18 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
+    { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 28 },
+  ]
 
   function writeExcel(dataRows, filename) {
     const wb = XLSX.utils.book_new()
@@ -1249,14 +1446,63 @@ export default function SurtidoRegistros() {
     toast.success('Exportación completada')
   }
 
-  const handleBulkExport = () => {
+  function writeDetailExcel(dataRows, filename) {
+    const headers = ['Orden', 'Destino', 'Código caja', 'Fecha validación', 'Usuario valida', 'Ubicación']
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
+    ws['!cols'] = [{ wch: 20 }, { wch: 24 }, { wch: 26 }, { wch: 20 }, { wch: 22 }, { wch: 18 }]
+    XLSX.utils.book_append_sheet(wb, ws, 'Detalle Validación')
+    XLSX.writeFile(wb, filename)
+    toast.success('Exportación detallada completada')
+  }
+
+  const handleBulkExport = async () => {
     if (selectedIds.size === 0) return
     setExportingBulk(true)
     try {
-      writeExcel(buildRegistrosRows(records.filter(r => selectedIds.has(r.id))), `surtido_registros_${getToday()}.xlsx`)
+      const selectedRecords = records.filter(r => selectedIds.has(r.id))
+      const details = await Promise.all(selectedRecords.map((record) => getScanSession(record.id)))
+      const detailMap = new Map()
+      details.forEach((payload, index) => {
+        detailMap.set(selectedRecords[index].id, payload?.data?.events ?? [])
+      })
+      writeExcel(buildRegistrosRows(selectedRecords, detailMap), `surtido_registros_${getToday()}.xlsx`)
       setSelectedIds(new Set())
     } catch { toast.error(t('toast.error')) }
     setExportingBulk(false)
+  }
+
+  const handleBulkDetailExport = async () => {
+    if (selectedIds.size === 0) return
+    setExportingDetailBulk(true)
+    try {
+      const selectedRecords = records.filter(r => selectedIds.has(r.id))
+      const details = await Promise.all(selectedRecords.map((record) => getScanSession(record.id)))
+      const rows = []
+
+      details.forEach((payload, index) => {
+        const session = payload?.data?.session ?? selectedRecords[index] ?? {}
+        const wms = wmsMap.get(normalizeOrderNo(session.outbound_order_no)) || {}
+        const events = (payload?.data?.events ?? []).filter((event) => event.scan_result === 'ok')
+
+        events.forEach((event) => {
+          rows.push([
+            session.outbound_order_no || '',
+            wms.receiverName || '',
+            event.normalized_code || event.scanned_code || event.matched_box_type || '',
+            event.scanned_at ? fmtDateTime(event.scanned_at) : '',
+            session.operator_nombre || '',
+            event.ubicacion_nota || session.ubicacion_nota || '',
+          ])
+        })
+      })
+
+      writeDetailExcel(rows, `surtido_detalle_validacion_${getToday()}.xlsx`)
+      setSelectedIds(new Set())
+    } catch {
+      toast.error(t('toast.error'))
+    }
+    setExportingDetailBulk(false)
   }
 
   const handleCopyCode = async (event, code) => {
@@ -1433,9 +1679,42 @@ export default function SurtidoRegistros() {
                 }, 400)
               }}
             />
+            <button
+              type="button"
+              onClick={() => setBulkSearchOpen(true)}
+              className={`shrink-0 rounded-lg p-1.5 transition-colors ${
+                bulkActive
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-warm-400 hover:bg-primary-50 hover:text-primary-600'
+              }`}
+              title={t('surtido.ordenes.bulk_search_title')}
+              aria-label={t('surtido.ordenes.bulk_search_title')}
+            >
+              <ListFilter size={14} />
+            </button>
           </div>
 
-          {(searchInput || statusFilter || operatorFilter.length > 0 || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
+          {bulkActive && (
+            <div className="col-span-2 inline-flex items-center gap-2 rounded-xl border border-primary-100 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 sm:col-span-1">
+              <ListFilter className="h-3.5 w-3.5" />
+              <span>{bulkSearchCodes.length} órdenes</span>
+              <button
+                type="button"
+                className="rounded-md p-0.5 text-primary-500 hover:bg-primary-100 hover:text-primary-700"
+                onClick={() => {
+                  setBulkSearchText('')
+                  setBulkSearchCodes([])
+                  setSelectedIds(new Set())
+                  setPage(1)
+                }}
+                title={t('common.clear')}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {(searchInput || bulkActive || statusFilter || operatorFilter.length > 0 || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
             <button
               onClick={clearFilters}
               className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors"
@@ -1525,6 +1804,11 @@ export default function SurtidoRegistros() {
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-success-600 text-white font-semibold hover:bg-success-700 transition-colors disabled:opacity-50">
                   {exportingBulk ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-3 h-3" />}
                   {t('common.export')} ({selectedIds.size})
+                </button>
+                <button onClick={handleBulkDetailExport} disabled={exportingDetailBulk}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white text-primary-700 border border-primary-200 font-semibold hover:bg-primary-50 transition-colors disabled:opacity-50">
+                  {exportingDetailBulk ? <div className="w-3 h-3 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" /> : <Download className="w-3 h-3" />}
+                  Exportar detalle
                 </button>
                 <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-primary-500 hover:text-primary-700 font-semibold">
                   <X className="w-3.5 h-3.5" />
@@ -1685,6 +1969,13 @@ export default function SurtidoRegistros() {
         canEdit={canEdit}
         canDelete={canDelete}
         initialTab={detailInitialTab}
+      />
+
+      <BulkSearchModal
+        isOpen={bulkSearchOpen}
+        onClose={() => setBulkSearchOpen(false)}
+        onApply={handleApplyBulkSearch}
+        initialValue={bulkSearchText}
       />
 
       <Modal

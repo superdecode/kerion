@@ -345,6 +345,26 @@ async function refreshPickSessionTotals(req, sessionId) {
     [sessionId, req.tenantId]
   )
 
+  await req.tQuery(
+    `UPDATE pick_sessions s
+     SET ubicacion_nota = dominant.ubicacion_nota,
+         updated_at = now()
+     FROM (
+       SELECT ubicacion_nota
+       FROM pick_events
+       WHERE session_id = $1
+         AND tenant_id = $2
+         AND scan_result = 'ok'
+         AND NULLIF(TRIM(ubicacion_nota), '') IS NOT NULL
+       GROUP BY ubicacion_nota
+       ORDER BY COUNT(*) DESC, MIN(scanned_at) ASC NULLS LAST, ubicacion_nota ASC
+       LIMIT 1
+     ) dominant
+     WHERE s.id = $1
+       AND s.tenant_id = $2`,
+    [sessionId, req.tenantId]
+  )
+
   const sessionRes = await req.tQuery(
     `SELECT id, outbound_order_no, third_order_no, status, total_expected, total_scanned
      FROM pick_sessions
@@ -1051,13 +1071,18 @@ router.put('/scan-session/:id',
       )
       const updatedSession = result.rows[0]
 
-      // Order-level ubicacion edit cascades to every caja in the session. A per-caja override
-      // made afterwards via PUT /scan-event/:id still wins for that single box.
+      // Order-level ubicacion fills older events without location; it must not overwrite
+      // per-caja locations already captured while scanning different sections.
       if (ubicacion_nota !== undefined) {
         await req.tQuery(
-          `UPDATE pick_events SET ubicacion_nota = $1 WHERE session_id = $2 AND tenant_id = $3`,
+          `UPDATE pick_events
+           SET ubicacion_nota = $1
+           WHERE session_id = $2
+             AND tenant_id = $3
+             AND NULLIF(TRIM(ubicacion_nota), '') IS NULL`,
           [normalizeOptionalText(ubicacion_nota), req.params.id, req.tenantId]
         )
+        await refreshPickSessionTotals(req, req.params.id)
       }
 
       if (status === 'complete' || status === 'with_discrepancies') {
@@ -1143,6 +1168,7 @@ router.post('/scan-event',
         manual_reason_id,
         manual_reason_label,
         manual_notes,
+        ubicacion_nota,
       } = req.body
       if (!session_id || !scanned_code || !scan_result) {
         return res.status(400).json({ success: false, error: 'session_id, scanned_code y scan_result son requeridos' })
@@ -1177,8 +1203,8 @@ router.post('/scan-event',
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
-            input_method, manual_reason_id, manual_reason_label, manual_notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            input_method, manual_reason_id, manual_reason_label, manual_notes, ubicacion_nota)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING *`,
         [
           session_id,
@@ -1193,6 +1219,7 @@ router.post('/scan-event',
           manual_reason_id || null,
           normalizeOptionalText(manual_reason_label),
           normalizeOptionalText(manual_notes),
+          normalizeOptionalText(ubicacion_nota),
         ]
       )
 
@@ -1239,6 +1266,7 @@ router.post('/scan-event/manual',
         manual_reason_id,
         manual_reason_label,
         manual_notes,
+        ubicacion_nota,
       } = req.body
 
       if (!session_id || !scanned_code || !manual_reason_id) {
@@ -1273,8 +1301,8 @@ router.post('/scan-event/manual',
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
-            input_method, manual_reason_id, manual_reason_label, manual_notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', $9, $10, $11)
+            input_method, manual_reason_id, manual_reason_label, manual_notes, ubicacion_nota)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', $9, $10, $11, $12)
          RETURNING *`,
         [
           session_id,
@@ -1288,6 +1316,7 @@ router.post('/scan-event/manual',
           reason.id,
           reason.nombre,
           normalizeOptionalText(manual_notes),
+          normalizeOptionalText(ubicacion_nota),
         ]
       )
       await refreshPickSessionTotals(req, session_id)

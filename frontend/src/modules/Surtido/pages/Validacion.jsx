@@ -1735,7 +1735,7 @@ const { data: reasonsData } = useQuery({
       setHistory(h => [{ code: norm, result: 'rejected', ts: Date.now() }, ...h].slice(0, 500))
       setCounts(c => ({ ...c, rejected: c.rejected + 1 }))
       setRejectedBoxModal({ open: true, code: norm })
-      addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'not_found', quantity: 1, _dedupeKey: `NF_${norm}_${Date.now()}` })
+      addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'not_found', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: `NF_${norm}_${Date.now()}` })
       return
     }
     const eventKey = getValidationCodeKey({ normalized_code: norm, matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null })
@@ -1745,7 +1745,7 @@ const { data: reasonsData } = useQuery({
       setLastScan({ code: norm, result: 'duplicate' })
       setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h].slice(0, 500))
       toast.warning(t('surtido.validacion.duplicate') + ': ' + norm)
-      addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'duplicate', quantity: 1, _dedupeKey: `DUP_${norm}_${Date.now()}` })
+      addEventMut.mutate({ session_id: sessionId, scanned_code: rawCode, normalized_code: norm, scan_result: 'duplicate', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: `DUP_${norm}_${Date.now()}` })
       return
     }
     playSound('success')
@@ -1759,9 +1759,9 @@ const { data: reasonsData } = useQuery({
       session_id: sessionId, scanned_code: rawCode, normalized_code: norm,
       matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null,
       matched_sku: matched.type === 'sku' ? matched.sku : null,
-      scan_result: 'ok', quantity: 1, _dedupeKey: `OK_${norm}_${ts}`,
+      scan_result: 'ok', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: `OK_${norm}_${ts}`,
     })
-  }, [sessionId, packageMap, productMap, addEventMut, t])
+  }, [sessionId, packageMap, productMap, addEventMut, selectedUbicacion, t])
 
   function addCodeToSession(code) {
     const norm = normalizeScanCode(code)
@@ -1788,7 +1788,7 @@ const { data: reasonsData } = useQuery({
     setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
     if (sessionId) {
       const ts = Date.now()
-      addEventMut.mutate({ session_id: sessionId, scanned_code: code, normalized_code: norm, scan_result: 'ok', quantity: 1, _dedupeKey: `RC_${norm}_${ts}` })
+      addEventMut.mutate({ session_id: sessionId, scanned_code: code, normalized_code: norm, scan_result: 'ok', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: `RC_${norm}_${ts}` })
     }
     toast.success(t('surtido.escaneo.recount_add_btn') + ': ' + norm)
   }
@@ -2439,6 +2439,7 @@ const { data: reasonsData } = useQuery({
                   manual_reason_id: Number(manualEntry.reasonId),
                   manual_reason_label: selectedReason?.nombre || null,
                   manual_notes: manualEntry.notes.trim() || null,
+                  ubicacion_nota: selectedUbicacion || null,
                 })
               }}
             >
