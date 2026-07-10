@@ -982,9 +982,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
               const pct = (totalExpected ?? 0) > 0
                 ? Math.min(100, Math.round((scannedCount / totalExpected) * 100))
                 : null
-              const isComplete = tracking?.status === 'complete' || tracking?.status === 'partial'
-                || (pct !== null && pct >= 100)
-                || (totalExpected != null && validatedBoxCount >= totalExpected && totalExpected > 0)
+              const isComplete = totalExpected != null && totalExpected > 0 && scannedCount >= totalExpected
               const isValidating = !isComplete && (tracking?.status === 'validating' || validatedBoxCount > 0)
 
               let statusBadge = null
