@@ -28,13 +28,26 @@ import {
   upsertOrderTracking, getScanSession, getRecords, getBoxStatusDetail, getOrderTracking,
 } from '../services/surtidoService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/services/googleSheetsService'
+import { captureErrorEvent } from '../../../core/services/errorTelemetry'
 import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
 import { useSurtidoStore } from '../stores/surtidoStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
 const SCANNER_THRESHOLD_MS = 100   // per-character inter-key gap (ScanRecount)
-const SCANNER_TOTAL_MS = 2000       // max total time first-char→Enter for scanner barcodes
+const SCANNER_TOTAL_MS = 2000       // base budget first-char→Enter for scanner barcodes
+// Codes past this length (QR/2D payloads, e.g. the JSON blobs some WMS scanners emit)
+// get extra time on top of SCANNER_TOTAL_MS — a fixed budget was long enough for a
+// short 10-20 char code but too tight for a 100+ char payload transmitted at the same
+// keystroke rate, which occasionally tipped a genuine scan over the limit and got it
+// discarded as "manual typing" with zero trace anywhere (not even a rejected/duplicate
+// pick_event) — the box looked scanned to the operator but the system never saw it.
+const SCANNER_BASE_CHARS = 40
+const SCANNER_EXTRA_MS_PER_CHAR = 15
+function scannerTimeBudgetMs(length) {
+  if (length <= SCANNER_BASE_CHARS) return SCANNER_TOTAL_MS
+  return SCANNER_TOTAL_MS + (length - SCANNER_BASE_CHARS) * SCANNER_EXTRA_MS_PER_CHAR
+}
 const TABS_KEY = 'kirion_surtido_tabs'
 const ACTIVE_TAB_KEY = 'kirion_surtido_active_tab'
 const SESSION_KEY = (tabId) => `kirion_surtido_session_${tabId}`
@@ -1829,10 +1842,30 @@ const { data: reasonsData } = useQuery({
     if (e.key === 'Enter') {
       const val = e.target.value.trim()
       if (!val) return
-      // Manual typing: total elapsed from first char to Enter exceeds threshold
+      // Manual typing: total elapsed from first char to Enter exceeds threshold,
+      // scaled by code length (see scannerTimeBudgetMs).
       const elapsed = now - inputStartTimeRef.current
-      if (elapsed > SCANNER_TOTAL_MS) {
+      if (elapsed > scannerTimeBudgetMs(val.length)) {
+        // This silently discards the code with no server-side trace at all — unlike
+        // every other outcome (ok/duplicate/rejected), which all still play a sound.
+        // A blocked scan with only a toast is the easiest failure mode to miss in a
+        // noisy warehouse, so it gets its own distinct audible cue too.
+        playSound('suspicious')
         toast.warning(t('surtido.validacion.manual_blocked'))
+        // Previously invisible — the code was discarded with nothing to show it ever
+        // happened. Surface it in the error-events dashboard so a recurring pattern
+        // (same operator/order/code length) is diagnosable instead of only detectable
+        // by manually reconciling scanned counts against pick_events after the fact.
+        captureErrorEvent({
+          // captureErrorEvent dedupes repeats of the same fingerprint for the rest of
+          // the page session — without a unique one here, only the first blocked scan
+          // per page load would ever get reported.
+          fingerprint: `scan_blocked_${sessionId}_${now}`,
+          source: 'surtido_scan_blocked_as_manual',
+          severity: 'warning',
+          message: 'Scan discarded: elapsed time exceeded scanner budget',
+          metadata: { obc, session_id: sessionId, code_length: val.length, elapsed_ms: elapsed, budget_ms: scannerTimeBudgetMs(val.length) },
+        })
         e.target.value = ''
         inputStartTimeRef.current = 0
         return
