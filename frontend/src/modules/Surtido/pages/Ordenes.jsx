@@ -2505,7 +2505,13 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
   const expected = Number(r.outboundBoxCount ?? r.packageCount ?? r.packageQty ?? r.totalBoxQty ?? r.totalQty ?? tracking?.total_expected ?? 0)
   const is100Percent = expected > 0 && scanned >= expected
   const rawStatus = tracking?.status || 'pending_assignment'
-  const displayStatus = (is100Percent && rawStatus !== 'complete' && rawStatus !== 'partial' && rawStatus !== 'cancelled') ? 'complete' : rawStatus
+  // 'partial' means "force-closed short of expected" — a fact about the count at
+  // closing time, not a permanent label. If the missing boxes were scanned afterward
+  // (e.g. the session was reopened and finished), the count now says complete and the
+  // badge must say so too — excluding 'partial' here left it stuck showing Parcial
+  // forever even at 100%. 'cancelled' stays excluded: that's a deliberate business
+  // decision unrelated to box count and must never be overridden by it.
+  const displayStatus = (is100Percent && rawStatus !== 'complete' && rawStatus !== 'cancelled') ? 'complete' : rawStatus
   const meta = getStatusMeta(displayStatus)
   const noSurtidor = !getSurtidorName(tracking)
   const isClosedOrder = CLOSED_ORDER_STATUSES.has(displayStatus)

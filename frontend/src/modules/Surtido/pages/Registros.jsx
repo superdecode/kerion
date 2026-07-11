@@ -98,6 +98,13 @@ function effectiveSessionStatus(r) {
   return r.status
 }
 
+function expectedValidationQty(session, wmsOrder) {
+  return Number(
+    wmsOrder?.outboundBoxCount ?? wmsOrder?.packageCount ?? wmsOrder?.packageQty ??
+    wmsOrder?.totalBoxQty ?? wmsOrder?.totalQty ?? session?.total_expected ?? 0
+  )
+}
+
 function fmtDt(v) {
   if (!v) return '—'
   return fmtDateTime(v)
@@ -448,7 +455,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   const firstEventAt = sortedEvents[0]?.scanned_at || sortedEvents[0]?.scan_time
   const lastEventAt  = sortedEvents[sortedEvents.length - 1]?.scanned_at || sortedEvents[sortedEvents.length - 1]?.scan_time
 
-  const totalExpected = session.total_expected ?? 0
+  const totalExpected = expectedValidationQty(session, wmsOrder)
   const totalScanned  = validados.length
   const displayStatus = effectiveSessionStatus({ status: session.status, total_expected: totalExpected, total_scanned: totalScanned })
   // Prefer the snapshot persisted on the session at creation time — stable, historical
@@ -1125,7 +1132,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
               {results.map(r => {
               const tracking = trackingMap.get(r.outboundOrderNo)
               const validatedBoxCount = getValidatedBoxCount(r.outboundOrderNo)
-              const totalExpected = tracking?.total_expected ?? r.outboundBoxCount ?? null
+              const totalExpected = r.outboundBoxCount ?? tracking?.total_expected ?? null
               const scannedCount = tracking?.total_scanned ?? validatedBoxCount
               const pct = (totalExpected ?? 0) > 0
                 ? Math.min(100, Math.round((scannedCount / totalExpected) * 100))
@@ -1460,7 +1467,7 @@ export default function SurtidoRegistros() {
         end ? fmtDateTime(end) : '',
         getDominantLocation(detailEvents, r.ubicacion_nota || ''),
         durationLabel(start, end),
-        r.total_expected ?? 0,
+        expectedValidationQty(r, wms),
         r.total_scanned ?? 0,
         rejected,
         resolveStatusLabel(t, STATUS_META[effectiveSessionStatus(r)]?.labelKey, 'common.status'),
@@ -1910,9 +1917,11 @@ export default function SurtidoRegistros() {
                 </thead>
                 <tbody className="divide-y divide-warm-50">
                   {records.map(r => {
-                    const meta = STATUS_META[effectiveSessionStatus(r)] ?? STATUS_META.open
-                    const pct = r.total_expected > 0
-                      ? Math.min(100, Math.round(((r.total_scanned ?? 0) / r.total_expected) * 100))
+                    const wmsOrder = wmsMap.get(normalizeOrderNo(r.outbound_order_no))
+                    const totalExpected = expectedValidationQty(r, wmsOrder)
+                    const meta = STATUS_META[effectiveSessionStatus({ ...r, total_expected: totalExpected })] ?? STATUS_META.open
+                    const pct = totalExpected > 0
+                      ? Math.min(100, Math.round(((r.total_scanned ?? 0) / totalExpected) * 100))
                       : null
                     const isSelected = selectedIds.has(r.id)
                     return (
@@ -1976,7 +1985,7 @@ export default function SurtidoRegistros() {
                           </span>
                         </td>
                         <td className="table-cell text-right">
-                          <span className="text-warm-500 text-xs tabular-nums">{r.total_expected ?? 0}</span>
+                          <span className="text-warm-500 text-xs tabular-nums">{totalExpected}</span>
                         </td>
                         <td className="table-cell text-right">
                           <div className="flex items-center justify-end gap-2">
