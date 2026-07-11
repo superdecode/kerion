@@ -1368,12 +1368,20 @@ const { data: reasonsData } = useQuery({
 
   const createSessionMut = useMutation({
     mutationFn: (force = false) => {
-      const packageList = (detailData?.data ?? detailData)?.packageList ?? (detailData?.data ?? detailData)?.details ?? (detailData?.data ?? detailData)?.items ?? []
+      const detail = detailData?.data ?? detailData
+      const packageList = detail?.packageList ?? detail?.details ?? detail?.items ?? []
       return createScanSession({
         outbound_order_no: obc,
-        third_order_no: (detailData?.data ?? detailData)?.thirdOrderNo || null,
+        third_order_no: detail?.thirdOrderNo || null,
         total_expected: packageList.reduce((s, p) => s + (p.quantity ?? p.totalPackageQty ?? p.qty ?? 1), 0),
         ubicacion_id: null,
+        // Snapshot destino/tracking/canal/fecha at session-creation time so Registros
+        // shows stable historical data instead of a live join against the WMS sheet
+        // cache, which can change or drop the row later.
+        receiver_name: detail?.receiverName || null,
+        logistics_track_no: detail?.logisticsTrackNo || null,
+        logistics_channel: detail?.logisticsChannel || null,
+        outbound_delivery_at: detail?.expectedTime || detail?.outboundTime || null,
         force,
       })
     },

@@ -1002,6 +1002,7 @@ export default function Ordenes() {
   const [search, setSearch] = useState('')
   const [statusDraft, setStatusDraft] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [anormalidadDraft, setAnormalidadDraft] = useState('')
   const [filterAnormalidad, setFilterAnormalidad] = useState('')
   const [clientDraft, setClientDraft] = useState([])
   const [filterClient, setFilterClient] = useState([])
@@ -1045,10 +1046,6 @@ export default function Ordenes() {
     setTimeout(() => setIsTransitioning(false), 300)
   }
 
-  const handleAnormalidadChange = (value) => {
-    setFilterAnormalidad(value)
-    setPage(1)
-  }
 
   const [refreshing, setRefreshing] = useState(false)
   const [exportingDetailed, setExportingDetailed] = useState(false)
@@ -1075,6 +1072,7 @@ export default function Ordenes() {
           setSurtidorDraft(v); setFilterSurtidor(v)
         }
         if (saved.filterDestination !== undefined) { setDestinationDraft(saved.filterDestination); setFilterDestination(saved.filterDestination) }
+        if (saved.filterAnormalidad !== undefined) { setAnormalidadDraft(saved.filterAnormalidad); setFilterAnormalidad(saved.filterAnormalidad) }
         if (saved.dateFrom) { setDateFromDraft(saved.dateFrom); setDateFrom(saved.dateFrom) }
         if (saved.dateTo) { setDateToDraft(saved.dateTo); setDateTo(saved.dateTo) }
         if (saved.timeFrom || saved.timeTo) {
@@ -1102,11 +1100,11 @@ export default function Ordenes() {
   useEffect(() => {
     try {
       sessionStorage.setItem(filtersKey, JSON.stringify({
-        search, filterStatus, filterClient, filterSurtidor, filterDestination,
+        search, filterStatus, filterClient, filterSurtidor, filterDestination, filterAnormalidad,
         dateFrom, dateTo, timeFrom, timeTo,
       }))
     } catch {}
-  }, [filtersKey, search, filterStatus, filterClient, filterSurtidor, filterDestination, dateFrom, dateTo, timeFrom, timeTo])
+  }, [filtersKey, search, filterStatus, filterClient, filterSurtidor, filterDestination, filterAnormalidad, dateFrom, dateTo, timeFrom, timeTo])
 
   useEffect(() => {
     const syncAutoDateWindow = () => {
@@ -1275,6 +1273,7 @@ export default function Ordenes() {
   function applyFilters() {
     setSearch(searchInput.trim())
     setFilterStatus(statusDraft)
+    setFilterAnormalidad(anormalidadDraft)
     setFilterClient(clientDraft)
     setFilterSurtidor(surtidorDraft)
     setFilterDestination(destinationDraft.trim())
@@ -1577,6 +1576,8 @@ export default function Ordenes() {
     setFilterClient([])
     setSurtidorDraft([])
     setFilterSurtidor([])
+    setAnormalidadDraft('')
+    setFilterAnormalidad('')
     setDestinationDraft('')
     setFilterDestination('')
     const today = getToday()
@@ -1600,6 +1601,7 @@ export default function Ordenes() {
   const hasFilters =
     filterClient.length > 0 ||
     filterSurtidor.length > 0 ||
+    filterAnormalidad ||
     filterDestination ||
     search ||
     timeFrom ||
@@ -2082,6 +2084,16 @@ export default function Ordenes() {
               t={t}
             />
 
+            <select
+              value={anormalidadDraft}
+              onChange={e => setAnormalidadDraft(e.target.value)}
+              className="h-10 pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
+            >
+              <option value="">{t('surtido.registros.anormalidad.all')}</option>
+              <option value="con">{t('surtido.registros.anormalidad.con')}</option>
+              <option value="sin">{t('surtido.registros.anormalidad.sin')}</option>
+            </select>
+
             <DestinationSearch
               value={destinationDraft}
                 onChange={(nextValue) => {
@@ -2152,19 +2164,8 @@ export default function Ordenes() {
         </div>
       </div>
 
-      <div className="sticky top-[8.7rem] z-[4] bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-6 flex items-center gap-2">
-        <div className="flex-1 min-w-0">
-          <StatusTabs selected={filterStatus} onChange={handleStatusChange} t={t} />
-        </div>
-        <select
-          value={filterAnormalidad}
-          onChange={e => handleAnormalidadChange(e.target.value)}
-          className="h-9 pl-3 pr-7 rounded-xl border border-warm-200 text-xs text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer shrink-0"
-        >
-          <option value="">{t('surtido.registros.anormalidad.all')}</option>
-          <option value="con">{t('surtido.registros.anormalidad.con')}</option>
-          <option value="sin">{t('surtido.registros.anormalidad.sin')}</option>
-        </select>
+      <div className="sticky top-[8.7rem] z-[4] bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-6">
+        <StatusTabs selected={filterStatus} onChange={handleStatusChange} t={t} />
       </div>
 
       {/* Table */}

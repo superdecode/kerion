@@ -750,7 +750,7 @@ router.post('/scan-session',
   requirePermission('surtido.validacion', 'crear'),
   async (req, res) => {
     try {
-      const { outbound_order_no, third_order_no, total_expected, force } = req.body
+      const { outbound_order_no, third_order_no, total_expected, force, receiver_name, logistics_track_no, logistics_channel, outbound_delivery_at } = req.body
       if (!outbound_order_no) return res.status(400).json({ success: false, error: 'outbound_order_no es requerido' })
 
       // An order must always map to exactly one pick_sessions record. Look up
@@ -811,10 +811,15 @@ router.post('/scan-session',
                completed_at = NULL,
                total_expected = GREATEST(total_expected, $2),
                notes = $3,
+               receiver_name = COALESCE(receiver_name, $6),
+               logistics_track_no = COALESCE(logistics_track_no, $7),
+               logistics_channel = COALESCE(logistics_channel, $8),
+               outbound_delivery_at = COALESCE(outbound_delivery_at, $9),
                updated_at = now()
            WHERE id = $4 AND tenant_id = $5
            RETURNING *`,
-          [req.user.id, total_expected || 0, nextNotes, s.id, req.tenantId]
+          [req.user.id, total_expected || 0, nextNotes, s.id, req.tenantId,
+           receiver_name || null, logistics_track_no || null, logistics_channel || null, outbound_delivery_at || null]
         )
         return res.json({ success: true, data: updated.rows[0], reused: true })
       }
@@ -822,10 +827,12 @@ router.post('/scan-session',
       try {
         const result = await req.tQuery(
           `INSERT INTO pick_sessions
-             (tenant_id, outbound_order_no, third_order_no, operator_id, status, total_expected, total_scanned)
-           VALUES ($1, $2, $3, $4, 'open', $5, 0)
+             (tenant_id, outbound_order_no, third_order_no, operator_id, status, total_expected, total_scanned,
+              receiver_name, logistics_track_no, logistics_channel, outbound_delivery_at)
+           VALUES ($1, $2, $3, $4, 'open', $5, 0, $6, $7, $8, $9)
            RETURNING *`,
-          [req.tenantId, outbound_order_no, third_order_no || null, req.user.id, total_expected || 0]
+          [req.tenantId, outbound_order_no, third_order_no || null, req.user.id, total_expected || 0,
+           receiver_name || null, logistics_track_no || null, logistics_channel || null, outbound_delivery_at || null]
         )
         return res.status(201).json({ success: true, data: result.rows[0] })
       } catch (insertErr) {

@@ -446,12 +446,14 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   const totalExpected = session.total_expected ?? 0
   const totalScanned  = validados.length
   const displayStatus = effectiveSessionStatus({ status: session.status, total_expected: totalExpected, total_scanned: totalScanned })
-  const destino      = wmsOrder?.receiverName || wmsOrder?.consignee || '—'
-  const fechaEntrega = (wmsOrder?.expectedTime || wmsOrder?.outboundTime)
-    ? fmtDt(wmsOrder?.expectedTime || wmsOrder?.outboundTime)
-    : '—'
-  const referencia   = wmsOrder?.thirdOrderNo || wmsOrder?.referenceNo || '—'
-  const tracking     = wmsOrder?.logisticsTrackNo || '—'
+  // Prefer the snapshot persisted on the session at creation time — stable, historical
+  // data — over the live WMS sheet join, which can change or drop the row later.
+  // wmsOrder is only a fallback for sessions created before this snapshot existed.
+  const destino      = session.receiver_name || wmsOrder?.receiverName || wmsOrder?.consignee || '—'
+  const fechaEntregaRaw = session.outbound_delivery_at || wmsOrder?.expectedTime || wmsOrder?.outboundTime
+  const fechaEntrega = fechaEntregaRaw ? fmtDt(fechaEntregaRaw) : '—'
+  const referencia   = session.third_order_no || wmsOrder?.thirdOrderNo || wmsOrder?.referenceNo || '—'
+  const tracking     = session.logistics_track_no || wmsOrder?.logisticsTrackNo || '—'
   // A session that only reads as "En Proceso" because it's stale (never really force-closed)
   // must stay editable too — see effectiveSessionStatus.
   const editableSession = displayStatus === 'open'
