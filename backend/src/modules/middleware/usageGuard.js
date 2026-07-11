@@ -1,5 +1,23 @@
 import { query } from '../../config/database.js'
 
+// Allowlist for the plan-limit columns interpolated into SQL. All callers pass
+// hardcoded literals today; this guards against a future caller passing an
+// unvalidated value into the column position (defense-in-depth vs SQL injection).
+const ALLOWED_LIMIT_FIELDS = new Set([
+  'guide_limit',
+  'inventario_limit',
+  'devoluciones_limit',
+  'surtido_limit',
+  'despacho_limit',
+  'recepcion_limit',
+])
+
+function assertLimitField(limitField) {
+  if (!ALLOWED_LIMIT_FIELDS.has(limitField)) {
+    throw new Error(`Invalid limitField: ${String(limitField).slice(0, 40)}`)
+  }
+}
+
 function parseUsageCount(row) {
   return parseInt(row?.count ?? row?.total ?? '0', 10)
 }
@@ -42,6 +60,7 @@ export function usageGuard({ limitField, countQuery, errorCode = 'PLAN_LIMIT_REA
  * limited = false when limit is NULL (unlimited).
  */
 export async function checkModuleLimit(tenantId, limitField, countQuery) {
+  assertLimitField(limitField)
   const planRes = await query(
     `SELECT p.${limitField} AS lim
      FROM tenants t
@@ -64,6 +83,7 @@ export async function checkModuleLimit(tenantId, limitField, countQuery) {
  * count+write critical section.
  */
 export async function checkModuleLimitForUpdate(client, tenantId, limitField, countQuery, increment = 1) {
+  assertLimitField(limitField)
   const planRes = await client.query(
     `SELECT p.${limitField} AS lim
      FROM tenants t

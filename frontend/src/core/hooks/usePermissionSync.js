@@ -29,8 +29,15 @@ export function usePermissionSync() {
   useEffect(() => {
     if (!isAuthenticated) return
 
-    // Refresh permissions every 60 seconds (was 45s — reduced call rate)
-    const interval = setInterval(maybeRefresh, 60_000)
+    // Periodic permission refresh. This is a background poll hit by every open
+    // tab/device tenant-wide, and each call runs several DB queries server-side,
+    // so it's the app's biggest idle cost driver. 4 min is safe: window-focus and
+    // reconnect handlers below still refresh immediately when the user actually
+    // interacts (30s cooldown), and the backend force-invalidates stale tokens on
+    // permission change via permisos_changed_at (migration 097). Override with
+    // VITE_PERM_SYNC_INTERVAL_MS if a tenant needs tighter propagation.
+    const intervalMs = Number(import.meta.env.VITE_PERM_SYNC_INTERVAL_MS) || 240_000
+    const interval = setInterval(maybeRefresh, intervalMs)
 
     // Refresh on window focus — gated by MIN_REFRESH_INTERVAL_MS cooldown
     const handleFocus = () => maybeRefresh()

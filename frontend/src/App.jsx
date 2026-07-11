@@ -1,92 +1,91 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './core/stores/authStore'
 import { captureErrorEvent } from './core/services/errorTelemetry'
 
-// Layout
+// Structural shell — kept eager (needed on first paint for every session).
 import MainLayout from './core/components/layout/MainLayout'
 import ErrorBoundary from './core/components/common/ErrorBoundary'
-
-// Auth
 import Login from './core/components/auth/Login'
 import ProtectedRoute, { PermissionRoute } from './core/components/auth/ProtectedRoute'
-
-// Super Admin panel
-import AdminLogin from './modules/SuperAdmin/pages/AdminLogin'
-import AdminLayout from './modules/SuperAdmin/components/AdminLayout'
-import AdminDashboard from './modules/SuperAdmin/pages/AdminDashboard'
-import AdminSolicitudes from './modules/SuperAdmin/pages/AdminSolicitudes'
-import AdminTenants from './modules/SuperAdmin/pages/AdminTenants'
-import AdminTenantDetalle from './modules/SuperAdmin/pages/AdminTenantDetalle'
-import AdminNotificaciones from './modules/SuperAdmin/pages/AdminNotificaciones'
-import AdminAnalytics from './modules/SuperAdmin/pages/AdminAnalytics'
-import AdminErrores from './modules/SuperAdmin/pages/AdminErrores'
-import AdminSuscripciones from './modules/SuperAdmin/pages/AdminSuscripciones'
-import AdminSoporte from './modules/SuperAdmin/pages/AdminSoporte'
 import { useAdminAuthStore } from './modules/SuperAdmin/stores/adminAuthStore'
-
-// Landing page
-import Landing from './pages/Landing'
-import NotFound from './pages/NotFound'
-import SoundTest from './pages/SoundTest'
-
-// Pages
 import GlobalDashboard from './pages/GlobalDashboard'
-import Administracion from './pages/Administracion'
-
-// Dashboard Module (consolidated)
-import DashboardPage from './modules/Dashboard/pages/DashboardPage'
-
-// DropScan Module
-import DropScanDashboard from './modules/DropScan/pages/Dashboard'
-import Escaneo from './modules/DropScan/pages/Escaneo'
-import Tarimas from './modules/DropScan/pages/Tarimas'
-import Reportes from './modules/DropScan/pages/Reportes'
-import Configuracion from './modules/DropScan/pages/Configuracion'
-
-// FEP Module
-import Folios from './modules/Fep/pages/Folios'
-import FolioDetalle from './modules/Fep/pages/FolioDetalle'
-import Entradas from './modules/Devoluciones/pages/Entradas'
-import EntradaDetalle from './modules/Devoluciones/pages/EntradaDetalle'
-import InventarioDevoluciones from './modules/Devoluciones/pages/Inventario'
-import Salidas from './modules/Devoluciones/pages/Salidas'
-import SalidaDetalle from './modules/Devoluciones/pages/SalidaDetalle'
-
-// Inventario Module
-import InventarioRegistros from './modules/Inventario/pages/Registros'
-import InventarioEscaneo from './modules/Inventario/pages/Escaneo'
-import InventarioRastreo from './modules/Inventario/pages/Rastreo'
-import InventarioRastreoDetalle from './modules/Inventario/pages/RastreoDetalle'
-
-// Surtido Module
-import SurtidoOrdenes from './modules/Surtido/pages/Ordenes'
-import SurtidoOrdenDetalle from './modules/Surtido/pages/OrdenDetalle'
-import SurtidoValidacion from './modules/Surtido/pages/Validacion'
-import SurtidoRegistros from './modules/Surtido/pages/Registros'
-
-// WMS Hub Module
-import WMSHubConfiguracion from './modules/WmsHub/pages/Configuracion'
 import GlobalPreloader from './core/components/common/GlobalPreloader'
 import TenantGuard from './core/components/common/TenantGuard'
 
+// Everything below is route-level code-split via React.lazy so a scanner opening
+// one operational screen no longer downloads the SuperAdmin panel, dashboards,
+// and every other module up front. Heavy deps (xlsx, recharts) ride along in
+// their own chunks and load only with the page that uses them.
+
+// Super Admin panel (never used by operators)
+const AdminLogin = lazy(() => import('./modules/SuperAdmin/pages/AdminLogin'))
+const AdminLayout = lazy(() => import('./modules/SuperAdmin/components/AdminLayout'))
+const AdminDashboard = lazy(() => import('./modules/SuperAdmin/pages/AdminDashboard'))
+const AdminSolicitudes = lazy(() => import('./modules/SuperAdmin/pages/AdminSolicitudes'))
+const AdminTenants = lazy(() => import('./modules/SuperAdmin/pages/AdminTenants'))
+const AdminTenantDetalle = lazy(() => import('./modules/SuperAdmin/pages/AdminTenantDetalle'))
+const AdminNotificaciones = lazy(() => import('./modules/SuperAdmin/pages/AdminNotificaciones'))
+const AdminAnalytics = lazy(() => import('./modules/SuperAdmin/pages/AdminAnalytics'))
+const AdminErrores = lazy(() => import('./modules/SuperAdmin/pages/AdminErrores'))
+const AdminSuscripciones = lazy(() => import('./modules/SuperAdmin/pages/AdminSuscripciones'))
+const AdminSoporte = lazy(() => import('./modules/SuperAdmin/pages/AdminSoporte'))
+
+// Landing / misc
+const Landing = lazy(() => import('./pages/Landing'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+const SoundTest = lazy(() => import('./pages/SoundTest'))
+const Administracion = lazy(() => import('./pages/Administracion'))
+
+// Dashboard Module (consolidated — pulls recharts)
+const DashboardPage = lazy(() => import('./modules/Dashboard/pages/DashboardPage'))
+
+// DropScan Module
+const Escaneo = lazy(() => import('./modules/DropScan/pages/Escaneo'))
+const Tarimas = lazy(() => import('./modules/DropScan/pages/Tarimas'))
+const Reportes = lazy(() => import('./modules/DropScan/pages/Reportes'))
+const Configuracion = lazy(() => import('./modules/DropScan/pages/Configuracion'))
+
+// FEP + Devoluciones Module (pull xlsx)
+const Folios = lazy(() => import('./modules/Fep/pages/Folios'))
+const FolioDetalle = lazy(() => import('./modules/Fep/pages/FolioDetalle'))
+const Entradas = lazy(() => import('./modules/Devoluciones/pages/Entradas'))
+const EntradaDetalle = lazy(() => import('./modules/Devoluciones/pages/EntradaDetalle'))
+const InventarioDevoluciones = lazy(() => import('./modules/Devoluciones/pages/Inventario'))
+const Salidas = lazy(() => import('./modules/Devoluciones/pages/Salidas'))
+const SalidaDetalle = lazy(() => import('./modules/Devoluciones/pages/SalidaDetalle'))
+
+// Inventario Module
+const InventarioRegistros = lazy(() => import('./modules/Inventario/pages/Registros'))
+const InventarioEscaneo = lazy(() => import('./modules/Inventario/pages/Escaneo'))
+const InventarioRastreo = lazy(() => import('./modules/Inventario/pages/Rastreo'))
+const InventarioRastreoDetalle = lazy(() => import('./modules/Inventario/pages/RastreoDetalle'))
+
+// Surtido Module
+const SurtidoOrdenes = lazy(() => import('./modules/Surtido/pages/Ordenes'))
+const SurtidoOrdenDetalle = lazy(() => import('./modules/Surtido/pages/OrdenDetalle'))
+const SurtidoValidacion = lazy(() => import('./modules/Surtido/pages/Validacion'))
+const SurtidoRegistros = lazy(() => import('./modules/Surtido/pages/Registros'))
+
+// WMS Hub Module
+const WMSHubConfiguracion = lazy(() => import('./modules/WmsHub/pages/Configuracion'))
+
 // Anormalidades Module
-import AnormRegistro from './modules/Anormalidades/pages/Registro'
-import AnormDashboard from './modules/Anormalidades/pages/Dashboard'
-import AnormMejoras from './modules/Anormalidades/pages/Mejoras'
-import AnormConfiguracion from './modules/Anormalidades/pages/Configuracion'
+const AnormRegistro = lazy(() => import('./modules/Anormalidades/pages/Registro'))
+const AnormMejoras = lazy(() => import('./modules/Anormalidades/pages/Mejoras'))
+const AnormConfiguracion = lazy(() => import('./modules/Anormalidades/pages/Configuracion'))
 
 // Despacho Module
-import DespachoOrdenes from './modules/Despacho/pages/Ordenes'
-import DespachoFolios from './modules/Despacho/pages/Folios'
-import DespachoFolioDetalle from './modules/Despacho/pages/FolioDetalle'
-import DespachoValidar from './modules/Despacho/pages/Validar'
+const DespachoOrdenes = lazy(() => import('./modules/Despacho/pages/Ordenes'))
+const DespachoFolios = lazy(() => import('./modules/Despacho/pages/Folios'))
+const DespachoFolioDetalle = lazy(() => import('./modules/Despacho/pages/FolioDetalle'))
+const DespachoValidar = lazy(() => import('./modules/Despacho/pages/Validar'))
 
 // Recepcion Module
-import RecepcionRecibir from './modules/Recepcion/pages/Recibir'
-import RecepcionDetalle from './modules/Recepcion/pages/RecepcionDetalle'
-import RecepcionEscanear from './modules/Recepcion/pages/Escanear'
+const RecepcionRecibir = lazy(() => import('./modules/Recepcion/pages/Recibir'))
+const RecepcionDetalle = lazy(() => import('./modules/Recepcion/pages/RecepcionDetalle'))
+const RecepcionEscanear = lazy(() => import('./modules/Recepcion/pages/Escanear'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -167,6 +166,7 @@ function AppRoutes() {
   }, [])
 
   return (
+    <Suspense fallback={<GlobalPreloader />}>
     <Routes>
       {/* PUBLIC ROUTES — No auth required, outside all protected layouts */}
 
@@ -351,6 +351,7 @@ function AppRoutes() {
       {/* 404 — shown for any unmatched route, completely public */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
   )
 }
 

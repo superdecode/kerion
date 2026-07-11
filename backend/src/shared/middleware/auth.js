@@ -149,9 +149,15 @@ export async function loadFullUser(req, res, next) {
     // Use tenantQuery so that SET LOCAL app.tenant_id is applied within the
     // transaction — required because usuarios and roles have FORCE ROW LEVEL
     // SECURITY with a policy that reads current_setting('app.tenant_id').
+    // Select only the columns the mapping below consumes — avoids pulling wide
+    // columns (notably password_hash) into request scope on every authenticated
+    // request, and cuts DB→function transfer on this hot path.
     const result = await tenantQueryWithRetry(
       tenantId,
-      `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos,
+      `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id,
+              u.es_admin_tenant, u.estado, u.tenant_id, u.zona_horaria,
+              u.permisos_override,
+              r.nombre as rol_nombre, r.permisos as rol_permisos,
               t.zona_horaria as tenant_zona_horaria
        FROM usuarios u
        LEFT JOIN roles r ON u.rol_id = r.id

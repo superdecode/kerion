@@ -360,7 +360,7 @@ export default function FolioDetalle() {
                                 onClick={() => setExpandedTarima(expandedTarima === t.id ? null : t.id)}
                                 className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-warm-50/60 text-left transition-colors group/row"
                               >
-                                <div className="flex-1 grid grid-cols-4 gap-4 text-sm">
+                                <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                                   <div className="flex items-center gap-1.5">
                                     <span className="code-main">{t.codigo}</span>
                                     <button

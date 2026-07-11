@@ -579,7 +579,7 @@ export default function SalidaDetalle() {
       />
 
       {/* Summary cards */}
-      <div className="shrink-0 px-5 py-3 border-b border-warm-100 grid grid-cols-4 gap-3">
+      <div className="shrink-0 px-5 py-3 border-b border-warm-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SummaryCard icon={User}         label={t('dev.salida_detalle.card.responsable')} value={salida.responsable_nombre || t('dev.salida_detalle.sin_asignar')} color="warm" />
         <SummaryCard icon={CalendarDays} label={t('dev.salida_detalle.card.fecha')}        value={fmtDate(salida.created_at)} color="warm" />
         <SummaryCard icon={Hash}         label={t('dev.salida_detalle.card.lineas')}       value={items.length} color="primary" />

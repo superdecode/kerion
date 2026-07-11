@@ -1,10 +1,9 @@
-import { useState, useMemo, useCallback, memo } from 'react'
+import { useState, useMemo, useCallback, useRef, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import * as XLSX from 'xlsx'
 import {
   Search, X, Eye, Trash2, Download, PackageCheck, Copy, Check,
-  ScanBarcode, Printer, Clock, Filter, Tags, Plus, Edit3,
+  ScanBarcode, Printer, Clock, Tags, Plus, Edit3,
 } from 'lucide-react'
 import RecepcionMobileHub from '../components/RecepcionMobileHub'
 import RecepcionQuickSearch from '../components/RecepcionQuickSearch'
@@ -410,16 +409,25 @@ export default function Recibir() {
     [orders, selected, canDeleteOrder]
   )
 
-  const handleApply = useCallback(() => { setQFilter(q); setPage(1) }, [q])
+  const searchDebounceRef = useRef(null)
+  const handleSearchChange = useCallback((value) => {
+    setQ(value)
+    clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(() => {
+      setQFilter(value)
+      setPage(1)
+    }, 400)
+  }, [])
   const handleClear = useCallback(() => {
     setQ(''); setQFilter(''); setEstados([]); setClienteFilter([])
     setFechaDesde(''); setFechaHasta(''); setPage(1); setSelected(new Set())
   }, [])
   const handleOpenBulkDelete = useCallback(() => setBulkDelOpen(true), [])
 
-  const handleExportSelected = useCallback(() => {
+  const handleExportSelected = useCallback(async () => {
     const sel = orders.filter(o => selected.has(o.id))
     if (!sel.length) return
+    const XLSX = await import('xlsx')
     const rows = sel.map(o => [
       o.folio, fmtDate(o.created_at), o.cliente || '', o.inbound_order_no || '', o.tracking_no || '',
       o.reference_no || '', o.total_cajas, o.cajas_registradas ?? o.cajas_validadas,
@@ -496,10 +504,10 @@ export default function Recibir() {
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10">
               <Clock size={13} className="text-warm-400 shrink-0" />
-              <input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)}
+              <input type="date" value={fechaDesde} onChange={e => { setFechaDesde(e.target.value); setPage(1) }}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
               <span className="text-warm-300 text-xs">→</span>
-              <input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)}
+              <input type="date" value={fechaHasta} onChange={e => { setFechaHasta(e.target.value); setPage(1) }}
                 className="text-xs outline-none bg-transparent text-warm-700 w-[108px]" />
             </div>
             <div className="ml-auto flex items-center gap-2 shrink-0">
@@ -517,14 +525,13 @@ export default function Recibir() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <MultiSelect options={estadoOptions} value={estados} onChange={setEstados} placeholder={t('rec.filter.estado')} />
-            <MultiSelect options={clienteOptions} value={clienteFilter} onChange={setClienteFilter} placeholder={t('rec.filter.cliente')} />
+            <MultiSelect options={estadoOptions} value={estados} onChange={v => { setEstados(v); setPage(1) }} placeholder={t('rec.filter.estado')} />
+            <MultiSelect options={clienteOptions} value={clienteFilter} onChange={v => { setClienteFilter(v); setPage(1) }} placeholder={t('rec.filter.cliente')} />
             <div className="flex-1 min-w-[220px] flex items-center gap-1.5 bg-warm-50 border border-warm-200 rounded-xl px-3 h-10 transition-all focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100">
               <Search size={14} className="text-warm-400 shrink-0" />
               <input
                 value={q}
-                onChange={e => setQ(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleApply()}
+                onChange={e => handleSearchChange(e.target.value)}
                 placeholder={t('rec.recibir.search_placeholder')}
                 className="flex-1 text-xs bg-transparent outline-none text-warm-700 placeholder:text-warm-400"
               />
@@ -539,9 +546,6 @@ export default function Recibir() {
                 <X className="w-3 h-3" /> {t('common.clear')}
               </button>
             )}
-            <button onClick={handleApply} className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-100 px-4 text-xs font-semibold text-violet-700 hover:bg-violet-200 transition-colors">
-              <Filter size={13} /> {t('common.apply')}
-            </button>
           </div>
         </div>
 

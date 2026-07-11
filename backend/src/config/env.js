@@ -60,6 +60,11 @@ if (env.NODE_ENV === 'production') {
   if (env.JWT_ADMIN_SECRET.length < 32 || env.JWT_ADMIN_SECRET.startsWith('dev_')) {
     throw new Error('[env] JWT_ADMIN_SECRET must be at least 32 chars and not a dev default')
   }
+  // WMS_ENCRYPTION_KEY is hashed to 32 bytes at use, but a short key still means
+  // low entropy for the AES-256 key that protects stored WMS secrets.
+  if (env.WMS_ENCRYPTION_KEY.length < 32) {
+    throw new Error('[env] WMS_ENCRYPTION_KEY must be at least 32 chars')
+  }
 }
 
 export default env

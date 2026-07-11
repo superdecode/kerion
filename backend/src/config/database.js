@@ -172,6 +172,7 @@ export function tenantDB(req, res, next) {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
+      assertTenantId(tid)
       await client.query(`SET LOCAL app.tenant_id = '${tid}'`)
     } catch (err) {
       client.release()
@@ -185,6 +186,7 @@ export function tenantDB(req, res, next) {
     const client = await exportPool.connect()
     try {
       await client.query('BEGIN')
+      assertTenantId(tid)
       await client.query(`SET LOCAL app.tenant_id = '${tid}'`)
     } catch (err) {
       client.release()

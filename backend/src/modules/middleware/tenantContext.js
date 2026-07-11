@@ -52,7 +52,11 @@ export async function tenantContext(req, res, next) {
     extractSlugFromHost(host) ||
     (env.NODE_ENV !== 'production' && isLocalDevHost(host) ? req.headers['x-tenant-slug'] : null)
 
-  console.log('[tenantContext] host=' + host + ' baseDomain=' + env.TENANT_BASE_DOMAIN + ' slug=' + (slug || '(none)'))
+  // Per-request log — gated to non-production to avoid multiplying Vercel log
+  // ingestion cost across every polling tab/device.
+  if (env.NODE_ENV !== 'production') {
+    console.log('[tenantContext] host=' + host + ' baseDomain=' + env.TENANT_BASE_DOMAIN + ' slug=' + (slug || '(none)'))
+  }
 
   // In dev with no subdomain: use tenant_id from JWT (so localhost mirrors the
   // logged-in user's real tenant rather than the placeholder LEGACY_TENANT_ID)
@@ -117,9 +121,13 @@ export async function tenantContext(req, res, next) {
   }
 }
 
-// Middleware that enforces read-only restriction (use on write endpoints for expired tenants)
+// Enforces read-only restriction for expired/read-only tenants. Safe (read)
+// methods always pass so the frontend can still load data and show the upgrade
+// prompt; only mutations are blocked. Mirrors moduleGuard's non-GET check so
+// core routes mounted without moduleGuard get the same protection.
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 export function requireActiveTenant(req, res, next) {
-  if (req.tenantReadOnly) {
+  if (req.tenantReadOnly && !SAFE_METHODS.has(req.method)) {
     return res.status(402).json({
       error: 'Suscripcion vencida. Renueva para continuar.',
       code: 'SUBSCRIPTION_EXPIRED',

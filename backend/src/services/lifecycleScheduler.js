@@ -103,5 +103,28 @@ export async function runLifecycleTasks() {
     }
   }
 
+  // ── 4. Retention: prune append-only tables that otherwise grow forever ────────
+  // These tables have no per-row cleanup and accumulate indefinitely (wide rows for
+  // error/audit events). Retention windows are conservative and preserve recent
+  // diagnostic/compliance history. Each runs independently so one failure (e.g. a
+  // table absent on an older DB) doesn't block the others.
+  const retentionTasks = [
+    { table: 'system_error_events', column: 'last_seen_at', days: 90 },
+    { table: 'landing_events',      column: 'created_at', days: 180 },
+    { table: 'audit_log',           column: 'created_at', days: 365 },
+    { table: 'notifications_outbox', column: 'created_at', days: 90, extra: "AND status = 'sent'" },
+  ]
+  for (const { table, column, days, extra } of retentionTasks) {
+    try {
+      const res = await query(
+        `DELETE FROM ${table}
+         WHERE ${column} < now() - INTERVAL '${days} days' ${extra || ''}`
+      )
+      if (res.rowCount > 0) log.push({ action: 'retention_pruned', table, deleted: res.rowCount })
+    } catch (err) {
+      log.push({ action: 'retention_error', table, error: err.message })
+    }
+  }
+
   return { ran_at: new Date().toISOString(), results: log }
 }

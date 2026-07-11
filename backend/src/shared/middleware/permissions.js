@@ -19,6 +19,17 @@
 
 const LEVEL_HIERARCHY = ['sin_acceso', 'ver', 'crear', 'actualizar', 'eliminar']
 
+// Warn once per user (per process) about the legacy admin bypass instead of on
+// every request — a tenant that hasn't re-logged in would otherwise log this on
+// each authorized call. Bounded to avoid unbounded growth in a long-lived process.
+const _legacyAdminWarned = new Set()
+function warnLegacyAdminOnce(userId) {
+  if (_legacyAdminWarned.has(userId)) return
+  if (_legacyAdminWarned.size > 5000) _legacyAdminWarned.clear()
+  _legacyAdminWarned.add(userId)
+  console.warn('[permissions] admin bypass via legacy rol_nombre — user should re-login', userId)
+}
+
 // Legacy level mapping (for data that wasn't fully migrated)
 const LEGACY_MAP = { total: 'eliminar', gestion: 'actualizar', escritura: 'crear', lectura: 'ver' }
 const MODULE_ALIASES = {
@@ -108,7 +119,7 @@ export function requirePermission(modulePath, action) {
       (user.es_admin_tenant === undefined && user.rol_nombre === 'Administrador')
     if (isAdmin) {
       if (user.es_admin_tenant === undefined) {
-        console.warn('[permissions] admin bypass via legacy rol_nombre — user should re-login', user.id)
+        warnLegacyAdminOnce(user.id)
       }
       return next()
     }
@@ -135,7 +146,7 @@ export function requireAnyPermission(candidates) {
       (user.es_admin_tenant === undefined && user.rol_nombre === 'Administrador')
     if (isAdmin) {
       if (user.es_admin_tenant === undefined) {
-        console.warn('[permissions] admin bypass via legacy rol_nombre — user should re-login', user.id)
+        warnLegacyAdminOnce(user.id)
       }
       return next()
     }

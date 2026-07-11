@@ -26,6 +26,10 @@ export default defineConfig({
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-ui': ['framer-motion', 'lucide-react'],
           'vendor-data': ['@tanstack/react-query', 'zustand'],
+          // Heavy, feature-specific deps in their own chunks so they load only
+          // when the exporting/charting screen that needs them is opened.
+          'vendor-xlsx': ['xlsx'],
+          'vendor-charts': ['recharts'],
         },
       },
     },

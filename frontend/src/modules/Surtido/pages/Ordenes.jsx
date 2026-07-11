@@ -659,7 +659,7 @@ function QuickEditPanel({ obc, wmsRecord, tracking, surtidores, isOpen, onClose,
           />
           {/* Panel */}
           <motion.div
-            className="fixed top-16 right-0 bottom-0 w-[400px] bg-white shadow-depth z-[35] flex flex-col border-l border-warm-200"
+            className="fixed top-16 right-0 bottom-0 w-full max-w-[90vw] sm:w-[400px] sm:max-w-[400px] bg-white shadow-depth z-[35] flex flex-col border-l border-warm-200"
             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 320 }}
           >

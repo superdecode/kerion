@@ -92,7 +92,11 @@ async function wmsPost(tenantId, endpoint, data) {
     url += `?authcode=${authcode}`
   }
 
-  console.log(`[xlwms] POST ${endpoint} appKey=****${config.app_key.slice(-4)} reqTime=${reqTime} authcode=${authcode ? authcode.slice(0,8) + '...' : 'NONE'}`)
+  // Per-call trace — gated to non-production to avoid log ingestion cost on the
+  // xlwms hot path (fires on every Surtido/WMS Hub scan and order fetch).
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[xlwms] POST ${endpoint} appKey=****${config.app_key.slice(-4)} reqTime=${reqTime} authcode=${authcode ? authcode.slice(0,8) + '...' : 'NONE'}`)
+  }
 
   let lastErr
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -106,7 +110,7 @@ async function wmsPost(tenantId, endpoint, data) {
       if (!res.ok) throw new Error(`WMS HTTP ${res.status}`)
       const json = await res.json()
       if (json.code !== 200) {
-        console.error(`[xlwms] FULL_RESPONSE=${JSON.stringify(json)} endpoint=${endpoint}`)
+        console.error(`[xlwms] error endpoint=${endpoint} code=${json.code} resp=${JSON.stringify(json).slice(0, 500)}`)
         const rawMsg = json.msg || json.message || json.errmsg || json.error || ''
         const msg = rawMsg ? `[${json.code}] ${rawMsg}` : `WMS error code ${json.code}`
         const err = new Error(msg)
@@ -115,7 +119,8 @@ async function wmsPost(tenantId, endpoint, data) {
         throw err
       }
       // Log first record of first successful response to inspect field names
-      if (json.data && !_fieldLogDone.has(endpoint)) {
+      // (dev only — the payload can contain record data we don't want in prod logs)
+      if (process.env.NODE_ENV !== 'production' && json.data && !_fieldLogDone.has(endpoint)) {
         _fieldLogDone.add(endpoint)
         pruneOldest(_fieldLogDone, FIELD_LOG_MAX)
         const sample = json.data?.records?.[0] ?? json.data?.[0] ?? json.data

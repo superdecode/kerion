@@ -20,7 +20,7 @@ import usageRoutes from './core/routes/usage.routes.js'
 import supportRoutes from './core/routes/support.routes.js'
 
 // Multi-tenant middleware
-import { tenantContext } from './modules/middleware/tenantContext.js'
+import { tenantContext, requireActiveTenant } from './modules/middleware/tenantContext.js'
 import { moduleGuard } from './modules/middleware/moduleGuard.js'
 
 // Module routes
@@ -196,12 +196,14 @@ app.use('/api/cron', cronRoutes)
 app.use('/api/auth/login', loginLimiter)
 app.use('/api/auth', authRoutes)
 
-// All tenant-scoped routes — apply tenantContext first
-app.use('/api/users', tenantContext, tenantDB, usersRoutes)
-app.use('/api/roles', tenantContext, tenantDB, rolesRoutes)
-app.use('/api/config', tenantContext, tenantDB, configRoutes)
+// All tenant-scoped routes — apply tenantContext first.
+// Core routes carry no moduleGuard, so requireActiveTenant enforces read-only
+// for expired tenants here (it lets GET/HEAD through, blocks mutations).
+app.use('/api/users', tenantContext, tenantDB, requireActiveTenant, usersRoutes)
+app.use('/api/roles', tenantContext, tenantDB, requireActiveTenant, rolesRoutes)
+app.use('/api/config', tenantContext, tenantDB, requireActiveTenant, configRoutes)
 app.use('/api/setup', tenantContext, tenantDB, setupRoutes)
-app.use('/api/wms', tenantContext, tenantDB, wmsRoutes)
+app.use('/api/wms', tenantContext, tenantDB, requireActiveTenant, wmsRoutes)
 
 // DropScan — require dropscan module access
 app.use('/api/dropscan', tenantContext, tenantDB, moduleGuard('dropscan'), scanRoutes)
@@ -280,7 +282,7 @@ function recordBackendError(req, err) {
       req.user?.email || null,
       ['backend', req.method, req.originalUrl, message].join('|').slice(0, 500),
       message,
-      String(err?.stack || '').slice(0, 8000),
+      String(err?.stack || '').slice(0, 3000),
       req.originalUrl || null,
       req.path || null,
       req.method || null,

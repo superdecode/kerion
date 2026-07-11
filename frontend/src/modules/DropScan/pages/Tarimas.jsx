@@ -877,7 +877,7 @@ export default function Tarimas() {
         ) : detail ? (
           <div className="space-y-5">
             {/* Info grid */}
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { icon: Package, l: t('history.company'), v: detail.empresa_nombre },
                 { icon: Package, l: t('history.channel'), v: detail.canal_nombre },

@@ -313,8 +313,15 @@ async function runDbQuery(queryable, text, params = []) {
   return queryable.query(text, params)
 }
 
+// Allowlist tables introspected via string interpolation (SELECT * FROM ${tableName}).
+// All callers pass literals; this blocks any future caller passing user input.
+const INTROSPECTABLE_TABLES = new Set(['pick_events', 'rastreo_cajas', 'rastreo_ordenes', 'rastreo_historial'])
+
 async function getTableColumns(queryable, tableName) {
   if (tableColumnCache.has(tableName)) return tableColumnCache.get(tableName)
+  if (!INTROSPECTABLE_TABLES.has(tableName)) {
+    throw new Error(`Unsupported table for column introspection: ${String(tableName).slice(0, 40)}`)
+  }
   let cols
   try {
     const probe = await runDbQuery(queryable, `SELECT * FROM ${tableName} LIMIT 0`, [])

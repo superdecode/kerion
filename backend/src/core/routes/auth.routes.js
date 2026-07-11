@@ -324,7 +324,13 @@ router.get('/me', authenticateToken, async (req, res) => {
     const [result, tenantInfo] = await Promise.all([
       tenantQueryAuthWithRetry(
         req.user.tenant_id,
-        `SELECT u.*, r.nombre as rol_nombre, r.permisos as rol_permisos
+        // Explicit columns only — this runs on every /auth/me poll (per tab,
+        // every few minutes). Avoids loading password_hash and other wide
+        // columns into request scope and cuts DB→function transfer.
+        `SELECT u.id, u.codigo, u.nombre_completo, u.email, u.rol_id,
+                u.es_admin_tenant, u.permisos_override, u.avatar_url, u.estado,
+                u.ultimo_acceso, u.zona_horaria, u.tour_completado,
+                r.nombre as rol_nombre, r.permisos as rol_permisos
          FROM usuarios u
          LEFT JOIN roles r ON u.rol_id = r.id
          WHERE u.id = $1 AND u.tenant_id = $2`,
@@ -375,8 +381,8 @@ router.post('/change-password', authenticateToken, async (req, res) => {
     if (!current_password || !new_password) {
       return res.status(400).json({ error: 'Contraseña actual y nueva son requeridas' })
     }
-    if (new_password.length < 6) {
-      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 6 caracteres' })
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: 'La nueva contraseña debe tener al menos 8 caracteres' })
     }
 
     if (!req.user.tenant_id) return res.status(400).json({ error: 'Sin tenant' })

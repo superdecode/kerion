@@ -707,8 +707,8 @@ router.get('/proxy/sheet',
       // In-memory miss: check Postgres (survives server restarts)
       try {
         const pgResult = await req.tQuery(
-          `SELECT data FROM wms_cache WHERE key = $1 AND expires_at > now()`,
-          [pgKey]
+          `SELECT data FROM wms_cache WHERE key = $1 AND tenant_id = $2 AND expires_at > now()`,
+          [pgKey, req.tenantId]
         )
         if (pgResult.rows.length > 0) {
           const { text, rowCount } = pgResult.rows[0].data
@@ -727,7 +727,7 @@ router.get('/proxy/sheet',
         // fall back to the last known-good snapshot in Postgres even if it's
         // expired, instead of a hard 502. Stale inventory/outbound data is far
         // more useful to warehouse staff mid-shift than an outright failure.
-        const staleRes = await req.tQuery(`SELECT data FROM wms_cache WHERE key = $1`, [pgKey]).catch(() => null)
+        const staleRes = await req.tQuery(`SELECT data FROM wms_cache WHERE key = $1 AND tenant_id = $2`, [pgKey, req.tenantId]).catch(() => null)
         if (staleRes?.rows?.length > 0) {
           const { text, rowCount } = staleRes.rows[0].data
           setCsvCache(cacheKey, text, rowCount)
@@ -901,16 +901,14 @@ router.get('/scan-sessions',
         // "Completado" on screen (and vice versa) whenever the session's status
         // column never got flipped even though the scanned count matches/exceeds
         // total_expected.
-        const scannedCountExpr = `(
-          SELECT COUNT(DISTINCT REGEXP_REPLACE(
-            UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
-            '[^A-Z0-9]', '', 'g'
-          ))
-          FROM pick_events
-          WHERE session_id = s.id AND tenant_id = s.tenant_id AND scan_result = 'ok'
-        )`
+        //
+        // Reuses stats.total_scanned (joined below) rather than recomputing the
+        // scanned count with its own correlated subquery — an earlier version did
+        // that and ran the pick_events aggregate 1000+ times per request (once per
+        // session row) on top of the identical aggregate the stats join already
+        // computes once, which is what actually caused the slowdown.
         const effectiveStatusExpr = `(CASE
-          WHEN s.total_expected > 0 AND COALESCE(${scannedCountExpr}, 0) >= s.total_expected THEN 'complete'
+          WHEN s.total_expected > 0 AND COALESCE(stats.total_scanned, 0) >= s.total_expected THEN 'complete'
           WHEN s.status = 'complete' AND s.total_expected > 0 THEN 'open'
           ELSE s.status
         END)`
@@ -973,6 +971,20 @@ router.get('/scan-sessions',
       }
 
       const where = conditions.join(' AND ')
+      const statsSubquery = `(
+        SELECT session_id,
+               COUNT(DISTINCT REGEXP_REPLACE(
+                 UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
+                 '[^A-Z0-9]', '', 'g'
+               )) AS total_scanned
+        FROM pick_events
+        WHERE tenant_id = $1
+          AND scan_result = 'ok'
+        GROUP BY session_id
+      ) stats`
+      // The count query only needs the stats join when the effective-status filter
+      // above references stats.total_scanned — skip it otherwise.
+      const countStatsJoin = status ? `LEFT JOIN ${statsSubquery} ON stats.session_id = s.id` : ''
       const [sessionsRes, countRes] = await Promise.all([
         req.tQuery(
           `SELECT s.*,
@@ -1002,17 +1014,7 @@ router.get('/scan-sessions',
                       AND pbs.estado = 'rastreo'
                   ) AS tiene_rastreo
            FROM pick_sessions s
-           LEFT JOIN (
-             SELECT session_id,
-                    COUNT(DISTINCT REGEXP_REPLACE(
-                      UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
-                      '[^A-Z0-9]', '', 'g'
-                    )) AS total_scanned
-             FROM pick_events
-             WHERE tenant_id = $1
-               AND scan_result = 'ok'
-             GROUP BY session_id
-           ) stats ON stats.session_id = s.id
+           LEFT JOIN ${statsSubquery} ON stats.session_id = s.id
            LEFT JOIN (
              SELECT session_id, COUNT(*) AS total_rejected
              FROM pick_events
@@ -1033,7 +1035,7 @@ router.get('/scan-sessions',
           [...params, limit, offset]
         ),
         req.tQuery(
-          `SELECT COUNT(*) as total FROM pick_sessions s WHERE ${where}`,
+          `SELECT COUNT(*) as total FROM pick_sessions s ${countStatsJoin} WHERE ${where}`,
           params
         ),
       ])

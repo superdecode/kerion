@@ -134,9 +134,12 @@ export async function wmsPostAll(tenantId, endpoint, baseData = {}, pageSize = 1
 // ── Cache helpers ──────────────────────────────────────────────────────────
 
 export async function cacheGet(tenantId, key) {
+  // Explicit tenant_id filter — the cache key is a shared constant
+  // ('inventory:full'), so without this a tenant would read another tenant's
+  // cached inventory (RLS is inert under the current BYPASSRLS DB role).
   const res = await tenantQuery(tenantId,
-    `SELECT data FROM wms_cache WHERE key = $1 AND expires_at > now()`,
-    [key]
+    `SELECT data FROM wms_cache WHERE key = $1 AND tenant_id = $2 AND expires_at > now()`,
+    [key, tenantId]
   )
   return res.rows[0]?.data ?? null
 }
