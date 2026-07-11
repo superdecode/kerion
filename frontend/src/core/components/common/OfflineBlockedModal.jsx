@@ -3,9 +3,11 @@ import { CloudOff, RefreshCw } from 'lucide-react'
 /**
  * Blocking modal shown when the device is offline and the required working data
  * has not been loaded yet. There is no way to dismiss it — the user must restore
- * connectivity.
+ * connectivity, either by waiting for the browser to detect it automatically or,
+ * since that detection can lag or miss a briefly-restored connection, by forcing
+ * one attempt via onRetry.
  */
-export default function OfflineBlockedModal({ isBlocked, message }) {
+export default function OfflineBlockedModal({ isBlocked, message, onRetry, retrying }) {
   if (!isBlocked) return null
 
   return (
@@ -18,10 +20,22 @@ export default function OfflineBlockedModal({ isBlocked, message }) {
         <p className="text-sm text-warm-600 leading-relaxed">
           {message || 'Los datos de trabajo no han sido cargados. Restablece la conexión a Internet para continuar.'}
         </p>
-        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-warm-400">
-          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-          Esperando conexión...
-        </div>
+        {onRetry ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={retrying}
+            className="mt-6 inline-flex items-center justify-center gap-2 mx-auto px-4 py-2 rounded-xl bg-red-50 text-red-700 text-xs font-semibold hover:bg-red-100 transition-colors disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${retrying ? 'animate-spin' : ''}`} />
+            {retrying ? 'Intentando...' : 'Reintentar ahora'}
+          </button>
+        ) : (
+          <div className="mt-6 flex items-center justify-center gap-2 text-xs text-warm-400">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            Esperando conexión...
+          </div>
+        )}
       </div>
     </div>
   )

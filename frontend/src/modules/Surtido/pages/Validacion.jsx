@@ -58,14 +58,25 @@ function normalizeLocationValue(raw) {
     .replace(/[\x00-\x1F\x7F]/g, '')
     .replace(/[‐‑‒–—−]/g, '-')
     .replace(/[／⁄]/g, '/')
+    // ES/EN keyboards produce different glyphs on the same key when toggling
+    // layouts (straight ", curly “ ” „ ‟, prime ″, acute/backtick used as a
+    // quote). Location codes use one as a separator — normalize them all to a
+    // single canonical " so it's recognized regardless of which layout typed it.
+    .replace(/[""„‟´`ˮ″]/g, '"')
     .replace(/\s+/g, '')
 }
 
 function validateLocationValue(raw) {
   const trimmed = String(raw || '').trim()
   const normalized = normalizeLocationValue(trimmed)
+  const quoteCount = (normalized.match(/"/g) || []).length
+  // A single " is a legitimate location separator (see normalizeLocationValue).
+  // Only treat it as a scanned JSON payload once there are 2+ — that's what an
+  // actual "key":"value" structure looks like — plus the unambiguous JSON
+  // structure characters and known payload field names.
   const looksStructuredPayload =
-    /[{}[\]"]/u.test(trimmed)
+    /[{}[\]]/u.test(trimmed)
+    || quoteCount > 1
     || /(?:reference_id|ops_data|container_type|source|seller)/i.test(trimmed)
 
   if (!normalized) {
@@ -79,11 +90,11 @@ function validateLocationValue(raw) {
       normalized,
     }
   }
-  if (!/^[A-Z0-9/-]+$/.test(normalized)) {
+  if (!/^[A-Z0-9/"-]+$/.test(normalized)) {
     return {
       ok: false,
       reason: 'charset',
-      summary: 'La ubicacion solo permite letras, numeros, "-" y "/".',
+      summary: 'La ubicacion solo permite letras, numeros, "-", "/" y una " de separacion.',
       normalized,
     }
   }
@@ -1164,6 +1175,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const surtidoPendingCount = useSurtidoStore((s) => s.pendingSync.length)
   const isOffline = useOfflineStore((s) => s.status === 'offline')
   const [isSyncing, setIsSyncing] = useState(false)
+  const [retryingConnection, setRetryingConnection] = useState(false)
   const [showRecount, setShowRecount] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
   const [showFinalize, setShowFinalize] = useState(false)
@@ -1884,12 +1896,40 @@ const { data: reasonsData } = useQuery({
       })
   }, [sessionList, obc, sessionSearch, sessionStatusFilter])
 
+  // navigator.onLine / the browser's online-offline events (which drive isOffline)
+  // can lag or miss a connection that's actually back — this lets the operator
+  // force one real attempt instead of only waiting for automatic detection.
+  async function handleRetryConnection() {
+    if (retryingConnection) return
+    setRetryingConnection(true)
+    try {
+      // fetchQuery is a plain fetch with no offline stale-fallback (unlike refreshSheet/
+      // loadSheet, which deliberately swallow failures to serve cached rows) — it's the
+      // real connectivity probe, and populates the reasons cache in the same round trip.
+      // Only flip to "online" once this genuinely succeeds.
+      await qc.fetchQuery({ queryKey: ['wms-manual-entry-reasons'], queryFn: getManualEntryReasons })
+      useOfflineStore.getState().setOnline()
+      qc.invalidateQueries({ queryKey: ['wms-outbound-detail', obc] })
+      refreshSheet('outbound').catch(() => {})
+      toast.success('Conexión restablecida')
+    } catch {
+      toast.warning('Sigue sin conexión')
+    } finally {
+      setRetryingConnection(false)
+    }
+  }
+
   /* ─── OFFLINE BLOCK: no session loaded and device is offline ── */
   if (isOffline && step === 'search') {
     return (
       <>
         <SearchStep onFound={() => {}} />
-        <OfflineBlockedModal isBlocked message="No hay conexión. Restablece Internet para buscar y cargar una orden de surtido." />
+        <OfflineBlockedModal
+          isBlocked
+          message="No hay conexión. Restablece Internet para buscar y cargar una orden de surtido."
+          onRetry={handleRetryConnection}
+          retrying={retryingConnection}
+        />
       </>
     )
   }
@@ -1913,6 +1953,15 @@ const { data: reasonsData } = useQuery({
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
           <span className="flex-1">Sin conexión — escaneos en cola. <span className="font-normal">Solo un operador por sesión en offline; sin red no hay sincronización entre usuarios.</span></span>
           {surtidoPendingCount > 0 && <span className="shrink-0 bg-amber-200 px-1.5 py-0.5 rounded-full">{surtidoPendingCount} pendientes</span>}
+          <button
+            type="button"
+            onClick={handleRetryConnection}
+            disabled={retryingConnection}
+            className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-200 hover:bg-amber-300 transition-colors disabled:opacity-60"
+          >
+            <RefreshCw className={`w-3 h-3 ${retryingConnection ? 'animate-spin' : ''}`} />
+            Reintentar
+          </button>
         </div>
       )}
       {/* Pending overlay: blocks content until sessionId is established */}

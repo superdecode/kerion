@@ -7,6 +7,33 @@ const OUTBOUND_RECORD_CACHE_KEY = 'kirion_wmshub_outbound_recent_v1'
 const OUTBOUND_RECORD_CACHE_TTL = 30 * 60 * 1000
 const OUTBOUND_RECORD_CACHE_LIMIT = 1000
 
+// Full raw CSV rows for the outbound sheet, persisted so Surtido validation still has
+// package/quantity data to match scans against after a page reload with no connection —
+// the in-memory `cache` below is otherwise wiped on reload and getOutboundDetail() has
+// nothing to fall back to. Generous TTL: this is a last-resort fallback used only when a
+// live fetch fails, not a substitute for it, so staleness just means "yesterday's data
+// is better than none" rather than something served under normal conditions.
+const OUTBOUND_ROWS_CACHE_KEY = 'kirion_wmshub_outbound_rows_v1'
+const OUTBOUND_ROWS_CACHE_TTL = 24 * 60 * 60 * 1000
+
+function readOutboundRowsCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(OUTBOUND_ROWS_CACHE_KEY) || 'null')
+    if (!cached?.rows?.length || Date.now() - cached.ts > OUTBOUND_ROWS_CACHE_TTL) return null
+    return cached.rows
+  } catch {
+    return null
+  }
+}
+
+function writeOutboundRowsCache(rows) {
+  try {
+    localStorage.setItem(OUTBOUND_ROWS_CACHE_KEY, JSON.stringify({ ts: Date.now(), rows }))
+  } catch {
+    // Storage quota should never block live WMS data — offline fallback is best-effort.
+  }
+}
+
 const cache = {
   inventory: { data: null, ts: 0, partial: false },
   outbound:  { data: null, ts: 0, partial: false },
@@ -444,15 +471,15 @@ async function loadSheet(type, forceRefresh = false) {
     return entry.data
   }
 
-  const urls = await loadSheetUrls()
-  const url = type === 'inventory' ? urls.inventory : urls.outbound
-  if (!url) {
-    const err = new Error(`URL de hoja no configurada: ${type}`)
-    err.code = 'SHEET_NOT_CONFIGURED'
-    throw err
-  }
-
   try {
+    const urls = await loadSheetUrls()
+    const url = type === 'inventory' ? urls.inventory : urls.outbound
+    if (!url) {
+      const err = new Error(`URL de hoja no configurada: ${type}`)
+      err.code = 'SHEET_NOT_CONFIGURED'
+      throw err
+    }
+
     // Inventory lookups must always be exhaustive; partial data causes false NoWMS.
     const limit = (forceRefresh || requiresFullDataset) ? 0 : 3000
     const text = await fetchSheetAsCSV(url, limit)
@@ -465,10 +492,21 @@ async function loadSheet(type, forceRefresh = false) {
     const partial = !forceRefresh && !requiresFullDataset
     cache[type] = { data: rows, ts: now, partial }
     if (partial) warmFullSheet(type)
+    else if (type === 'outbound') writeOutboundRowsCache(rows)
     notifySheetCache(type)
     return rows
   } catch (err) {
-    if (entry.data) return entry.data // stale fallback
+    if (entry.data) return entry.data // in-memory stale fallback (loaded earlier this tab)
+    // loadSheetUrls() itself needs the network, so a cold offline reload never even
+    // reaches fetchSheetAsCSV — fall back to the persisted rows from the last
+    // successful full load instead of hard-failing with nothing to match scans against.
+    if (type === 'outbound') {
+      const persisted = readOutboundRowsCache()
+      if (persisted) {
+        cache.outbound = { data: persisted, ts: 0, partial: false }
+        return persisted
+      }
+    }
     throw err
   }
 }
