@@ -89,6 +89,12 @@ function effectiveSessionStatus(r) {
   const expected = Number(r.total_expected ?? 0)
   const scanned = Number(r.total_scanned ?? 0)
   if (r.status === 'complete' && expected > 0 && scanned < expected) return 'open'
+  // Symmetric case: total_scanned is already a deduplicated count of distinct
+  // validated boxes (see the backend's COUNT(DISTINCT ...) subquery), so once it
+  // reaches total_expected the order really is done — even if the session's own
+  // status column never got flipped to 'complete' (e.g. the last scan didn't
+  // trigger the transition). Don't leave it reading as "En Proceso" forever.
+  if (r.status !== 'complete' && expected > 0 && scanned >= expected) return 'complete'
   return r.status
 }
 
