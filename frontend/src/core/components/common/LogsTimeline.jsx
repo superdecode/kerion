@@ -117,26 +117,22 @@ function EventRow({ entry, t }) {
 function ValidationPeriodRow({ entry, t }) {
   return (
     <div className="flex items-start gap-3 py-2.5 px-1">
-      <div className="w-7 h-7 rounded-lg bg-primary-50 flex items-center justify-center shrink-0 mt-0.5">
-        <ScanLine className="w-3.5 h-3.5 text-primary-500" />
+      <div className="w-7 h-7 rounded-lg bg-warm-100 flex items-center justify-center shrink-0 mt-0.5">
+        <ScanLine className="w-3.5 h-3.5 text-warm-500" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-[11px] text-warm-400 mb-0.5">
+        <p className="text-sm text-warm-800">{fill(t('logs.scanPeriod.summary'), { n: entry.scan_count ?? 0 })}</p>
+        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-warm-400">
           {entry.actor_name && (
-            <span className="inline-flex items-center gap-1 text-sm font-semibold text-warm-800">
+            <span className="inline-flex items-center gap-1">
               <User className="w-3 h-3" />{entry.actor_name}
             </span>
           )}
-          <span className="badge bg-primary-100 text-primary-700 text-[10px]">
-            {fill(t('logs.scanPeriod.count'), { n: entry.scan_count ?? 0 })}
+          <span className="tabular-nums">
+            {fmtDateTime(entry.started_at)}
+            {entry.ended_at && entry.ended_at !== entry.started_at && <> · {fmtDateTime(entry.ended_at)}</>}
           </span>
         </div>
-        <p className="text-xs text-warm-500 tabular-nums">
-          {t('logs.scanPeriod.first')} {fmtDateTime(entry.started_at)}
-          {entry.ended_at && entry.ended_at !== entry.started_at && (
-            <> · {t('logs.scanPeriod.last')} {fmtDateTime(entry.ended_at)}</>
-          )}
-        </p>
       </div>
     </div>
   )
