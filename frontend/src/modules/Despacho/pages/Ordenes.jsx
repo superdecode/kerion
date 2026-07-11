@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import * as XLSX from 'xlsx'
 import {
-  Search, X, Truck, PackageCheck, RefreshCw, Clock, Filter,
+  Search, X, Truck, PackageCheck, RefreshCw, Clock,
   Users, ChevronUp, ChevronDown, ChevronsUpDown, AlertCircle,
   ScanLine, CalendarDays, Copy, Check, MapPin, Package,
   Loader2, CheckCircle2, Pencil, Box, Download,
@@ -368,8 +368,6 @@ export default function Ordenes() {
     }
   }
 
-  function applyFilters() { setSearch(searchInput.trim()) }
-
   function clearFilters() {
     clearDespachoDates()
     const smart = getSmartDespachoDates()
@@ -687,8 +685,7 @@ export default function Ordenes() {
                 type="text"
                 placeholder={t('desp.filter.buscar')}
                 value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') applyFilters() }}
+                onChange={e => { const v = e.target.value; setSearchInput(v); setSearch(v) }}
                 className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0"
               />
               {searchInput && (
@@ -703,10 +700,6 @@ export default function Ordenes() {
                 <X className="w-3 h-3" /> {t('common.clear')}
               </button>
             )}
-            <button onClick={applyFilters}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-100 px-4 text-xs font-semibold text-violet-700 hover:bg-violet-200 transition-colors">
-              <Filter className="w-3 h-3" /> {t('common.apply')}
-            </button>
           </div>
 
           </div>

@@ -6,7 +6,7 @@ import { motion } from 'framer-motion'
 import * as XLSX from 'xlsx'
 import {
   Plus, Search, X, PackageCheck, CheckCircle2, XCircle, Clock,
-  Users, Truck, User, Eye, Filter, ChevronUp, ChevronDown, ChevronsUpDown,
+  Users, Truck, User, Eye, ChevronUp, ChevronDown, ChevronsUpDown,
   AlertCircle, RefreshCw, Trash2, Loader2, Download,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
@@ -193,8 +193,6 @@ export default function Folios() {
       setSortDir('asc')
     }
   }
-
-  function applyFilters() { setQ(searchInput.trim()) }
 
   function clearFilters() {
     setSearchInput('')
@@ -408,8 +406,7 @@ export default function Folios() {
                 type="text"
                 placeholder={t('desp.filter.buscarFolio')}
                 value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') applyFilters() }}
+                onChange={e => { const v = e.target.value; setSearchInput(v); setQ(v) }}
                 className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0"
               />
               {searchInput && (
@@ -424,10 +421,6 @@ export default function Folios() {
                 <X className="w-3 h-3" /> {t('common.clear')}
               </button>
             )}
-            <button onClick={applyFilters}
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-100 px-4 text-xs font-semibold text-violet-700 hover:bg-violet-200 transition-colors">
-              <Filter className="w-3 h-3" /> {t('common.apply')}
-            </button>
 
             {canWrite('despacho.folios') && (
               <button onClick={() => setShowCreate(true)} className="col-span-2 sm:col-span-1 btn-primary text-sm inline-flex items-center justify-center gap-1.5 sm:ml-auto">

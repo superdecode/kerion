@@ -1819,7 +1819,7 @@ export default function SurtidoRegistros() {
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.validated')}</span></th>
                     <th className={`${TH_CLASS} hidden lg:table-cell max-w-[16ch]`}><span className={TH_TEXT}>{t('surtido.registros.col.ubicacion')}</span></th>
                     <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.status')}</span></th>
-                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
+                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('common.actions')}</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
@@ -1906,7 +1906,7 @@ export default function SurtidoRegistros() {
                     <SortTh label={t('surtido.registros.validated')} colKey="total_scanned" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="text-right" />
                     <th className={`${TH_CLASS} hidden lg:table-cell max-w-[16ch]`}><span className={TH_TEXT}>{t('surtido.registros.col.ubicacion')}</span></th>
                     <SortTh label={t('surtido.registros.status')} colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
+                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('common.actions')}</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
