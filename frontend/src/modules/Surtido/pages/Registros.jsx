@@ -15,6 +15,7 @@ import TablePagination from '../../../core/components/common/TablePagination'
 import StatusPill from '../../../core/components/common/StatusPill'
 import CopyableCell from '../../../core/components/common/CopyableCell'
 import LogsTimeline from '../../../core/components/common/LogsTimeline'
+import FastTooltip from '../../../core/components/common/FastTooltip'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -1919,7 +1920,7 @@ export default function SurtidoRegistros() {
                         </td>
                         <td className="table-cell">
                           <div className="flex min-w-0 items-center gap-1.5">
-                            <span className="truncate font-mono font-bold text-primary-700 text-xs">{r.outbound_order_no || '—'}</span>
+                            <span className="code-main truncate">{r.outbound_order_no || '—'}</span>
                             {r.outbound_order_no && (
                               <button
                                 type="button"
@@ -1932,14 +1933,23 @@ export default function SurtidoRegistros() {
                                   : <Copy size={13} />}
                               </button>
                             )}
-                            {(r.tiene_faltantes || r.tiene_anormalidades) && (
-                              <span
-                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${r.tiene_anormalidades ? 'bg-warning-500' : 'bg-danger-500'}`}
-                                title={[
+                            {(r.tiene_faltantes || r.tiene_anormalidades || r.tiene_reparacion || r.tiene_rastreo) && (
+                              <FastTooltip
+                                label={[
                                   r.tiene_anormalidades && t('surtido.ordenes.indicator.anormalidades'),
                                   r.tiene_faltantes && t('surtido.ordenes.indicator.faltantes'),
+                                  r.tiene_reparacion && t('surtido.ordenes.indicator.reparacion'),
+                                  r.tiene_rastreo && t('surtido.ordenes.indicator.rastreo'),
                                 ].filter(Boolean).join(' · ')}
-                              />
+                              >
+                                <span
+                                  className={`w-2 h-2 rounded-full shrink-0 ${
+                                    r.tiene_anormalidades ? 'bg-warning-500' :
+                                    r.tiene_faltantes    ? 'bg-danger-500' :
+                                    r.tiene_reparacion   ? 'bg-violet-500' : 'bg-sky-500'
+                                  }`}
+                                />
+                              </FastTooltip>
                             )}
                           </div>
                         </td>

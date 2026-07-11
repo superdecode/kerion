@@ -246,6 +246,18 @@ function buildPickOrderTrackingSelectWithStats(columns) {
     if (column === 'validation_completed_at') return 'COALESCE(ot.validation_completed_at, stats.last_session_at) AS validation_completed_at'
     if (column === 'updated_at') return 'COALESCE(ot.updated_at, stats.last_session_at) AS updated_at'
     if (column === 'created_at') return 'COALESCE(ot.created_at, stats.first_session_at) AS created_at'
+    // Computed live from pick_box_status rather than trusting these cached columns —
+    // refreshOrderFlags() doesn't run on every write path that can set estado, so the
+    // cache can drift stale and silently hide orders that do have an anormalidad box.
+    if (column === 'tiene_faltantes' || column === 'tiene_anormalidades') {
+      const estado = column === 'tiene_faltantes' ? 'faltante' : 'anormalidad'
+      return `EXISTS (
+        SELECT 1 FROM pick_box_status pbs
+        WHERE pbs.tenant_id = COALESCE(ot.tenant_id, stats.tenant_id)
+          AND pbs.outbound_order_no = COALESCE(ot.outbound_order_no, stats.outbound_order_no)
+          AND pbs.estado = '${estado}'
+      ) AS ${column}`
+    }
     return `ot.${column}`
   }).join(', ')
 }
@@ -877,10 +889,14 @@ router.get('/scan-sessions',
 
       if (status) { conditions.push(`s.status = $${p++}`); params.push(status) }
       if (anormalidad === 'con' || anormalidad === 'sin') {
+        // Query pick_box_status directly rather than the cached
+        // pick_order_tracking.tiene_anormalidades flag — that flag is only
+        // refreshed by refreshOrderFlags() on specific write paths and can
+        // go stale, silently missing orders that do have an anormalidad box.
         const existsClause = `EXISTS (
-          SELECT 1 FROM pick_order_tracking pot
-          WHERE pot.tenant_id = s.tenant_id AND pot.outbound_order_no = s.outbound_order_no
-            AND pot.tiene_anormalidades = true
+          SELECT 1 FROM pick_box_status pbs
+          WHERE pbs.tenant_id = s.tenant_id AND pbs.outbound_order_no = s.outbound_order_no
+            AND pbs.estado = 'anormalidad'
         )`
         conditions.push(anormalidad === 'con' ? existsClause : `NOT ${existsClause}`)
       }
@@ -934,8 +950,26 @@ router.get('/scan-sessions',
                   scan_times.first_scan_at,
                   scan_times.last_scan_at,
                   u.nombre_completo as operator_nombre,
-                  COALESCE(ot.tiene_faltantes, false)     AS tiene_faltantes,
-                  COALESCE(ot.tiene_anormalidades, false) AS tiene_anormalidades
+                  EXISTS (
+                    SELECT 1 FROM pick_box_status pbs
+                    WHERE pbs.tenant_id = s.tenant_id AND pbs.outbound_order_no = s.outbound_order_no
+                      AND pbs.estado = 'faltante'
+                  ) AS tiene_faltantes,
+                  EXISTS (
+                    SELECT 1 FROM pick_box_status pbs
+                    WHERE pbs.tenant_id = s.tenant_id AND pbs.outbound_order_no = s.outbound_order_no
+                      AND pbs.estado = 'anormalidad'
+                  ) AS tiene_anormalidades,
+                  EXISTS (
+                    SELECT 1 FROM pick_box_status pbs
+                    WHERE pbs.tenant_id = s.tenant_id AND pbs.outbound_order_no = s.outbound_order_no
+                      AND pbs.estado = 'reparacion'
+                  ) AS tiene_reparacion,
+                  EXISTS (
+                    SELECT 1 FROM pick_box_status pbs
+                    WHERE pbs.tenant_id = s.tenant_id AND pbs.outbound_order_no = s.outbound_order_no
+                      AND pbs.estado = 'rastreo'
+                  ) AS tiene_rastreo
            FROM pick_sessions s
            LEFT JOIN (
              SELECT session_id,
@@ -962,8 +996,6 @@ router.get('/scan-sessions',
              GROUP BY session_id
            ) scan_times ON scan_times.session_id = s.id
            LEFT JOIN usuarios u ON u.id = s.operator_id
-           LEFT JOIN pick_order_tracking ot
-             ON ot.tenant_id = s.tenant_id AND ot.outbound_order_no = s.outbound_order_no
            WHERE ${where}
            ORDER BY ${sortCol} ${sortDir} NULLS LAST, s.id DESC
            LIMIT $${p} OFFSET $${p + 1}`,

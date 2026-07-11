@@ -17,6 +17,7 @@ import Modal from '../../../core/components/common/Modal'
 import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import DataSyncStatus from '../../../core/components/common/DataSyncStatus'
 import TablePagination from '../../../core/components/common/TablePagination'
+import FastTooltip from '../../../core/components/common/FastTooltip'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -1001,6 +1002,7 @@ export default function Ordenes() {
   const [search, setSearch] = useState('')
   const [statusDraft, setStatusDraft] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterAnormalidad, setFilterAnormalidad] = useState('')
   const [clientDraft, setClientDraft] = useState([])
   const [filterClient, setFilterClient] = useState([])
   const [surtidorDraft, setSurtidorDraft] = useState([])
@@ -1041,6 +1043,11 @@ export default function Ordenes() {
     setFilterStatus(newStatus)
     setPage(1)
     setTimeout(() => setIsTransitioning(false), 300)
+  }
+
+  const handleAnormalidadChange = (value) => {
+    setFilterAnormalidad(value)
+    setPage(1)
   }
 
   const [refreshing, setRefreshing] = useState(false)
@@ -1322,6 +1329,8 @@ export default function Ordenes() {
       }
     }
 
+    if (filterAnormalidad === 'con' && !tracking?.tiene_anormalidades) return false
+    if (filterAnormalidad === 'sin' && tracking?.tiene_anormalidades) return false
     if (filterClient.length > 0 && !filterClient.includes(r.customerCode || r.customerNo || r.customerName || '')) return false
     if (filterSurtidor.length > 0) {
       const surtNombre = getSurtidorName(tracking)
@@ -1344,7 +1353,7 @@ export default function Ordenes() {
     }
     return true
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [combinedRecords, trackingMap, filterStatus, filterClient, filterSurtidor, destinationQuery, q, qCompact, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo, dateMode])
+  }), [combinedRecords, trackingMap, filterStatus, filterAnormalidad, filterClient, filterSurtidor, destinationQuery, q, qCompact, bulkSearchCodes, dateFrom, dateTo, timeFrom, timeTo, dateMode])
 
   const filteredValidacion = useMemo(() => trackingList.filter(tr => {
     if (filterStatus && tr.status !== filterStatus) return false
@@ -2143,8 +2152,19 @@ export default function Ordenes() {
         </div>
       </div>
 
-      <div className="sticky top-[8.7rem] z-[4] bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-6">
-        <StatusTabs selected={filterStatus} onChange={handleStatusChange} t={t} />
+      <div className="sticky top-[8.7rem] z-[4] bg-white/70 backdrop-blur-2xl border-b border-warm-100/40 px-6 flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <StatusTabs selected={filterStatus} onChange={handleStatusChange} t={t} />
+        </div>
+        <select
+          value={filterAnormalidad}
+          onChange={e => handleAnormalidadChange(e.target.value)}
+          className="h-9 pl-3 pr-7 rounded-xl border border-warm-200 text-xs text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer shrink-0"
+        >
+          <option value="">{t('surtido.registros.anormalidad.all')}</option>
+          <option value="con">{t('surtido.registros.anormalidad.con')}</option>
+          <option value="sin">{t('surtido.registros.anormalidad.sin')}</option>
+        </select>
       </div>
 
       {/* Table */}
@@ -2535,18 +2555,22 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
         <div className="flex items-center gap-1.5">
           <CopyableObc obc={obc} />
           {(tracking?.tiene_faltantes || tracking?.tiene_anormalidades || tracking?.tiene_reparacion || tracking?.tiene_rastreo) && (
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                tracking?.tiene_anormalidades ? 'bg-warning-500' :
-                tracking?.tiene_faltantes    ? 'bg-danger-500' :
-                tracking?.tiene_reparacion   ? 'bg-violet-500' : 'bg-sky-500'
-              }`}
-              title={
-                tracking?.tiene_anormalidades ? t('surtido.ordenes.indicator.anormalidades') :
-                tracking?.tiene_faltantes    ? t('surtido.ordenes.indicator.faltantes') :
-                tracking?.tiene_reparacion   ? t('surtido.ordenes.indicator.reparacion') : t('surtido.ordenes.indicator.rastreo')
-              }
-            />
+            <FastTooltip
+              label={[
+                tracking?.tiene_anormalidades && t('surtido.ordenes.indicator.anormalidades'),
+                tracking?.tiene_faltantes    && t('surtido.ordenes.indicator.faltantes'),
+                tracking?.tiene_reparacion   && t('surtido.ordenes.indicator.reparacion'),
+                tracking?.tiene_rastreo      && t('surtido.ordenes.indicator.rastreo'),
+              ].filter(Boolean).join(' · ')}
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  tracking?.tiene_anormalidades ? 'bg-warning-500' :
+                  tracking?.tiene_faltantes    ? 'bg-danger-500' :
+                  tracking?.tiene_reparacion   ? 'bg-violet-500' : 'bg-sky-500'
+                }`}
+              />
+            </FastTooltip>
           )}
         </div>
       </td>
