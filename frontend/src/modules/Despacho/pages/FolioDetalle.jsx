@@ -182,7 +182,7 @@ export default function FolioDetalle() {
   const { data: conductoresData } = useQuery({ queryKey: ['despacho-conductores'], queryFn: getConductores, staleTime: 10 * 60_000 })
   const { data: unidadesData } = useQuery({ queryKey: ['despacho-unidades'], queryFn: getUnidades, staleTime: 10 * 60_000 })
 
-  const { data: logsData, isLoading: loadingLogs } = useQuery({
+  const { data: logsData, isLoading: loadingLogs, isError: logsError, refetch: refetchLogs } = useQuery({
     queryKey: ['despacho-folio-logs', folioId],
     queryFn: () => getFolioLogs(folioId),
     enabled: !!folioId && activeTab === 'logs',
@@ -761,7 +761,7 @@ export default function FolioDetalle() {
 
         {activeTab === 'logs' && (
           <div className="card overflow-hidden border border-warm-100/80 shadow-soft">
-            <LogsTimeline entries={logEntries} isLoading={loadingLogs} />
+            <LogsTimeline entries={logEntries} isLoading={loadingLogs} isError={logsError} onRetry={refetchLogs} />
           </div>
         )}
       </div>

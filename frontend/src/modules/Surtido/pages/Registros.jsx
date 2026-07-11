@@ -384,12 +384,11 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
   })
   const incidencias = incidenciasData?.data ?? []
 
-  const { data: logsData, isLoading: loadingLogs } = useQuery({
+  const { data: logsData, isLoading: loadingLogs, isError: logsError, refetch: refetchLogs } = useQuery({
     queryKey: ['surtido-order-logs', session.outbound_order_no],
     queryFn: () => getOrderLogs(session.outbound_order_no),
     enabled: isOpen && detailTab === 'logs' && !!session.outbound_order_no,
     staleTime: 15000,
-    retry: 0,
   })
   const logEntries = logsData?.data ?? []
 
@@ -829,7 +828,7 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
           )}
 
           {detailTab === 'logs' && (
-            <LogsTimeline entries={logEntries} isLoading={loadingLogs} />
+            <LogsTimeline entries={logEntries} isLoading={loadingLogs} isError={logsError} onRetry={refetchLogs} />
           )}
 
         </div>

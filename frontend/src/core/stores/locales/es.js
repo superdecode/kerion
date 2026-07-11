@@ -3609,6 +3609,7 @@ export default {
     'desp.folioDetalle.cajaPlural': 'cajas',
     'logs.tab': 'Logs',
     'logs.empty': 'Sin registros en la bitácora',
+    'logs.loadError': 'No se pudo cargar la bitácora. Intenta de nuevo.',
     'logs.scanPeriod.summary': 'Validación de {n} cajas',
     'logs.status.pending_assignment': 'Pendiente de asignación',
     'logs.status.assigned': 'Asignado',

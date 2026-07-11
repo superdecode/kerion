@@ -3638,6 +3638,7 @@ export default {
     'desp.folioDetalle.cajaPlural': '箱',
     'logs.tab': '日志',
     'logs.empty': '暂无日志记录',
+    'logs.loadError': '日志加载失败，请重试。',
     'logs.scanPeriod.summary': '验证了 {n} 箱',
     'logs.status.pending_assignment': '待分配',
     'logs.status.assigned': '已分配',

@@ -1,6 +1,6 @@
 import {
   Clock, User, AlertTriangle, CheckCircle2, XCircle, Edit3,
-  Package, RefreshCw, ScanLine, UserPlus, FileText, ListPlus, MinusCircle,
+  Package, RefreshCw, ScanLine, UserPlus, FileText, ListPlus, MinusCircle, RotateCw,
 } from 'lucide-react'
 import LoadingSpinner from './LoadingSpinner'
 import { useI18nStore } from '../../stores/i18nStore'
@@ -138,13 +138,29 @@ function ValidationPeriodRow({ entry, t }) {
   )
 }
 
-export default function LogsTimeline({ entries, isLoading }) {
+export default function LogsTimeline({ entries, isLoading, isError, onRetry }) {
   const { t } = useI18nStore()
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-14">
         <LoadingSpinner size="sm" text={t('common.loading')} />
+      </div>
+    )
+  }
+
+  // A failed fetch (e.g. a transient DB/pooler blip) must never look like "no logs" —
+  // the order can have plenty of history that simply didn't load this time.
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-14 gap-2 text-warm-300">
+        <AlertTriangle className="w-8 h-8 opacity-50 text-warning-400" />
+        <p className="text-xs text-warm-400">{t('logs.loadError')}</p>
+        {onRetry && (
+          <button type="button" onClick={onRetry} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700">
+            <RotateCw className="w-3.5 h-3.5" />{t('common.retry')}
+          </button>
+        )}
       </div>
     )
   }

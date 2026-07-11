@@ -7,6 +7,40 @@ const READ_ONLY_STATUSES = new Set(['trial_expired', 'expired'])
 // Statuses that block access entirely
 const BLOCKED_STATUSES = new Set(['suspended', 'rejected', 'pending'])
 const TENANT_DB_DEADLINE_MS = parseInt(process.env.TENANT_DB_DEADLINE_MS, 10) || 12000
+const NON_RETRYABLE_TENANT_DB_CODES = new Set(['ECHECKOUTTIMEOUT', 'DB_QUERY_DEADLINE'])
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// Every /api/* request resolves its tenant here with a fresh query (no cache) —
+// under a pooled connection (Supavisor) that occasionally drops a connection
+// mid-query, this single query becoming a hard failure would 500 the entire
+// request. Retry once on the same transient-error classes tenantQueryWithRetry
+// already handles in auth.js, so a one-off pooler blip doesn't surface as
+// "tenant not found" / 500 to the user.
+async function queryTenantWithRetry(sql, params) {
+  const execute = () => {
+    let timeoutId
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const error = new Error(`Tenant query exceeded ${TENANT_DB_DEADLINE_MS}ms`)
+        error.code = 'DB_QUERY_DEADLINE'
+        reject(error)
+      }, TENANT_DB_DEADLINE_MS)
+    })
+    return Promise.race([query(sql, params), timeoutPromise]).finally(() => clearTimeout(timeoutId))
+  }
+
+  try {
+    return await execute()
+  } catch (error) {
+    if (!isDatabaseUnavailableError(error) || NON_RETRYABLE_TENANT_DB_CODES.has(error.code)) throw error
+    console.warn('[tenantContext] transient DB error, retrying once:', error.code || error.message)
+    await sleep(350)
+    return execute()
+  }
+}
 
 function extractSlugFromHost(host) {
   if (!host) return null
@@ -74,23 +108,12 @@ export async function tenantContext(req, res, next) {
   try {
     const tenantParam = slug || (jwtTenantId ?? env.LEGACY_TENANT_ID)
     const byId = !!jwtTenantId || useDevFallback
-    let timeoutId
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => {
-        const error = new Error(`Tenant query exceeded ${TENANT_DB_DEADLINE_MS}ms`)
-        error.code = 'DB_QUERY_DEADLINE'
-        reject(error)
-      }, TENANT_DB_DEADLINE_MS)
-    })
-    const result = await Promise.race([
-      query(
-        byId
-          ? 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE id = $1 LIMIT 1'
-          : 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE slug = $1 LIMIT 1',
-        [tenantParam]
-      ),
-      timeoutPromise,
-    ]).finally(() => clearTimeout(timeoutId))
+    const result = await queryTenantWithRetry(
+      byId
+        ? 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE id = $1 LIMIT 1'
+        : 'SELECT id, slug, status, trial_expires_at, subscription_expires_at, current_plan_id FROM tenants WHERE slug = $1 LIMIT 1',
+      [tenantParam]
+    )
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Tenant no encontrado' })
