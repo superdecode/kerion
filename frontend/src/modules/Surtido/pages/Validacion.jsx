@@ -1647,7 +1647,22 @@ const { data: reasonsData } = useQuery({
   const updateUbicacionMut = useMutation({
     mutationFn: (texto) => updateScanSession(sessionId, { ubicacion_nota: texto || null }),
     onSuccess: (_, texto) => confirmUbicacionLocally(texto),
-    onError:   (_, texto) => confirmUbicacionLocally(texto),
+    onError: (err, texto) => {
+      confirmUbicacionLocally(texto)
+      if (err.response?.status === 404) return // session gone server-side; nothing to sync
+      // This used to only update local state on failure — the ubicacion looked confirmed
+      // in the UI but the PUT that actually persists it to pick_sessions was simply
+      // dropped, so it never made it to the server once the connection came back. Queue
+      // it like scans/manual entries do. Only the latest value per session matters, so
+      // drop any earlier queued ubicacion update for this session first — otherwise a
+      // flush would fire both PUTs in parallel with no ordering guarantee.
+      useSurtidoStore.setState(s => ({
+        pendingSync: [
+          ...s.pendingSync.filter(e => !(e.kind === 'ubicacion' && e.payload?.id === sessionId)),
+          { key: `UBI_${sessionId}_${Date.now()}`, kind: 'ubicacion', payload: { id: sessionId, body: { ubicacion_nota: texto || null } } },
+        ],
+      }))
+    },
   })
 
   function confirmUbicacionLocally(texto) {
