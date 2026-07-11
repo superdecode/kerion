@@ -896,14 +896,16 @@ router.get('/scan-sessions',
 
       if (status) { conditions.push(`s.status = $${p++}`); params.push(status) }
       if (anormalidad === 'con' || anormalidad === 'sin') {
-        // Query pick_box_status directly rather than the cached
-        // pick_order_tracking.tiene_anormalidades flag — that flag is only
-        // refreshed by refreshOrderFlags() on specific write paths and can
-        // go stale, silently missing orders that do have an anormalidad box.
+        // "Anormalidad" here means anything abnormal — not just the literal
+        // estado='anormalidad' value, but any non-normal box status (faltante,
+        // anormalidad, reparacion, rastreo). Query pick_box_status directly
+        // rather than the cached pick_order_tracking.tiene_* flags — those are
+        // only refreshed by refreshOrderFlags() on specific write paths and can
+        // go stale, silently missing orders that do have an incident box.
         const existsClause = `EXISTS (
           SELECT 1 FROM pick_box_status pbs
           WHERE pbs.tenant_id = s.tenant_id AND pbs.outbound_order_no = s.outbound_order_no
-            AND pbs.estado = 'anormalidad'
+            AND pbs.estado IN ('anormalidad', 'faltante', 'reparacion', 'rastreo')
         )`
         conditions.push(anormalidad === 'con' ? existsClause : `NOT ${existsClause}`)
       }

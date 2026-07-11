@@ -1328,8 +1328,11 @@ export default function Ordenes() {
       }
     }
 
-    if (filterAnormalidad === 'con' && !tracking?.tiene_anormalidades) return false
-    if (filterAnormalidad === 'sin' && tracking?.tiene_anormalidades) return false
+    // "Anormalidad" here means anything abnormal, not just estado='anormalidad' —
+    // any incident type (faltante/anormalidad/reparacion/rastreo) counts.
+    const tieneIncidencia = !!(tracking?.tiene_faltantes || tracking?.tiene_anormalidades || tracking?.tiene_reparacion || tracking?.tiene_rastreo)
+    if (filterAnormalidad === 'con' && !tieneIncidencia) return false
+    if (filterAnormalidad === 'sin' && tieneIncidencia) return false
     if (filterClient.length > 0 && !filterClient.includes(r.customerCode || r.customerNo || r.customerName || '')) return false
     if (filterSurtidor.length > 0) {
       const surtNombre = getSurtidorName(tracking)
