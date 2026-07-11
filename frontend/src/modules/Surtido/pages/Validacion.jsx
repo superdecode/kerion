@@ -1687,30 +1687,22 @@ const { data: reasonsData } = useQuery({
   })
 
   const addManualEventMut = useMutation({
-    mutationFn: addManualScanEvent,
-    onSuccess: (result) => {
-      const payload = result?.data
-      const norm = normalizeCodeFast(payload?.normalized_code || manualEntry.code)
-      const matched = findMatchedItem(norm, packageMap, productMap)
-      playSound('success')
-      scannedOkCodesRef.current.add(norm)
-      setLastScan({ code: norm, result: 'ok' })
-      setHistory(h => [{ code: norm, result: 'ok', ts: Date.now(), isManual: true }, ...h].slice(0, 500))
-      setCounts(c => ({ ...c, ok: c.ok + 1 }))
-      if (matched) {
-        setItemCounts(m => {
-          const next = new Map(m)
-          next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1)
-          return next
-        })
-      }
-      setManualEntry({ code: '', reasonId: '', notes: '' })
-      setShowManualEntry(false)
-      toast.success(t('surtido.validacion.manual_entry_saved'))
+    mutationFn: (vars) => addManualScanEvent(vars),
+    onSuccess: () => {
       // Same reasoning as addEventMut: a manual entry can complete the order too.
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
     },
-    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+    onError: (err, vars) => {
+      if (err.response?.status === 404) {
+        clearSession()
+        toast.error(t('surtido.validacion.session_expired') || 'Sesión expirada. Inicia una nueva sesión.')
+        return
+      }
+      // Local state (counts/history) was already applied optimistically before this
+      // mutation fired — mirror addEventMut and queue for background sync instead of
+      // showing a generic error that makes it look like the manual entry was lost.
+      useSurtidoStore.getState().enqueueSync({ key: vars._dedupeKey, kind: 'manual', payload: vars })
+    },
   })
 
   const cancelMut = useMutation({
@@ -2369,7 +2361,11 @@ const { data: reasonsData } = useQuery({
 
       <Modal
         isOpen={invalidLocationModal.open}
-        onClose={() => setInvalidLocationModal({ open: false, raw: '', normalized: '', summary: '' })}
+        onClose={() => {
+          setInvalidLocationModal({ open: false, raw: '', normalized: '', summary: '' })
+          setLocationInputValue('')
+          setTimeout(() => locationRef.current?.focus(), 80)
+        }}
         title="Ubicacion invalida"
         icon={AlertTriangle}
         footer={
@@ -2377,6 +2373,7 @@ const { data: reasonsData } = useQuery({
             className="btn-danger w-full inline-flex items-center justify-center gap-2"
             onClick={() => {
               setInvalidLocationModal({ open: false, raw: '', normalized: '', summary: '' })
+              setLocationInputValue('')
               setTimeout(() => locationRef.current?.focus(), 80)
             }}
           >
@@ -2434,6 +2431,22 @@ const { data: reasonsData } = useQuery({
                   return
                 }
                 const selectedReason = (getRecords(reasonsData)).find((reason) => String(reason.id) === manualEntry.reasonId)
+                // Apply local state immediately, same as doScan — a dropped connection
+                // must not make a manual entry look lost. addManualEventMut.onError
+                // queues the request itself for background sync.
+                playSound('success')
+                scannedOkCodesRef.current.add(norm)
+                setLastScan({ code: norm, result: 'ok' })
+                setHistory(h => [{ code: norm, result: 'ok', ts: Date.now(), isManual: true }, ...h].slice(0, 500))
+                setCounts(c => ({ ...c, ok: c.ok + 1 }))
+                setItemCounts(m => {
+                  const next = new Map(m)
+                  next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1)
+                  return next
+                })
+                setManualEntry({ code: '', reasonId: '', notes: '' })
+                setShowManualEntry(false)
+                toast.success(t('surtido.validacion.manual_entry_saved'))
                 addManualEventMut.mutate({
                   session_id: sessionId,
                   scanned_code: manualEntry.code.trim(),
@@ -2446,6 +2459,7 @@ const { data: reasonsData } = useQuery({
                   manual_reason_label: selectedReason?.nombre || null,
                   manual_notes: manualEntry.notes.trim() || null,
                   ubicacion_nota: selectedUbicacion || null,
+                  _dedupeKey: `MAN_${norm}_${Date.now()}`,
                 })
               }}
             >
