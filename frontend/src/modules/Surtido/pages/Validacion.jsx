@@ -34,7 +34,6 @@ import { useSurtidoStore } from '../stores/surtidoStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
-const SCANNER_THRESHOLD_MS = 100   // per-character inter-key gap (ScanRecount)
 const SCANNER_TOTAL_MS = 2000       // base budget first-char→Enter for scanner barcodes
 // Codes past this length (QR/2D payloads, e.g. the JSON blobs some WMS scanners emit)
 // get extra time on top of SCANNER_TOTAL_MS — a fixed budget was long enough for a
@@ -670,10 +669,11 @@ function ScanFeedTable({ items, t }) {
 
 /* ─── Recount modal ───────────────────────────────────────── */
 function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
+  const toast = useToastStore.getState()
   const [recountInput, setRecountInput] = useState('')
   const [recountItems, setRecountItems] = useState([])
   const recountRef = useRef(null)
-  const lastKeyRef = useRef(0)
+  const inputStartTimeRef = useRef(0)
 
   useEffect(() => {
     if (isOpen) { setRecountItems([]); setTimeout(() => recountRef.current?.focus(), 80) }
@@ -696,18 +696,31 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
     recountRef.current.value = ''
   }
 
+  // Was a per-keystroke gap check (>100ms between any two characters wiped the whole
+  // input mid-scan, silently, no feedback at all) — same fragility as the main scan
+  // input's guard before that was fixed to a total-elapsed budget scaled by code
+  // length (see scannerTimeBudgetMs / TabSession.handleKeyDown for the full context).
+  // Mirrored here for the same reason: any main-thread hiccup during a long QR/JSON
+  // payload could false-positive on a genuine scan.
   function handleKeyDown(e) {
     const now = Date.now()
-    const delta = now - lastKeyRef.current
-    lastKeyRef.current = now
+    if (e.target.value.length === 0 && e.key !== 'Enter') {
+      inputStartTimeRef.current = now
+    }
     if (e.key === 'Enter') {
       const val = e.target.value.trim()
       if (!val) return
-      doRecount(val); return
-    }
-    if (delta > SCANNER_THRESHOLD_MS && e.target.value.length > 0) {
-      e.preventDefault()
-      e.target.value = ''
+      const elapsed = now - inputStartTimeRef.current
+      if (elapsed > scannerTimeBudgetMs(val.length)) {
+        playSound('suspicious')
+        toast.warning(t('surtido.validacion.manual_blocked'))
+        e.target.value = ''
+        inputStartTimeRef.current = 0
+        return
+      }
+      doRecount(val)
+      inputStartTimeRef.current = 0
+      return
     }
   }
 
