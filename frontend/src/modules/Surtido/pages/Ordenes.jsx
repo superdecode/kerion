@@ -9,7 +9,7 @@ import {
   Package2, Truck, ScanBarcode, Copy, Check, Eye, ClipboardList,
   User, Clock, BarChart3, RefreshCw, Database, CheckCircle2,
   MapPin, Timer, XCircle, AlertCircle, Edit3, BadgeCheck, Download,
-  ListFilter, Filter, CalendarClock, Save, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Printer,
+  ListFilter, CalendarClock, Save, ArrowUpDown, ArrowUp, ArrowDown, ShieldAlert, Printer,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -1000,7 +1000,6 @@ export default function Ordenes() {
   const [pageSize, setPageSize] = useState(50)
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const [statusDraft, setStatusDraft] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [anormalidadDraft, setAnormalidadDraft] = useState('')
   const [filterAnormalidad, setFilterAnormalidad] = useState('')
@@ -1268,24 +1267,6 @@ export default function Ordenes() {
     if (dateFrom && d < dateFrom) return false
     if (dateTo   && d > dateTo)   return false
     return true
-  }
-
-  function applyFilters() {
-    setSearch(searchInput.trim())
-    setFilterStatus(statusDraft)
-    setFilterAnormalidad(anormalidadDraft)
-    setFilterClient(clientDraft)
-    setFilterSurtidor(surtidorDraft)
-    setFilterDestination(destinationDraft.trim())
-    setTimeFrom(timeFromDraft)
-    setTimeTo(timeToDraft)
-    setPage(1)
-    localStorage.setItem(timeFilterKey, JSON.stringify({ timeFrom: timeFromDraft, timeTo: timeToDraft }))
-    if (destinationDraft.trim()) {
-      sessionStorage.setItem(destinationFilterKey, destinationDraft.trim())
-    } else {
-      sessionStorage.removeItem(destinationFilterKey)
-    }
   }
 
   function applyDateFilters(nextDateFrom = dateFromDraft, nextDateTo = dateToDraft) {
@@ -2070,7 +2051,7 @@ export default function Ordenes() {
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
             <MultiSelect
               value={clientDraft}
-              onChange={setClientDraft}
+              onChange={(v) => { setClientDraft(v); setFilterClient(v); setPage(1) }}
               options={customerOptions.map(c => ({ value: c, label: c }))}
               placeholder={t('surtido.ordenes.cliente')}
               t={t}
@@ -2078,7 +2059,7 @@ export default function Ordenes() {
 
             <MultiSelect
               value={surtidorDraft}
-              onChange={setSurtidorDraft}
+              onChange={(v) => { setSurtidorDraft(v); setFilterSurtidor(v); setPage(1) }}
               options={[
                 { value: '__unassigned__', label: 'Sin asignar' },
                 ...surtidores.map(s => ({ value: s.nombre, label: s.nombre }))
@@ -2089,7 +2070,7 @@ export default function Ordenes() {
 
             <select
               value={anormalidadDraft}
-              onChange={e => setAnormalidadDraft(e.target.value)}
+              onChange={e => { const v = e.target.value; setAnormalidadDraft(v); setFilterAnormalidad(v); setPage(1) }}
               className="h-10 pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
             >
               <option value="">{t('surtido.registros.anormalidad.all')}</option>
@@ -2101,6 +2082,8 @@ export default function Ordenes() {
               value={destinationDraft}
                 onChange={(nextValue) => {
                   setDestinationDraft(nextValue)
+                  setFilterDestination(nextValue.trim())
+                  setPage(1)
                   const normalized = nextValue.trim()
                   if (normalized) {
                     sessionStorage.setItem(destinationFilterKey, normalized)
@@ -2108,7 +2091,6 @@ export default function Ordenes() {
                     sessionStorage.removeItem(destinationFilterKey)
                   }
                 }}
-                onEnter={applyFilters}
                 options={destinationOptions}
                 t={t}
               />
@@ -2124,8 +2106,7 @@ export default function Ordenes() {
                 className="flex-1 min-w-0 text-sm outline-none bg-transparent text-warm-700 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 placeholder={t('surtido.ordenes.search_placeholder')}
                 value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') applyFilters() }}
+                onChange={e => { const v = e.target.value; setSearchInput(v); setSearch(v); setPage(1) }}
               />
               <button
                 type="button"
@@ -2145,13 +2126,6 @@ export default function Ordenes() {
                 <X className="w-3 h-3" /> {t('common.clear')}
               </button>
             )}
-
-            <button
-              className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-100 px-4 text-xs font-semibold text-violet-700 hover:bg-violet-200"
-              onClick={applyFilters}
-            >
-              <Filter size={13} /> {t('common.apply')}
-            </button>
 
             {canCreateValidation && (
               <button
