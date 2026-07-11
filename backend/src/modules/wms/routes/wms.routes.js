@@ -277,6 +277,7 @@ function buildPickSessionsStatsSubquery(sessionColumns, includeSessionCount = fa
   )
   aggregates.push('SUM(COALESCE(rejected_stats.total_rejected, 0)) as total_rejected')
   aggregates.push(sessionColumns.has('third_order_no') ? 'MAX(third_order_no) as third_order_no' : 'NULL::text as third_order_no')
+  aggregates.push(sessionColumns.has('ubicacion_nota') ? 'MAX(ubicacion_nota) as ubicacion_nota' : 'NULL::text as ubicacion_nota')
   aggregates.push(sessionColumns.has('started_at') ? 'MIN(started_at) as first_session_at' : 'NULL as first_session_at')
   aggregates.push(sessionColumns.has('updated_at') ? 'MAX(updated_at) as last_session_at' : sessionColumns.has('completed_at') ? 'MAX(completed_at) as last_session_at' : 'NULL as last_session_at')
   return `
@@ -2521,7 +2522,8 @@ router.get('/order-tracking',
                 COALESCE(stats.total_expected, 0) as total_expected,
                 COALESCE(stats.total_rejected, 0) as total_rejected,
                 stats.first_session_at,
-                stats.last_session_at
+                stats.last_session_at,
+                stats.ubicacion_nota
          FROM stats
          FULL JOIN pick_order_tracking ot
            ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id
@@ -2559,7 +2561,8 @@ router.get('/order-tracking/:obc',
                 COALESCE(stats.total_expected, 0) as total_expected,
                 COALESCE(stats.total_rejected, 0) as total_rejected,
                 stats.first_session_at,
-                stats.last_session_at
+                stats.last_session_at,
+                stats.ubicacion_nota
          FROM stats
          FULL JOIN pick_order_tracking ot
            ON stats.outbound_order_no = ot.outbound_order_no AND stats.tenant_id = ot.tenant_id

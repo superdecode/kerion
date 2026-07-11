@@ -1617,6 +1617,7 @@ export default function Ordenes() {
         tr.total_scanned ?? 0,
         r.outboundTime || '',
         getSurtidorName(tr) || '',
+        tr.ubicacion_nota || '',
         t(getStatusMeta(tr.status || 'pending_assignment').labelKey),
         r.orderCreateTime || '',
       ]
@@ -1651,6 +1652,7 @@ export default function Ordenes() {
     t('surtido.ordenes.validated_qty'),
     t('surtido.ordenes.fecha_entrega'),
     t('surtido.ordenes.surtidor'),
+    t('surtido.ordenes.ubicacion'),
     t('surtido.ordenes.status'),
     t('surtido.ordenes.fecha_creacion'),
   ]
@@ -2636,6 +2638,12 @@ const WmsRow = memo(function WmsRow({ r, tracking, isChecked, onToggle, onView, 
         )}
       </td>
 
+      <td className="table-cell hidden xl:table-cell">
+        <span className="block max-w-[130px] truncate text-warm-600 text-xs" title={tracking?.ubicacion_nota || undefined}>
+          {tracking?.ubicacion_nota || '—'}
+        </span>
+      </td>
+
       <td className="table-cell">
         <StatusPill className={meta.cls}>{t(meta.labelKey)}</StatusPill>
       </td>
@@ -2865,6 +2873,7 @@ function WmsTable({ records, allFilteredObcs, trackingMap, surtidores, onAssign,
               <th className={`${TH_CLASS} col-name`}>
                 <SortableHeader label={t('surtido.ordenes.surtidor')} sortKey="surtidor" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
               </th>
+              <th className={`${TH_CLASS} hidden xl:table-cell`}><span className={TH_TEXT}>{t('surtido.ordenes.ubicacion')}</span></th>
               <th className={`${TH_CLASS} col-status`}>
                 <SortableHeader label={t('surtido.ordenes.status')} sortKey="status" currentKey={sortKey} direction={sortDirection} onSort={handleSort} textClassName={TH_TEXT} />
               </th>

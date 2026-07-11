@@ -1851,6 +1851,7 @@ export default {
     // ── Surtido ordenes additions ──────────────────────────────────────────
     'surtido.ordenes.surtidor':          '配货员',
     'surtido.ordenes.no_surtidor':       '未分配',
+    'surtido.ordenes.ubicacion':         '库位',
     'surtido.ordenes.assign_surtidor':   '分配配货员',
     'surtido.ordenes.manage_surtidores': '管理配货员',
     'surtido.ordenes.manage_motivos':    '管理原因',

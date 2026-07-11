@@ -1794,6 +1794,7 @@ export default {
     // ── Surtido ordenes additions ──────────────────────────────────────────
     'surtido.ordenes.surtidor':          'Surtidor',
     'surtido.ordenes.no_surtidor':       'Sin Asignar',
+    'surtido.ordenes.ubicacion':         'Ubicación',
     'surtido.ordenes.assign_surtidor':   'Asignar Surtidor',
     'surtido.ordenes.manage_surtidores': 'Gestionar Surtidores',
     'surtido.ordenes.manage_motivos':    'Gestionar Motivos',
