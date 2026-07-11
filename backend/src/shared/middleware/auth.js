@@ -125,12 +125,13 @@ export async function auditLog(req, action, entityType, entityId, details) {
   try {
     const userId = req.user?.id || req.fullUser?.id || null
     const userEmail = req.user?.email || req.fullUser?.email || null
+    const tenantId = req.tenantId || req.user?.tenant_id || null
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || null
     const ua = req.headers['user-agent'] || null
     await query(
-      `INSERT INTO audit_log (user_id, user_email, action, entity_type, entity_id, details, ip_address, user_agent)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [userId, userEmail, action, entityType, entityId, details ? JSON.stringify(details) : null, ip, ua]
+      `INSERT INTO audit_log (user_id, user_email, tenant_id, action, entity_type, entity_id, details, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [userId, userEmail, tenantId, action, entityType, entityId, details ? JSON.stringify(details) : null, ip, ua]
     )
   } catch (err) {
     console.error('Audit log error (non-blocking):', err.message)

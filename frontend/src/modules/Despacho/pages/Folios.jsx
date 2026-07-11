@@ -143,9 +143,15 @@ export default function Folios() {
         if (!f.conductor_id || !conductorFilter.includes(String(f.conductor_id))) return false
       }
       if (search) {
-        const haystack = [f.folio_numero, f.conductor_nombre, f.unidad_placa]
+        const haystack = [f.folio_numero, f.conductor_nombre, f.unidad_placa, ...(f.outbound_order_nos || []), ...(f.box_codes || [])]
           .filter(Boolean).join(' ').toLowerCase()
-        if (!haystack.includes(search)) return false
+        if (!haystack.includes(search)) {
+          // Box codes can be scanned/stored with either separator ("64942255/156" vs
+          // "64942255-156") — fall back to a separator-stripped comparison so both match.
+          const searchCompact = search.replace(/[^a-z0-9]/g, '')
+          const haystackCompact = haystack.replace(/[^a-z0-9]/g, '')
+          if (!searchCompact || !haystackCompact.includes(searchCompact)) return false
+        }
       }
       return true
     })

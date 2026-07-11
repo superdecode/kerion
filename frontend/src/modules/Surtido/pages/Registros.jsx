@@ -5,8 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import {
   X, CheckCircle2, XCircle, AlertTriangle, Copy, Check,
-  Clock, ScanBarcode, Package2, BadgeCheck, User, Timer, ShieldCheck,
-  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Edit3, Trash2, Search, ScanLine, ChevronRight, ChevronUp, ChevronDown, ListFilter,
+  Clock, ScanBarcode, Package2, BadgeCheck, User, Timer, ShieldCheck, History,
+  Loader2, AlertCircle, Eye, Truck, Calendar, Download, Edit3, Trash2, Search, ScanLine, ChevronRight, ChevronUp, ChevronDown, ChevronsUpDown, ListFilter,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import BarcodeScannerModal from '../../../core/components/common/BarcodeScannerModal'
@@ -14,6 +14,7 @@ import Modal from '../../../core/components/common/Modal'
 import TablePagination from '../../../core/components/common/TablePagination'
 import StatusPill from '../../../core/components/common/StatusPill'
 import CopyableCell from '../../../core/components/common/CopyableCell'
+import LogsTimeline from '../../../core/components/common/LogsTimeline'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
@@ -21,13 +22,30 @@ import { fmtDateTime, fmtDate, fmtTimeShort, getToday, subtractDays } from '../.
 import {
   getScanSessions, getScanSession, getOutboundList, getRecords,
   updateScanEvent, deleteScanEvent, addManualScanEvent, getManualEntryReasons, deleteScanSession,
-  getOrderTrackingByOBC, getBoxIncidents, getScanOperators, getBoxStatusDetail, updateScanSession,
+  getOrderTrackingByOBC, getBoxIncidents, getScanOperators, getBoxStatusDetail, updateScanSession, getOrderLogs,
 } from '../services/surtidoService'
 import MultiSelect from '../../../core/components/common/MultiSelect'
 import { normalizeCode, generateCodeVariations, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 
 const TH_CLASS = 'table-header whitespace-nowrap'
 const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracking-wider leading-none text-warm-500'
+
+function SortTh({ label, colKey, sortKey, sortDir, onSort, className = '' }) {
+  const active = colKey === sortKey
+  return (
+    <th
+      className={`${TH_CLASS} cursor-pointer select-none hover:bg-warm-100/60 transition-colors ${className}`}
+      onClick={() => onSort(colKey)}
+    >
+      <span className={`${TH_TEXT} gap-1`}>
+        {label}
+        {active
+          ? (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 text-primary-500" /> : <ChevronDown className="w-3 h-3 text-primary-500" />)
+          : <ChevronsUpDown className="w-3 h-3 text-warm-300" />}
+      </span>
+    </th>
+  )
+}
 
 const STATUS_META = {
   open:               { labelKey: 'surtido.registros.status.open',               cls: 'bg-warning-100 text-warning-700' },
@@ -358,6 +376,15 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
     retry: 0,
   })
   const incidencias = incidenciasData?.data ?? []
+
+  const { data: logsData, isLoading: loadingLogs } = useQuery({
+    queryKey: ['surtido-order-logs', session.outbound_order_no],
+    queryFn: () => getOrderLogs(session.outbound_order_no),
+    enabled: isOpen && detailTab === 'logs' && !!session.outbound_order_no,
+    staleTime: 15000,
+    retry: 0,
+  })
+  const logEntries = logsData?.data ?? []
 
   // Build a map of box_code → matched_box_type from events for the Incidencias tab
   const eventTypeMap = useMemo(() => {
@@ -715,6 +742,12 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
                 <span className="bg-warning-100 text-warning-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full normal-case">{incidencias.length}</span>
               )}
             </button>
+            <button onClick={() => setDetailTab('logs')}
+              className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all border-b-2 -mb-px flex items-center gap-1.5 ${
+                detailTab === 'logs' ? 'text-primary-600 border-primary-500' : 'text-warm-400 border-transparent hover:text-warm-600'
+              }`}>
+              <History size={12} /> {t('logs.tab')}
+            </button>
           </div>
 
           {/* Tab content */}
@@ -784,6 +817,10 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
           )}
           {detailTab === 'incidencias' && (
             <IncidenciasTable incidencias={incidencias} eventTypeMap={eventTypeMap} t={t} />
+          )}
+
+          {detailTab === 'logs' && (
+            <LogsTimeline entries={logEntries} isLoading={loadingLogs} />
           )}
 
         </div>
@@ -1208,12 +1245,24 @@ export default function SurtidoRegistros() {
   const canDelete = hasPermission('surtido.validacion', 'eliminar')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
+  const [sortKey, setSortKey] = useState('started_at')
+  const [sortDir, setSortDir] = useState('desc')
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+    setPage(1)
+  }
   const [copiedCode, setCopiedCode] = useState('')
   const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const searchDebounceRef = useRef(null)
   const [statusFilter, setStatusFilter] = useState('')
+  const [anormalidadFilter, setAnormalidadFilter] = useState('')
   const [operatorFilter, setOperatorFilter] = useState([])
   const today = getToday()
   const thirtyDaysAgo = subtractDays(today, 30)
@@ -1239,13 +1288,16 @@ export default function SurtidoRegistros() {
   const bulkActive = bulkSearchCodes.length > 0
   const obcActive = !!search.trim() || bulkActive
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['surtido-sessions', { page, pageSize, search: search.trim(), bulkSearchCodes, statusFilter, operatorFilter, dateFrom: obcActive ? null : dateFrom, dateTo: obcActive ? null : dateTo }],
+    queryKey: ['surtido-sessions', { page, pageSize, search: search.trim(), bulkSearchCodes, statusFilter, anormalidadFilter, operatorFilter, dateFrom: obcActive ? null : dateFrom, dateTo: obcActive ? null : dateTo, sortKey, sortDir }],
     queryFn: async () => {
       const baseParams = {
         status: statusFilter || undefined,
+        anormalidad: anormalidadFilter || undefined,
         operator_ids: operatorFilter.length > 0 ? operatorFilter.join(',') : undefined,
         fecha_inicio: obcActive ? undefined : (dateFrom || undefined),
         fecha_fin: obcActive ? undefined : (dateTo || undefined),
+        sort: sortKey,
+        dir: sortDir.toUpperCase(),
       }
 
       if (bulkActive) {
@@ -1335,6 +1387,7 @@ export default function SurtidoRegistros() {
     setBulkSearchCodes([])
     setSelectedIds(new Set())
     setStatusFilter('')
+    setAnormalidadFilter('')
     setOperatorFilter([])
     setDateFrom(thirtyDaysAgo)
     setDateTo(today)
@@ -1640,6 +1693,16 @@ export default function SurtidoRegistros() {
             <option value="cancelled">{t('surtido.registros.status.cancelled')}</option>
           </select>
 
+          <select
+            value={anormalidadFilter}
+            onChange={e => { setAnormalidadFilter(e.target.value); setPage(1) }}
+            className="h-10 pl-3 pr-8 rounded-xl border border-warm-200 text-sm text-warm-700 bg-warm-50 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-100 focus:shadow-sm transition-all cursor-pointer"
+          >
+            <option value="">{t('surtido.registros.anormalidad.all')}</option>
+            <option value="con">{t('surtido.registros.anormalidad.con')}</option>
+            <option value="sin">{t('surtido.registros.anormalidad.sin')}</option>
+          </select>
+
           {surtidoresOptions.length > 0 && (
             <MultiSelect
               options={surtidoresOptions}
@@ -1712,7 +1775,7 @@ export default function SurtidoRegistros() {
             </div>
           )}
 
-          {(searchInput || bulkActive || statusFilter || operatorFilter.length > 0 || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
+          {(searchInput || bulkActive || statusFilter || anormalidadFilter || operatorFilter.length > 0 || dateFrom !== thirtyDaysAgo || dateTo !== today) && (
             <button
               onClick={clearFilters}
               className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-semibold transition-colors"
@@ -1745,8 +1808,8 @@ export default function SurtidoRegistros() {
                     <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.duration')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.expected')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.validated')}</span></th>
+                    <th className={`${TH_CLASS} hidden lg:table-cell max-w-[16ch]`}><span className={TH_TEXT}>{t('surtido.registros.col.ubicacion')}</span></th>
                     <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.status')}</span></th>
-                    <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.col.ubicacion')}</span></th>
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
                   </tr>
                 </thead>
@@ -1760,8 +1823,8 @@ export default function SurtidoRegistros() {
                       <td className="table-cell hidden lg:table-cell"><div className="h-3 w-12 rounded bg-warm-100 animate-pulse" /></td>
                       <td className="table-cell text-right"><div className="h-3 w-8 rounded bg-warm-100 animate-pulse ml-auto" /></td>
                       <td className="table-cell text-right"><div className="h-3 w-8 rounded bg-warm-100 animate-pulse ml-auto" /></td>
-                      <td className="table-cell"><div className="h-5 w-20 rounded-full bg-warm-100 animate-pulse" /></td>
                       <td className="table-cell hidden lg:table-cell"><div className="h-3 w-16 rounded bg-warm-100 animate-pulse" /></td>
+                      <td className="table-cell"><div className="h-5 w-20 rounded-full bg-warm-100 animate-pulse" /></td>
                       <td className="table-cell text-right"><div className="h-3 w-12 rounded bg-warm-100 animate-pulse ml-auto" /></td>
                     </tr>
                   ))}
@@ -1826,14 +1889,14 @@ export default function SurtidoRegistros() {
                         onChange={toggleSelectAll}
                         className="cb" />
                     </th>
-                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.order_no')}</span></th>
-                    <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.operator')}</span></th>
-                    <th className={`${TH_CLASS} hidden md:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.date')}</span></th>
-                    <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.duration')}</span></th>
-                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.expected')}</span></th>
-                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('surtido.registros.validated')}</span></th>
-                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('surtido.registros.status')}</span></th>
-                    <th className={`${TH_CLASS} hidden lg:table-cell`}><span className={TH_TEXT}>{t('surtido.registros.col.ubicacion')}</span></th>
+                    <SortTh label={t('surtido.registros.order_no')} colKey="outbound_order_no" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                    <SortTh label={t('surtido.registros.operator')} colKey="operator_nombre" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden lg:table-cell" />
+                    <SortTh label={t('surtido.registros.date')} colKey="started_at" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden md:table-cell" />
+                    <SortTh label={t('surtido.registros.duration')} colKey="duration" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="hidden lg:table-cell" />
+                    <SortTh label={t('surtido.registros.expected')} colKey="total_expected" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="text-right" />
+                    <SortTh label={t('surtido.registros.validated')} colKey="total_scanned" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} className="text-right" />
+                    <th className={`${TH_CLASS} hidden lg:table-cell max-w-[16ch]`}><span className={TH_TEXT}>{t('surtido.registros.col.ubicacion')}</span></th>
+                    <SortTh label={t('surtido.registros.status')} colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
                     <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
                   </tr>
                 </thead>
@@ -1872,7 +1935,10 @@ export default function SurtidoRegistros() {
                             {(r.tiene_faltantes || r.tiene_anormalidades) && (
                               <span
                                 className={`w-1.5 h-1.5 rounded-full shrink-0 ${r.tiene_anormalidades ? 'bg-warning-500' : 'bg-danger-500'}`}
-                                title={r.tiene_anormalidades ? 'Con anormalidades' : 'Con faltantes'}
+                                title={[
+                                  r.tiene_anormalidades && t('surtido.ordenes.indicator.anormalidades'),
+                                  r.tiene_faltantes && t('surtido.ordenes.indicator.faltantes'),
+                                ].filter(Boolean).join(' · ')}
                               />
                             )}
                           </div>
@@ -1906,10 +1972,10 @@ export default function SurtidoRegistros() {
                             )}
                           </div>
                         </td>
+                        <td className="table-cell hidden lg:table-cell max-w-[16ch] font-mono text-xs text-accent-700 truncate" title={r.ubicacion_nota || undefined}>{r.ubicacion_nota || '—'}</td>
                         <td className="table-cell">
                           <StatusPill className={meta.cls}>{resolveStatusLabel(t, meta.labelKey)}</StatusPill>
                         </td>
-                        <td className="table-cell hidden lg:table-cell font-mono text-xs text-accent-700 truncate">{r.ubicacion_nota || '—'}</td>
                         <td className="table-cell text-right">
                           <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                             <button

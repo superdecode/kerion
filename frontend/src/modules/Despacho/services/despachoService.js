@@ -24,6 +24,9 @@ export const createFolio = (body) =>
 export const getFolio = (id) =>
   api.get(`/despacho/folios/${id}`).then(r => r.data)
 
+export const getFolioLogs = (id) =>
+  api.get(`/despacho/folios/${id}/logs`).then(r => r.data)
+
 export const updateFolio = (id, body) =>
   api.put(`/despacho/folios/${id}`, body).then(r => r.data)
 

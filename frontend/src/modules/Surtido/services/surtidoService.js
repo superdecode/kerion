@@ -100,5 +100,8 @@ export const getBoxIncidents = (obc) =>
 export const getBoxStatusDetail = (obc) =>
   api.get(`/wmshub/box-status-detail/${encodeURIComponent(obc)}`).then(r => r.data)
 
+export const getOrderLogs = (obc) =>
+  api.get(`/wmshub/order-logs/${encodeURIComponent(obc)}`).then(r => r.data)
+
 export const getScanOperators = () =>
   api.get('/wmshub/scan-operators').then(r => r.data)

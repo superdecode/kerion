@@ -176,7 +176,13 @@ router.get('/',
                 u.placa AS unidad_placa, u.tipo AS unidad_tipo,
                 us.nombre_completo AS operador_nombre,
                 COUNT(fo.id) AS total_ordenes,
-                COALESCE(SUM(fo.bultos), 0) AS total_cajas
+                COALESCE(SUM(fo.bultos), 0) AS total_cajas,
+                COALESCE(array_agg(DISTINCT fo.outbound_order_no) FILTER (WHERE fo.outbound_order_no IS NOT NULL), '{}') AS outbound_order_nos,
+                (
+                  SELECT COALESCE(array_agg(DISTINCT dos.codigo_caja), '{}')
+                  FROM dispatch_order_scans dos
+                  WHERE dos.folio_id = f.id AND dos.tenant_id = f.tenant_id AND dos.codigo_caja IS NOT NULL
+                ) AS box_codes
          FROM dispatch_folios f
          LEFT JOIN dispatch_conductores c ON c.id = f.conductor_id
          LEFT JOIN dispatch_unidades u ON u.id = f.unidad_id
@@ -460,6 +466,68 @@ router.get('/:id',
   }
 )
 
+// GET /:id/logs — general (non per-caja) audit trail for one folio: create/edit/cerrar/
+// reabrir/cancelar/order-attach events, plus a computed validation-start/end entry per
+// operator who scanned boxes for this folio (from dispatch_order_scans, not a discrete
+// log write — box-level detail already has its own trace via GET /:id/scans).
+router.get('/:id/logs',
+  authenticateToken, loadFullUser,
+  requireDespachoValidar('ver'),
+  async (req, res) => {
+    try {
+      const folioId = req.params.id
+      const [eventsRes, periodsRes] = await Promise.all([
+        req.tQuery(
+          `SELECT al.id, al.action, al.details, al.created_at AS at,
+                  al.user_id, al.user_email, u.nombre_completo AS actor_name
+           FROM audit_log al
+           LEFT JOIN usuarios u ON u.id = al.user_id
+           WHERE al.tenant_id = $1
+             AND (
+               (al.entity_type = 'dispatch_folio' AND al.entity_id = $2)
+               OR (al.action = 'DESPACHO_DESTINO_ORDER_REMOVE' AND al.details->>'folio_id' = $2)
+             )
+           ORDER BY al.created_at DESC`,
+          [req.tenantId, folioId]
+        ),
+        req.tQuery(
+          `SELECT dos.validated_by AS operator_id, u.nombre_completo AS operator_name,
+                  MIN(dos.validated_at) AS started_at, MAX(dos.validated_at) AS ended_at,
+                  COUNT(*) AS scan_count
+           FROM dispatch_order_scans dos
+           LEFT JOIN usuarios u ON u.id = dos.validated_by
+           WHERE dos.tenant_id = $1 AND dos.folio_id = $2
+           GROUP BY dos.validated_by, u.nombre_completo
+           ORDER BY started_at ASC`,
+          [req.tenantId, folioId]
+        ),
+      ])
+
+      const events = eventsRes.rows.map(row => ({
+        type: 'event',
+        action: row.action,
+        actor_name: row.actor_name || row.user_email || null,
+        at: row.at,
+        details: row.details || {},
+      }))
+      const periods = periodsRes.rows.map(row => ({
+        type: 'validation_period',
+        actor_name: row.operator_name || null,
+        started_at: row.started_at,
+        ended_at: row.ended_at,
+        scan_count: parseInt(row.scan_count, 10),
+        at: row.started_at,
+      }))
+
+      const timeline = [...events, ...periods].sort((a, b) => new Date(b.at) - new Date(a.at))
+      res.json({ data: timeline })
+    } catch (error) {
+      console.error('Get folio logs error:', error)
+      res.status(500).json({ error: 'Error obteniendo bitácora del folio' })
+    }
+  }
+)
+
 // Update folio metadata (allowed for borrador, en_proceso, cerrado — not cancelado)
 // Also handles validar_por_tarimas toggle (only for active folios)
 router.put('/:id',
@@ -508,6 +576,14 @@ router.put('/:id',
         params
       )
       if (result.rows.length === 0) return res.status(404).json({ error: 'Folio no encontrado' })
+      const editedFields = ['conductor_id', 'unidad_id', 'notas', 'fecha_salida', 'validar_por_tarimas']
+        .filter(field => field in req.body)
+      if (editedFields.length > 0) {
+        auditLog(req, 'DESPACHO_FOLIO_EDIT', 'dispatch_folio', req.params.id, {
+          folio_numero: result.rows[0].folio_numero,
+          fields: editedFields,
+        })
+      }
       res.json({ folio: result.rows[0] })
     } catch (error) {
       console.error('Update folio error:', error)
@@ -557,6 +633,10 @@ router.post('/:id/orders/bulk',
         [req.params.id, req.tenantId]
       )
       const detail = await getFolioDetail(req, req.params.id)
+      auditLog(req, 'DESPACHO_FOLIO_ORDER_ADD', 'dispatch_folio', req.params.id, {
+        bulk: true,
+        orders_added: orders.filter(o => o.outbound_order_no).length,
+      })
       res.status(201).json(detail)
     } catch (error) {
       console.error('Bulk add orders error:', error)
@@ -900,6 +980,9 @@ router.post('/:id/orders',
         [req.params.id, req.tenantId]
       )
       const detail = await getFolioDetail(req, req.params.id)
+      auditLog(req, 'DESPACHO_FOLIO_ORDER_ADD', 'dispatch_folio', req.params.id, {
+        outbound_order_no,
+      })
       res.status(201).json({ ...detail, added_order_id: result.rows[0].id })
     } catch (error) {
       console.error('Add order to folio error:', {
@@ -1159,6 +1242,9 @@ router.post('/:id/cancelar',
         [req.params.id, req.tenantId]
       )
       if (result.rows.length === 0) return res.status(409).json({ error: 'El folio no se puede cancelar' })
+      auditLog(req, 'DESPACHO_FOLIO_CANCELAR', 'dispatch_folio', req.params.id, {
+        folio_numero: result.rows[0].folio_numero,
+      })
       res.json({ folio: result.rows[0] })
     } catch (error) {
       console.error('Cancelar folio error:', error)

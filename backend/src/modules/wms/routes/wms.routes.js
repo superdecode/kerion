@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import crypto from 'crypto'
 import { isDatabaseUnavailableError } from '../../../config/database.js'
-import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
+import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { requirePermission, getPermissionLevel, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { getToday, instantDateInTZ } from '../../../shared/utils/dateUtils.js'
 import { normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
@@ -847,16 +847,43 @@ router.get('/scan-sessions',
   ]),
   async (req, res) => {
     try {
-      const { page = 1, pageSize = 20, status, operator_id, operator_ids, fecha_inicio, fecha_fin, outbound_order_no } = req.query
+      const { page = 1, pageSize = 20, status, operator_id, operator_ids, fecha_inicio, fecha_fin, outbound_order_no, sort, dir, anormalidad } = req.query
       const tz = getTimezone(req)
       const limit = Math.min(parseInt(pageSize) || 20, 100)
       const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit
 
-      const conditions = ['s.tenant_id = $1']
+      const SORT_COLUMNS = {
+        outbound_order_no: 's.outbound_order_no',
+        operator_nombre: 'u.nombre_completo',
+        started_at: 's.started_at',
+        duration: '(COALESCE(scan_times.last_scan_at, s.completed_at) - scan_times.first_scan_at)',
+        total_expected: 's.total_expected',
+        total_scanned: 'stats.total_scanned',
+        status: 's.status',
+      }
+      const sortCol = SORT_COLUMNS[sort] || 's.started_at'
+      const sortDir = String(dir).toUpperCase() === 'ASC' ? 'ASC' : 'DESC'
+
+      // A session row is created as soon as an operator opens "Validar" for an order (see
+      // POST /scan-session), before they scan anything — so orders that were opened but
+      // never actually scanned would otherwise clutter this list forever as 0/0 rows.
+      // Only surface sessions once they have at least one successful scan.
+      const conditions = [
+        's.tenant_id = $1',
+        `EXISTS (SELECT 1 FROM pick_events pe WHERE pe.session_id = s.id AND pe.tenant_id = s.tenant_id AND pe.scan_result = 'ok')`,
+      ]
       const params = [req.tenantId]
       let p = 2
 
       if (status) { conditions.push(`s.status = $${p++}`); params.push(status) }
+      if (anormalidad === 'con' || anormalidad === 'sin') {
+        const existsClause = `EXISTS (
+          SELECT 1 FROM pick_order_tracking pot
+          WHERE pot.tenant_id = s.tenant_id AND pot.outbound_order_no = s.outbound_order_no
+            AND pot.tiene_anormalidades = true
+        )`
+        conditions.push(anormalidad === 'con' ? existsClause : `NOT ${existsClause}`)
+      }
       const opIds = operator_ids
         ? operator_ids.split(',').map(Number).filter(Boolean)
         : operator_id ? [parseInt(operator_id)] : []
@@ -938,7 +965,7 @@ router.get('/scan-sessions',
            LEFT JOIN pick_order_tracking ot
              ON ot.tenant_id = s.tenant_id AND ot.outbound_order_no = s.outbound_order_no
            WHERE ${where}
-           ORDER BY s.started_at DESC
+           ORDER BY ${sortCol} ${sortDir} NULLS LAST, s.id DESC
            LIMIT $${p} OFFSET $${p + 1}`,
           [...params, limit, offset]
         ),
@@ -1114,6 +1141,19 @@ router.put('/scan-session/:id',
           [req.tenantId, updatedSession.outbound_order_no, updatedSession.third_order_no || null, orderStatus, userNombre]
         )
       }
+      const sessionChanges = {}
+      if (status !== undefined && status !== session.status) sessionChanges.status = { from: session.status, to: status }
+      if (ubicacion_nota !== undefined) {
+        const fromUbicacion = session.ubicacion_nota || null
+        const toUbicacion = normalizeOptionalText(ubicacion_nota) || null
+        if (fromUbicacion !== toUbicacion) sessionChanges.ubicacion_nota = { from: fromUbicacion, to: toUbicacion }
+      }
+      if (Object.keys(sessionChanges).length > 0) {
+        auditLog(req, 'SURTIDO_SESSION_UPDATE', 'pick_session', req.params.id, {
+          outbound_order_no: session.outbound_order_no,
+          ...sessionChanges,
+        })
+      }
       res.json({ success: true, data: updatedSession })
     } catch (err) {
       console.error('PUT wmshub/scan-session/:id error:', err.message)
@@ -1212,8 +1252,8 @@ router.post('/scan-event',
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
-            input_method, manual_reason_id, manual_reason_label, manual_notes, ubicacion_nota)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            input_method, manual_reason_id, manual_reason_label, manual_notes, ubicacion_nota, operator_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING *`,
         [
           session_id,
@@ -1229,6 +1269,7 @@ router.post('/scan-event',
           normalizeOptionalText(manual_reason_label),
           normalizeOptionalText(manual_notes),
           normalizeOptionalText(ubicacion_nota),
+          req.fullUser?.id || null,
         ]
       )
 
@@ -1310,8 +1351,8 @@ router.post('/scan-event/manual',
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
-            input_method, manual_reason_id, manual_reason_label, manual_notes, ubicacion_nota)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', $9, $10, $11, $12)
+            input_method, manual_reason_id, manual_reason_label, manual_notes, ubicacion_nota, operator_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', $9, $10, $11, $12, $13)
          RETURNING *`,
         [
           session_id,
@@ -1326,6 +1367,7 @@ router.post('/scan-event/manual',
           reason.nombre,
           normalizeOptionalText(manual_notes),
           normalizeOptionalText(ubicacion_nota),
+          req.fullUser?.id || null,
         ]
       )
       await refreshPickSessionTotals(req, session_id)
@@ -1360,7 +1402,7 @@ router.put('/scan-event/:id',
   async (req, res) => {
     try {
       const eventRes = await req.tQuery(
-        `SELECT e.*, s.tenant_id, s.status, s.operator_id
+        `SELECT e.*, s.tenant_id, s.status, s.operator_id, s.outbound_order_no
          FROM pick_events e
          JOIN pick_sessions s ON s.id = e.session_id
          WHERE e.id = $1 AND s.tenant_id = $2`,
@@ -1467,6 +1509,27 @@ router.put('/scan-event/:id',
         ]
       )
       await refreshPickSessionTotals(req, event.session_id)
+      const eventChanges = {}
+      if (ubicacion_nota !== undefined) {
+        const fromUbicacion = event.ubicacion_nota || null
+        const toUbicacion = normalizeOptionalText(ubicacion_nota) || null
+        if (fromUbicacion !== toUbicacion) eventChanges.ubicacion_nota = { from: fromUbicacion, to: toUbicacion }
+      }
+      const codeChanged = (scanned_code !== undefined && normalizeOptionalText(scanned_code) !== event.scanned_code) ||
+        (normalized_code !== undefined && normalizeOptionalText(normalized_code) !== event.normalized_code)
+      if (codeChanged) {
+        eventChanges.code = {
+          from: event.normalized_code || event.scanned_code,
+          to: result.rows[0].normalized_code || result.rows[0].scanned_code,
+        }
+      }
+      if (Object.keys(eventChanges).length > 0) {
+        auditLog(req, 'SURTIDO_EVENT_UPDATE', 'pick_event', req.params.id, {
+          outbound_order_no: event.outbound_order_no,
+          box_code: event.normalized_code || event.scanned_code,
+          ...eventChanges,
+        })
+      }
       res.json({ success: true, data: result.rows[0] })
     } catch (err) {
       console.error('PUT wmshub/scan-event/:id error:', err.message)
@@ -2613,6 +2676,24 @@ router.post('/order-tracking/bulk',
           updated.push(...resUpdate.rows)
         }
 
+        if (requestedStatus !== undefined) {
+          for (const obc of updateObcs) {
+            const from = existingMap.get(obc)?.status
+            if (from !== requestedStatus) {
+              auditLog(req, 'SURTIDO_ORDER_STATUS_CHANGE', 'pick_order_tracking', obc, {
+                outbound_order_no: obc, from, to: requestedStatus, bulk: true,
+              })
+            }
+          }
+        }
+        if (surtidor_id !== undefined) {
+          for (const obc of [...newObcs, ...updateObcs]) {
+            auditLog(req, 'SURTIDO_ORDER_ASSIGNED', 'pick_order_tracking', obc, {
+              outbound_order_no: obc, surtidor_id: surtidor_id || null, surtidor_nombre: surtidorNombre, bulk: true,
+            })
+          }
+        }
+
         return { rows: [...inserted, ...updated], skipped: closedObcs.size }
       })
 
@@ -2711,6 +2792,13 @@ router.put('/order-tracking/:obc',
           )
           return result.rows[0]
         })
+        if (created.status || created.surtidor_id) {
+          auditLog(req, 'SURTIDO_ORDER_STATUS_CHANGE', 'pick_order_tracking', req.params.obc, {
+            outbound_order_no: req.params.obc,
+            to: created.status || null,
+            surtidor_nombre: surtidorNombre,
+          })
+        }
         return res.json({ success: true, data: created })
       }
 
@@ -2771,6 +2859,20 @@ router.put('/order-tracking/:obc',
          WHERE tenant_id = $${p++} AND outbound_order_no = $${p} RETURNING *`,
         params
       )
+      if (requestedStatus !== undefined && requestedStatus !== existingStatus) {
+        auditLog(req, 'SURTIDO_ORDER_STATUS_CHANGE', 'pick_order_tracking', req.params.obc, {
+          outbound_order_no: req.params.obc,
+          from: existingStatus,
+          to: requestedStatus,
+        })
+      }
+      if (surtidor_id !== undefined) {
+        auditLog(req, 'SURTIDO_ORDER_ASSIGNED', 'pick_order_tracking', req.params.obc, {
+          outbound_order_no: req.params.obc,
+          surtidor_id: surtidor_id || null,
+          surtidor_nombre: surtidorNombre,
+        })
+      }
       res.json({ success: true, data: result.rows[0] })
     } catch (err) {
       console.error('PUT order-tracking error:', err.message, '| obc:', req.params.obc, '| body:', JSON.stringify(req.body), '\n', err.stack)
@@ -3152,6 +3254,13 @@ router.patch('/box-status/:obc/:code',
       )
 
       await refreshOrderFlags(req, obc)
+      auditLog(req, 'SURTIDO_BOX_STATUS_CHANGE', 'pick_box_status', `${obc}:${boxCode}`, {
+        outbound_order_no: obc,
+        box_code: boxCode,
+        from: currentEstado,
+        to: estado,
+        notas: normalizeOptionalText(notas) || undefined,
+      })
       res.json({ success: true, data: result.rows[0] })
     } catch (err) {
       console.error('PATCH box-status error:', err.message)
@@ -3182,6 +3291,81 @@ router.get('/box-status-incidents/:obc',
     } catch (err) {
       console.error('GET box-status-incidents error:', err.message)
       res.status(500).json({ success: false, error: 'Error obteniendo incidencias' })
+    }
+  }
+)
+
+const SURTIDO_LOG_ACTIONS = [
+  'SURTIDO_ORDER_STATUS_CHANGE',
+  'SURTIDO_ORDER_ASSIGNED',
+  'SURTIDO_BOX_STATUS_CHANGE',
+  'SURTIDO_SESSION_UPDATE',
+  'SURTIDO_EVENT_UPDATE',
+]
+
+// GET /wmshub/order-logs/:obc — general (non per-caja) audit trail for one order's surtido
+// lifecycle: status/assignment changes, anomaly marks, ubicacion edits, plus a computed
+// validation-start/end entry per operator who scanned this order (from pick_events, not
+// a discrete log write — avoids one audit row per scan).
+router.get('/order-logs/:obc',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'ver' },
+  ]),
+  async (req, res) => {
+    try {
+      const obc = req.params.obc
+      const [eventsRes, periodsRes] = await Promise.all([
+        req.tQuery(
+          `SELECT al.id, al.action, al.details, al.created_at AS at,
+                  al.user_id, al.user_email, u.nombre_completo AS actor_name
+           FROM audit_log al
+           LEFT JOIN usuarios u ON u.id = al.user_id
+           WHERE al.tenant_id = $1
+             AND al.action = ANY($2::text[])
+             AND al.details->>'outbound_order_no' = $3
+           ORDER BY al.created_at DESC`,
+          [req.tenantId, SURTIDO_LOG_ACTIONS, obc]
+        ),
+        req.tQuery(
+          `SELECT COALESCE(pe.operator_id, ps.operator_id) AS operator_id,
+                  u.nombre_completo AS operator_name,
+                  MIN(pe.scanned_at) AS started_at,
+                  MAX(pe.scanned_at) AS ended_at,
+                  COUNT(*) AS scan_count
+           FROM pick_events pe
+           JOIN pick_sessions ps ON ps.id = pe.session_id
+           LEFT JOIN usuarios u ON u.id = COALESCE(pe.operator_id, ps.operator_id)
+           WHERE ps.tenant_id = $1 AND ps.outbound_order_no = $2
+           GROUP BY COALESCE(pe.operator_id, ps.operator_id), u.nombre_completo
+           ORDER BY started_at ASC`,
+          [req.tenantId, obc]
+        ),
+      ])
+
+      const events = eventsRes.rows.map(row => ({
+        type: 'event',
+        action: row.action,
+        actor_name: row.actor_name || row.user_email || null,
+        at: row.at,
+        details: row.details || {},
+      }))
+      const periods = periodsRes.rows.map(row => ({
+        type: 'validation_period',
+        actor_name: row.operator_name || null,
+        started_at: row.started_at,
+        ended_at: row.ended_at,
+        scan_count: parseInt(row.scan_count, 10),
+        at: row.started_at,
+      }))
+
+      const timeline = [...events, ...periods].sort((a, b) => new Date(b.at) - new Date(a.at))
+      res.json({ success: true, data: timeline })
+    } catch (err) {
+      console.error('GET order-logs error:', err.message)
+      res.status(500).json({ success: false, error: 'Error obteniendo bitácora de la orden' })
     }
   }
 )
