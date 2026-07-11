@@ -894,7 +894,29 @@ router.get('/scan-sessions',
       const params = [req.tenantId]
       let p = 2
 
-      if (status) { conditions.push(`s.status = $${p++}`); params.push(status) }
+      if (status) {
+        // Filter on the same effective status the frontend displays (see
+        // effectiveSessionStatus in Registros.jsx), not the raw s.status column —
+        // otherwise filtering by "En Proceso" could still show orders that read as
+        // "Completado" on screen (and vice versa) whenever the session's status
+        // column never got flipped even though the scanned count matches/exceeds
+        // total_expected.
+        const scannedCountExpr = `(
+          SELECT COUNT(DISTINCT REGEXP_REPLACE(
+            UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
+            '[^A-Z0-9]', '', 'g'
+          ))
+          FROM pick_events
+          WHERE session_id = s.id AND tenant_id = s.tenant_id AND scan_result = 'ok'
+        )`
+        const effectiveStatusExpr = `(CASE
+          WHEN s.total_expected > 0 AND COALESCE(${scannedCountExpr}, 0) >= s.total_expected THEN 'complete'
+          WHEN s.status = 'complete' AND s.total_expected > 0 THEN 'open'
+          ELSE s.status
+        END)`
+        conditions.push(`${effectiveStatusExpr} = $${p++}`)
+        params.push(status)
+      }
       if (anormalidad === 'con' || anormalidad === 'sin') {
         // "Anormalidad" here means anything abnormal — not just the literal
         // estado='anormalidad' value, but any non-normal box status (faltante,
