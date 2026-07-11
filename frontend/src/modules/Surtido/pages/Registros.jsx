@@ -218,7 +218,7 @@ function ScanTable({
                 </td>
               )}
               {showUbicacion && (
-                <td className="px-3 py-2 font-mono text-xs text-accent-700 truncate">
+                <td className="px-3 py-2 text-xs text-accent-700 truncate">
                   {ubicacionEditable && editingUbicacionId === e.id ? (
                     <div className="flex items-center gap-1">
                       <input
@@ -614,10 +614,10 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-100/50">
               <p className="text-[10px] text-warm-400 uppercase tracking-wider font-bold mb-0.5">{t('surtido.registros.detail.deliveryDate')}</p>
-              {(wmsOrder?.expectedTime || wmsOrder?.outboundTime) ? (
+              {fechaEntregaRaw ? (
                 <div>
-                  <p className="text-sm font-semibold text-warm-700">{fmtDate(wmsOrder.expectedTime || wmsOrder.outboundTime)}</p>
-                  <p className="text-xs text-warm-500 tabular-nums">{fmtTimeShort(wmsOrder.expectedTime || wmsOrder.outboundTime)}</p>
+                  <p className="text-sm font-semibold text-warm-700">{fmtDate(fechaEntregaRaw)}</p>
+                  <p className="text-xs text-warm-500 tabular-nums">{fmtTimeShort(fechaEntregaRaw)}</p>
                 </div>
               ) : <p className="text-sm font-semibold text-warm-400">—</p>}
             </div>
@@ -1990,7 +1990,7 @@ export default function SurtidoRegistros() {
                             )}
                           </div>
                         </td>
-                        <td className="table-cell hidden lg:table-cell max-w-[16ch] font-mono text-xs text-accent-700 truncate" title={r.ubicacion_nota || undefined}>{r.ubicacion_nota || '—'}</td>
+                        <td className="table-cell hidden lg:table-cell max-w-[16ch] text-xs text-accent-700 truncate" title={r.ubicacion_nota || undefined}>{r.ubicacion_nota || '—'}</td>
                         <td className="table-cell">
                           <StatusPill className={meta.cls}>{resolveStatusLabel(t, meta.labelKey)}</StatusPill>
                         </td>
