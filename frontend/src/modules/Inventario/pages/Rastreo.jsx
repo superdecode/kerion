@@ -34,7 +34,15 @@ const TH_TEXT = 'inline-flex items-center text-xs font-semibold uppercase tracki
 
 function parseStoredDate(value) {
   if (!value) return null
-  const parsed = new Date(value)
+  const raw = String(value).trim()
+  let parsed = new Date(raw)
+  if (Number.isNaN(parsed.getTime())) {
+    const match = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/)
+    if (match) {
+      const [, day, month, year, hour = '0', minute = '0', second = '0'] = match
+      parsed = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second))
+    }
+  }
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
@@ -213,7 +221,7 @@ export default function Rastreo() {
     staleTime: 5 * 60 * 1000,
   })
   const wmsOutboundByOrderNo = useMemo(() => {
-    const records = wmsOutboundData?.data?.records || []
+    const records = wmsOutboundData?.data?.records ?? wmsOutboundData?.data ?? []
     const map = new Map()
     records.forEach(r => {
       const key = normalizeCodeFast(r.outboundOrderNo || '')

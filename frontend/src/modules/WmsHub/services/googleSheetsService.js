@@ -436,6 +436,12 @@ async function warmFullSheet(type) {
     const rows = parseCSV(text)
     if (rows.length >= 2) {
       cache[type] = { data: rows, ts: Date.now(), partial: false }
+      // This background warm is the normal way the full outbound dataset gets loaded
+      // (triggered right after the fast partial fetch) — it must persist to localStorage
+      // too, not just loadSheet's own forceRefresh path, otherwise a cold reload while
+      // offline has nothing in OUTBOUND_ROWS_CACHE_KEY to fall back to even though the
+      // full sheet was already fetched once this session.
+      if (type === 'outbound') writeOutboundRowsCache(rows)
       notifySheetCache(type)
     }
   } catch {

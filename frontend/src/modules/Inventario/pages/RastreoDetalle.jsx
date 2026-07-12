@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
@@ -200,6 +200,23 @@ export default function RastreoDetalle() {
     },
     onError: (err, variables) => toast.error(err?.response?.data?.error || variables?.errorMessage || t('rastreo.toast.errorActualizarOrden')),
   })
+
+  // Legacy rastreo orders may predate the snapshot columns. Once their WMS detail
+  // is available, persist missing essentials exactly once so list/detail no longer
+  // depend on a Google Sheet row that can later disappear.
+  useEffect(() => {
+    const orden = data?.data?.orden
+    const od = outboundData?.data
+    if (!canEdit || !orden?.id || !od || updateOrden.isPending) return
+    const body = {}
+    if (!orden.customer_code && od.customerCode) body.customer_code = od.customerCode
+    if (!orden.receiver_name && od.receiverName) body.receiver_name = od.receiverName
+    if (!orden.logistics_track_no && (od.logisticsTrackNo || od.trackingNo)) body.logistics_track_no = od.logisticsTrackNo || od.trackingNo
+    if (!orden.third_order_no && od.thirdOrderNo) body.third_order_no = od.thirdOrderNo
+    if (!orden.logistics_channel && od.logisticsChannel) body.logistics_channel = od.logisticsChannel
+    if (!orden.outbound_delivery_at && (od.outboundTime || od.expectedTime)) body.outbound_delivery_at = od.outboundTime || od.expectedTime
+    if (Object.keys(body).length) updateOrden.mutate({ id: orden.id, body, silentSuccess: true })
+  }, [canEdit, data?.data?.orden, outboundData?.data])
 
   const updateCajaMutation = useMutation({
     mutationFn: ({ id, body }) => updateRastreaoCaja(id, body),

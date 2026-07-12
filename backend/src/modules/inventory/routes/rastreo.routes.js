@@ -1760,7 +1760,11 @@ router.patch('/:id',
   requirePermission('inventario.rastreo', 'editar'),
   async (req, res) => {
     try {
-      const { estado, asignado_a, notas, agregar_nota } = req.body
+      const {
+        estado, asignado_a, notas, agregar_nota,
+        customer_code, receiver_name, logistics_track_no, third_order_no,
+        logistics_channel, outbound_delivery_at,
+      } = req.body
       const userId = req.fullUser.id
       const normalizedEstado = estado !== undefined ? normalizeEstado(estado) : undefined
 
@@ -1825,6 +1829,22 @@ router.patch('/:id',
             descripcion: 'Notas generales actualizadas',
           })
         }
+      }
+
+      // Backfill immutable WMS snapshot fields for legacy orders. COALESCE makes
+      // this write-once: later sheet edits or deletions cannot change history.
+      const snapshotFields = [
+        ['customer_code', customer_code],
+        ['receiver_name', receiver_name],
+        ['logistics_track_no', logistics_track_no],
+        ['third_order_no', third_order_no],
+        ['logistics_channel', logistics_channel],
+        ['outbound_delivery_at', outbound_delivery_at],
+      ]
+      for (const [field, value] of snapshotFields) {
+        if (value === undefined) continue
+        values.push(normalizeOptionalText(value))
+        updates.push(`${field} = COALESCE(${field}, $${values.length + 2})`)
       }
 
       if (agregar_nota) {

@@ -42,7 +42,11 @@ export const useSurtidoStore = create(
         },
       })),
 
-      enqueueSync: (event) => set(s => ({ pendingSync: [...s.pendingSync, event] })),
+      enqueueSync: (event) => set(s => ({
+        pendingSync: s.pendingSync.some((queued) => queued.key === event.key)
+          ? s.pendingSync
+          : [...s.pendingSync, event],
+      })),
 
       markSynced: (keys) => set(s => ({
         pendingSync: s.pendingSync.filter(e => !keys.includes(e.key)),

@@ -39,7 +39,9 @@ async function getAppliedVersions(client) {
 
 function extractVersion(filename) {
   const match = filename.match(/^(\d+)/)
-  return match ? match[1].replace(/^0+/, '') || '0' : null
+  // schema_migrations stores the zero-padded filename prefix (e.g. "089").
+  // Stripping zeros made every applied migration look pending ("089" !== "89").
+  return match ? match[1] : null
 }
 
 async function runMigration(filename) {
@@ -78,8 +80,11 @@ async function main() {
 
   try {
     const migrationsDir = path.join(__dirname, '../migrations')
+    const requestedFiles = String(process.env.MIGRATION_FILES || '')
+      .split(',').map((file) => file.trim()).filter(Boolean)
     const files = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
+      .filter(f => requestedFiles.length === 0 || requestedFiles.includes(f))
       .sort()
 
     if (files.length === 0) {

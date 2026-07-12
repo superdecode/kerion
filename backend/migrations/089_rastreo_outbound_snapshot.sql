@@ -9,6 +9,6 @@ ALTER TABLE rastreo_ordenes
 CREATE INDEX IF NOT EXISTS idx_rastreo_ordenes_tenant_delivery
   ON rastreo_ordenes (tenant_id, outbound_delivery_at);
 
-INSERT INTO schema_migrations (version, name)
+INSERT INTO schema_migrations (version, description)
 VALUES ('089', 'rastreo_outbound_snapshot')
 ON CONFLICT (version) DO NOTHING;

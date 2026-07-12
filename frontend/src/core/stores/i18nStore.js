@@ -1,17 +1,14 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import es from './locales/es.js'
+import zh from './locales/zh.js'
 
-// Spanish is the default and fallback locale, bundled eagerly. Every other locale
-// lives in its own code-split chunk (see ./locales/) and is fetched the first time
-// it's selected, so the main bundle no longer carries every dictionary (~230KB of
-// Chinese was shipping to every user). Until a lazy locale finishes loading, t()
-// falls back to Spanish — graceful, never a missing-key flash or a crash.
-const loaded = { es }
+// Both supported dictionaries are loaded atomically. Lazy-loading Chinese caused
+// tooltips mounted during the first render to receive the Spanish fallback and, in
+// long-lived table rows, keep that stale label until another render occurred.
+const loaded = { es, zh }
 
-const localeLoaders = {
-  zh: () => import('./locales/zh.js'),
-}
+const localeLoaders = {}
 
 function makeTFunc(locale) {
   return (key) => loaded[locale]?.[key] || es[key] || key

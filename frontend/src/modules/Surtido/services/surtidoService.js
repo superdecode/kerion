@@ -69,8 +69,20 @@ export const deleteManualEntryReason = (id) =>
   api.delete(`/wmshub/manual-entry-reasons/${id}`).then(r => r.data)
 
 // Order tracking
-export const getOrderTracking = () =>
-  api.get('/wmshub/order-tracking').then(r => r.data)
+const ORDER_TRACKING_CACHE_KEY = 'kirion_surtido_order_tracking_v1'
+export const getOrderTracking = async () => {
+  try {
+    const data = await api.get('/wmshub/order-tracking').then(r => r.data)
+    try { localStorage.setItem(ORDER_TRACKING_CACHE_KEY, JSON.stringify({ ts: Date.now(), data })) } catch {}
+    return data
+  } catch (error) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(ORDER_TRACKING_CACHE_KEY) || 'null')
+      if (cached?.data?.data && Array.isArray(cached.data.data)) return { ...cached.data, offline: true }
+    } catch {}
+    throw error
+  }
+}
 
 export const getOrderTrackingByOBC = (obc) =>
   api.get(`/wmshub/order-tracking/${encodeURIComponent(obc)}`).then(r => r.data)

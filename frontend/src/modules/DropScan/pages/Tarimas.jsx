@@ -1200,28 +1200,28 @@ export default function Tarimas() {
 
       {/* Blocked edit modal — tarima tiene folio activo */}
       <Modal isOpen={!!blockedEditTarima} onClose={() => { setBlockedEditTarima(null); setConfirmingFolioDelete(false) }}
-        title="Tarima bloqueada" icon={Lock} size="sm"
+        title={t('history.palletBlockedTitle')} icon={Lock} size="sm"
         footer={
           confirmingFolioDelete ? (
             <>
-              <button onClick={() => setConfirmingFolioDelete(false)} className="btn-ghost" disabled={deleteFolioMutation.isPending}>Cancelar</button>
+              <button onClick={() => setConfirmingFolioDelete(false)} className="btn-ghost" disabled={deleteFolioMutation.isPending}>{t('history.cancel')}</button>
               <button
                 onClick={() => deleteFolioMutation.mutate(blockedEditTarima.folio_id)}
                 disabled={deleteFolioMutation.isPending}
                 className="btn-danger inline-flex items-center gap-2">
                 <Trash2 className="w-4 h-4" />
-                {deleteFolioMutation.isPending ? 'Eliminando...' : `Confirmar eliminación`}
+                {deleteFolioMutation.isPending ? t('history.deleting') : t('history.confirmDeleteFolioBtn')}
               </button>
             </>
           ) : (
             <>
-              <button onClick={() => { setBlockedEditTarima(null); setConfirmingFolioDelete(false) }} className="btn-secondary">Cerrar</button>
+              <button onClick={() => { setBlockedEditTarima(null); setConfirmingFolioDelete(false) }} className="btn-secondary">{t('common.close')}</button>
               {canDeleteFolio && blockedEditTarima?.folio_id && (
                 <button
                   onClick={() => setConfirmingFolioDelete(true)}
                   className="btn-danger inline-flex items-center gap-2">
                   <Trash2 className="w-4 h-4" />
-                  Eliminar folio {blockedEditTarima.folio_asignado}
+                  {t('history.deleteFolioBtn').replace('{folio}', blockedEditTarima.folio_asignado)}
                 </button>
               )}
               {!canDeleteFolio && blockedEditTarima?.folio_id && (
@@ -1229,7 +1229,7 @@ export default function Tarimas() {
                   onClick={() => { setBlockedEditTarima(null); navigate(`/DropScan/folios?folio_id=${blockedEditTarima.folio_id}`) }}
                   className="inline-flex items-center gap-2 px-3 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 font-semibold text-sm transition-all">
                   <ArrowRight className="w-4 h-4" />
-                  Ir al folio
+                  {t('history.goToFolio')}
                 </button>
               )}
             </>
@@ -1240,9 +1240,9 @@ export default function Tarimas() {
             <div className="p-4 rounded-xl bg-danger-50 border border-danger-200 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-danger-500 shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-bold text-danger-800">¿Eliminar el folio {blockedEditTarima?.folio_asignado}?</p>
+                <p className="text-sm font-bold text-danger-800">{t('history.confirmDeleteFolioTitle').replace('{folio}', blockedEditTarima?.folio_asignado)}</p>
                 <p className="text-xs text-danger-600 mt-1">
-                  El folio será eliminado permanentemente y la tarima quedará disponible para edición.
+                  {t('history.confirmDeleteFolioDesc')}
                 </p>
               </div>
             </div>
@@ -1250,9 +1250,9 @@ export default function Tarimas() {
             <div className="p-4 rounded-xl bg-danger-50 border border-danger-200 flex items-start gap-3">
               <Lock className="w-5 h-5 text-danger-500 shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-bold text-danger-800">Esta tarima está bloqueada por un folio activo</p>
+                <p className="text-sm font-bold text-danger-800">{t('history.palletBlockedDesc')}</p>
                 <p className="text-xs text-danger-600 mt-1">
-                  Para editar la tarima debes eliminar el folio <span className="font-bold">{blockedEditTarima?.folio_asignado}</span> primero.
+                  {t('history.palletBlockedBody').replace('{folio}', blockedEditTarima?.folio_asignado)}
                 </p>
               </div>
             </div>
@@ -1260,11 +1260,11 @@ export default function Tarimas() {
           {blockedEditTarima && (
             <div className="p-3 rounded-xl bg-warm-50 border border-warm-200 space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-warm-500 font-medium">Tarima</span>
+                <span className="text-xs text-warm-500 font-medium">{t('history.pallet')}</span>
                 <span className="font-mono" style={TARIMA_CODE_STYLE}>{blockedEditTarima.codigo}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-warm-500 font-medium">Folio asignado</span>
+                <span className="text-xs text-warm-500 font-medium">{t('history.assignedFolio')}</span>
                 <span className="text-sm font-bold text-primary-600">{blockedEditTarima.folio_asignado}</span>
               </div>
             </div>

@@ -32,7 +32,6 @@ import { captureErrorEvent } from '../../../core/services/errorTelemetry'
 import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
 import { useSurtidoStore } from '../stores/surtidoStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
-import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
 const SCANNER_TOTAL_MS = 2000       // base budget first-char→Enter for scanner barcodes
 // Codes past this length (QR/2D payloads, e.g. the JSON blobs some WMS scanners emit)
@@ -189,9 +188,9 @@ function buildItemMaps(detailData) {
   return { packageMap, productMap }
 }
 
-function findMatchedItem(code, packageMap, productMap) {
+function findMatchedItem(code, packageMap) {
   for (const variant of generateCodeVariations(code, false)) {
-    const matched = packageMap.get(variant) || productMap.get(variant)
+    const matched = packageMap.get(variant)
     if (matched) return matched
   }
   return null
@@ -247,6 +246,28 @@ function getValidationCodeKey({ normalized_code, scanned_code, matched_box_type,
   return normalizeCodeFast(matched_box_type || normalized_code || scanned_code || code || '')
 }
 
+function replayPendingValidation(item) {
+  if (item.kind === 'create_session') return createScanSession(item.payload.body)
+  if (item.kind === 'manual') return addManualScanEvent(item.payload)
+  if (item.kind === 'ubicacion' || item.kind === 'finalize') {
+    return updateScanSession(item.payload.id, item.payload.body)
+  }
+  return addScanEvent(item.payload)
+}
+
+function isPermanentSyncError(error) {
+  const status = error?.response?.status
+  return status >= 400 && status < 500 && status !== 408 && status !== 429
+}
+
+let validationReplayInProgress = false
+
+function createOfflineSessionId() {
+  return typeof crypto?.randomUUID === 'function'
+    ? `offline-${crypto.randomUUID()}`
+    : `offline-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 function buildCompletedSnapshot({
   source,
   reason = 'already_validated',
@@ -284,6 +305,7 @@ function buildCompletedSnapshot({
 function SearchStep({ onFound }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
+  const isOffline = useOfflineStore((s) => s.status === 'offline')
   const [input, setInput] = useState('')
   const [results, setResults] = useState(null)
   const inputRef = useRef(null)
@@ -291,14 +313,37 @@ function SearchStep({ onFound }) {
     queryKey: ['outbound-list-validacion-search'],
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
+    retry: 0,
   })
-  const allOrders = useMemo(() => getRecords(outboundData), [outboundData])
+  const { data: trackingData } = useQuery({
+    queryKey: ['wms-surtido-tracking-offline-cache'],
+    queryFn: getOrderTracking,
+    staleTime: 60 * 1000,
+    retry: 0,
+  })
+  const allOrders = useMemo(() => {
+    const records = getRecords(outboundData)
+    if (!isOffline) return records
+    const trackingMap = new Map(getRecords(trackingData).map((row) => [row.outbound_order_no, row]))
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const limit = new Date(today)
+    limit.setDate(limit.getDate() + 3)
+    return records.filter((row) => {
+      const tracking = trackingMap.get(row.outboundOrderNo)
+      const expected = Number(tracking?.total_expected ?? row.outboundBoxCount ?? 0)
+      const scanned = Number(tracking?.total_scanned ?? 0)
+      const complete = tracking?.status === 'complete' || (expected > 0 && scanned >= expected)
+      if (!complete) return true
+      const date = row.outboundTime ? new Date(row.outboundTime) : null
+      return date && !Number.isNaN(date.getTime()) && date >= today && date <= limit
+    })
+  }, [outboundData, trackingData, isOffline])
 
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80) }, [])
 
-  function doSearch(q) {
+  async function doSearch(q) {
     if (!q.trim()) return
-    if (allOrders.length === 0) return
     const normQ = normalizeCodeFast(q.trim())
     const lowerQ = q.trim().toLowerCase()
     const filtered = allOrders.filter(r => {
@@ -309,7 +354,24 @@ function SearchStep({ onFound }) {
       if (normQ && (r.allCustomizeCodes || []).some(c => normalizeCodeFast(c).includes(normQ))) return true
       return false
     })
-    if (filtered.length === 0) { toast.error(t('surtido.escaneo.order_not_found') + ': ' + q); setResults([]); return }
+    if (filtered.length === 0) {
+      // getOutboundList may intentionally return the 1,000-record persistent fast
+      // cache while the full sheet warms in the background. Before reporting a false
+      // "not found", perform an exhaustive direct lookup against the raw outbound rows.
+      try {
+        const detailResponse = await getOutboundDetail(q.trim())
+        const detail = detailResponse?.data ?? detailResponse
+        if (detail?.outboundOrderNo) {
+          onFound(detail.outboundOrderNo)
+          return
+        }
+      } catch {
+        // The normal not-found UI below is also the correct offline/no-cache outcome.
+      }
+      toast.error((isOffline ? t('surtido.validacion.offline_order_not_cached') : t('surtido.escaneo.order_not_found')) + ': ' + q)
+      setResults([])
+      return
+    }
     if (filtered.length === 1) { onFound(filtered[0].outboundOrderNo); return }
     setResults(filtered)
   }
@@ -340,12 +402,12 @@ function SearchStep({ onFound }) {
                 placeholder="OB-XXXXXXXX"
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && input.trim()) doSearch(input.trim()) }}
+                onKeyDown={e => { if (e.key === 'Enter' && input.trim()) void doSearch(input.trim()) }}
               />
             </div>
             <motion.button
               className="btn-primary px-6 py-4 text-base shadow-glow"
-              onClick={() => doSearch(input.trim())}
+              onClick={() => void doSearch(input.trim())}
               disabled={!input.trim() || loading}
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
@@ -955,8 +1017,8 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                 type="button"
                 onClick={() => setScannerOpen(true)}
                 className="sm:hidden shrink-0 -ml-0.5 p-0.5 text-primary-600 hover:text-primary-700 transition-colors"
-                aria-label="Escanear codigo con camara"
-                title="Escanear codigo"
+                aria-label={t('surtido.validacion.scan_camera')}
+                title={t('surtido.validacion.scan_code')}
               >
                 <ScanLine size={18} />
               </button>
@@ -986,7 +1048,7 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
           {isLoadingSheet && !searchError && results === null && (
             <div className="text-center py-6 text-sm text-warm-400 flex items-center justify-center gap-2">
               <Loader2 size={14} className="animate-spin" />
-              <span>Cargando datos de salidas...</span>
+              <span>{t('surtido.validacion.loading_outbound')}</span>
             </div>
           )}
 
@@ -1024,9 +1086,9 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
 
               let statusBadge = null
               if (isComplete) {
-                statusBadge = <StatusPill size="xs" className="shrink-0 bg-success-100 text-success-700">Completa</StatusPill>
+                statusBadge = <StatusPill size="xs" className="shrink-0 bg-success-100 text-success-700">{t('surtido.validacion.status_complete')}</StatusPill>
               } else if (isValidating) {
-                statusBadge = <StatusPill size="xs" className="shrink-0 bg-primary-100 text-primary-700">Validando</StatusPill>
+                statusBadge = <StatusPill size="xs" className="shrink-0 bg-primary-100 text-primary-700">{t('surtido.validacion.status_validating')}</StatusPill>
               } else if (tracking) {
                 statusBadge = <StatusPill size="xs" className="shrink-0 bg-warm-100 text-warm-600">{tracking.status}</StatusPill>
               } else {
@@ -1148,7 +1210,7 @@ function MissingList({ items, itemCounts, t }) {
           type="text"
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="Buscar codigo..."
+              placeholder={t('surtido.validacion.search_code')}
           className="flex-1 min-w-0 text-sm bg-transparent outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-0 text-warm-700 placeholder:text-warm-300"
         />
         {q && <button onClick={() => setQ('')} className="text-warm-400 hover:text-warm-600"><X size={12} /></button>}
@@ -1249,9 +1311,15 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
         const s = JSON.parse(saved)
         if (s.obc && s.sessionId) {
           const restoreLocally = () => {
+            const queuedOkCodes = useSurtidoStore.getState().pendingSync
+              .filter((item) => String(item.payload?.session_id) === String(s.sessionId) && item.payload?.scan_result === 'ok')
+              .map((item) => getValidationCodeKey(item.payload))
+              .filter(Boolean)
             setObc(s.obc); setSessionId(s.sessionId); setSessionStart(new Date(s.sessionStart))
             setCounts(s.counts || { ok: 0, rejected: 0 })
             setItemCounts(new Map(s.itemCountsArr || []))
+            setHistory(s.history || [])
+            scannedOkCodesRef.current = new Set([...(s.scannedOkCodesArr || []), ...queuedOkCodes])
             setSelectedUbicacion(s.ubicacion || null)
             setUbicacionConfirmed(s.ubicacionConfirmed || !!s.ubicacion)
             setStep('session')
@@ -1329,9 +1397,8 @@ const { data: reasonsData } = useQuery({
   const allItems = useMemo(() => {
     const items = []
     packageMap.forEach(v => { if (v && !items.some(i => i.displayCode === v.displayCode)) items.push(v) })
-    productMap.forEach(v => { if (v && !items.some(i => i.displayCode === v.displayCode)) items.push(v) })
     return items
-  }, [packageMap, productMap])
+  }, [packageMap])
 
   const totalExpected = allItems.reduce((s, i) => s + (i.expectedQty || 1), 0)
   const totalScanned = counts.ok
@@ -1408,10 +1475,15 @@ const { data: reasonsData } = useQuery({
     mutationFn: (force = false) => {
       const detail = detailData?.data ?? detailData
       const packageList = detail?.packageList ?? detail?.details ?? detail?.items ?? []
-      return createScanSession({
+      const expectedBoxes = packageList.map((box) => {
+        const codes = [box.customizeCode, box.boxCode, box.boxType].filter(Boolean)
+        return { canonical: box.customizeCode || box.boxCode || box.boxType, codes }
+      }).filter((box) => box.canonical && box.codes.length)
+      const body = {
         outbound_order_no: obc,
         third_order_no: detail?.thirdOrderNo || null,
         total_expected: packageList.reduce((s, p) => s + (p.quantity ?? p.totalPackageQty ?? p.qty ?? 1), 0),
+        expected_boxes: expectedBoxes,
         ubicacion_id: null,
         // Snapshot destino/tracking/canal/fecha at session-creation time so Registros
         // shows stable historical data instead of a live join against the WMS sheet
@@ -1421,7 +1493,18 @@ const { data: reasonsData } = useQuery({
         logistics_channel: detail?.logisticsChannel || null,
         outbound_delivery_at: detail?.expectedTime || detail?.outboundTime || null,
         force,
-      })
+      }
+      if (useOfflineStore.getState().status === 'offline') {
+        const tempSessionId = createOfflineSessionId()
+        useSurtidoStore.getState().enqueueSync({
+          key: `CREATE_SESSION_${tempSessionId}`,
+          kind: 'create_session',
+          tempSessionId,
+          payload: { body },
+        })
+        return Promise.resolve({ success: true, offline: true, data: { id: tempSessionId, status: 'open', ...body } })
+      }
+      return createScanSession(body)
     },
     onSuccess: (data) => {
       const s = data.data
@@ -1608,21 +1691,57 @@ const { data: reasonsData } = useQuery({
   useEffect(() => {
     const interval = setInterval(async () => {
       const { pendingSync: queue } = useSurtidoStore.getState()
-      if (queue.length === 0 || isSyncingRef.current) return
+      if (queue.length === 0 || isSyncingRef.current || validationReplayInProgress || useOfflineStore.getState().status === 'offline') return
+      validationReplayInProgress = true
       isSyncingRef.current = true
       setIsSyncing(true)
-      const batch = [...queue]
       try {
-        const results = await Promise.allSettled(batch.map(e => addScanEvent(e.payload)))
-        const synced = batch.filter((_, i) => results[i].status === 'fulfilled').map(e => e.key)
-        useSurtidoStore.getState().markSynced(synced)
+        const processed = []
+        // A close can fail faster than the last scan and reach the persisted queue
+        // first. Always replay closes last while preserving FIFO within each group.
+        const orderedQueue = [...queue].sort((a, b) =>
+          Number(a.kind === 'finalize') - Number(b.kind === 'finalize'))
+        for (const item of orderedQueue) {
+          try {
+            const replayed = await replayPendingValidation(item)
+            if (item.kind === 'create_session' && replayed?.data?.id) {
+              for (const queued of orderedQueue) {
+                if (String(queued.payload?.session_id) === String(item.tempSessionId)) {
+                  queued.payload = { ...queued.payload, session_id: replayed.data.id }
+                }
+              }
+              useSurtidoStore.setState((state) => ({
+                pendingSync: state.pendingSync.map((queued) => (
+                  String(queued.payload?.session_id) === String(item.tempSessionId)
+                    ? { ...queued, payload: { ...queued.payload, session_id: replayed.data.id } }
+                    : queued
+                )),
+              }))
+            }
+            processed.push(item.key)
+          } catch (error) {
+            if (isPermanentSyncError(error)) {
+              // A rejected/expired item can never succeed on retry. Remove it so it
+              // cannot block later orders forever, then rebuild the active count.
+              processed.push(item.key)
+              continue
+            }
+            // Network/5xx/429: preserve this item and everything after it to keep FIFO.
+            break
+          }
+        }
+        if (processed.length) useSurtidoStore.getState().markSynced(processed)
+        if (sessionId) {
+          getScanSession(sessionId).then(res => hydrateFromServerEvents(res?.data?.events)).catch(() => {})
+        }
       } finally {
+        validationReplayInProgress = false
         isSyncingRef.current = false
         setIsSyncing(false)
       }
     }, 30000)
     return () => clearInterval(interval)
-  }, []) // stable — never recreated
+  }, [sessionId, hydrateFromServerEvents])
 
   // Keep the sessionStorage snapshot current as scans come in — otherwise a reload
   // mid-session (common on handheld devices with unstable connectivity) restores
@@ -1632,14 +1751,15 @@ const { data: reasonsData } = useQuery({
     sessionStorage.setItem(storageKey, JSON.stringify({
       obc, sessionId, sessionStart: sessionStart.toISOString(),
       counts, itemCountsArr: [...itemCounts.entries()],
+      history, scannedOkCodesArr: [...scannedOkCodesRef.current],
       ubicacion: selectedUbicacion, ubicacionConfirmed,
     }))
-  }, [sessionId, obc, sessionStart, counts, itemCounts, selectedUbicacion, ubicacionConfirmed, storageKey])
+  }, [sessionId, obc, sessionStart, counts, itemCounts, history, selectedUbicacion, ubicacionConfirmed, storageKey])
 
   const persistSession = (newObc, newSessionId, newStart, ubicacion) => {
     sessionStorage.setItem(storageKey, JSON.stringify({
       obc: newObc, sessionId: newSessionId, sessionStart: newStart.toISOString(),
-      counts: { ok: 0, rejected: 0 }, itemCountsArr: [], ubicacion: ubicacion || null,
+      counts: { ok: 0, rejected: 0 }, itemCountsArr: [], history: [], scannedOkCodesArr: [], ubicacion: ubicacion || null,
     }))
   }
 
@@ -1682,14 +1802,18 @@ const { data: reasonsData } = useQuery({
       // it like scans/manual entries do. Only the latest value per session matters, so
       // drop any earlier queued ubicacion update for this session first — otherwise a
       // flush would fire both PUTs in parallel with no ordering guarantee.
-      useSurtidoStore.setState(s => ({
-        pendingSync: [
-          ...s.pendingSync.filter(e => !(e.kind === 'ubicacion' && e.payload?.id === sessionId)),
-          { key: `UBI_${sessionId}_${Date.now()}`, kind: 'ubicacion', payload: { id: sessionId, body: { ubicacion_nota: texto || null } } },
-        ],
-      }))
+      queueUbicacionOffline(texto)
     },
   })
+
+  function queueUbicacionOffline(texto) {
+    useSurtidoStore.setState(s => ({
+      pendingSync: [
+        ...s.pendingSync.filter(e => !(e.kind === 'ubicacion' && String(e.payload?.id) === String(sessionId))),
+        { key: `UBI_${sessionId}`, kind: 'ubicacion', payload: { id: sessionId, body: { ubicacion_nota: texto || null } } },
+      ],
+    }))
+  }
 
   function confirmUbicacionLocally(texto) {
     setSelectedUbicacion(texto || null)
@@ -1718,6 +1842,11 @@ const { data: reasonsData } = useQuery({
       })
       return
     }
+    if (isOffline) {
+      confirmUbicacionLocally(validation.normalized)
+      queueUbicacionOffline(validation.normalized)
+      return
+    }
     updateUbicacionMut.mutate(validation.normalized)
   }
 
@@ -1735,6 +1864,12 @@ const { data: reasonsData } = useQuery({
         useToastStore.getState().error(t('surtido.validacion.session_expired') || 'Sesión expirada. Inicia una nueva sesión.')
         return
       }
+      if (err.response?.status === 422) {
+        getScanSession(sessionId).then(res => hydrateFromServerEvents(res?.data?.events)).catch(() => {})
+        playSound('error')
+        useToastStore.getState().error(err.response?.data?.error || t('surtido.validacion.not_in_bd'))
+        return
+      }
       useSurtidoStore.getState().enqueueSync({ key: vars._dedupeKey, payload: vars })
     },
   })
@@ -1749,6 +1884,12 @@ const { data: reasonsData } = useQuery({
       if (err.response?.status === 404) {
         clearSession()
         toast.error(t('surtido.validacion.session_expired') || 'Sesión expirada. Inicia una nueva sesión.')
+        return
+      }
+      if (err.response?.status === 422) {
+        getScanSession(sessionId).then(res => hydrateFromServerEvents(res?.data?.events)).catch(() => {})
+        playSound('error')
+        toast.error(err.response?.data?.error || t('surtido.validacion.not_in_bd'))
         return
       }
       // Local state (counts/history) was already applied optimistically before this
@@ -1923,7 +2064,40 @@ const { data: reasonsData } = useQuery({
       setShowFinalize(false)
       setShowCompletionModal(true)
     },
-    onError: () => toast.error(t('toast.error')),
+    onError: (error, vars) => {
+      if (!error.response || [502, 503, 504].includes(error.response?.status)) {
+        useSurtidoStore.getState().enqueueSync({
+          key: `FINALIZE_${sessionId}`,
+          kind: 'finalize',
+          payload: {
+            id: sessionId,
+            body: {
+              status: counts.ok < totalExpected ? 'with_discrepancies' : 'complete',
+              notes: finalNotes,
+              total_scanned: counts.ok,
+              ubicacion_nota: selectedUbicacion || null,
+            },
+          },
+        })
+        const lastTs = historyTimeBounds.last || Date.now()
+        const startTs = historyTimeBounds.first || sessionStart?.getTime() || lastTs
+        setCompletionSnapshot({
+          source: vars?.source || 'offline', obc, scanned: counts.ok,
+          expected: totalExpected, rejected: counts.rejected,
+          missing: Math.max(0, totalExpected - counts.ok), progress,
+          sessionStart: new Date(startTs).toISOString(),
+          elapsed: Math.max(0, Math.floor((lastTs - startTs) / 1000)),
+          startedAt: new Date(startTs).toISOString(), completedAt: new Date(lastTs).toISOString(),
+          pendingSync: true,
+        })
+        setShowFinalize(false)
+        setShowCompletionModal(true)
+        toast.warning(t('surtido.validacion.offline_finalize_pending'))
+        return
+      }
+      autoFinalizeLockRef.current = false
+      toast.error(error.response?.data?.error || t('toast.error'))
+    },
   })
 
   useEffect(() => {
@@ -1972,27 +2146,12 @@ const { data: reasonsData } = useQuery({
       useOfflineStore.getState().setOnline()
       qc.invalidateQueries({ queryKey: ['wms-outbound-detail', obc] })
       refreshSheet('outbound').catch(() => {})
-      toast.success('Conexión restablecida')
+      toast.success(t('connection.restored'))
     } catch {
-      toast.warning('Sigue sin conexión')
+      toast.warning(t('connection.still_offline'))
     } finally {
       setRetryingConnection(false)
     }
-  }
-
-  /* ─── OFFLINE BLOCK: no session loaded and device is offline ── */
-  if (isOffline && step === 'search') {
-    return (
-      <>
-        <SearchStep onFound={() => {}} />
-        <OfflineBlockedModal
-          isBlocked
-          message="No hay conexión. Restablece Internet para buscar y cargar una orden de surtido."
-          onRetry={handleRetryConnection}
-          retrying={retryingConnection}
-        />
-      </>
-    )
   }
 
   /* ─── SEARCH / PREVIEW STEPS ────────────────────────────── */
@@ -2012,8 +2171,8 @@ const { data: reasonsData } = useQuery({
       {isOffline && (
         <div className="absolute top-0 inset-x-0 z-50 flex items-center gap-2 px-4 py-2 bg-amber-100 border-b border-amber-300 text-amber-800 text-xs font-semibold">
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
-          <span className="flex-1">Sin conexión — escaneos en cola. <span className="font-normal">Solo un operador por sesión en offline; sin red no hay sincronización entre usuarios.</span></span>
-          {surtidoPendingCount > 0 && <span className="shrink-0 bg-amber-200 px-1.5 py-0.5 rounded-full">{surtidoPendingCount} pendientes</span>}
+          <span className="flex-1">{t('surtido.validacion.offline_banner')} <span className="font-normal">{t('surtido.validacion.offline_warning')}</span></span>
+          {surtidoPendingCount > 0 && <span className="shrink-0 bg-amber-200 px-1.5 py-0.5 rounded-full">{surtidoPendingCount} {t('surtido.escaneo.pending')}</span>}
           <button
             type="button"
             onClick={handleRetryConnection}
@@ -2021,7 +2180,7 @@ const { data: reasonsData } = useQuery({
             className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-200 hover:bg-amber-300 transition-colors disabled:opacity-60"
           >
             <RefreshCw className={`w-3 h-3 ${retryingConnection ? 'animate-spin' : ''}`} />
-            Reintentar
+            {t('common.retry')}
           </button>
         </div>
       )}
@@ -2030,7 +2189,7 @@ const { data: reasonsData } = useQuery({
         <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-white">
           <Loader2 className="w-10 h-10 animate-spin text-primary-400" />
           <p className="font-mono text-sm font-semibold text-warm-700">{obc}</p>
-          <p className="text-xs text-warm-400">Verificando sesión de validación...</p>
+          <p className="text-xs text-warm-400">{t('surtido.validacion.verifying_session')}</p>
         </div>
       )}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
@@ -2331,7 +2490,7 @@ const { data: reasonsData } = useQuery({
               return next
             })
           }}
-          title={sidebarVisible ? 'Ocultar panel' : 'Mostrar panel'}
+          title={sidebarVisible ? t('surtido.validacion.sidebar_hide') : t('surtido.validacion.sidebar_show')}
           className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
         >
           {sidebarVisible ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
@@ -2348,10 +2507,10 @@ const { data: reasonsData } = useQuery({
             <div className="p-3 rounded-2xl border border-primary-200/80 bg-gradient-to-br from-primary-50 via-white to-accent-50/60 shadow-[0_14px_30px_-22px_rgba(37,99,235,0.45)] ring-1 ring-primary-100/80">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-bold text-warm-700 font-mono truncate mr-2">{obc}</span>
-                <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">ACTIVA</span>
+                <span className="badge bg-primary-100 text-primary-700 text-[9px] shrink-0">{t('surtido.validacion.card_active').toUpperCase()}</span>
               </div>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] text-warm-500 font-medium">{totalScanned}/{totalExpected} cajas</span>
+                <span className="text-[10px] text-warm-500 font-medium">{totalScanned}/{totalExpected} {t('surtido.validacion.card_boxes').toLowerCase()}</span>
                 <span className="text-[10px] font-bold text-primary-600">{progress}%</span>
               </div>
               <div className="w-full h-1.5 bg-primary-100 rounded-full overflow-hidden">
@@ -2414,10 +2573,10 @@ const { data: reasonsData } = useQuery({
                     </span>
                   </div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] text-warm-400 font-medium">{s.total_scanned ?? 0}/{s.total_expected ?? '?'} cajas</span>
+                    <span className="text-[10px] text-warm-400 font-medium">{s.total_scanned ?? 0}/{s.total_expected ?? '?'} {t('surtido.validacion.card_boxes').toLowerCase()}</span>
                     {isComplete && (
                       <span className="text-[10px] text-success-600 flex items-center gap-1">
-                        <CheckCircle2 size={9} /> Completa
+                        <CheckCircle2 size={9} /> {t('surtido.validacion.status_complete')}
                       </span>
                     )}
                   </div>
@@ -2431,7 +2590,7 @@ const { data: reasonsData } = useQuery({
                       onClick={() => onOpenObc(s.outbound_order_no)}
                       className="mt-2 w-full btn-primary text-[10px] py-1 h-7"
                     >
-                      Validar
+                      {t('surtido.validacion.card_validate')}
                     </button>
                   )}
                 </div>
@@ -2934,7 +3093,7 @@ function MobileSessionPicker({ tabs, activeTabId, onSelect, onClose, onCloseTab,
       >
         <div className="w-10 h-1 bg-warm-300 rounded-full mx-auto mt-3 mb-1" />
         <div className="px-4 pb-2 pt-1 flex items-center justify-between">
-          <span className="text-sm font-bold text-warm-800">Sesiones activas</span>
+          <span className="text-sm font-bold text-warm-800">{t('surtido.validacion.active_sessions_title')}</span>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-warm-100 text-warm-400"><X size={16} /></button>
         </div>
         <div className="px-3 pb-6 space-y-2 max-h-64 overflow-y-auto">
@@ -2955,7 +3114,7 @@ function MobileSessionPicker({ tabs, activeTabId, onSelect, onClose, onCloseTab,
                 </p>
               </div>
               {tab.id === activeTabId && (
-                <span className="text-[10px] font-bold text-violet-600 bg-violet-100 px-1.5 py-0.5 rounded shrink-0">Activa</span>
+                <span className="text-[10px] font-bold text-violet-600 bg-violet-100 px-1.5 py-0.5 rounded shrink-0">{t('surtido.validacion.card_active')}</span>
               )}
               {tabs.length > 1 && (
                 <button

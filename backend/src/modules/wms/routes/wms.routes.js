@@ -148,6 +148,25 @@ function compactCanonicalCode(raw) {
   return normalizeScanCode(raw).replace(/[^A-Z0-9]/g, '')
 }
 
+function normalizeExpectedBoxes(value) {
+  if (!Array.isArray(value)) return []
+  const boxes = []
+  for (const item of value) {
+    const rawCodes = Array.isArray(item?.codes) ? item.codes : []
+    const codes = [...new Set(rawCodes.map(compactCanonicalCode).filter(Boolean))]
+    const canonical = compactCanonicalCode(item?.canonical || codes[0] || '')
+    if (!canonical || !codes.length) continue
+    boxes.push({ canonical, codes: codes.includes(canonical) ? codes : [canonical, ...codes] })
+  }
+  return boxes
+}
+
+function matchExpectedBox(expectedBoxes, scannedCode) {
+  const scanned = compactCanonicalCode(scannedCode)
+  if (!scanned) return null
+  return expectedBoxes.find((box) => box.codes.includes(scanned)) || null
+}
+
 function requireAnyPermission(requirements) {
   return (req, res, next) => {
     const user = req.fullUser
@@ -765,7 +784,7 @@ router.post('/scan-session',
   requirePermission('surtido.validacion', 'crear'),
   async (req, res) => {
     try {
-      const { outbound_order_no, third_order_no, total_expected, force, receiver_name, logistics_track_no, logistics_channel, outbound_delivery_at } = req.body
+      const { outbound_order_no, third_order_no, total_expected, expected_boxes, force, receiver_name, logistics_track_no, logistics_channel, outbound_delivery_at } = req.body
       if (!outbound_order_no) return res.status(400).json({ success: false, error: 'outbound_order_no es requerido' })
 
       // An order must always map to exactly one pick_sessions record. Look up
@@ -830,11 +849,13 @@ router.post('/scan-session',
                logistics_track_no = COALESCE(logistics_track_no, $7),
                logistics_channel = COALESCE(logistics_channel, $8),
                outbound_delivery_at = COALESCE(outbound_delivery_at, $9),
+               expected_boxes = CASE WHEN jsonb_array_length($10::jsonb) > 0 THEN $10::jsonb ELSE expected_boxes END,
                updated_at = now()
            WHERE id = $4 AND tenant_id = $5
            RETURNING *`,
           [req.user.id, total_expected || 0, nextNotes, s.id, req.tenantId,
-           receiver_name || null, logistics_track_no || null, logistics_channel || null, outbound_delivery_at || null]
+           receiver_name || null, logistics_track_no || null, logistics_channel || null, outbound_delivery_at || null,
+           JSON.stringify(normalizeExpectedBoxes(expected_boxes))]
         )
         return res.json({ success: true, data: updated.rows[0], reused: true })
       }
@@ -843,11 +864,12 @@ router.post('/scan-session',
         const result = await req.tQuery(
           `INSERT INTO pick_sessions
              (tenant_id, outbound_order_no, third_order_no, operator_id, status, total_expected, total_scanned,
-              receiver_name, logistics_track_no, logistics_channel, outbound_delivery_at)
-           VALUES ($1, $2, $3, $4, 'open', $5, 0, $6, $7, $8, $9)
+              receiver_name, logistics_track_no, logistics_channel, outbound_delivery_at, expected_boxes)
+           VALUES ($1, $2, $3, $4, 'open', $5, 0, $6, $7, $8, $9, $10::jsonb)
            RETURNING *`,
           [req.tenantId, outbound_order_no, third_order_no || null, req.user.id, total_expected || 0,
-           receiver_name || null, logistics_track_no || null, logistics_channel || null, outbound_delivery_at || null]
+           receiver_name || null, logistics_track_no || null, logistics_channel || null, outbound_delivery_at || null,
+           JSON.stringify(normalizeExpectedBoxes(expected_boxes))]
         )
         return res.status(201).json({ success: true, data: result.rows[0] })
       } catch (insertErr) {
@@ -1187,15 +1209,15 @@ router.put('/scan-session/:id',
       )
       const updatedSession = result.rows[0]
 
-      // Order-level ubicacion fills older events without location; it must not overwrite
-      // per-caja locations already captured while scanning different sections.
+      // Editing the order-level location means moving the validation record as a whole.
+      // Keep every event aligned; otherwise refreshPickSessionTotals immediately derives
+      // the old dominant event location and silently reverts the value just saved.
       if (ubicacion_nota !== undefined) {
         await req.tQuery(
           `UPDATE pick_events
            SET ubicacion_nota = $1
            WHERE session_id = $2
-             AND tenant_id = $3
-             AND NULLIF(TRIM(ubicacion_nota), '') IS NULL`,
+             AND tenant_id = $3`,
           [normalizeOptionalText(ubicacion_nota), req.params.id, req.tenantId]
         )
         await refreshPickSessionTotals(req, req.params.id)
@@ -1307,7 +1329,7 @@ router.post('/scan-event',
       }
 
       const sessionCheck = await req.tQuery(
-        'SELECT id, operator_id, outbound_order_no FROM pick_sessions WHERE id = $1 AND tenant_id = $2 AND status = $3',
+        'SELECT id, operator_id, outbound_order_no, expected_boxes FROM pick_sessions WHERE id = $1 AND tenant_id = $2 AND status = $3',
         [session_id, req.tenantId, 'open']
       )
       if (sessionCheck.rows.length === 0) {
@@ -1316,14 +1338,27 @@ router.post('/scan-event',
 
       const normCode = normalizeScanCode(normalized_code || scanned_code)
       let effectiveScanResult = scan_result
+      let serverMatchedBoxType = normalizeOptionalText(matched_box_type)
       if (scan_result === 'ok') {
+        const expectedBoxes = normalizeExpectedBoxes(sessionCheck.rows[0].expected_boxes)
+        const expectedMatch = matchExpectedBox(expectedBoxes, normCode)
+        if (!expectedMatch) {
+          return res.status(422).json({
+            success: false,
+            code: expectedBoxes.length ? 'BOX_NOT_IN_ORDER' : 'ORDER_BOX_SNAPSHOT_REQUIRED',
+            error: expectedBoxes.length
+              ? 'La caja no pertenece a esta orden de salida'
+              : 'La orden no tiene un snapshot de cajas válido; vuelve a abrirla desde Validación',
+          })
+        }
+        serverMatchedBoxType = expectedMatch.canonical
         const existingOk = await findExistingOkEvent(
           (sql, params) => req.tQuery(sql, params),
           {
             tenantId: req.tenantId,
             sessionId: session_id,
             normalizedCode: normCode,
-            matchedBoxType: matched_box_type,
+            matchedBoxType: serverMatchedBoxType,
             scannedCode: scanned_code,
           }
         )
@@ -1341,7 +1376,7 @@ router.post('/scan-event',
           String(scanned_code).trim(),
           normCode,
           normalizeOptionalText(matched_sku),
-          normalizeOptionalText(matched_box_type),
+          serverMatchedBoxType,
           effectiveScanResult,
           parsePositiveInt(quantity, 1),
           input_method || 'scanner',
@@ -1416,6 +1451,17 @@ router.post('/scan-event/manual',
 
       const reason = reasonRes.rows[0]
       const normCodeManual = normalizeScanCode(normalized_code || scanned_code)
+      const expectedBoxes = normalizeExpectedBoxes(session.expected_boxes)
+      const expectedMatch = matchExpectedBox(expectedBoxes, normCodeManual)
+      if (!expectedMatch) {
+        return res.status(422).json({
+          success: false,
+          code: expectedBoxes.length ? 'BOX_NOT_IN_ORDER' : 'ORDER_BOX_SNAPSHOT_REQUIRED',
+          error: expectedBoxes.length
+            ? 'La caja no pertenece a esta orden de salida'
+            : 'La orden no tiene un snapshot de cajas válido; vuelve a abrirla desde Validación',
+        })
+      }
       let effectiveManualResult = 'ok'
       const existingOk = await findExistingOkEvent(
         (sql, params) => req.tQuery(sql, params),
@@ -1423,7 +1469,7 @@ router.post('/scan-event/manual',
           tenantId: req.tenantId,
           sessionId: session_id,
           normalizedCode: normCodeManual,
-          matchedBoxType: matched_box_type,
+          matchedBoxType: expectedMatch.canonical,
           scannedCode: scanned_code,
         }
       )
@@ -1440,7 +1486,7 @@ router.post('/scan-event/manual',
           String(scanned_code).trim(),
           normCodeManual,
           normalizeOptionalText(matched_sku),
-          normalizeOptionalText(matched_box_type),
+          expectedMatch.canonical,
           effectiveManualResult,
           parsePositiveInt(quantity, 1),
           reason.id,
@@ -1482,7 +1528,7 @@ router.put('/scan-event/:id',
   async (req, res) => {
     try {
       const eventRes = await req.tQuery(
-        `SELECT e.*, s.tenant_id, s.status, s.operator_id, s.outbound_order_no
+        `SELECT e.*, s.tenant_id, s.status, s.operator_id, s.outbound_order_no, s.expected_boxes
          FROM pick_events e
          JOIN pick_sessions s ON s.id = e.session_id
          WHERE e.id = $1 AND s.tenant_id = $2`,
@@ -1538,11 +1584,23 @@ router.put('/scan-event/:id',
       }
 
       const nextNormalizedCode = normalizeOptionalText(normalized_code) || event.normalized_code || scanned_code || event.scanned_code
-      const nextMatchedBoxType = matched_box_type !== undefined ? normalizeOptionalText(matched_box_type) : event.matched_box_type
+      let nextMatchedBoxType = matched_box_type !== undefined ? normalizeOptionalText(matched_box_type) : event.matched_box_type
       const nextScannedCode = normalizeOptionalText(scanned_code) || event.scanned_code
       let nextScanResult = scan_result || event.scan_result
 
       if (nextScanResult === 'ok') {
+        const expectedBoxes = normalizeExpectedBoxes(event.expected_boxes)
+        const expectedMatch = matchExpectedBox(expectedBoxes, nextNormalizedCode || nextScannedCode)
+        if (!expectedMatch) {
+          return res.status(422).json({
+            success: false,
+            code: expectedBoxes.length ? 'BOX_NOT_IN_ORDER' : 'ORDER_BOX_SNAPSHOT_REQUIRED',
+            error: expectedBoxes.length
+              ? 'La caja no pertenece a esta orden de salida'
+              : 'La orden no tiene un snapshot de cajas válido; vuelve a abrirla desde Validación',
+          })
+        }
+        nextMatchedBoxType = expectedMatch.canonical
         const existingOk = await findExistingOkEvent(
           (sql, params) => req.tQuery(sql, params),
           {
