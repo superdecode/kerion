@@ -314,12 +314,17 @@ function SearchStep({ onFound }) {
     queryFn: getOutboundList,
     staleTime: 5 * 60 * 1000,
     retry: 0,
+    // retry:0 alone doesn't help offline — default networkMode 'online' still pauses
+    // the query without ever calling queryFn, so getOutboundList's own persisted-cache
+    // fallback never runs. 'always' is what actually lets the offline order list load.
+    networkMode: 'always',
   })
   const { data: trackingData } = useQuery({
     queryKey: ['wms-surtido-tracking-offline-cache'],
     queryFn: getOrderTracking,
     staleTime: 60 * 1000,
     retry: 0,
+    networkMode: 'always',
   })
   const allOrders = useMemo(() => {
     const records = getRecords(outboundData)
@@ -1373,6 +1378,11 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     queryFn: () => getOutboundDetail(obc),
     enabled: !!obc && step !== 'search',
     staleTime: 60000,
+    // Default networkMode 'online' pauses the query (status stays 'pending' forever)
+    // while navigator.onLine is false, so getOutboundDetail's own persisted-cache
+    // fallback never even runs — 'always' lets it execute and resolve either from
+    // cache or with data: null, instead of hanging the "Verificando sesión..." overlay.
+    networkMode: 'always',
   })
 const { data: reasonsData } = useQuery({
     queryKey: ['wms-manual-entry-reasons'],
@@ -1387,6 +1397,10 @@ const { data: reasonsData } = useQuery({
     queryFn: getOrderTracking,
     staleTime: 60000,
     enabled: step === 'session',
+    // Same reasoning as detailData above: without this, trackingStatus stays 'pending'
+    // offline and the auto-start effect's `trackingStatus === 'pending'` guard never
+    // clears, even though getOrderTracking has its own localStorage fallback.
+    networkMode: 'always',
   })
 
   const { packageMap, productMap } = useMemo(() => {
@@ -1472,6 +1486,12 @@ const { data: reasonsData } = useQuery({
   }, [packageMap, productMap])
 
   const createSessionMut = useMutation({
+    // CRITICAL for offline: TanStack Query v5 mutations default to networkMode 'online',
+    // which PAUSES the mutation while navigator.onLine is false — mutationFn never runs,
+    // so the offline branch below (which resolves instantly with a temp session id) is
+    // skipped, onSuccess never fires, sessionId stays null, and the "Verificando sesión..."
+    // overlay spins forever. 'always' lets mutationFn execute and take its offline path.
+    networkMode: 'always',
     mutationFn: (force = false) => {
       const detail = detailData?.data ?? detailData
       const packageList = detail?.packageList ?? detail?.details ?? detail?.items ?? []
@@ -1648,8 +1668,13 @@ const { data: reasonsData } = useQuery({
     const validation = validateOrderBoxData(detailData)
     if (!validation.ok) {
       setAutoStartPending(false)
+      // Offline + failed box validation almost always means the order simply isn't in
+      // the local cache yet (never browsed while online), not that it genuinely has no
+      // boxes — surface the accurate, actionable message instead of the online reasons.
       toast.error(
-        validation.reason === 'no_boxes'
+        isOffline
+          ? t('surtido.validacion.offline_order_not_cached')
+          : validation.reason === 'no_boxes'
           ? t('surtido.validacion.error_no_boxes')
           : validation.reason === 'no_codes'
           ? t('surtido.validacion.error_no_codes')
@@ -1668,7 +1693,7 @@ const { data: reasonsData } = useQuery({
     sessionCreateFiredRef.current = true
     setAutoStartPending(false)
     createSessionMut.mutate()
-  }, [autoStartPending, step, detailLoading, detailData, sessionId, createSessionMut.isPending, canCreate, t, trackingStatus, trackingAlreadyComplete, obc]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoStartPending, step, detailLoading, detailData, sessionId, createSessionMut.isPending, canCreate, t, trackingStatus, trackingAlreadyComplete, obc, isOffline]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!onSessionChange) return
@@ -1791,6 +1816,10 @@ const { data: reasonsData } = useQuery({
   useEffect(() => () => window.clearTimeout(copyTimeoutRef.current), [])
 
   const updateUbicacionMut = useMutation({
+    // 'always' so a genuine offline call reaches onError and gets queued, instead of the
+    // mutation silently pausing (the pre-mutate isOffline guard usually catches this, but
+    // a connection dropping mid-request would otherwise leave the update paused and unqueued).
+    networkMode: 'always',
     mutationFn: (texto) => updateScanSession(sessionId, { ubicacion_nota: texto || null }),
     onSuccess: (_, texto) => confirmUbicacionLocally(texto),
     onError: (err, texto) => {
@@ -1851,6 +1880,10 @@ const { data: reasonsData } = useQuery({
   }
 
   const addEventMut = useMutation({
+    // 'always' is required for offline scans: the offline persistence lives in onError
+    // (enqueueSync below), and networkMode 'online' would pause the mutation offline so
+    // neither mutationFn nor onError ever runs — the scan would be lost on reload.
+    networkMode: 'always',
     mutationFn: addScanEvent,
     onSuccess: () => {
       // A scan can be the one that completes the order (refreshPickSessionTotals flips
@@ -1875,6 +1908,9 @@ const { data: reasonsData } = useQuery({
   })
 
   const addManualEventMut = useMutation({
+    // Same as addEventMut: offline manual entries are queued in onError, so the mutation
+    // must run (not pause) offline for that queueing to fire.
+    networkMode: 'always',
     mutationFn: (vars) => addManualScanEvent(vars),
     onSuccess: () => {
       // Same reasoning as addEventMut: a manual entry can complete the order too.
@@ -2029,6 +2065,9 @@ const { data: reasonsData } = useQuery({
   }
 
   const finalizeMut = useMutation({
+    // Same as addEventMut: offline finalize is queued in onError (offline_finalize_pending),
+    // so the mutation must run offline rather than pause.
+    networkMode: 'always',
     mutationFn: ({ source = 'manual' } = {}) => {
       const sessionStatus = counts.ok < totalExpected ? 'with_discrepancies' : 'complete'
       return updateScanSession(sessionId, { status: sessionStatus, notes: finalNotes, total_scanned: counts.ok, ubicacion_nota: selectedUbicacion || null })

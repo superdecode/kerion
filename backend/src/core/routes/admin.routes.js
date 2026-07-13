@@ -46,6 +46,20 @@ function normalizeSlug(value) {
     .replace(/^-|-$/g, '')
 }
 
+// zona_horaria is interpolated into SQL as `AT TIME ZONE '${tz}'` in dateUtils (RLS is
+// inert under the current role, so nothing else guards it). The tenant self-service path
+// already validates via Intl; mirror that here so a super-admin can't store a value that
+// breaks out of the string literal. Returns true only for IANA zones Intl accepts.
+function isValidTimezone(tz) {
+  if (!tz || typeof tz !== 'string') return false
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date())
+    return true
+  } catch {
+    return false
+  }
+}
+
 function buildSubscriptionTypeAndPrice(plan, subscriptionType) {
   const type = subscriptionType === 'annual' ? 'annual' : 'monthly'
   const price_amount = type === 'annual'
@@ -438,6 +452,10 @@ router.patch('/tenants/:id', authenticateAdmin, async (req, res) => {
     const { id } = req.params
     const { legal_name, contact_email, contact_phone, country, notes, slug, zona_horaria } = req.body
 
+    if (zona_horaria != null && !isValidTimezone(zona_horaria)) {
+      return res.status(400).json({ error: 'Zona horaria inválida' })
+    }
+
     // Auto-generate slug from legal_name if slug field sent as empty and legal_name provided
     let finalSlug = slug !== undefined ? (slug || null) : undefined
     if (finalSlug === '' || (finalSlug === undefined && !slug)) finalSlug = null
@@ -477,6 +495,9 @@ router.post('/tenants', authenticateAdmin, async (req, res) => {
     : KNOWN_MODULES
   if (!legal_name || !contact_name || !contact_email || !admin_password) {
     return res.status(400).json({ error: 'legal_name, contact_name, contact_email y admin_password son requeridos' })
+  }
+  if (zona_horaria != null && !isValidTimezone(zona_horaria)) {
+    return res.status(400).json({ error: 'Zona horaria inválida' })
   }
 
   let client

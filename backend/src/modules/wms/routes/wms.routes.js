@@ -1140,8 +1140,13 @@ router.get('/scan-session/:id',
           [req.params.id, req.tenantId]
         ),
         req.tQuery(
-          'SELECT * FROM pick_events WHERE session_id = $1 ORDER BY scanned_at ASC',
-          [req.params.id]
+          // tenant_id is defense-in-depth: RLS is currently inert (app connects as a
+          // BYPASSRLS role), and this runs in Promise.all alongside the session check —
+          // without it, another tenant's session_id would fetch that tenant's events
+          // (they're discarded by the 404 gate below today, but the filter must not
+          // depend on that ordering).
+          'SELECT * FROM pick_events WHERE session_id = $1 AND tenant_id = $2 ORDER BY scanned_at ASC',
+          [req.params.id, req.tenantId]
         ),
       ])
 
@@ -1916,8 +1921,10 @@ router.get('/inventory-session/:id',
             [req.params.id, req.tenantId]
           ),
           client.query(
-            'SELECT * FROM inv_scans WHERE session_id = $1 ORDER BY scanned_at ASC',
-            [req.params.id]
+            // Defense-in-depth tenant_id — RLS is inert under the current BYPASSRLS
+            // role, and this runs in parallel with the session check above.
+            'SELECT * FROM inv_scans WHERE session_id = $1 AND tenant_id = $2 ORDER BY scanned_at ASC',
+            [req.params.id, req.tenantId]
           ),
         ])
         return { sessionRes, scansRes }
