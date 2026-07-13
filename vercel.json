@@ -7,7 +7,7 @@
   },
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" },
-    { "source": "/((?!api).*)", "destination": "/index.html" }
+    { "source": "/((?!api(?:/|$)|assets(?:/|$)|sw\\.js$|manifest\\.json$|logo\\.png$).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
