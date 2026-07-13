@@ -192,7 +192,7 @@ export default function AdminDashboard() {
               <button
                 type="button"
                 onClick={dismissDeliverabilityAlert}
-                title="Cerrar alerta"
+                title={t('common.closeAlert')}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-400/20 bg-red-500/10 text-red-200 transition-colors hover:bg-red-500/20 hover:text-white"
               >
                 <X className="h-3.5 w-3.5" />

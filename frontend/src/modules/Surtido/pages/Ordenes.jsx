@@ -23,7 +23,7 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import {
   getOutboundList, getOutboundDetail,
-  getSurtidores, createSurtidor, deleteSurtidor,
+  getSurtidores, createSurtidor, updateSurtidor, deleteSurtidor,
   getOrderTracking, upsertOrderTracking, bulkUpsertOrderTracking, getScanSessions, getScanSession,
   getManualEntryReasons, createManualEntryReason, updateManualEntryReason, deleteManualEntryReason,
   forceValidateOrder,
@@ -37,7 +37,7 @@ import PrintSurtidoUbicaciones from '../components/PrintSurtidoUbicaciones'
 import ModuleLimitBanner from '../../../core/components/common/ModuleLimitBanner'
 import StatusPill from '../../../core/components/common/StatusPill'
 import { useModuleUsage } from '../../../core/hooks/useModuleUsage'
-import { refreshSheet, getCacheTimestamp, subscribeSheetCache } from '../../WmsHub/services/googleSheetsService'
+import { refreshSheet, getCacheTimestamp, subscribeSheetCache, getCacheStatus, warmOutboundFull } from '../../WmsHub/services/googleSheetsService'
 import { fmtDateTime as formatDateTimeTz, fmtDate as formatDateTz, fmtTimeShort, getToday, subtractDays, addDays, toDateKey } from '../../../core/utils/dateFormat'
 
 const STATUS_META = {
@@ -336,55 +336,179 @@ function SurtidoresModal({ isOpen, onClose, canUpdate, canDelete }) {
   const toast = useToastStore.getState()
   const qc = useQueryClient()
   const [nombre, setNombre] = useState('')
+  const [search, setSearch] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [editingName, setEditingName] = useState('')
   const backendOnline = useAuthStore(s => s.backendOnline)
 
   const { data } = useQuery({ queryKey: ['wms-surtidores'], queryFn: getSurtidores, staleTime: 5 * 60 * 1000, enabled: backendOnline })
   const surtidores = getRecords(data)
+  const filteredSurtidores = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase('es-MX')
+    if (!q) return surtidores
+    return surtidores.filter((s) => String(s.nombre || '').toLocaleLowerCase('es-MX').includes(q))
+  }, [surtidores, search])
 
   const addMut = useMutation({
     mutationFn: createSurtidor,
     onSuccess: () => { setNombre(''); qc.invalidateQueries({ queryKey: ['wms-surtidores'] }) },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
+  const updateMut = useMutation({
+    mutationFn: ({ id, nombre }) => updateSurtidor(id, { nombre }),
+    onSuccess: () => {
+      setEditingId(null)
+      setEditingName('')
+      qc.invalidateQueries({ queryKey: ['wms-surtidores'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
+  })
   const delMut = useMutation({
     mutationFn: deleteSurtidor,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['wms-surtidores'] }),
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error')),
   })
 
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch('')
+      setCreateOpen(false)
+      setNombre('')
+      setEditingId(null)
+      setEditingName('')
+    }
+  }, [isOpen])
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.ordenes.surtidores_title')} icon={Users}
-      footer={<button className="btn-secondary" onClick={onClose}>{t('common.close')}</button>}
-    >
-      <div className="space-y-3">
-        {canUpdate && (
-          <div className="flex gap-2">
-            <input className="input-field flex-1 text-sm" placeholder={t('surtido.ordenes.surtidor_name')}
-              value={nombre} onChange={e => setNombre(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && nombre.trim()) addMut.mutate({ nombre: nombre.trim() }) }} />
-            <button className="btn-primary inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap" onClick={() => addMut.mutate({ nombre: nombre.trim() })}
-              disabled={!nombre.trim() || addMut.isPending}>
-              {addMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              {t('surtido.ordenes.add_surtidor')}
-            </button>
+    <Modal isOpen={isOpen} onClose={onClose} title={t('surtido.ordenes.surtidores_title')} icon={Users} size="lg"
+      footer={(
+        <div className="flex w-full items-center justify-between gap-3">
+          <div className="text-xs text-warm-400">
+            {t('surtido.ordenes.surtidores_footer_count')
+              .replace('{visible}', String(filteredSurtidores.length))
+              .replace('{total}', String(surtidores.length))}
           </div>
-        )}
-        <div className="divide-y divide-warm-100 max-h-60 overflow-y-auto">
-          {surtidores.length === 0 ? (
+          <button className="btn-secondary" onClick={onClose}>{t('common.close')}</button>
+        </div>
+      )}
+    >
+      <div className="space-y-2">
+        <div className="rounded-2xl border border-warm-100 bg-gradient-to-br from-white via-warm-50/50 to-primary-50/35 px-3 py-2 shadow-sm">
+          <div className="space-y-1.5">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-warm-200 bg-white px-3 py-2 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.35)]">
+                <Search size={15} className="shrink-0 text-warm-400" />
+                <input
+                  className="min-w-0 flex-1 bg-transparent text-sm text-warm-800 outline-none placeholder:text-warm-300"
+                  placeholder={t('surtido.ordenes.surtidores_search_placeholder')}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {search && (
+                  <button
+                    className="rounded-lg p-1 text-warm-300 hover:bg-warm-100 hover:text-warm-600"
+                    onClick={() => setSearch('')}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              {canUpdate && (
+                <button
+                  className="inline-flex items-center gap-1 self-start rounded-xl px-2 py-0.5 text-sm font-semibold text-primary-600 transition-colors hover:bg-primary-50/70 hover:text-primary-700 sm:self-auto"
+                  onClick={() => setCreateOpen((prev) => !prev)}
+                >
+                  <Plus size={15} />
+                  <span>{t('surtido.ordenes.surtidores_create_toggle_label')}</span>
+                  {createOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+              )}
+            </div>
+            {canUpdate && createOpen && (
+              <div className="rounded-2xl border border-primary-100 bg-white/95 p-2.5 shadow-[0_14px_32px_-24px_rgba(59,130,246,0.45)]">
+                <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-primary-500">
+                  {t('surtido.ordenes.surtidores_create_toggle_label')}
+                </div>
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+                  <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-primary-100 bg-primary-50/35 px-3 py-2">
+                    <Users size={15} className="shrink-0 text-primary-500" />
+                    <input
+                      className="min-w-0 flex-1 bg-transparent text-sm font-medium text-warm-800 outline-none placeholder:text-warm-300"
+                      placeholder={t('surtido.ordenes.surtidor_name')}
+                      value={nombre}
+                      onChange={e => setNombre(e.target.value.toLocaleUpperCase('es-MX'))}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && nombre.trim()) {
+                          addMut.mutate({ nombre: nombre.trim().toLocaleUpperCase('es-MX') })
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    className="btn-primary inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+                    onClick={() => addMut.mutate({ nombre: nombre.trim().toLocaleUpperCase('es-MX') })}
+                    disabled={!nombre.trim() || addMut.isPending}
+                  >
+                    {addMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                    {t('surtido.ordenes.add_surtidor')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="divide-y divide-warm-100 max-h-[30rem] overflow-y-auto pr-1">
+          {filteredSurtidores.length === 0 ? (
             <p className="text-sm text-warm-400 text-center py-6">{t('common.noData')}</p>
-          ) : surtidores.map(s => (
-            <div key={s.id} className="flex items-center justify-between py-2.5">
+          ) : filteredSurtidores.map(s => (
+            <div key={s.id} className="flex min-h-[3.5rem] items-center justify-between py-2.5">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold">
                   {s.nombre[0]?.toUpperCase()}
                 </div>
-                <span className="text-sm text-warm-800 font-medium">{s.nombre}</span>
+                {editingId === s.id ? (
+                  <input
+                    className="input-field min-w-[18rem] flex-1 text-sm"
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value.toLocaleUpperCase('es-MX'))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && editingName.trim()) {
+                        updateMut.mutate({ id: s.id, nombre: editingName.trim().toLocaleUpperCase('es-MX') })
+                      }
+                    }}
+                    autoFocus
+                  />
+                ) : (
+                  <span className="text-sm text-warm-800 font-medium">{s.nombre}</span>
+                )}
               </div>
-              {canDelete && (
-                <button className="p-1.5 rounded-lg hover:bg-danger-50 text-warm-300 hover:text-danger-500 transition-colors"
-                  onClick={() => delMut.mutate(s.id)}>
-                  <Trash2 size={13} />
-                </button>
-              )}
+              <div className="flex items-center gap-1">
+                {canUpdate && (
+                  editingId === s.id ? (
+                    <button
+                      className="rounded-lg p-2 text-primary-600 hover:bg-primary-50"
+                      onClick={() => updateMut.mutate({ id: s.id, nombre: editingName.trim().toLocaleUpperCase('es-MX') })}
+                      disabled={!editingName.trim() || updateMut.isPending}
+                    >
+                      <Save size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      className="rounded-lg p-2 text-warm-400 hover:bg-warm-100 hover:text-primary-600"
+                      onClick={() => { setEditingId(s.id); setEditingName(s.nombre) }}
+                    >
+                      <Edit3 size={14} />
+                    </button>
+                  )
+                )}
+                {canDelete && (
+                  <button className="p-2 rounded-lg hover:bg-danger-50 text-warm-300 hover:text-danger-500 transition-colors"
+                    onClick={() => delMut.mutate(s.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -954,7 +1078,7 @@ function CopyableObc({ obc }) {
 
 function StatusTabs({ selected, onChange, t }) {
   return (
-    <div className="flex gap-0 border-b border-warm-100 bg-white/60 overflow-x-auto scrollbar-none">
+    <div className="flex gap-0 border-b border-warm-100 bg-white/60 overflow-x-auto overflow-y-hidden scrollbar-none">
       <button
         onClick={() => onChange('')}
         className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-all border-b-2 -mb-px whitespace-nowrap ${
@@ -1033,6 +1157,10 @@ export default function Ordenes() {
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
   const [cancelStatusModal, setCancelStatusModal] = useState({ open: false, obcs: [], status: 'cancelled', note: '' })
   const [isTransitioning, setIsTransitioning] = useState(false)
+  // True while a full-dataset warm is in flight because the user is searching over data
+  // that has only partially loaded — keeps the spinner up instead of prematurely reporting
+  // "sin resultados" for an order that lives beyond the partial slice.
+  const [warmActive, setWarmActive] = useState(false)
   const [filtersExpanded, setFiltersExpanded] = useFilterAutoCollapse()
   const timeFromInputRef = useRef(null)
   const dateModeRef = useRef(null)
@@ -1201,6 +1329,7 @@ export default function Ordenes() {
     return subscribeSheetCache((type, status) => {
       if (type !== 'outbound') return
       if (status.partial && !fromPersistentCache) return
+      setWarmActive(false)
       setSheetTs(status.ts)
       qc.invalidateQueries({ queryKey: ['wms-outbound'] })
     })
@@ -1259,6 +1388,23 @@ export default function Ordenes() {
 
   const q = search.trim().toLowerCase()
   const qCompact = compactSearchValue(search)
+
+  // A search must cover the whole dataset, not just the fast partial slice. When the user
+  // searches while data is still partial, force the background full-sheet warm so an order
+  // beyond the partial window can be found. The cache subscription above invalidates the
+  // query once the full sheet arrives, re-running the search over the complete dataset.
+  useEffect(() => {
+    const searching = Boolean(q) || bulkSearchCodes.length > 0
+    if (!searching || !isPartial) return undefined
+    let cancelled = false
+    setWarmActive(true)
+    Promise.resolve(warmOutboundFull()).finally(() => {
+      // If our call hit the in-flight guard (another warm already running), leave the flag
+      // set and let that warm's completion clear it, instead of flashing an empty state.
+      if (!cancelled && !getCacheStatus('outbound').loading) setWarmActive(false)
+    })
+    return () => { cancelled = true }
+  }, [q, bulkSearchCodes, isPartial])
 
   function matchesDateFilter(dateStr, requireDate = false) {
     if (!dateStr) return !(requireDate && (dateFrom || dateTo))
@@ -2175,7 +2321,7 @@ export default function Ordenes() {
                 <RefreshCw className="w-3.5 h-3.5" /> {t('desp.btn.reintentar')}
               </button>
             </motion.div>
-          ) : isTransitioning || showInitialLoader || (backendOnline && !wmsError && pagedRecords.length === 0 && (!wmsData || wmsLoading || wmsFetching || isPartial)) ? (
+          ) : isTransitioning || showInitialLoader || (backendOnline && !wmsError && pagedRecords.length === 0 && (!wmsData || wmsLoading || wmsFetching || warmActive)) ? (
              <motion.div
                key="loader"
                initial={{ opacity: 0 }}
@@ -2193,9 +2339,11 @@ export default function Ordenes() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center h-64 gap-3 text-warm-400">
-              <Package2 size={40} className="opacity-30" />
-              <p className="text-sm">{t('common.noData')}</p>
+              className="relative h-full min-h-[360px] overflow-hidden rounded-2xl border border-warm-100 bg-white">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-warm-400">
+                <Package2 size={40} className="opacity-30" />
+                <p className="text-sm">{t('common.noData')}</p>
+              </div>
             </motion.div>
           ) : (
             <motion.div

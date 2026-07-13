@@ -69,22 +69,22 @@ function UpgradeModal({ module, usage, onClose }) {
         ) : (
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
             <div className="bg-gray-800/60 rounded-xl p-4">
-              <p className="text-gray-400 text-xs uppercase tracking-wider mb-2 font-medium">Uso este mes — {meta.label}</p>
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-2 font-medium">{t('common.monthUsage')} — {meta.label}</p>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-white text-sm font-semibold">{(usage?.used ?? 0).toLocaleString()} / {usage?.limit != null ? usage.limit.toLocaleString() : '∞'} {meta.unit}</span>
-                <span className="text-danger-400 text-xs font-bold">{usage?.pct ?? 100}% utilizado</span>
+                <span className="text-danger-400 text-xs font-bold">{usage?.pct ?? 100}% {t('common.used')}</span>
               </div>
               <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                 <div className="h-full bg-danger-500 rounded-full transition-all" style={{ width: `${usage?.pct ?? 100}%` }} />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Mensaje adicional (opcional)</label>
+              <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">{t('common.additionalMessageOptional')}</label>
               <textarea
                 rows={3}
                 value={form.message}
                 onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
-                placeholder="Cuéntanos sobre tu volumen estimado o necesidades..."
+                placeholder={t('sub.renewMessagePlaceholder')}
                 className={inputCls}
               />
             </div>

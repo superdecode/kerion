@@ -446,9 +446,20 @@ async function warmFullSheet(type) {
     }
   } catch {
     // Keep partial data on background failure
+  } finally {
+    // Always clear the in-flight flag, including the empty-sheet path where cache[type]
+    // is neither replaced nor caught — otherwise _bgLoading stays true forever and blocks
+    // every future warm, permanently pinning search to the partial dataset.
     const e = cache[type]
     if (e) e._bgLoading = false
   }
+}
+
+// Force the background full-sheet warm for the outbound dataset. Idempotent via the
+// _bgLoading guard. Used by Órdenes to guarantee a search covers the complete dataset
+// even when the fast partial slice is all that has loaded so far.
+export function warmOutboundFull() {
+  return warmFullSheet('outbound')
 }
 
 function isSameDayAsNow(ts) {

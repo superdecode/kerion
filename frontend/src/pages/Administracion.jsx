@@ -130,7 +130,7 @@ function CopyHoverText({ value, className = '' }) {
           type="button"
           onClick={handleCopy}
           className="shrink-0 rounded p-0.5 text-warm-300 opacity-0 transition-all hover:bg-warm-100 hover:text-primary-600 group-hover:opacity-100"
-          title="Copiar"
+          title={t('common.copy')}
         >
           {copied ? <Check className="h-3.5 w-3.5 text-success-500" /> : <Copy className="h-3.5 w-3.5" />}
         </button>

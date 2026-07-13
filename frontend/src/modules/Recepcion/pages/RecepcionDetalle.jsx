@@ -77,7 +77,7 @@ function CopyInline({ value, className = '', mono = false }) {
           type="button"
           onClick={handleCopy}
           className="shrink-0 rounded p-0.5 text-warm-300 opacity-0 transition-all hover:bg-warm-100 hover:text-primary-600 group-hover:opacity-100"
-          title="Copiar"
+          title={t('common.copy')}
         >
           {copied ? <Check className="h-3.5 w-3.5 text-success-500" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
@@ -517,7 +517,7 @@ export default function RecepcionDetalle() {
       { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
       { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 18 },
     ]
-    XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle')
+    XLSX.utils.book_append_sheet(wb, wsDetalle, t('common.detail'))
   }
 
   const appendValidacionSheet = (wb, exportData) => {
@@ -538,7 +538,7 @@ export default function RecepcionDetalle() {
     wsValid['!cols'] = [
       { wch: 5 }, { wch: 24 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 20 }, { wch: 18 },
     ]
-    XLSX.utils.book_append_sheet(wb, wsValid, 'Validación')
+    XLSX.utils.book_append_sheet(wb, wsValid, t('rec.validacion.title'))
   }
 
   const appendOtrosSheet = (wb, exportData) => {
@@ -555,7 +555,7 @@ export default function RecepcionDetalle() {
       ...otrosRows,
     ])
     wsOtros['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 18 }]
-    XLSX.utils.book_append_sheet(wb, wsOtros, 'Otros')
+    XLSX.utils.book_append_sheet(wb, wsOtros, t('common.others'))
   }
 
   const runExport = async (scope) => {
@@ -599,7 +599,7 @@ export default function RecepcionDetalle() {
       setListaPreviewData(buildListaRecepcionData(result.order, result.lines, false))
       setListaPreviewOpen(true)
     } catch {
-      toast.error('Error al generar lista')
+      toast.error(t('rec.lista.errorGenerate'))
     } finally {
       setListaPreviewLoading(false)
     }

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
 import { fmtDateTimeMini } from '../../../core/utils/dateFormat'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 const PAGE_SIZE = 50
 
@@ -227,7 +228,7 @@ function DetailModal({ event, onClose, onSaved }) {
                 onChange={e => setNotes(e.target.value)}
                 rows={5}
                 className="w-full resize-none rounded-xl border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-blue-500"
-                placeholder="Hipotesis, ticket, solucion aplicada..."
+                placeholder={t('superadmin.errores.internalNotesPlaceholder')}
               />
             </div>
             {error && <p className="mt-3 text-xs text-red-300">{error}</p>}
@@ -236,7 +237,7 @@ function DetailModal({ event, onClose, onSaved }) {
               disabled={saving}
               className="mt-4 w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
             >
-              {saving ? 'Guardando...' : 'Guardar revision'}
+              {saving ? t('common.saving') : t('superadmin.errores.saveReview')}
             </button>
           </aside>
         </div>
@@ -246,6 +247,7 @@ function DetailModal({ event, onClose, onSaved }) {
 }
 
 export default function AdminErrores() {
+  const { t } = useI18nStore()
   const [events, setEvents] = useState([])
   const [tenants, setTenants] = useState([])
   const [summary, setSummary] = useState({})
@@ -296,8 +298,8 @@ export default function AdminErrores() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-white">Supervision de errores</h1>
-          <p className="mt-0.5 text-sm text-gray-500">Eventos tecnicos bloqueantes, trazas y contexto por tenant.</p>
+          <h1 className="text-xl font-bold text-white">{t('superadmin.errores.title')}</h1>
+          <p className="mt-0.5 text-sm text-gray-500">{t('superadmin.errores.subtitle')}</p>
         </div>
         <button
           onClick={load}
@@ -329,7 +331,7 @@ export default function AdminErrores() {
             <input
               value={filters.q}
               onChange={e => updateFilter('q', e.target.value)}
-              placeholder="Buscar mensaje, ruta, usuario..."
+              placeholder={t('superadmin.errores.searchPlaceholder')}
               className="w-full rounded-lg border border-gray-700 bg-gray-950 py-2 pl-9 pr-3 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-blue-500"
             />
           </div>
@@ -421,7 +423,7 @@ export default function AdminErrores() {
                   <button
                     onClick={() => setSelected(ev)}
                     className="rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-500/10 hover:text-blue-300"
-                    title="Ver diagnostico"
+                    title={t('superadmin.errores.viewDiagnostic')}
                   >
                     <Eye className="h-4 w-4" />
                   </button>
@@ -446,4 +448,3 @@ export default function AdminErrores() {
     </div>
   )
 }
-

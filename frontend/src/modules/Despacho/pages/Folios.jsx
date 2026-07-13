@@ -499,7 +499,7 @@ export default function Folios() {
                     <SortHeader label={t('desp.folio.col.unidad')} field="unidad_placa" {...sp} />
                     <SortHeader label={t('desp.folio.col.ordenes')} field="total_ordenes" {...sp} className="text-center" />
                     <SortHeader label={t('desp.folio.col.cajas')} field="total_cajas" {...sp} className="text-center" />
-                    <th className="table-header w-24 text-right">{t('desp.folio.col.acciones')}</th>
+                    <th className="table-header w-32 text-right">{t('desp.folio.col.acciones')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-warm-50">
@@ -517,7 +517,7 @@ export default function Folios() {
                       className="hover:bg-primary-100 cursor-pointer transition-colors"
                       onClick={() => navigate(`/despacho/folios/${folio.id}`)}
                     >
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <td className="table-cell" onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selected.has(folio.id)}
@@ -525,37 +525,38 @@ export default function Folios() {
                           className="cb"
                         />
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
+                      <td className="table-cell whitespace-nowrap">
                         <span className="font-mono font-semibold text-primary-700 text-xs">{folio.folio_numero}</span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="table-cell">
                         <div className="flex flex-col leading-tight">
                           <span className="text-xs text-warm-700">{fmtDate(folio.created_at)}</span>
                           <span className="text-[10px] text-warm-400">{fmtTimeShort(folio.created_at)}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">{estadoBadge(folio.estado)}</td>
-                      <td className="px-4 py-3">
+                      <td className="table-cell">{estadoBadge(folio.estado)}</td>
+                      <td className="table-cell">
                         {folio.conductor_nombre
                           ? <span className="flex items-center gap-1.5 text-xs text-warm-700 font-medium"><User className="w-3.5 h-3.5 text-warm-400" />{folio.conductor_nombre}</span>
                           : <span className="text-warm-300 text-xs">—</span>}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="table-cell">
                         {folio.unidad_placa
                           ? <span className="flex items-center gap-1.5 text-xs text-warm-700 font-medium"><Truck className="w-3.5 h-3.5 text-warm-400" />{folio.unidad_placa} <span className="text-warm-400">({folio.unidad_tipo})</span></span>
                           : <span className="text-warm-300 text-xs">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="table-cell text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-50 text-primary-700 text-xs font-bold">
                           {folio.total_ordenes}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="table-cell text-center">
                         <span className="text-xs font-semibold tabular-nums text-warm-700">
                           {folio.total_cajas ?? 0}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
+                      <td className="table-cell text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                        <div className="inline-flex min-w-[6.5rem] items-center justify-end gap-1 whitespace-nowrap">
                         <button
                           onClick={() => navigate(`/despacho/folios/${folio.id}`)}
                           title={t('desp.btn.verDetalle')}
@@ -583,6 +584,7 @@ export default function Folios() {
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
+                        </div>
                       </td>
                     </motion.tr>
                   ))}

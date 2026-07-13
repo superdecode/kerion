@@ -250,12 +250,12 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
   return createPortal(
     <div className="fixed inset-0 z-[10050] bg-black flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 shrink-0">
-        <p className="text-sm font-semibold text-white">Escanear código</p>
+        <p className="text-sm font-semibold text-white">{t('common.scanCode')}</p>
         <button
           type="button"
           onClick={onClose}
           className="p-2 rounded-full text-white/80 hover:bg-white/10 hover:text-white transition-colors"
-          aria-label="Cerrar escáner"
+          aria-label={t('common.closeScanner')}
         >
           <X size={20} />
         </button>
@@ -277,7 +277,7 @@ export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
         {status === 'starting' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 pointer-events-none">
             <Camera className="w-8 h-8 text-white/60 animate-pulse" />
-            <p className="text-white/60 text-xs">Iniciando cámara...</p>
+            <p className="text-white/60 text-xs">{t('common.startingCamera')}</p>
           </div>
         )}
 

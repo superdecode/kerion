@@ -191,7 +191,7 @@ export default function Escaneo() {
   const deleteGuiaFromTarimaMutation = useMutation({
     mutationFn: ({ tarimaId, guiaId }) => ds.deleteGuiaFromTarima(tarimaId, guiaId),
     onSuccess: (data, { tarimaId }) => {
-      toast.success('Guía eliminada')
+      toast.success(t('dropscan.toast.guiaDeleted'))
       qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail', tarimaId] })
     },
     onError: (err) => toast.error(err.response?.data?.error || t('toast.error'))
@@ -200,7 +200,7 @@ export default function Escaneo() {
   const finalizePanelTarimaMutation = useMutation({
     mutationFn: (id) => ds.finalizeTarima(id),
     onSuccess: () => {
-      toast.success('Tarima finalizada')
+      toast.success(t('dropscan.toast.tarimaFinalized'))
       qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail', panelDetailId] })
       qc.invalidateQueries({ queryKey: ['dropscan-today-history'] })
       updateTab(activeTabId, { panelDetailId: null })
@@ -230,7 +230,7 @@ export default function Escaneo() {
       ]
       const ws = XLSX.utils.aoa_to_sheet(wsData)
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Tarima')
+      XLSX.utils.book_append_sheet(wb, ws, t('dropscan.excel.tarimaSheet'))
       XLSX.writeFile(wb, `tarima_${td.codigo}_${getToday()}.xlsx`)
     } catch { toast.error(t('toast.error')) }
   }

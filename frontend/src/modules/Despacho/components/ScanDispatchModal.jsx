@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { ScanLine, X, Search, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import { findOrderByBarcode } from '../services/despachoService'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 const IDLE    = 'idle'
 const LOADING = 'loading'
@@ -10,6 +11,7 @@ const NOT_FOUND = 'not_found'
 const OUT_OF_RANGE = 'out_of_range'
 
 export default function ScanDispatchModal({ isOpen, onClose, filteredOrders = [], onOrderFound }) {
+  const { t } = useI18nStore()
   const [input, setInput]   = useState('')
   const [status, setStatus] = useState(IDLE)
   const inputRef = useRef(null)
@@ -87,11 +89,11 @@ export default function ScanDispatchModal({ isOpen, onClose, filteredOrders = []
   }
 
   const statusMeta = {
-    [IDLE]:          { icon: null,          cls: '',                     text: 'Escanea o escribe y presiona Enter' },
-    [LOADING]:       { icon: Loader2,       cls: 'text-warm-500',       text: 'Buscando...' },
-    [FOUND]:         { icon: CheckCircle2,  cls: 'text-success-600',    text: 'Orden encontrada' },
-    [NOT_FOUND]:     { icon: AlertCircle,   cls: 'text-danger-500',     text: 'No encontrada' },
-    [OUT_OF_RANGE]:  { icon: AlertCircle,   cls: 'text-warning-600',    text: 'Orden fuera del rango de fechas activo' },
+    [IDLE]:          { icon: null,          cls: '',                     text: t('desp.scanDispatch.idle') },
+    [LOADING]:       { icon: Loader2,       cls: 'text-warm-500',       text: t('common.searching') },
+    [FOUND]:         { icon: CheckCircle2,  cls: 'text-success-600',    text: t('desp.scanDispatch.orderFound') },
+    [NOT_FOUND]:     { icon: AlertCircle,   cls: 'text-danger-500',     text: t('desp.scanDispatch.notFound') },
+    [OUT_OF_RANGE]:  { icon: AlertCircle,   cls: 'text-warning-600',    text: t('desp.scanDispatch.outOfRange') },
   }
 
   const sm = statusMeta[status]
@@ -106,7 +108,7 @@ export default function ScanDispatchModal({ isOpen, onClose, filteredOrders = []
         <div className="flex items-center justify-between px-6 py-4 border-b border-warm-100">
           <div className="flex items-center gap-2">
             <ScanLine className="w-5 h-5 text-primary-600" />
-            <h2 className="font-bold text-warm-800 text-base">Escanear Orden</h2>
+            <h2 className="font-bold text-warm-800 text-base">{t('desp.scanDispatch.scanOrder')}</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-warm-100 text-warm-400 hover:text-warm-600 transition-all">
             <X className="w-4 h-4" />
@@ -128,7 +130,7 @@ export default function ScanDispatchModal({ isOpen, onClose, filteredOrders = []
               value={input}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
-              placeholder="Escanear codigo..."
+              placeholder={t('common.scanCodeEllipsis')}
               className="flex-1 bg-transparent font-mono text-sm text-warm-800 outline-none focus-visible:outline-none focus-visible:ring-0 placeholder:text-warm-300"
             />
             {input && (
@@ -145,7 +147,7 @@ export default function ScanDispatchModal({ isOpen, onClose, filteredOrders = []
           </div>
 
           <p className="text-[11px] text-warm-400 text-center">
-            Busca por: numero de orden · codigo de rastreo · codigo de caja
+            {t('desp.scanDispatch.searchHint')}
           </p>
         </div>
       </div>

@@ -230,6 +230,7 @@ async function getPublicTableColumns(queryable, tableName) {
 function buildPickOrderTrackingSelect(columns) {
   const preferred = [
     'id', 'tenant_id', 'outbound_order_no', 'third_order_no',
+    'receiver_name', 'logistics_track_no', 'logistics_channel', 'outbound_delivery_at', 'outbound_box_count',
     'surtidor_id', 'surtidor_nombre', 'status', 'notes',
     'assigned_at', 'assigned_by',
     'sorting_started_at', 'sorting_completed_at',
@@ -245,6 +246,7 @@ function buildPickOrderTrackingSelect(columns) {
 function buildPickOrderTrackingSelectWithStats(columns) {
   const preferred = [
     'id', 'tenant_id', 'outbound_order_no', 'third_order_no',
+    'receiver_name', 'logistics_track_no', 'logistics_channel', 'outbound_delivery_at', 'outbound_box_count',
     'surtidor_id', 'surtidor_nombre', 'status', 'notes',
     'assigned_at', 'assigned_by',
     'sorting_started_at', 'sorting_completed_at',
@@ -260,6 +262,11 @@ function buildPickOrderTrackingSelectWithStats(columns) {
     if (column === 'tenant_id') return 'COALESCE(ot.tenant_id, stats.tenant_id) AS tenant_id'
     if (column === 'outbound_order_no') return 'COALESCE(ot.outbound_order_no, stats.outbound_order_no) AS outbound_order_no'
     if (column === 'third_order_no') return 'COALESCE(ot.third_order_no, stats.third_order_no) AS third_order_no'
+    if (column === 'receiver_name') return 'COALESCE(ot.receiver_name, stats.receiver_name) AS receiver_name'
+    if (column === 'logistics_track_no') return 'COALESCE(ot.logistics_track_no, stats.logistics_track_no) AS logistics_track_no'
+    if (column === 'logistics_channel') return 'COALESCE(ot.logistics_channel, stats.logistics_channel) AS logistics_channel'
+    if (column === 'outbound_delivery_at') return 'COALESCE(ot.outbound_delivery_at, stats.outbound_delivery_at) AS outbound_delivery_at'
+    if (column === 'outbound_box_count') return 'COALESCE(ot.outbound_box_count, stats.outbound_box_count) AS outbound_box_count'
     // Single source of truth for "is this order done": actual scan counts always win
     // over the cached ot.status once they say complete — except 'cancelled', a
     // deliberate business decision unrelated to box count that must never be
@@ -310,6 +317,11 @@ function buildPickSessionsStatsSubquery(sessionColumns, includeSessionCount = fa
   )
   aggregates.push('SUM(COALESCE(rejected_stats.total_rejected, 0)) as total_rejected')
   aggregates.push(sessionColumns.has('third_order_no') ? 'MAX(third_order_no) as third_order_no' : 'NULL::text as third_order_no')
+  aggregates.push(sessionColumns.has('receiver_name') ? 'MAX(receiver_name) as receiver_name' : 'NULL::text as receiver_name')
+  aggregates.push(sessionColumns.has('logistics_track_no') ? 'MAX(logistics_track_no) as logistics_track_no' : 'NULL::text as logistics_track_no')
+  aggregates.push(sessionColumns.has('logistics_channel') ? 'MAX(logistics_channel) as logistics_channel' : 'NULL::text as logistics_channel')
+  aggregates.push(sessionColumns.has('outbound_delivery_at') ? 'MAX(outbound_delivery_at) as outbound_delivery_at' : 'NULL::text as outbound_delivery_at')
+  aggregates.push(sessionColumns.has('total_expected') ? 'MAX(COALESCE(total_expected, 0)) as outbound_box_count' : '0::bigint as outbound_box_count')
   aggregates.push(sessionColumns.has('ubicacion_nota') ? 'MAX(ubicacion_nota) as ubicacion_nota' : 'NULL::text as ubicacion_nota')
   aggregates.push(sessionColumns.has('started_at') ? 'MIN(started_at) as first_session_at' : 'NULL as first_session_at')
   aggregates.push(sessionColumns.has('updated_at') ? 'MAX(updated_at) as last_session_at' : sessionColumns.has('completed_at') ? 'MAX(completed_at) as last_session_at' : 'NULL as last_session_at')
@@ -327,6 +339,42 @@ function buildPickSessionsStatsSubquery(sessionColumns, includeSessionCount = fa
     WHERE s.tenant_id = $1
     GROUP BY s.outbound_order_no, s.tenant_id
   `
+}
+
+async function upsertOrderTrackingSnapshot(queryable, tenantId, outboundOrderNo, snapshot = {}) {
+  if (!outboundOrderNo) return
+  const trackingColumns = await getPublicTableColumns(queryable, 'pick_order_tracking')
+  const insertColumns = ['tenant_id', 'outbound_order_no']
+  const insertValues = [tenantId, outboundOrderNo]
+  const updates = []
+
+  const snapshotFields = [
+    ['third_order_no', normalizeOptionalText(snapshot.third_order_no)],
+    ['receiver_name', normalizeOptionalText(snapshot.receiver_name)],
+    ['logistics_track_no', normalizeOptionalText(snapshot.logistics_track_no)],
+    ['logistics_channel', normalizeOptionalText(snapshot.logistics_channel)],
+    ['outbound_delivery_at', normalizeOptionalText(snapshot.outbound_delivery_at)],
+    ['outbound_box_count', Number.isFinite(Number(snapshot.outbound_box_count)) ? Number(snapshot.outbound_box_count) : null],
+  ]
+
+  for (const [field, value] of snapshotFields) {
+    if (!trackingColumns.has(field)) continue
+    insertColumns.push(field)
+    insertValues.push(value)
+    updates.push(`${field} = COALESCE(pick_order_tracking.${field}, EXCLUDED.${field})`)
+  }
+
+  if (trackingColumns.has('updated_at')) updates.push('updated_at = now()')
+  const placeholders = insertColumns.map((_, index) => `$${index + 1}`).join(', ')
+
+  await runDbQuery(
+    queryable,
+    `INSERT INTO pick_order_tracking (${insertColumns.join(', ')})
+     VALUES (${placeholders})
+     ON CONFLICT (tenant_id, outbound_order_no) DO UPDATE SET
+       ${updates.join(', ')}`,
+    insertValues
+  )
 }
 
 async function generateInventorySectionCode(client, tenantId, tz, referenceDate = null) {
@@ -857,6 +905,14 @@ router.post('/scan-session',
            receiver_name || null, logistics_track_no || null, logistics_channel || null, outbound_delivery_at || null,
            JSON.stringify(normalizeExpectedBoxes(expected_boxes))]
         )
+        await upsertOrderTrackingSnapshot(req, req.tenantId, outbound_order_no, {
+          third_order_no,
+          receiver_name,
+          logistics_track_no,
+          logistics_channel,
+          outbound_delivery_at,
+          outbound_box_count: total_expected,
+        })
         return res.json({ success: true, data: updated.rows[0], reused: true })
       }
 
@@ -871,6 +927,14 @@ router.post('/scan-session',
            receiver_name || null, logistics_track_no || null, logistics_channel || null, outbound_delivery_at || null,
            JSON.stringify(normalizeExpectedBoxes(expected_boxes))]
         )
+        await upsertOrderTrackingSnapshot(req, req.tenantId, outbound_order_no, {
+          third_order_no,
+          receiver_name,
+          logistics_track_no,
+          logistics_channel,
+          outbound_delivery_at,
+          outbound_box_count: total_expected,
+        })
         return res.status(201).json({ success: true, data: result.rows[0] })
       } catch (insertErr) {
         // Unique index race: another request created the open session first — reuse it.
@@ -2550,14 +2614,41 @@ router.post('/surtidores',
     try {
       const { nombre } = req.body
       if (!nombre?.trim()) return res.status(400).json({ success: false, error: 'Nombre requerido' })
+      const normalizedNombre = nombre.trim().toLocaleUpperCase('es-MX')
       const result = await req.tQuery(
         'INSERT INTO pick_surtidores (tenant_id, nombre) VALUES ($1, $2) RETURNING *',
-        [req.tenantId, nombre.trim()]
+        [req.tenantId, normalizedNombre]
       )
       res.status(201).json({ success: true, data: result.rows[0] })
     } catch (err) {
       if (err.code === '23505') return res.status(409).json({ success: false, error: 'Ya existe un surtidor con ese nombre' })
       res.status(500).json({ success: false, error: 'Error creando surtidor' })
+    }
+  }
+)
+
+router.put('/surtidores/:id',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.ordenes', 'actualizar'),
+  async (req, res) => {
+    try {
+      const { nombre } = req.body
+      if (!nombre?.trim()) return res.status(400).json({ success: false, error: 'Nombre requerido' })
+      const normalizedNombre = nombre.trim().toLocaleUpperCase('es-MX')
+      const result = await req.tQuery(
+        `UPDATE pick_surtidores
+            SET nombre = $3
+          WHERE id = $1 AND tenant_id = $2 AND activo = true
+        RETURNING *`,
+        [req.params.id, req.tenantId, normalizedNombre]
+      )
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Surtidor no encontrado' })
+      }
+      res.json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      if (err.code === '23505') return res.status(409).json({ success: false, error: 'Ya existe un surtidor con ese nombre' })
+      res.status(500).json({ success: false, error: 'Error actualizando surtidor' })
     }
   }
 )
@@ -2864,7 +2955,10 @@ router.put('/order-tracking/:obc',
   requirePermission('surtido.ordenes', 'actualizar'),
   async (req, res) => {
     try {
-      const { surtidor_id, status, notes, third_order_no } = req.body
+      const {
+        surtidor_id, status, notes, third_order_no,
+        receiver_name, logistics_track_no, logistics_channel, outbound_delivery_at, outbound_box_count,
+      } = req.body
       const trackingColumns = await getPublicTableColumns(req, 'pick_order_tracking')
       if (status !== undefined && !ORDER_TRACKING_STATUSES.has(String(status))) {
         return res.status(400).json({ success: false, error: 'Estado de orden inválido' })
@@ -2910,6 +3004,26 @@ router.put('/order-tracking/:obc',
           if (txTrackingColumns.has('third_order_no')) {
             insertColumns.push('third_order_no')
             insertValues.push(normalizeOptionalText(third_order_no))
+          }
+          if (txTrackingColumns.has('receiver_name')) {
+            insertColumns.push('receiver_name')
+            insertValues.push(normalizeOptionalText(receiver_name))
+          }
+          if (txTrackingColumns.has('logistics_track_no')) {
+            insertColumns.push('logistics_track_no')
+            insertValues.push(normalizeOptionalText(logistics_track_no))
+          }
+          if (txTrackingColumns.has('logistics_channel')) {
+            insertColumns.push('logistics_channel')
+            insertValues.push(normalizeOptionalText(logistics_channel))
+          }
+          if (txTrackingColumns.has('outbound_delivery_at')) {
+            insertColumns.push('outbound_delivery_at')
+            insertValues.push(normalizeOptionalText(outbound_delivery_at))
+          }
+          if (txTrackingColumns.has('outbound_box_count')) {
+            insertColumns.push('outbound_box_count')
+            insertValues.push(Number.isFinite(Number(outbound_box_count)) ? Number(outbound_box_count) : null)
           }
           if (txTrackingColumns.has('surtidor_id')) {
             insertColumns.push('surtidor_id')
@@ -2987,6 +3101,11 @@ router.put('/order-tracking/:obc',
         if (surtidor_id && trackingColumns.has('assigned_at')) fields.push(`assigned_at = COALESCE(assigned_at, now())`)
       }
       if (third_order_no !== undefined && trackingColumns.has('third_order_no')) { fields.push(`third_order_no = $${p++}`); params.push(normalizeOptionalText(third_order_no)) }
+      if (receiver_name !== undefined && trackingColumns.has('receiver_name')) { fields.push(`receiver_name = $${p++}`); params.push(normalizeOptionalText(receiver_name)) }
+      if (logistics_track_no !== undefined && trackingColumns.has('logistics_track_no')) { fields.push(`logistics_track_no = $${p++}`); params.push(normalizeOptionalText(logistics_track_no)) }
+      if (logistics_channel !== undefined && trackingColumns.has('logistics_channel')) { fields.push(`logistics_channel = $${p++}`); params.push(normalizeOptionalText(logistics_channel)) }
+      if (outbound_delivery_at !== undefined && trackingColumns.has('outbound_delivery_at')) { fields.push(`outbound_delivery_at = $${p++}`); params.push(normalizeOptionalText(outbound_delivery_at)) }
+      if (outbound_box_count !== undefined && trackingColumns.has('outbound_box_count')) { fields.push(`outbound_box_count = $${p++}`); params.push(Number.isFinite(Number(outbound_box_count)) ? Number(outbound_box_count) : null) }
       if (notes !== undefined && trackingColumns.has('notes')) {
         if (requestedStatus === 'cancelled' && normalizedNotes) {
           fields.push(`notes = CASE WHEN COALESCE(notes, '') <> '' THEN notes || E'\n' || $${p} ELSE $${p} END`)

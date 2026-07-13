@@ -705,7 +705,7 @@ export default function Ordenes() {
           </div>
 
           {/* Row 3 — status tabs */}
-          <div className="flex gap-0 border-b border-warm-100 -mx-5 px-5 overflow-x-auto scrollbar-none">
+          <div className="flex gap-0 border-b border-warm-100 px-5 overflow-x-auto overflow-y-hidden scrollbar-none">
             {TABS.map(t => (
               <button
                 key={t.id}

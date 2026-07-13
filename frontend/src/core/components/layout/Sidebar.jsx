@@ -363,7 +363,7 @@ export default function Sidebar() {
           <button
             onClick={closeNav}
             className="ml-auto p-1.5 rounded-lg text-blue-300/70 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0"
-            aria-label="Cerrar menú"
+            aria-label={t('common.closeMenu')}
           >
             <X className="w-4 h-4" />
           </button>

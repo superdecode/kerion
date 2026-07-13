@@ -569,7 +569,7 @@ function DespachoOrdenesSection({ records, open, onToggle }) {
     <div>
       <SectionHeader
         icon={Send}
-        title="Ordenes en Despacho"
+        title={t('rastreo.searchModal.section.despacho')}
         count={records?.length}
         color={{ border: 'border-teal-200', bg: 'bg-teal-50/50', icon: 'bg-teal-100 text-teal-600', badge: 'bg-teal-100 text-teal-700' }}
         open={open}
@@ -585,7 +585,7 @@ function DespachoOrdenesSection({ records, open, onToggle }) {
           >
             <div className="mt-2 rounded-xl border border-teal-100 overflow-x-auto">
               {!records?.length ? (
-                <p className="px-4 py-3 text-xs text-warm-400">Sin resultados en ordenes de despacho</p>
+                <p className="px-4 py-3 text-xs text-warm-400">{t('rastreo.searchModal.empty.despacho')}</p>
               ) : (
                 <table className="min-w-max w-full text-xs whitespace-nowrap">
                   <thead className="bg-teal-50/70 border-b border-teal-100">
@@ -1059,8 +1059,8 @@ export default function RastreoSearchModal({ isOpen, onClose }) {
                     type="button"
                     onClick={() => setScannerOpen(true)}
                     className="sm:hidden shrink-0 -ml-0.5 p-0.5 text-primary-600 hover:text-primary-700 transition-colors"
-                    aria-label="Escanear código de barras o QR"
-                    title="Escanear código"
+                    aria-label={t('common.scanBarcodeOrQr')}
+                    title={t('common.scanCode')}
                   >
                     <ScanLine size={18} />
                   </button>

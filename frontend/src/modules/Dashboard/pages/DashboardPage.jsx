@@ -235,7 +235,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Module list */}
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none py-2">
           {visibleModules.map(mod => {
             const isActive = mod.id === activeModule?.id
             const styles = COLOR_STYLES[mod.color]

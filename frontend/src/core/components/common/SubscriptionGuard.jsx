@@ -202,7 +202,7 @@ function RenewalModal({ user, state, onClose, onSent }) {
                 type="email"
                 value={form.contact_email}
                 onChange={e => setForm(f => ({ ...f, contact_email: e.target.value }))}
-                placeholder="you@company.com"
+                placeholder={t('common.emailExample')}
                 className={inputCls}
               />
             </div>
@@ -306,7 +306,7 @@ function CountdownBanner({ state, onRenew, onDismiss }) {
           {t('sub.renewBtn')}
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
-        <button onClick={onDismiss} className="text-gray-600 hover:text-gray-400 transition-colors p-1" title="Ocultar por 24 horas">
+        <button onClick={onDismiss} className="text-gray-600 hover:text-gray-400 transition-colors p-1" title={t('sub.hide24h')}>
           <X className="w-4 h-4" />
         </button>
       </div>

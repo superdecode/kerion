@@ -84,7 +84,7 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
 
   return (
     <>
-    <Modal isOpen={isOpen} onClose={onClose} title="Búsqueda rápida de código" icon={Search} size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.quickSearch.title')} icon={Search} size="xl">
       <div className="space-y-4">
         <div className="flex gap-2">
           <div className="flex h-12 flex-1 items-center gap-2 rounded-2xl border-2 border-warm-200 bg-warm-50 px-4 transition-all focus-within:rounded-2xl focus-within:border-primary-400 focus-within:ring-4 focus-within:ring-primary-100 focus-within:shadow-sm">
@@ -92,8 +92,8 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
               type="button"
               onClick={() => setScannerOpen(true)}
               className="sm:hidden shrink-0 -ml-0.5 p-0.5 text-primary-600 hover:text-primary-700 transition-colors"
-              aria-label="Escanear código con cámara"
-              title="Escanear código"
+              aria-label={t('inventario.quickSearch.scanCamera')}
+              title={t('inventario.quickSearch.scanCode')}
             >
               <ScanLine size={18} />
             </button>
@@ -102,7 +102,7 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
               ref={inputRef}
               type="text"
               className="h-full min-w-0 flex-1 appearance-none border-0 bg-transparent font-mono text-base tracking-wide shadow-none outline-none ring-0 placeholder:text-warm-300 focus:border-0 focus:outline-none focus:ring-0 focus:shadow-none focus-visible:border-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:shadow-none"
-              placeholder="Código 1, Código 2 o SKU"
+              placeholder={t('inventario.quickSearch.placeholder')}
               value={query}
               onChange={(event) => { setQuery(event.target.value); setSearchError(null) }}
               onKeyDown={(event) => { if (event.key === 'Enter' && query.trim()) doSearch(query) }}
@@ -140,12 +140,12 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-warm-500">
-                <Package2 className="h-3.5 w-3.5" /> Stock actual
+                <Package2 className="h-3.5 w-3.5" /> {t('inventario.quickSearch.currentStock')}
               </div>
               <div className="grid grid-cols-1 gap-3 max-h-[58vh] overflow-y-auto pr-1 scrollbar-thin">
                 {results.stock.length === 0 ? (
                   <div className="rounded-2xl border border-warm-200 bg-warm-50 px-4 py-6 text-sm text-warm-400">
-                    Sin coincidencias en el inventario disponible.
+                    {t('inventario.quickSearch.noStockMatches')}
                   </div>
                 ) : results.stock.map((row, index) => (
                   <div key={`${row.customizeBarcode || row.boxType || 'stock'}-${index}`} className="rounded-2xl border border-warm-200 bg-white p-4 shadow-sm">
@@ -156,32 +156,32 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
                         row.isBlocked ? 'bg-warning-100 text-warning-700' :
                         'bg-danger-100 text-danger-700'
                       }`}>
-                        {row.isAvailable ? 'Disponible' : row.isBlocked ? 'Bloqueado' : 'No disponible'}
+                        {row.isAvailable ? t('inventario.stock.available') : row.isBlocked ? t('inventario.stock.blocked') : t('inventario.stock.unavailable')}
                       </span>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                       <div>
-                        <p className="text-warm-400 uppercase tracking-wide">SKU</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.stock.sku')}</p>
                         <p className="mt-0.5 font-medium text-warm-700">{row.customizeCode || '—'}</p>
                       </div>
                       <div>
-                        <p className="text-warm-400 uppercase tracking-wide">Tipo caja</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.quickSearch.boxType')}</p>
                         <p className="mt-0.5 font-medium text-warm-700">{row.boxType || '—'}</p>
                       </div>
                       <div className="col-span-2">
-                        <p className="text-warm-400 uppercase tracking-wide">Producto</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.stock.product')}</p>
                         <p className="mt-0.5 font-medium text-warm-700">{row.productName || '—'}</p>
                       </div>
                       <div>
-                        <p className="text-warm-400 uppercase tracking-wide">Disponible</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.stock.available')}</p>
                         <p className="mt-0.5 font-bold text-success-700">{row.availableAmount ?? 0}</p>
                       </div>
                       <div>
-                        <p className="text-warm-400 uppercase tracking-wide">Bloqueado</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.stock.blocked')}</p>
                         <p className="mt-0.5 font-bold text-warning-700">{row.lockAmount ?? 0}</p>
                       </div>
                       <div className="col-span-2">
-                        <p className="text-warm-400 uppercase tracking-wide">Ubicación actual</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.quickSearch.currentLocation')}</p>
                         <p className="mt-0.5 inline-flex items-center gap-1 font-medium text-warm-700">
                           <MapPin className="h-3.5 w-3.5 text-accent-500" />
                           {row.cellNo || '—'}
@@ -195,12 +195,12 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
 
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-warm-500">
-                <Boxes className="h-3.5 w-3.5" /> Registros vinculados
+                <Boxes className="h-3.5 w-3.5" /> {t('inventario.quickSearch.linkedRecords')}
               </div>
               <div className="grid grid-cols-1 gap-3 max-h-[58vh] overflow-y-auto pr-1 scrollbar-thin">
                 {results.matches.length === 0 ? (
                   <div className="rounded-2xl border border-warm-200 bg-warm-50 px-4 py-6 text-sm text-warm-400">
-                    Sin registros guardados para este código.
+                    {t('inventario.quickSearch.noSavedRecords')}
                   </div>
                 ) : results.matches.map((row) => {
                   const CardTag = onOpenSession ? 'button' : 'div'
@@ -222,36 +222,36 @@ export default function QuickCodeSearchModal({ isOpen, onClose, onOpenSession })
                         row.scan_status === 'blocked' ? 'bg-warning-100 text-warning-700' :
                         'bg-danger-100 text-danger-700'
                       }`}>
-                        {row.scan_status === 'ok' ? 'Disponible' : row.scan_status === 'blocked' ? 'Bloqueado' : 'No WMS'}
+                        {row.scan_status === 'ok' ? t('inventario.stock.available') : row.scan_status === 'blocked' ? t('inventario.stock.blocked') : t('inventario.quickSearch.noWms')}
                       </span>
                     </div>
 
                     <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                       <div>
-                        <p className="text-warm-400 uppercase tracking-wide">Sección</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.registros.section')}</p>
                         <p className="mt-0.5 font-medium text-warm-700">{formatSectionCode(row.tarima_code, row.completed_at)}</p>
                       </div>
                       <div>
-                        <p className="text-warm-400 uppercase tracking-wide">Tipo</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.quickSearch.type')}</p>
                         <p className="mt-0.5 font-medium text-warm-700">{row.scan_type === 'clasificacion' ? 'Clasificación' : 'Unificado'}</p>
                       </div>
                       <div>
-                        <p className="text-warm-400 uppercase tracking-wide">Operador</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.quickSearch.operator')}</p>
                         <p className="mt-0.5 font-medium text-warm-700 truncate">{row.operator_nombre || '—'}</p>
                       </div>
                       <div>
-                        <p className="text-warm-400 uppercase tracking-wide">Ubic. trabajo</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.registros.work_location')}</p>
                         <p className="mt-0.5 font-medium text-warm-700 truncate">{row.origin_location || '—'}</p>
                       </div>
                       <div className="col-span-2">
-                        <p className="text-warm-400 uppercase tracking-wide">Ubic. destino</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.registros.destination_location')}</p>
                         <p className="mt-0.5 inline-flex items-center gap-1 font-medium text-warm-700">
                           <MapPin className="h-3.5 w-3.5 text-accent-500" />
                           {row.ubicacion_destino_codigo || row.ubicacion_destino_nombre || row.cell_no || '—'}
                         </p>
                       </div>
                       <div className="col-span-2">
-                        <p className="text-warm-400 uppercase tracking-wide">Último movimiento / escaneo</p>
+                        <p className="text-warm-400 uppercase tracking-wide">{t('inventario.quickSearch.lastMovement')}</p>
                         <p className="mt-0.5 inline-flex items-center gap-1 font-medium text-warm-700">
                           <Clock className="h-3.5 w-3.5 text-warm-400" />
                           {row.scanned_at ? fmtDateTime(row.scanned_at) : '—'}

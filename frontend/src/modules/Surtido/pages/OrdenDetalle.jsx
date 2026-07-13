@@ -576,7 +576,18 @@ export default function OrdenDetalle() {
   const tracking = trackingRaw?.data ?? null
   const sessions = getRecords(sessionsRaw)
 
-  const d = detail ?? wmsRecord ?? {}
+  const d = {
+    ...(wmsRecord ?? {}),
+    ...(detail ?? {}),
+    customerCode: detail?.customerCode ?? wmsRecord?.customerCode ?? null,
+    receiverName: detail?.receiverName ?? tracking?.receiver_name ?? wmsRecord?.receiverName ?? null,
+    outboundTime: detail?.outboundTime ?? tracking?.outbound_delivery_at ?? wmsRecord?.outboundTime ?? null,
+    expectedTime: detail?.expectedTime ?? tracking?.outbound_delivery_at ?? null,
+    outboundBoxCount: detail?.outboundBoxCount ?? tracking?.outbound_box_count ?? wmsRecord?.outboundBoxCount ?? null,
+    logisticsChannel: detail?.logisticsChannel ?? tracking?.logistics_channel ?? wmsRecord?.logisticsChannel ?? null,
+    logisticsTrackNo: detail?.logisticsTrackNo ?? tracking?.logistics_track_no ?? wmsRecord?.logisticsTrackNo ?? null,
+    thirdOrderNo: detail?.thirdOrderNo ?? tracking?.third_order_no ?? wmsRecord?.thirdOrderNo ?? null,
+  }
   const packageList = d?.packageList ?? d?.outboundBoxList ?? d?.boxList ?? []
 
   const status = tracking?.status || 'pending_assignment'
@@ -607,6 +618,24 @@ export default function OrdenDetalle() {
 
   const pct = totalExpected > 0 ? Math.min(100, Math.round((totalScanned / totalExpected) * 100)) : null
   const hasValidation = pct !== null || totalScanned > 0
+  const hasOperationData = Boolean(
+    sessions.length > 0 ||
+    tracking?.notes ||
+    tracking?.assigned_at ||
+    tracking?.assigned_by ||
+    tracking?.surtidor_id ||
+    tracking?.surtidor_nombre ||
+    tracking?.surtidor_nombre_actual ||
+    tracking?.sorting_started_at ||
+    tracking?.sorting_completed_at ||
+    tracking?.validation_started_at ||
+    tracking?.validation_completed_at ||
+    tracking?.validated_by ||
+    Number(tracking?.total_scanned ?? 0) > 0 ||
+    Number(tracking?.total_rejected ?? 0) > 0 ||
+    Number(tracking?.session_count ?? 0) > 0 ||
+    (tracking?.status && tracking.status !== 'pending_assignment')
+  )
 
   const assignMut = useMutation({
     mutationFn: (surtidorId) => upsertOrderTracking(obc, {
@@ -635,7 +664,7 @@ export default function OrdenDetalle() {
     onError: (err) => toast.error(err?.response?.data?.error || t('toast.error')),
   })
 
-  if (detailLoading && !wmsRecord) {
+  if (detailLoading && !wmsRecord && !tracking) {
     return (
       <div className="flex flex-col h-full">
         <Header title={t('surtido.ordenes.detail.title')} subtitle={t('nav.surtido_wms')} />
@@ -750,27 +779,24 @@ export default function OrdenDetalle() {
       {/* Main scrollable — single column */}
       <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
 
-        {/* Operación — traceability timeline */}
-        <motion.div className="card p-4"
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
-          <div className="flex items-center gap-2 mb-4 pb-2 border-b border-warm-100">
-            <ClipboardList size={13} className="text-primary-500 shrink-0" />
-            <p className="text-[10px] uppercase tracking-wider font-bold text-primary-600">
-              {t('surtido.ordenes.trace.operacion') || 'Operación'}
-            </p>
-          </div>
-          {tracking ? (
+        {hasOperationData && (
+          <motion.div className="card p-4"
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
+            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-warm-100">
+              <ClipboardList size={13} className="text-primary-500 shrink-0" />
+              <p className="text-[10px] uppercase tracking-wider font-bold text-primary-600">
+                {t('surtido.ordenes.trace.operacion') || 'Operación'}
+              </p>
+            </div>
             <TraceabilityTimeline
               tracking={tracking}
               sessions={sessions}
               isComplete={displayStatus === 'complete' || displayStatus === 'partial'}
               t={t}
             />
-          ) : (
-            <p className="text-xs text-warm-400 text-center py-4">{t('common.noData')}</p>
-          )}
-        </motion.div>
+          </motion.div>
+        )}
 
         {/* Cajas de la orden */}
         <motion.div className="card p-4"

@@ -55,7 +55,7 @@ function TabBar({ tabs, activeTabId, onSelect, onClose, onAdd, canAdd, t }) {
         <button
           onClick={onAdd}
           className="flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-xs font-semibold border-2 border-transparent text-success-600 bg-success-50 hover:bg-success-100 transition-all shrink-0"
-          title="Iniciar nueva validación">
+          title={t('desp.validar.startNewValidation')}>
           <Plus size={14} />
           <span className="hidden sm:inline">{t('desp.validar.nuevaSesion')}</span>
         </button>
@@ -202,7 +202,7 @@ export default function Validar() {
         <button
           onClick={toggleNav}
           className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-warm-500 hover:bg-warm-100 transition-colors"
-          aria-label="Abrir menu"
+          aria-label={t('common.openMenu')}
         >
           <Menu className="w-5 h-5" />
         </button>

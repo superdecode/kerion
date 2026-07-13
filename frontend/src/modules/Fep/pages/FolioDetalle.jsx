@@ -366,7 +366,7 @@ export default function FolioDetalle() {
                                     <button
                                       onClick={e => { e.stopPropagation(); copyToClipboard(t.codigo) }}
                                       className="opacity-0 group-hover/row:opacity-100 p-0.5 rounded hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-all"
-                                      title="Copiar código"
+                                      title={t('common.copy')}
                                     >
                                       {copiedCode === t.codigo
                                         ? <CheckCircle className="w-3.5 h-3.5 text-success-500" />

@@ -200,19 +200,19 @@ export default function AdminLayout() {
           <button
             onClick={() => setShowChangePwd(true)}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-blue-200/60 hover:text-blue-300 hover:bg-white/5 transition-colors"
-            title="Cambiar contraseña"
+            title={t('auth.changePassword')}
           >
             <Lock className="w-4 h-4 flex-shrink-0" />
-            {!collapsed && 'Cambiar contraseña'}
+            {!collapsed && t('auth.changePassword')}
           </button>
 
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-blue-200/60 hover:text-red-400 hover:bg-red-950/30 transition-colors"
-            title="Cerrar sesion"
+            title={t('auth.logout')}
           >
             <LogOut className="w-4 h-4 flex-shrink-0" />
-            {!collapsed && 'Cerrar sesion'}
+            {!collapsed && t('auth.logout')}
           </button>
         </div>
       </aside>

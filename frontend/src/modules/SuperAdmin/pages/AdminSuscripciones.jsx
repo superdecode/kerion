@@ -136,7 +136,6 @@ function PlanModal({ plan, onClose, onSaved }) {
           )}
 
           <div className="grid grid-cols-3 gap-6">
-            {/* Col 1: Configuracion */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-2.5 border-b border-gray-800">
                 <Settings className="w-4 h-4 text-gray-500" />
@@ -175,7 +174,6 @@ function PlanModal({ plan, onClose, onSaved }) {
               </div>
             </div>
 
-            {/* Col 2: Precios */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 pb-2.5 border-b border-gray-800">
                 <CreditCard className="w-4 h-4 text-emerald-500" />
@@ -205,7 +203,6 @@ function PlanModal({ plan, onClose, onSaved }) {
               </div>
             </div>
 
-            {/* Col 3: Limites por modulo */}
             <div className="space-y-3">
               <div className="flex items-center gap-2 pb-2.5 border-b border-gray-800">
                 <BarChart3 className="w-4 h-4 text-blue-400" />
@@ -430,8 +427,6 @@ function PlansTab() {
   )
 }
 
-// ── Edit Subscription Modal ───────────────────────────────────────────────────
-
 function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
   function extractTime(isoStr) {
     if (!isoStr) return '23:59'
@@ -556,8 +551,6 @@ function EditSubscriptionModal({ sub, plans, onClose, onSaved }) {
     </div>
   )
 }
-
-// ── Subscriptions records ─────────────────────────────────────────────────────
 
 const SUB_PAGE_SIZES = [20, 50, 100, 200, 500]
 const DEFAULT_SUB_PAGE_SIZE = 50
@@ -717,7 +710,6 @@ function SubscriptionsTab() {
           onSaved={() => { setEditSub(null); load() }}
         />
       )}
-      {/* Filters: search + date card + plan dropdown + status pills on right */}
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
@@ -780,7 +772,6 @@ function SubscriptionsTab() {
         </div>
       </div>
 
-      {/* Table */}
       {loading ? (
         <div className="flex items-center justify-center h-32">
           <RefreshCw className="w-5 h-5 animate-spin text-gray-500" />
@@ -935,8 +926,6 @@ function SubscriptionsTab() {
     </div>
   )
 }
-
-// ── Main ─────────────────────────────────────────────────────────────────────
 
 export default function AdminSuscripciones() {
   const [tab, setTab] = useState('registros')

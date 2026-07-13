@@ -407,7 +407,7 @@ export default function Inventario() {
                   {canManage && (
                     <button
                       onClick={exportInventario}
-                      title="Exportar CSV"
+                      title={t('common.exportCsv')}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold rounded-lg border bg-warm-50 text-warm-600 border-warm-200 hover:bg-warm-100 transition-colors"
                     >
                       <Download className="w-3.5 h-3.5" /> {t('dev.inventario.exportar')}
@@ -770,7 +770,7 @@ export default function Inventario() {
       <Modal
         isOpen={!!exportConfirm}
         onClose={() => setExportConfirm(null)}
-        title="Confirmar exportación"
+        title={t('common.confirmExport')}
         icon={Download}
         size="sm"
         footer={

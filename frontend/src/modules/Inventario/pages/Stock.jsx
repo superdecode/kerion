@@ -42,15 +42,15 @@ export default function Stock() {
 
   const handleRefresh = async () => {
     setRefreshState('loading')
-    setRefreshMessage('Actualizando...')
+    setRefreshMessage(t('inventario.stock.refreshing'))
     try {
       await refetch()
       setRefreshState('success')
-      setRefreshMessage('Actualizado')
-      toast.success('Stock actualizado')
+      setRefreshMessage(t('inventario.stock.updated'))
+      toast.success(t('inventario.stock.updated'))
     } catch (error) {
       setRefreshState('error')
-      setRefreshMessage('Error')
+      setRefreshMessage(t('toast.error'))
       toast.error(error?.message || t('toast.error'))
     } finally {
       window.setTimeout(() => {
@@ -128,10 +128,10 @@ export default function Stock() {
                   <tr>
                     <th className="table-header">{t('inventario.stock.box_code')}</th>
                     <th className="table-header">{t('inventario.stock.sku')}</th>
-                    <th className="table-header">Producto</th>
+                    <th className="table-header">{t('inventario.stock.product')}</th>
                     <th className="table-header">{t('inventario.stock.location')}</th>
                     <th className="table-header text-right">{t('inventario.stock.qty')}</th>
-                    <th className="table-header text-right">Bloqueado</th>
+                    <th className="table-header text-right">{t('inventario.stock.blocked')}</th>
                     <th className="table-header">{t('inventario.stock.status')}</th>
                   </tr>
                 </thead>
@@ -157,7 +157,7 @@ export default function Stock() {
                             r.isBlocked ? 'bg-warning-100 text-warning-700' :
                             'bg-danger-100 text-danger-700'
                           }>
-                            {r.isAvailable ? t('inventario.stock.available') : r.isBlocked ? t('inventario.stock.blocked') : 'No disponible'}
+                            {r.isAvailable ? t('inventario.stock.available') : r.isBlocked ? t('inventario.stock.blocked') : t('inventario.stock.unavailable')}
                           </StatusPill>
                         </td>
                       </tr>

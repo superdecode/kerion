@@ -22,7 +22,7 @@ export default function Header({ title, subtitle, actions, showSearch = false, q
       <button
         onClick={toggleNav}
         className="md:hidden flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl text-warm-500 hover:text-warm-700 hover:bg-warm-100 transition-colors active:scale-95"
-        aria-label="Abrir menú"
+        aria-label={t('common.openMenu')}
       >
         <Menu className="w-5 h-5" />
       </button>

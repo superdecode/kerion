@@ -53,6 +53,9 @@ export const getSurtidores = () =>
 export const createSurtidor = (body) =>
   api.post('/wmshub/surtidores', body).then(r => r.data)
 
+export const updateSurtidor = (id, body) =>
+  api.put(`/wmshub/surtidores/${id}`, body).then(r => r.data)
+
 export const deleteSurtidor = (id) =>
   api.delete(`/wmshub/surtidores/${id}`).then(r => r.data)
 

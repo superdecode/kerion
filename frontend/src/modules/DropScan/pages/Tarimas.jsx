@@ -259,7 +259,7 @@ export default function Tarimas() {
   const deleteGuiaMutation = useMutation({
     mutationFn: ({ tarimaId, guiaId }) => ds.deleteGuiaFromTarima(tarimaId, guiaId),
     onSuccess: () => {
-      toast.success('Guía eliminada')
+      toast.success(t('dropscan.toast.guiaDeleted'))
       qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail', selectedTarima] })
       qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] })
     },
@@ -269,14 +269,14 @@ export default function Tarimas() {
   const addGuiaMutation = useMutation({
     mutationFn: ({ tarimaId, codigo_guia }) => ds.addGuiaToTarima(tarimaId, codigo_guia),
     onSuccess: (data) => {
-      toast.success('Guía agregada correctamente')
+      toast.success(t('dropscan.toast.guiaAdded'))
       setNewGuiaCode('')
       qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail', selectedTarima] })
       qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] })
     },
     onError: (err) => {
       if (err.response?.data?.error === 'DUPLICADO') {
-        toast.error('Esta guía ya está registrada en esta tarima')
+        toast.error(t('dropscan.toast.guiaDuplicateInTarima'))
       } else {
         toast.error(err.response?.data?.error || t('toast.error'))
       }
@@ -296,7 +296,7 @@ export default function Tarimas() {
   const finalizeMutation = useMutation({
     mutationFn: (id) => ds.finalizeTarima(id),
     onSuccess: () => {
-      toast.success('Tarima cerrada forzosamente')
+      toast.success(t('dropscan.toast.tarimaForcedClosed'))
       qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] })
       qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail', selectedTarima] })
     },
@@ -411,7 +411,7 @@ export default function Tarimas() {
       ]
       const ws = XLSX.utils.aoa_to_sheet(wsData)
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Tarima')
+      XLSX.utils.book_append_sheet(wb, ws, t('dropscan.excel.tarimaSheet'))
       XLSX.writeFile(wb, `tarima_${detail.codigo}_${getToday()}.xlsx`)
     } catch { toast.error(t('toast.error')) }
   }
@@ -448,9 +448,9 @@ export default function Tarimas() {
       }
       const ws = XLSX.utils.aoa_to_sheet(rows)
       ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 8 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 22 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 10 }]
-      XLSX.utils.book_append_sheet(wb, ws, 'Tarimas')
+      XLSX.utils.book_append_sheet(wb, ws, t('dropscan.excel.tarimasSheet'))
       XLSX.writeFile(wb, `tarimas_${getToday()}.xlsx`)
-      toast.success('Exportación completada')
+      toast.success(t('common.exportCompleted'))
       setSelectMode(false)
       setSelectedIds(new Set())
     } catch { toast.error(t('toast.error')) }
@@ -736,7 +736,7 @@ export default function Tarimas() {
                               <button
                                 onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(row.codigo) }}
                                 className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-all"
-                                title="Copiar código"
+                                title={t('common.copy')}
                               >
                                 <Copy className="w-3.5 h-3.5" />
                               </button>
@@ -769,7 +769,7 @@ export default function Tarimas() {
                             <div className="flex items-center justify-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                               {canViewDetails && (
                               <button onClick={() => handleOpenDetail(row.id)}
-                                className="p-2 rounded-xl hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-all" title="Ver detalle">
+                                className="p-2 rounded-xl hover:bg-primary-50 text-warm-400 hover:text-primary-600 transition-all" title={t('common.viewDetail')}>
                                 <Eye className="w-4 h-4" />
                               </button>
                               )}
@@ -777,7 +777,7 @@ export default function Tarimas() {
                                 <button
                                   onClick={() => handleOpenDetail(row.id, true)}
                                   className="p-2 rounded-xl hover:bg-warning-50 text-warm-400 hover:text-warning-500 transition-all"
-                                  title="Editar">
+                                  title={t('common.edit')}>
                                   <Edit3 className="w-4 h-4" />
                                 </button>
                               )}
@@ -785,7 +785,7 @@ export default function Tarimas() {
                                 <button
                                   onClick={() => row.folio_asignado ? setBlockedDeleteTarima(row) : setDeletingTarima(row)}
                                   className="p-2 rounded-xl hover:bg-danger-50 text-warm-400 hover:text-danger-500 transition-all"
-                                  title={row.folio_asignado ? `Bloqueado — folio ${row.folio_asignado}` : 'Eliminar'}
+                                  title={row.folio_asignado ? `${t('common.blocked')} — ${t('nav.desp.folios').toLowerCase()} ${row.folio_asignado}` : t('common.delete')}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -825,7 +825,7 @@ export default function Tarimas() {
                 <button
                   onClick={(e) => { e.stopPropagation(); copyTarimaCode(detail.codigo) }}
                   className="opacity-0 group-hover/tcode:opacity-100 p-0.5 rounded hover:bg-primary-100/60 text-warm-400 hover:text-primary-600 transition-all"
-                  title="Copiar código"
+                  title={t('common.copy')}
                 >
                   {copiedTarimaCode === detail.codigo
                     ? <CheckCircle className="w-3.5 h-3.5 text-success-500" />

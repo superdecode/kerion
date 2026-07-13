@@ -1077,8 +1077,8 @@ function QuickSearchModal({ isOpen, onClose, onValidate }) {
                 type="button"
                 onClick={() => setScannerOpen(true)}
                 className="sm:hidden shrink-0 -ml-0.5 p-0.5 text-primary-600 hover:text-primary-700 transition-colors"
-                aria-label="Escanear codigo con camara"
-                title="Escanear codigo"
+                aria-label={t('common.scanWithCamera')}
+                title={t('common.scanCode')}
               >
                 <ScanLine size={18} />
               </button>
@@ -1855,7 +1855,7 @@ export default function SurtidoRegistros() {
             </div>
           </div>
         ) : records.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 gap-3">
+          <div className="card overflow-hidden shadow-sm table-shell flex flex-col items-center justify-center min-h-[360px] gap-3">
             <div className="w-16 h-16 rounded-2xl bg-warm-100 flex items-center justify-center">
               <Package2 size={28} className="text-warm-300" />
             </div>

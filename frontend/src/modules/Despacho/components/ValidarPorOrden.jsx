@@ -302,13 +302,13 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     <Modal
       isOpen={forceModal.open}
       onClose={closeForceModal}
-      title="Código no reconocido"
+      title={t('desp.validar.unrecognizedCodeTitle')}
       icon={AlertCircle}
       size="sm"
       footer={
         <div className="flex justify-end gap-2">
           <button type="button" onClick={closeForceModal} className="btn-secondary text-sm">
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             type="button"

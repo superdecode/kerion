@@ -394,11 +394,11 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
             <p className="font-semibold text-warm-900 mt-0.5 capitalize">{tab.scanType}</p>
           </div>
           <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-br from-white via-warm-50/70 to-warm-100/60 p-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.5)]">
-            <p className="text-xs text-warm-500 uppercase tracking-wide">Fecha inicio</p>
+            <p className="text-xs text-warm-500 uppercase tracking-wide">{t('inventario.escaneo.startDate')}</p>
             <p className="mt-1 font-mono text-xs font-medium text-warm-600">{bounds.start ? fmtDateTime(bounds.start) : '—'}</p>
           </div>
           <div className="rounded-2xl border border-warm-100/80 bg-gradient-to-br from-white via-warm-50/70 to-warm-100/60 p-3 shadow-[0_12px_24px_-24px_rgba(15,23,42,0.5)]">
-            <p className="text-xs text-warm-500 uppercase tracking-wide">Fecha final</p>
+            <p className="text-xs text-warm-500 uppercase tracking-wide">{t('inventario.escaneo.endDate')}</p>
             <p className="mt-1 font-mono text-xs font-medium text-warm-600">{bounds.end ? fmtDateTime(bounds.end) : '—'}</p>
           </div>
         </div>
@@ -444,19 +444,19 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
         {originLocation && (
           <div className="flex items-center gap-2 bg-warm-50 rounded-xl px-3 py-2 border border-warm-200">
             <MapPin size={11} className="text-warm-400 shrink-0" />
-            <span className="text-[10px] text-warm-500 uppercase tracking-wide shrink-0">Origen:</span>
+            <span className="text-[10px] text-warm-500 uppercase tracking-wide shrink-0">{t('inventario.escaneo.origin')}:</span>
             <span className="font-mono text-xs text-warm-700 truncate">{originLocation}</span>
           </div>
         )}
         <div className="rounded-2xl border border-warning-200 bg-warning-50/70 p-3 space-y-2">
-          <p className="text-xs font-semibold text-warning-700">Confirmar conteo de cajas</p>
-          <p className="text-[11px] text-warning-600">Ingresa el número de cajas para confirmar el envío:</p>
+          <p className="text-xs font-semibold text-warning-700">{t('inventario.escaneo.confirmBoxCount')}</p>
+          <p className="text-[11px] text-warning-600">{t('inventario.escaneo.confirmBoxCountBody')}</p>
           <input
             type="number"
             min="0"
             value={blindCount}
             onChange={e => setBlindCount(e.target.value)}
-            placeholder="Número de cajas"
+            placeholder={t('inventario.escaneo.boxCountPlaceholder')}
             className={`w-full px-3 py-2 rounded-xl border text-sm font-mono outline-none transition-colors ${
               countConfirmed
                 ? 'border-success-400 bg-success-50 text-success-700 focus:border-success-500'
@@ -468,7 +468,7 @@ function SessionSummaryModal({ isOpen, tab, onSave, onContinue, isSaving, ubicac
           />
           {countConfirmed && (
             <p className="text-[11px] text-success-600 font-semibold flex items-center gap-1">
-              <CheckCircle2 size={11} /> Conteo confirmado
+              <CheckCircle2 size={11} /> {t('inventario.escaneo.countConfirmed')}
             </p>
           )}
         </div>
@@ -499,13 +499,13 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
   const countConfirmed = !isNaN(blindNum) && blindNum === actualCount
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Enviar Tarima" icon={Square}
+    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.sendPallet')} icon={Square}
       footer={
         <div className="flex gap-3 justify-end">
           <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn-primary inline-flex items-center gap-2" onClick={onSave} disabled={isSaving || !countConfirmed}>
             {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-            Enviar Tarima
+            {t('inventario.escaneo.sendPallet')}
           </button>
         </div>
       }
@@ -516,28 +516,28 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
           <div className="rounded-xl border border-warm-100 bg-warm-50/80 p-3 flex items-start gap-2.5">
             <Hash size={13} className="text-warm-400 shrink-0 mt-0.5" />
             <div className="min-w-0">
-              <p className="text-[10px] text-warm-400 uppercase tracking-wide">Sección</p>
+              <p className="text-[10px] text-warm-400 uppercase tracking-wide">{t('inventario.escaneo.section')}</p>
               <p className="font-mono font-bold text-xs text-warm-800 mt-0.5 truncate">{sectionCode}</p>
             </div>
           </div>
           <div className="rounded-xl border border-warm-100 bg-warm-50/80 p-3 flex items-start gap-2.5">
             <Layers size={13} className="text-warm-400 shrink-0 mt-0.5" />
             <div className="min-w-0">
-              <p className="text-[10px] text-warm-400 uppercase tracking-wide">Tarima</p>
+              <p className="text-[10px] text-warm-400 uppercase tracking-wide">{t('inventario.escaneo.pallet')}</p>
               <p className="font-mono font-bold text-xs text-warm-800 mt-0.5 truncate">{tarimaCode}</p>
             </div>
           </div>
           <div className="rounded-xl border border-warm-100 bg-warm-50/80 p-3 flex items-start gap-2.5">
             <Calendar size={13} className="text-warm-400 shrink-0 mt-0.5" />
             <div className="min-w-0">
-              <p className="text-[10px] text-warm-400 uppercase tracking-wide">Fecha inicio</p>
+              <p className="text-[10px] text-warm-400 uppercase tracking-wide">{t('inventario.escaneo.startDate')}</p>
               <p className="font-mono text-[11px] text-warm-700 mt-0.5">{bounds.start ? fmtDateTime(bounds.start) : '—'}</p>
             </div>
           </div>
           <div className="rounded-xl border border-warm-100 bg-warm-50/80 p-3 flex items-start gap-2.5">
             <Calendar size={13} className="text-warm-400 shrink-0 mt-0.5" />
             <div className="min-w-0">
-              <p className="text-[10px] text-warm-400 uppercase tracking-wide">Fecha final</p>
+              <p className="text-[10px] text-warm-400 uppercase tracking-wide">{t('inventario.escaneo.endDate')}</p>
               <p className="font-mono text-[11px] text-warm-700 mt-0.5">{bounds.end ? fmtDateTime(bounds.end) : '—'}</p>
             </div>
           </div>
@@ -548,12 +548,12 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
           <div className={`rounded-xl border p-3 flex items-center gap-2.5 ${meta.soft}`}>
             <meta.icon size={14} className="shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] uppercase tracking-wide opacity-60">Tipo</p>
+              <p className="text-[10px] uppercase tracking-wide opacity-60">{t('superadmin.suscripciones.type')}</p>
               <p className="font-bold text-xs mt-0.5 leading-tight">{t(meta.labelKey)}</p>
             </div>
             <div className="text-right shrink-0">
               <p className={`text-2xl font-black tabular-nums leading-none ${countConfirmed ? '' : 'blur-sm select-none'}`}>{actualCount}</p>
-              <p className="text-[9px] uppercase tracking-wide opacity-50">cajas</p>
+              <p className="text-[9px] uppercase tracking-wide opacity-50">{t('inventario.escaneo.boxes')}</p>
             </div>
           </div>
           <div className="rounded-xl border border-primary-100 bg-gradient-to-r from-primary-50 to-white p-3 flex items-center gap-2.5">
@@ -570,7 +570,7 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
           <div className="rounded-xl border border-accent-100 bg-accent-50/40 p-3 space-y-2">
             <div className="flex items-center gap-2">
               <MapPin size={12} className="text-accent-600 shrink-0" />
-              <span className="text-[10px] text-accent-500 uppercase tracking-wide shrink-0">Destino:</span>
+              <span className="text-[10px] text-accent-500 uppercase tracking-wide shrink-0">{t('inventario.escaneo.destination')}:</span>
               <span className="font-mono font-semibold text-accent-700 text-xs truncate">{ubicacionValidated.codigo}</span>
               {ubicacionValidated.nombre && ubicacionValidated.nombre !== ubicacionValidated.codigo && (
                 <span className="text-accent-400 text-xs truncate">{ubicacionValidated.nombre}</span>
@@ -583,7 +583,7 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
             {originLocation && (
               <div className="flex items-center gap-2">
                 <MapPin size={12} className="text-warm-400 shrink-0" />
-                <span className="text-[10px] text-warm-500 uppercase tracking-wide shrink-0">Origen:</span>
+                <span className="text-[10px] text-warm-500 uppercase tracking-wide shrink-0">{t('inventario.escaneo.origin')}:</span>
                 <span className="font-mono text-xs text-warm-700 truncate">{originLocation}</span>
               </div>
             )}
@@ -598,14 +598,14 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
         )}
 
         <div className="rounded-2xl border border-warning-200 bg-warning-50/70 p-3 space-y-2">
-          <p className="text-xs font-semibold text-warning-700">Confirmar conteo de cajas</p>
-          <p className="text-[11px] text-warning-600">Ingresa el número de cajas en esta tarima ({t(meta.labelKey)}):</p>
+          <p className="text-xs font-semibold text-warning-700">{t('inventario.escaneo.confirmBoxCount')}</p>
+          <p className="text-[11px] text-warning-600">{t('inventario.escaneo.confirmPalletBoxCount').replace('{{type}}', t(meta.labelKey))}</p>
           <input
             type="number"
             min="0"
             value={blindCount}
             onChange={e => setBlindCount(e.target.value)}
-            placeholder="Número de cajas"
+            placeholder={t('inventario.escaneo.boxCountPlaceholder')}
             className={`w-full px-3 py-2 rounded-xl border text-sm font-mono outline-none transition-colors ${
               countConfirmed
                 ? 'border-success-400 bg-success-50 text-success-700 focus:border-success-500'
@@ -617,7 +617,7 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
           />
           {countConfirmed && (
             <p className="text-[11px] text-success-600 font-semibold flex items-center gap-1">
-              <CheckCircle2 size={11} /> Conteo confirmado
+              <CheckCircle2 size={11} /> {t('inventario.escaneo.countConfirmed')}
             </p>
           )}
         </div>
@@ -703,7 +703,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
               className="w-full pl-10 pr-4 py-3.5 text-base bg-white border-2 border-accent-200 rounded-2xl
                 focus:border-accent-500 focus:shadow-md
                 transition-all outline-none placeholder:text-warm-300 font-mono"
-              placeholder="UB-XXX"
+              placeholder={t('inventario.escaneo.locationCodePlaceholder')}
               value={inputValue}
               onChange={e => { setInputValue(e.target.value); setNotFound(false) }}
               onKeyDown={e => { if (e.key === 'Enter') handleConfirm() }}
@@ -1893,17 +1893,17 @@ export default function Escaneo() {
 
   async function handleSheetRefresh() {
     setRefreshState('loading')
-    setRefreshMessage('Actualizando inventario...')
+      setRefreshMessage(t('inventario.escaneo.refreshingInventory'))
     try {
       await refreshSheet('inventory')
       setSheetTs(getCacheTimestamp('inventory'))
       await boxStockQuery.refetch()
       setRefreshState('success')
-      setRefreshMessage('Inventario actualizado')
-      toast.success('Inventario actualizado')
+      setRefreshMessage(t('inventario.escaneo.inventoryUpdated'))
+      toast.success(t('inventario.escaneo.inventoryUpdated'))
     } catch (error) {
       setRefreshState('error')
-      setRefreshMessage(error?.message || 'Error al actualizar')
+      setRefreshMessage(error?.message || t('inventario.escaneo.inventoryRefreshError'))
       toast.error(error?.message || t('toast.error'))
     } finally {
       window.setTimeout(() => {
@@ -1998,8 +1998,8 @@ export default function Escaneo() {
               type="button"
               onClick={() => setShowQuickSearch(true)}
               className="interactive-lift inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50"
-              title="Búsqueda rápida"
-              aria-label="Búsqueda rápida"
+              title={t('inventario.registros.quick_search')}
+              aria-label={t('inventario.registros.quick_search')}
             >
               <Search className="w-4 h-4" />
             </button>
@@ -2079,7 +2079,7 @@ export default function Escaneo() {
       {isOffline && (
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-100 border-b border-amber-300 text-amber-800 text-xs font-semibold">
           <WifiOff className="w-3.5 h-3.5 shrink-0" />
-          <span>Sin conexión — escaneos guardados localmente. <span className="font-normal">No trabaje en la misma ubicación con otro operador: sin red no hay sincronización y habrá duplicados al guardar.</span></span>
+          <span>{t('inventario.escaneo.offlineBanner')} <span className="font-normal">{t('inventario.escaneo.offlineBannerDetail')}</span></span>
         </div>
       )}
       <Header title={t('inventario.escaneo.title')} subtitle={t('nav.inventario')}
@@ -2130,8 +2130,8 @@ export default function Escaneo() {
             type="button"
             onClick={() => setShowQuickSearch(true)}
             className="interactive-lift inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 text-warm-400 hover:text-primary-600 hover:bg-primary-50"
-            title="Búsqueda rápida"
-            aria-label="Búsqueda rápida"
+            title={t('inventario.registros.quick_search')}
+            aria-label={t('inventario.registros.quick_search')}
           >
             <Search className="w-4 h-4" />
           </button>
@@ -2243,7 +2243,7 @@ export default function Escaneo() {
                       <p className="text-[10px] text-warm-400">{tab.items.length} {t('inventario.escaneo.scans_label')}</p>
                     </div>
                     {tab.id === activeTabId && (
-                      <span className="text-[10px] font-bold text-teal-600 bg-teal-100 px-1.5 py-0.5 rounded shrink-0">Activa</span>
+                      <span className="text-[10px] font-bold text-teal-600 bg-teal-100 px-1.5 py-0.5 rounded shrink-0">{t('inventario.escaneo.activeTab')}</span>
                     )}
                     {tabs.length > 1 && (
                       <button
@@ -2321,13 +2321,13 @@ export default function Escaneo() {
                 <div className="mt-2 flex items-center justify-between border-t border-warm-100 pt-2">
                   <div className="flex items-center gap-1.5 flex-1 min-w-0">
                     <MapPin size={13} className="text-primary-500 shrink-0" />
-                    <span className="text-warm-500 shrink-0 font-medium text-xs">Origen:</span>
+                    <span className="text-warm-500 shrink-0 font-medium text-xs">{t('inventario.escaneo.origin')}:</span>
                     <input
                       ref={originLocationRef}
                       type="text"
                       value={originLocation}
                       onChange={e => { const v = e.target.value; setOriginLocation(v); if (v) sessionStorage.setItem('kirion_work_location', v); else sessionStorage.removeItem('kirion_work_location') }}
-                      placeholder="Ubicación trabajo/origen"
+                      placeholder={t('inventario.escaneo.workLocationPlaceholder')}
                       className="flex-1 min-w-0 font-mono text-xs bg-transparent border-0 outline-none placeholder:text-warm-300 text-warm-700 focus:text-primary-700"
                       onKeyDown={e => { if (e.key === 'Enter') scanRef.current?.focus() }}
                       autoComplete="off"
@@ -2459,7 +2459,7 @@ export default function Escaneo() {
             <button
               type="button"
               onClick={() => setShowPanel(v => !v)}
-              title={showPanel ? 'Ocultar panel' : 'Mostrar panel'}
+              title={showPanel ? t('inventario.escaneo.hidePanel') : t('inventario.escaneo.showPanel')}
               className="hidden lg:flex absolute -left-5 top-4 z-20 h-10 w-10 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600"
             >
               {showPanel ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}

@@ -162,7 +162,7 @@ function DuplicateConfirmModal({ isOpen, code, conflicts = [], onConfirm, onClos
   )
 }
 
-function MultiSelect({ value, onChange, options, placeholder }) {
+function MultiSelect({ value, onChange, options, placeholder, t }) {
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef(null)
 
@@ -176,7 +176,7 @@ function MultiSelect({ value, onChange, options, placeholder }) {
 
   const count = value.length
   const label = count === 0
-    ? `${placeholder} — Todos`
+    ? `${placeholder} — ${t('common.all')}`
     : count === 1
     ? (options.find(o => o === value[0]) || value[0])
     : `${placeholder} (${count})`
@@ -215,7 +215,7 @@ function MultiSelect({ value, onChange, options, placeholder }) {
             <div className="border-t border-warm-100 px-3 py-2">
               <button type="button" className="text-xs text-primary-600 hover:text-primary-700 font-semibold"
                 onMouseDown={e => { e.preventDefault(); onChange([]); setOpen(false) }}>
-                Limpiar
+                {t('common.clear')}
               </button>
             </div>
           )}
@@ -450,18 +450,18 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
     try {
       const wb = XLSX.utils.book_new()
       const info = [
-        ['Sección', sectionCode],
-        ['Tipo', isClasificacion ? 'Clasificación' : 'Unificado'],
-        ['Operador', sessionData.operator_nombre || ''],
-        ['Inicio', scanBounds.start ? fmtDateTime(scanBounds.start) : ''],
-        ['Final', scanBounds.end ? fmtDateTime(scanBounds.end) : ''],
-        ['Tarimas', totals.tarimas],
-        ['Disponible', totals.ok],
-        ['Bloqueado', totals.blocked],
-        ['No WMS', totals.nowms],
-        ['Total', totals.total],
+        [t('inventario.registros.section'), sectionCode],
+        [t('inventario.registros.type'), isClasificacion ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado')],
+        [t('inventario.registros.operator'), sessionData.operator_nombre || ''],
+        [t('inventario.registros.start_date'), scanBounds.start ? fmtDateTime(scanBounds.start) : ''],
+        [t('inventario.registros.end_date'), scanBounds.end ? fmtDateTime(scanBounds.end) : ''],
+        [t('inventario.registros.tarimas'), totals.tarimas],
+        [t('inventario.escaneo.group_disponible'), totals.ok],
+        [t('inventario.escaneo.group_bloqueado'), totals.blocked],
+        [t('inventario.escaneo.group_nowms'), totals.nowms],
+        [t('common.total'), totals.total],
         [],
-        ['Tarima', 'Código 1', 'Código 2', 'Ubicación', 'Estado', 'Fecha escaneo'],
+        [t('inventario.registros.tarima'), t('inventario.escaneo.code_1'), t('inventario.escaneo.code_2'), t('inventario.escaneo.location'), t('common.status'), t('inventario.registros.scan_date')],
         ...scans.map(sc => [
           tarimaCodeByRaw[normalizeTarimaGroupKey(sc.group_assignment, sectionCode)] || formatTarimaCode(sc.group_assignment, sectionCode, 0),
           sc.normalized_code || '',
@@ -473,9 +473,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
       ]
       const ws = XLSX.utils.aoa_to_sheet(info)
       ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 22 }]
-      XLSX.utils.book_append_sheet(wb, ws, 'Inventario')
+      XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.excel_sheet'))
       XLSX.writeFile(wb, `inventario_${sectionCode}_${getToday()}.xlsx`)
-      toast.success('Exportación completada')
+      toast.success(t('inventario.registros.export_success'))
     } catch { toast.error(t('toast.error')) }
   }
 
@@ -535,13 +535,13 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
               { label: t('inventario.registros.operator'), value: sessionData.operator_nombre || '—', Icon: User },
-              { label: 'Fecha inicio', raw: scanBounds.start, Icon: Clock },
-              { label: 'Fecha final', raw: scanBounds.end, Icon: Clock },
-              { label: 'Tarimas', value: totals.tarimas, Icon: Boxes },
+              { label: t('inventario.registros.start_date'), raw: scanBounds.start, Icon: Clock },
+              { label: t('inventario.registros.end_date'), raw: scanBounds.end, Icon: Clock },
+              { label: t('inventario.registros.tarimas'), value: totals.tarimas, Icon: Boxes },
               { label: t('inventario.registros.total'), value: totals.total, Icon: Package2 },
               { label: t('inventario.escaneo.time_label'), value: duration, Icon: Timer },
-              { label: 'Ubic. trabajo', value: sessionData.origin_location || '—', Icon: MapPin, edit: 'origen' },
-              { label: 'Ubic. destino', value: sessionData.ubicacion_codigo || sessionData.ubicacion_code || '—', Icon: MapPin, edit: 'destino' },
+              { label: t('inventario.registros.work_location'), value: sessionData.origin_location || '—', Icon: MapPin, edit: 'origen' },
+              { label: t('inventario.registros.destination_location'), value: sessionData.ubicacion_codigo || sessionData.ubicacion_code || '—', Icon: MapPin, edit: 'destino' },
             ].map(card => {
               const editable = !isReadOnly && canEditScans && card.edit
               return (
@@ -553,7 +553,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                   <input
                     className="input-field h-8 text-sm w-full"
                     value={editOrigin}
-                    placeholder="Ubicación origen"
+                    placeholder={t('inventario.registros.origin_location_placeholder')}
                     onChange={(event) => setEditOrigin(event.target.value)}
                   />
                 ) : editable === 'destino' ? (
@@ -561,7 +561,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                     <input
                       className="input-field h-8 text-sm w-full font-mono pr-7"
                       value={editUbicacionInput}
-                      placeholder="Buscar ubicación destino"
+                      placeholder={t('inventario.registros.destination_location_search_placeholder')}
                       autoComplete="off"
                       onChange={(event) => { setEditUbicacionInput(event.target.value); setShowUbicSuggest(true) }}
                       onFocus={() => setShowUbicSuggest(true)}
@@ -589,7 +589,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                       </ul>
                     )}
                   </div>
-                ) : card.label.includes('Fecha') ? (
+                ) : card.raw !== undefined ? (
                   card.raw ? (
                     <div>
                       <p className="text-sm font-semibold text-warm-700">{fmtDate(card.raw)}</p>
@@ -614,19 +614,19 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                     onClick={() => setDetailTab('detallado')}
                     className={`${DETAIL_TAB_CLASS} whitespace-nowrap ${detailTab === 'detallado' ? 'border-primary-500 text-primary-600' : 'border-transparent text-warm-400 hover:text-warm-600'}`}
                   >
-                    <ScanBarcode className="w-3.5 h-3.5" /> Detallado
+                    <ScanBarcode className="w-3.5 h-3.5" /> {t('inventario.registros.detailed_tab')}
                   </button>
                   <button
                     onClick={() => setDetailTab('tarimas')}
                     className={`${DETAIL_TAB_CLASS} whitespace-nowrap ${detailTab === 'tarimas' ? 'border-primary-500 text-primary-600' : 'border-transparent text-warm-400 hover:text-warm-600'}`}
                   >
-                    <Boxes className="w-3.5 h-3.5" /> Tarimas
+                    <Boxes className="w-3.5 h-3.5" /> {t('inventario.registros.tarimas')}
                   </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 pb-2 shrink-0">
-                  <StatusPill size="xs" className={STATUS_META_KEYS.ok.pill}>Disponible {totals.ok}</StatusPill>
-                  <StatusPill size="xs" className={STATUS_META_KEYS.blocked.pill}>Bloqueado {totals.blocked}</StatusPill>
-                  <StatusPill size="xs" className={STATUS_META_KEYS.nowms.pill}>No WMS {totals.nowms}</StatusPill>
+                  <StatusPill size="xs" className={STATUS_META_KEYS.ok.pill}>{t('inventario.escaneo.group_disponible')} {totals.ok}</StatusPill>
+                  <StatusPill size="xs" className={STATUS_META_KEYS.blocked.pill}>{t('inventario.escaneo.group_bloqueado')} {totals.blocked}</StatusPill>
+                  <StatusPill size="xs" className={STATUS_META_KEYS.nowms.pill}>{t('inventario.escaneo.group_nowms')} {totals.nowms}</StatusPill>
                 </div>
               </div>
 
@@ -636,10 +636,10 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                   <table className="w-full min-w-[520px] text-xs">
                     <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                       <tr>
-                        <th className={TH_CLASS}><span className={TH_TEXT}>Tarima</span></th>
-                        <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>Disponible</span></th>
-                        <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>Bloqueado</span></th>
-                        <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>No WMS</span></th>
+                        <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.tarima')}</span></th>
+                        <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>{t('inventario.escaneo.group_disponible')}</span></th>
+                        <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>{t('inventario.escaneo.group_bloqueado')}</span></th>
+                        <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>{t('inventario.escaneo.group_nowms')}</span></th>
                         <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>{t('inventario.registros.total')}</span></th>
                         <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT} /></th>
                       </tr>
@@ -671,11 +671,11 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                                         <thead className="bg-warm-50 sticky top-0 z-[5]">
                                           <tr className="text-warm-400 border-b border-warm-100">
                                             <th className="text-left py-1.5 pr-3 font-semibold">#</th>
-                                            <th className="text-left pr-3 font-semibold">Código 1</th>
-                                            <th className="text-left pr-3 font-semibold">Código 2</th>
-                                            <th className="text-left pr-3 font-semibold">Ubicación</th>
+                                            <th className="text-left pr-3 font-semibold">{t('inventario.escaneo.code_1')}</th>
+                                            <th className="text-left pr-3 font-semibold">{t('inventario.escaneo.code_2')}</th>
+                                            <th className="text-left pr-3 font-semibold">{t('inventario.escaneo.location')}</th>
                                             <th className="text-left pr-3 font-semibold">{t('common.status')}</th>
-                                            <th className="text-right font-semibold">Fecha escaneo</th>
+                                            <th className="text-right font-semibold">{t('inventario.registros.scan_date')}</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -732,13 +732,13 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                     <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
                       <tr>
                         <th className={TH_CLASS}><span className={TH_TEXT}>#</span></th>
-                        <th className={TH_CLASS}><span className={TH_TEXT}>Tarima</span></th>
-                        <th className={TH_CLASS}><span className={TH_TEXT}>Código 1</span></th>
-                        <th className={TH_CLASS}><span className={TH_TEXT}>Código 2</span></th>
-                        <th className={TH_CLASS}><span className={TH_TEXT}>Ubicación</span></th>
+                        <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.tarima')}</span></th>
+                        <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.code_1')}</span></th>
+                        <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.code_2')}</span></th>
+                        <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.location')}</span></th>
                         <th className={TH_CLASS}><span className={TH_TEXT}>{t('common.status')}</span></th>
-                        <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Fecha escaneo</span></th>
-                        <th className={TH_CLASS}><span className={TH_TEXT}>Acciones</span></th>
+                        <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('inventario.registros.scan_date')}</span></th>
+                        <th className={TH_CLASS}><span className={TH_TEXT}>{t('common.actions')}</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-warm-50">
@@ -829,16 +829,16 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                                         onAccept: () => updateScanMut.mutate({ id: sc.id, code: nextCode, cell_no: editingCell.trim() }),
                                       })
                                     }}
-                                    title="Guardar">
+                                    title={t('common.save')}>
                                     <CheckCircle2 className="w-4 h-4" />
                                   </button>
                                 ) : canEditScans ? (
-                                  <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => { setEditingScanId(sc.id); setEditingCode(sc.normalized_code || sc.scanned_code || ''); setEditingCell(sc.cell_no || '') }} title="Editar">
+                                  <button className="p-2 rounded-lg hover:bg-accent-50 text-accent-600 hover:text-accent-700 transition-colors" onClick={() => { setEditingScanId(sc.id); setEditingCode(sc.normalized_code || sc.scanned_code || ''); setEditingCell(sc.cell_no || '') }} title={t('common.edit')}>
                                     <Edit3 className="w-4 h-4" />
                                   </button>
                                 ) : null}
                                 {canDeleteScans && (
-                                  <button className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors" onClick={() => deleteScanMut.mutate(sc.id)} title="Eliminar">
+                                  <button className="p-2 rounded-lg hover:bg-danger-50 text-danger-600 hover:text-danger-700 transition-colors" onClick={() => deleteScanMut.mutate(sc.id)} title={t('common.delete')}>
                                     <Trash2 className="w-4 h-4" />
                                   </button>
                                 )}
@@ -861,9 +861,9 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                         <td className="table-cell"><span className="text-warm-300">—</span></td>
                         <td className="table-cell">
                           <select className="input-field h-8 text-xs" value={newScan.scan_status} onChange={(event) => setNewScan((prev) => ({ ...prev, scan_status: event.target.value }))}>
-                            <option value="ok">Disponible</option>
-                            <option value="blocked">Bloqueado</option>
-                            <option value="nowms">No WMS</option>
+                            <option value="ok">{t('inventario.escaneo.group_disponible')}</option>
+                            <option value="blocked">{t('inventario.escaneo.group_bloqueado')}</option>
+                            <option value="nowms">{t('inventario.escaneo.group_nowms')}</option>
                           </select>
                         </td>
                         <td className="table-cell text-right text-warm-300">—</td>
@@ -881,7 +881,7 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
                               })
                             }}
                           >
-                            Agregar
+                            {t('common.create')}
                           </button>
                         </td>
                       </tr>
@@ -1014,8 +1014,8 @@ export default function InventarioRegistros() {
           type="button"
           onClick={() => setShowQuickSearch(true)}
           className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 bg-warm-100 text-warm-400 transition-all hover:bg-primary-50 hover:text-primary-600"
-          title="Búsqueda rápida"
-          aria-label="Búsqueda rápida"
+                  title={t('inventario.registros.quick_search')}
+                  aria-label={t('inventario.registros.quick_search')}
         >
           <Search size={14} />
         </button>
@@ -1083,11 +1083,20 @@ export default function InventarioRegistros() {
       return next
     })
   }
-  const INV_HEADERS = ['Sección', 'Tipo', 'Fecha', 'Operador', 'Disponible', 'Bloqueado', 'No WMS', 'Total']
+  const INV_HEADERS = [
+    t('inventario.registros.section'),
+    t('inventario.registros.type'),
+    t('inventario.registros.date'),
+    t('inventario.registros.operator'),
+    t('inventario.escaneo.group_disponible'),
+    t('inventario.escaneo.group_bloqueado'),
+    t('inventario.escaneo.group_nowms'),
+    t('inventario.registros.total'),
+  ]
   const INV_COLS = [{ wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }]
   const buildInvRows = (rows) => rows.map(r => [
     formatSectionCode(r.tarima_code, r.started_at || r.created_at),
-    r.scan_type === 'clasificacion' ? 'Clasificación' : 'Unificado',
+    r.scan_type === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado'),
     (r.started_at || r.created_at) ? fmtDateTime(r.started_at || r.created_at) : '',
     r.operator_nombre || '',
     r.total_ok ?? 0,
@@ -1099,9 +1108,9 @@ export default function InventarioRegistros() {
     const wb = XLSX.utils.book_new()
     const ws = XLSX.utils.aoa_to_sheet([INV_HEADERS, ...dataRows])
     ws['!cols'] = INV_COLS
-    XLSX.utils.book_append_sheet(wb, ws, 'Registros Inventario')
+    XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.title'))
     XLSX.writeFile(wb, filename)
-    toast.success('Exportación completada')
+    toast.success(t('inventario.registros.export_success'))
   }
 
   const handleBulkExport = () => {
@@ -1149,7 +1158,7 @@ export default function InventarioRegistros() {
             onClick={() => setFiltersExpanded(v => !v)}
             className="sm:hidden w-full flex items-center justify-between px-5 py-2 hover:bg-warm-50/80 transition-colors"
           >
-            <span className="text-xs font-semibold text-warm-600">Filtros</span>
+            <span className="text-xs font-semibold text-warm-600">{t('inventario.registros.filters')}</span>
             {filtersExpanded ? <ChevronUp size={14} className="text-warm-400" /> : <ChevronDown size={14} className="text-warm-400" />}
           </button>
           <div className={`${filtersExpanded ? '' : 'hidden sm:block'} px-5 py-2 space-y-2`}>
@@ -1163,7 +1172,7 @@ export default function InventarioRegistros() {
                 className="text-xs outline-none bg-transparent text-warm-700 w-[110px]" />
             </div>
 
-            {[{ label: 'Hoy', d: 0 }, { label: '7 Días', d: 7 }, { label: '30 Días', d: 30 }].map(({ label, d }) => (
+            {[{ label: t('common.today'), d: 0 }, { label: t('common.last7Days'), d: 7 }, { label: t('common.last30Days'), d: 30 }].map(({ label, d }) => (
               <button
                 key={label}
                 type="button"
@@ -1204,6 +1213,7 @@ export default function InventarioRegistros() {
                   onChange={v => { setFilterOperators(v); setPage(1) }}
                   options={operatorOptions}
                   placeholder={t('inventario.registros.operator')}
+                  t={t}
                 />
               )}
 
@@ -1213,8 +1223,8 @@ export default function InventarioRegistros() {
                   type="button"
                   onClick={() => setScannerOpen(true)}
                   className="sm:hidden shrink-0 -ml-0.5 text-primary-600 hover:text-primary-700 transition-colors"
-                  aria-label="Escanear código de barras o QR"
-                  title="Escanear código"
+                  aria-label={t('inventario.registros.scan_code')}
+                  title={t('inventario.registros.scan_code')}
                 >
                   <ScanLine size={16} />
                 </button>
@@ -1222,7 +1232,7 @@ export default function InventarioRegistros() {
                   type="text"
                   value={searchInput}
                   onChange={e => handleSearch(e.target.value)}
-                  placeholder="Buscar por sección, operador..."
+                  placeholder={t('inventario.registros.search_placeholder')}
                   autoCapitalize="off"
                   autoCorrect="off"
                   autoComplete="off"
@@ -1250,7 +1260,7 @@ export default function InventarioRegistros() {
                   className="h-10 px-4 rounded-xl bg-primary-600 text-white flex items-center gap-2 text-sm font-semibold hover:bg-primary-700 transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
                 >
                   <ScanBarcode className="w-4 h-4" />
-                  Escanear
+                  {t('inventario.registros.scan_cta')}
                 </Link>
               )}
             </div>
@@ -1266,15 +1276,15 @@ export default function InventarioRegistros() {
                   <thead>
                     <tr className="bg-warm-50 border-b border-warm-100">
                       <th className="table-header w-10 text-center"><div className="h-4 w-4 rounded bg-warm-200 animate-pulse mx-auto" /></th>
-                      <th className={TH_CLASS}><span className={TH_TEXT}>Sección</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.section')}</span></th>
                       <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.type')}</span></th>
                       <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.date')}</span></th>
                       <th className={`${TH_CLASS} hidden md:table-cell`}><span className={TH_TEXT}>{t('inventario.registros.operator')}</span></th>
-                      <th className={TH_CLASS}><span className={TH_TEXT}>Disponible</span></th>
-                      <th className={TH_CLASS}><span className={TH_TEXT}>Bloqueado</span></th>
-                      <th className={TH_CLASS}><span className={TH_TEXT}>No WMS</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.group_disponible')}</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.group_bloqueado')}</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.group_nowms')}</span></th>
                       <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('inventario.registros.total')}</span></th>
-                      <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
+                      <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('common.actions')}</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warm-50">
@@ -1348,15 +1358,15 @@ export default function InventarioRegistros() {
                           onChange={toggleSelectAll}
                           className="cb" />
                       </th>
-                      <th className={TH_CLASS}><span className={TH_TEXT}>Sección</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.section')}</span></th>
                       <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.type')}</span></th>
                       <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.date')}</span></th>
                       <th className={`${TH_CLASS} hidden md:table-cell`}><span className={TH_TEXT}>{t('inventario.registros.operator')}</span></th>
-                      <th className={TH_CLASS}><span className={TH_TEXT}>Disponible</span></th>
-                      <th className={TH_CLASS}><span className={TH_TEXT}>Bloqueado</span></th>
-                      <th className={TH_CLASS}><span className={TH_TEXT}>No WMS</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.group_disponible')}</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.group_bloqueado')}</span></th>
+                      <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.group_nowms')}</span></th>
                       <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('inventario.registros.total')}</span></th>
-                      <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>Acciones</span></th>
+                      <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('common.actions')}</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-warm-50">
@@ -1501,7 +1511,11 @@ export default function InventarioRegistros() {
             <p className="text-xs text-danger-600">
               {(deleteConfirmSession?.total_scans ?? 0)} {t('inventario.registros.scanned_boxes')}
               {' · '}
-              {t('inventario.registros.type')}: {deleteConfirmSession?.scan_type || '—'}
+              {t('inventario.registros.type')}: {deleteConfirmSession?.scan_type === 'clasificacion'
+                ? t('inventario.escaneo.type_clasificacion')
+                : deleteConfirmSession?.scan_type === 'unificado'
+                ? t('inventario.escaneo.type_unificado')
+                : '—'}
             </p>
           </div>
         </div>

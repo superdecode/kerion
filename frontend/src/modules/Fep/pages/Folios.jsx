@@ -539,7 +539,7 @@ export default function Folios() {
                             <button
                               onClick={e => copyToClipboard(row.folio_numero, e)}
                               className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-all"
-                              title="Copiar folio"
+                              title={t('fep.copyFolio')}
                             >
                               {copiedCode === row.folio_numero
                                 ? <CheckCircle className="w-3.5 h-3.5 text-success-500" />
@@ -690,7 +690,7 @@ export default function Folios() {
               <button
                 onClick={copyFolioHeader}
                 className="opacity-0 group-hover/fheader:opacity-100 p-0.5 rounded hover:bg-primary-100/60 text-warm-400 hover:text-primary-600 transition-all"
-                title="Copiar folio"
+                title={t('fep.copyFolio')}
               >
                 {copiedFolioHeader
                   ? <CheckCircle className="w-3.5 h-3.5 text-success-500" />
@@ -876,7 +876,7 @@ export default function Folios() {
                                 <span className="code-main truncate">{tar.codigo}</span>
                                 <button onClick={e => copyDetailCode(tar.codigo, e)}
                                   className="opacity-0 group-hover/trow:opacity-100 p-0.5 rounded hover:bg-primary-100 text-warm-400 hover:text-primary-600 transition-all shrink-0"
-                                  title="Copiar código">
+                                  title={t('common.copy')}>
                                   {copiedDetailCode === tar.codigo
                                     ? <CheckCircle className="w-3.5 h-3.5 text-success-500" />
                                     : <Copy className="w-3.5 h-3.5" />}

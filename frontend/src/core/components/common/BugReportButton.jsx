@@ -174,7 +174,7 @@ export default function BugReportButton() {
                   onChange={e => setDescription(e.target.value)}
                   maxLength={2000}
                   rows={4}
-                  placeholder="Que ocurrio? En que pagina? Que esperabas que pasara?"
+                  placeholder={t('bugreport.placeholder')}
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent placeholder:text-gray-400"
                 />
                 <p className="text-[10px] text-gray-400 text-right mt-0.5">
@@ -184,7 +184,7 @@ export default function BugReportButton() {
 
               <div className="flex items-center justify-between pt-1">
                 <p className="text-[10px] text-gray-400 leading-tight">
-                  Se captura tu correo y la pagina actual automaticamente.
+                  {t('bugreport.captureHint')}
                 </p>
                 <button
                   type="submit"

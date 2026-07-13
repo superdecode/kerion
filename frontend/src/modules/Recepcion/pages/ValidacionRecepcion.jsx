@@ -974,7 +974,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         setScanning(true)
         refocusRef.current?.()
       } catch {
-        if (!cancelled) toast.error('Error al iniciar sesión de validación')
+        if (!cancelled) toast.error(t('rec.val.toast.sessionStartError'))
       } finally {
         if (!cancelled) setBootingSession(false)
       }
@@ -1296,7 +1296,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     onSuccess: (data) => {
       applyRemovedScanEffects(data)
       qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
-      toast.success('Registro eliminado')
+      toast.success(t('rec.val.toast.recordDeleted'))
       resetDeleteModal()
       refocus()
     },
@@ -1308,7 +1308,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
     onSuccess: (data) => {
       applyRemovedScanEffects(data)
       qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
-      toast.success('Último registro eliminado')
+      toast.success(t('rec.val.toast.lastRecordDeleted'))
       resetDeleteModal()
       refocus()
     },
@@ -1416,7 +1416,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       setEditUbicacionModal(null)
       setEditUbicacionValue('')
       if (data.offline) {
-        toast.success('Cambio guardado sin conexión — se sincronizará al reconectar')
+        toast.success(t('rec.val.toast.offlineSavedWillSync'))
       } else {
         qc.invalidateQueries({ queryKey: ['recepcion-scan-events', id] })
         toast.success(`${t('rec.val.ubicacion.edit')} (${data.updated} escaneos)`)
@@ -1630,7 +1630,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
       }
       if (matchingLines.length === 0 && isOffline) {
         playSound('error')
-        toast.error('No se puede validar este código sin red hasta cargar toda la orden.')
+        toast.error(t('rec.val.toast.noOfflineValidationUntilOrderLoaded'))
         refocus()
         return
       }
@@ -2197,7 +2197,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                   <button
                     type="button"
                     onClick={() => {
-                      if (isOffline) { toast.error('Transferir tarima requiere conexión a internet'); return }
+                      if (isOffline) { toast.error(t('rec.val.toast.transferTarimaNeedsInternet')); return }
                       setTarimaTransferModal({ open: true, fromNum: ts.num, fromBases: ts.bases }); setTransferToTarima('')
                     }}
                     disabled={ts.empty || isOffline}
@@ -3478,7 +3478,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
             </button>
             <button
               onClick={async () => {
-                if (isOffline) { toast.error('Transferir tarima requiere conexión a internet'); return }
+                if (isOffline) { toast.error(t('rec.val.toast.transferTarimaNeedsInternet')); return }
                 const toNum = parseInt(transferToTarima)
                 if (!toNum || toNum === tarimaTransferModal.fromNum) return
                 const nextMap = new Map(lockedTarimaMap)

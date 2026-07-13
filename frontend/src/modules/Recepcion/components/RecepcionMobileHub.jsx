@@ -178,7 +178,7 @@ function RecepcionMobileHub({ orders, isLoading, t, onValidateOrder }) {
                 onClick={handleScan}
                 className="flex items-center justify-center w-8 h-8 rounded-xl bg-primary-600 text-white active:scale-95 transition-all"
                 tabIndex={-1}
-                aria-label="Buscar"
+                aria-label={t('common.search')}
               >
                 <ScanBarcode className="w-4 h-4" />
               </button>

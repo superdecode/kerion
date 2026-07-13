@@ -404,7 +404,7 @@ function SearchStep({ onFound }) {
                 ref={inputRef}
                 type="text"
                 className="flex-1 min-w-0 h-full text-base bg-transparent outline-none placeholder:text-warm-300 font-mono tracking-wide focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                placeholder="OB-XXXXXXXX"
+                placeholder={t('surtido.escaneo.order_code_placeholder')}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && input.trim()) void doSearch(input.trim()) }}
