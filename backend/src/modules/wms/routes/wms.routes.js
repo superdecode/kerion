@@ -150,26 +150,41 @@ function compactCanonicalCode(raw) {
 
 function normalizeExpectedBoxes(value) {
   if (!Array.isArray(value)) return []
-  const boxes = []
+  const boxesByCanonical = new Map()
   for (const item of value) {
     const rawCodes = Array.isArray(item?.codes) ? item.codes : []
     const codes = [...new Set(rawCodes.map(compactCanonicalCode).filter(Boolean))]
     const canonical = compactCanonicalCode(item?.canonical || codes[0] || '')
     const quantity = parsePositiveInt(item?.quantity ?? item?.qty ?? item?.expectedQty, 1)
     if (!canonical || !codes.length) continue
-    boxes.push({
+    const existing = boxesByCanonical.get(canonical)
+    if (existing) {
+      // Repeated rows in the outbound detail are the only way a code can have
+      // more than one allowed scan. Preserve that explicit source quantity.
+      existing.quantity += quantity
+      existing.codes = [...new Set([...existing.codes, ...codes, canonical])]
+      continue
+    }
+    boxesByCanonical.set(canonical, {
       canonical,
       codes: codes.includes(canonical) ? codes : [canonical, ...codes],
       quantity,
     })
   }
-  return boxes
+  return [...boxesByCanonical.values()]
 }
 
 function matchExpectedBox(expectedBoxes, scannedCode) {
   const scanned = compactCanonicalCode(scannedCode)
   if (!scanned) return null
-  return expectedBoxes.find((box) => box.codes.includes(scanned)) || null
+  const matches = expectedBoxes.filter((box) => box.codes.includes(scanned))
+  if (matches.length === 0) return null
+  // A shared alias (for example a generic box type) cannot identify which box
+  // is being validated. Never assign it to an arbitrary row from the order.
+  if (new Set(matches.map((box) => box.canonical)).size !== 1) {
+    return { ambiguous: true }
+  }
+  return matches[0]
 }
 
 function requireAnyPermission(requirements) {
@@ -1415,6 +1430,13 @@ router.post('/scan-event',
       if (scan_result === 'ok') {
         const expectedBoxes = normalizeExpectedBoxes(sessionCheck.rows[0].expected_boxes)
         const expectedMatch = matchExpectedBox(expectedBoxes, normCode)
+        if (expectedMatch?.ambiguous) {
+          return res.status(422).json({
+            success: false,
+            code: 'AMBIGUOUS_BOX_CODE',
+            error: 'El código escaneado no identifica una caja única de esta orden',
+          })
+        }
         if (!expectedMatch) {
           return res.status(422).json({
             success: false,
@@ -1538,6 +1560,13 @@ router.post('/scan-event/manual',
       const normCodeManual = normalizeScanCode(normalized_code || scanned_code)
       const expectedBoxes = normalizeExpectedBoxes(session.expected_boxes)
       const expectedMatch = matchExpectedBox(expectedBoxes, normCodeManual)
+      if (expectedMatch?.ambiguous) {
+        return res.status(422).json({
+          success: false,
+          code: 'AMBIGUOUS_BOX_CODE',
+          error: 'El código capturado no identifica una caja única de esta orden',
+        })
+      }
       if (!expectedMatch) {
         return res.status(422).json({
           success: false,
@@ -1669,6 +1698,13 @@ router.put('/scan-event/:id',
       if (nextScanResult === 'ok') {
         const expectedBoxes = normalizeExpectedBoxes(event.expected_boxes)
         const expectedMatch = matchExpectedBox(expectedBoxes, nextNormalizedCode || nextScannedCode)
+        if (expectedMatch?.ambiguous) {
+          return res.status(422).json({
+            success: false,
+            code: 'AMBIGUOUS_BOX_CODE',
+            error: 'El código capturado no identifica una caja única de esta orden',
+          })
+        }
         if (!expectedMatch) {
           return res.status(422).json({
             success: false,
