@@ -188,6 +188,24 @@ function buildItemMaps(detailData) {
   return { packageMap, productMap }
 }
 
+function buildExpectedCodeLimits(detailData) {
+  const detail = detailData?.data ?? detailData
+  const packageList = detail?.packageList ?? detail?.details ?? detail?.items ?? []
+  const limits = new Map()
+  packageList.forEach((p) => {
+    const codes = [p.customizeCode, p.boxType, p.boxCode].filter(Boolean)
+    let primaryNorm = null
+    for (const c of codes) {
+      const n = normalizeCodeFast(c)
+      if (n) { primaryNorm = n; break }
+    }
+    if (!primaryNorm) return
+    const qty = Number(p.quantity ?? p.totalPackageQty ?? p.qty ?? 1) || 1
+    limits.set(primaryNorm, (limits.get(primaryNorm) || 0) + qty)
+  })
+  return limits
+}
+
 function findMatchedItem(code, packageMap) {
   for (const variant of generateCodeVariations(code, false)) {
     const matched = packageMap.get(variant)
@@ -1291,7 +1309,7 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
   const locationRef = useRef(null)
   const autoFinalizeLockRef = useRef(false)
   const sessionCreateFiredRef = useRef(false)
-  const scannedOkCodesRef = useRef(new Set())
+  const validatedCodeCountsRef = useRef(new Map())
   const isSyncingRef = useRef(false)
   const sidebarStorageKey = `kirion_surtido_validation_sidebar_${user?.id || 'guest'}`
   const sessionCompleteLocked = showCompletionModal || !!completionSnapshot
@@ -1320,11 +1338,20 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
               .filter((item) => String(item.payload?.session_id) === String(s.sessionId) && item.payload?.scan_result === 'ok')
               .map((item) => getValidationCodeKey(item.payload))
               .filter(Boolean)
+            const restoredCounts = new Map(s.validatedCodeCountsArr || [])
+            if (restoredCounts.size === 0 && Array.isArray(s.scannedOkCodesArr)) {
+              s.scannedOkCodesArr.forEach((code) => {
+                restoredCounts.set(code, (restoredCounts.get(code) || 0) + 1)
+              })
+            }
+            queuedOkCodes.forEach((code) => {
+              restoredCounts.set(code, (restoredCounts.get(code) || 0) + 1)
+            })
             setObc(s.obc); setSessionId(s.sessionId); setSessionStart(new Date(s.sessionStart))
             setCounts(s.counts || { ok: 0, rejected: 0 })
             setItemCounts(new Map(s.itemCountsArr || []))
             setHistory(s.history || [])
-            scannedOkCodesRef.current = new Set([...(s.scannedOkCodesArr || []), ...queuedOkCodes])
+            validatedCodeCountsRef.current = restoredCounts
             setSelectedUbicacion(s.ubicacion || null)
             setUbicacionConfirmed(s.ubicacionConfirmed || !!s.ubicacion)
             setStep('session')
@@ -1407,6 +1434,7 @@ const { data: reasonsData } = useQuery({
     if (!detailData) return { packageMap: new Map(), productMap: new Map() }
     return buildItemMaps(detailData)
   }, [detailData])
+  const expectedCodeLimits = useMemo(() => buildExpectedCodeLimits(detailData), [detailData])
 
   const allItems = useMemo(() => {
     const items = []
@@ -1457,22 +1485,22 @@ const { data: reasonsData } = useQuery({
     const sorted = [...events].sort((a, b) => new Date(a.scanned_at) - new Date(b.scanned_at))
     const nextHistory = []
     const nextItemCounts = new Map()
-    const okCodes = new Set()
-    const seenValidated = new Set()
+    const validatedCounts = new Map()
     let okCount = 0
     let rejectedCount = 0
     for (const e of sorted) {
       const norm = e.normalized_code || e.scanned_code
       const eventKey = getValidationCodeKey(e)
+      const priorCount = eventKey ? (validatedCounts.get(eventKey) || 0) : 0
+      const expectedLimit = eventKey ? (expectedCodeLimits.get(eventKey) || 1) : 1
       let result = e.scan_result === 'not_found' ? 'rejected' : e.scan_result
-      if (e.scan_result === 'ok' && eventKey && seenValidated.has(eventKey)) {
+      if (e.scan_result === 'ok' && eventKey && priorCount >= expectedLimit) {
         result = 'duplicate'
       }
       nextHistory.unshift({ code: norm, result, ts: new Date(e.scanned_at).getTime() })
       if (result === 'ok') {
         okCount += 1
-        if (eventKey) seenValidated.add(eventKey)
-        okCodes.add(eventKey || norm)
+        if (eventKey) validatedCounts.set(eventKey, priorCount + 1)
         const matched = findMatchedItem(norm, packageMap, productMap)
         if (matched) nextItemCounts.set(matched.displayCode, (nextItemCounts.get(matched.displayCode) || 0) + 1)
       } else if (result === 'rejected' || result === 'duplicate') {
@@ -1482,8 +1510,8 @@ const { data: reasonsData } = useQuery({
     setHistory(nextHistory.slice(0, 500))
     setItemCounts(nextItemCounts)
     setCounts({ ok: okCount, rejected: rejectedCount })
-    scannedOkCodesRef.current = okCodes
-  }, [packageMap, productMap])
+    validatedCodeCountsRef.current = validatedCounts
+  }, [expectedCodeLimits, packageMap, productMap])
 
   const createSessionMut = useMutation({
     // CRITICAL for offline: TanStack Query v5 mutations default to networkMode 'online',
@@ -1497,7 +1525,11 @@ const { data: reasonsData } = useQuery({
       const packageList = detail?.packageList ?? detail?.details ?? detail?.items ?? []
       const expectedBoxes = packageList.map((box) => {
         const codes = [box.customizeCode, box.boxCode, box.boxType].filter(Boolean)
-        return { canonical: box.customizeCode || box.boxCode || box.boxType, codes }
+        return {
+          canonical: box.customizeCode || box.boxCode || box.boxType,
+          codes,
+          quantity: box.quantity ?? box.totalPackageQty ?? box.qty ?? 1,
+        }
       }).filter((box) => box.canonical && box.codes.length)
       const body = {
         outbound_order_no: obc,
@@ -1581,7 +1613,7 @@ const { data: reasonsData } = useQuery({
         getScanSession(sid).then(res => hydrateFromServerEvents(res?.data?.events)).catch(() => {})
       } else {
         setHistory([]); setCounts({ ok: 0, rejected: 0 }); setItemCounts(new Map())
-        scannedOkCodesRef.current = new Set()
+        validatedCodeCountsRef.current = new Map()
       }
     },
     onError: (err) => {
@@ -1776,7 +1808,7 @@ const { data: reasonsData } = useQuery({
     sessionStorage.setItem(storageKey, JSON.stringify({
       obc, sessionId, sessionStart: sessionStart.toISOString(),
       counts, itemCountsArr: [...itemCounts.entries()],
-      history, scannedOkCodesArr: [...scannedOkCodesRef.current],
+      history, validatedCodeCountsArr: [...validatedCodeCountsRef.current.entries()],
       ubicacion: selectedUbicacion, ubicacionConfirmed,
     }))
   }, [sessionId, obc, sessionStart, counts, itemCounts, history, selectedUbicacion, ubicacionConfirmed, storageKey])
@@ -1784,13 +1816,13 @@ const { data: reasonsData } = useQuery({
   const persistSession = (newObc, newSessionId, newStart, ubicacion) => {
     sessionStorage.setItem(storageKey, JSON.stringify({
       obc: newObc, sessionId: newSessionId, sessionStart: newStart.toISOString(),
-      counts: { ok: 0, rejected: 0 }, itemCountsArr: [], history: [], scannedOkCodesArr: [], ubicacion: ubicacion || null,
+      counts: { ok: 0, rejected: 0 }, itemCountsArr: [], history: [], validatedCodeCountsArr: [], ubicacion: ubicacion || null,
     }))
   }
 
   const clearSession = () => {
     sessionStorage.removeItem(storageKey)
-    scannedOkCodesRef.current = new Set()
+    validatedCodeCountsRef.current = new Map()
     setStep('search'); setObc(null); setSessionId(null); setSessionStart(null)
     setLastScan(null); setHistory([]); setCounts({ ok: 0, rejected: 0 })
     setItemCounts(new Map()); setSelectedUbicacion(null)
@@ -1967,7 +1999,10 @@ const { data: reasonsData } = useQuery({
       return
     }
     const eventKey = getValidationCodeKey({ normalized_code: norm, matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null })
-    const isDup = scannedOkCodesRef.current.has(eventKey || norm)
+    const countKey = eventKey || matched.displayCode || norm
+    const currentCount = validatedCodeCountsRef.current.get(countKey) || 0
+    const expectedLimit = expectedCodeLimits.get(countKey) || matched.expectedQty || 1
+    const isDup = currentCount >= expectedLimit
     if (isDup) {
       playSound('duplicate')
       setLastScan({ code: norm, result: 'duplicate' })
@@ -1977,7 +2012,7 @@ const { data: reasonsData } = useQuery({
       return
     }
     playSound('success')
-    scannedOkCodesRef.current.add(eventKey || norm)
+    validatedCodeCountsRef.current.set(countKey, currentCount + 1)
     setLastScan({ code: norm, result: 'ok' })
     setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
@@ -1989,7 +2024,7 @@ const { data: reasonsData } = useQuery({
       matched_sku: matched.type === 'sku' ? matched.sku : null,
       scan_result: 'ok', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: `OK_${norm}_${ts}`,
     })
-  }, [sessionId, packageMap, productMap, addEventMut, selectedUbicacion, t])
+  }, [sessionId, packageMap, productMap, addEventMut, expectedCodeLimits, selectedUbicacion, t])
 
   function addCodeToSession(code) {
     const norm = normalizeScanCode(code)
@@ -2000,7 +2035,10 @@ const { data: reasonsData } = useQuery({
       return
     }
     const eventKey = getValidationCodeKey({ normalized_code: norm, matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null })
-    if (scannedOkCodesRef.current.has(eventKey || norm)) {
+    const countKey = eventKey || matched.displayCode || norm
+    const currentCount = validatedCodeCountsRef.current.get(countKey) || 0
+    const expectedLimit = expectedCodeLimits.get(countKey) || matched.expectedQty || 1
+    if (currentCount >= expectedLimit) {
       playSound('duplicate')
       setLastScan({ code: norm, result: 'duplicate' })
       setHistory(h => [{ code: norm, result: 'duplicate', ts: Date.now() }, ...h].slice(0, 500))
@@ -2009,7 +2047,7 @@ const { data: reasonsData } = useQuery({
       return
     }
     playSound('success')
-    scannedOkCodesRef.current.add(eventKey || norm)
+    validatedCodeCountsRef.current.set(countKey, currentCount + 1)
     setLastScan({ code: norm, result: 'ok' })
     setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
@@ -2139,13 +2177,10 @@ const { data: reasonsData } = useQuery({
     },
   })
 
-  useEffect(() => {
-    if (step !== 'session' || !sessionId || totalExpected <= 0) return
-    if (counts.ok < totalExpected) return
-    if (showCompletionModal || finalizeMut.isPending || autoFinalizeLockRef.current) return
-    autoFinalizeLockRef.current = true
-    finalizeMut.mutate({ source: 'auto' })
-  }, [step, sessionId, totalExpected, counts.ok, showCompletionModal, finalizeMut.isPending]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Do not finalize from the optimistic local counter. The final scan request may
+  // still be in flight, and closing the session first made that request fail with
+  // 404, consistently losing the last box. The backend completes the session only
+  // after it has persisted and counted the scan.
 
   const missingItems = allItems.filter(item => {
     const normBoxType = normalizeCodeFast(item.boxType || '')
@@ -2738,12 +2773,20 @@ const { data: reasonsData } = useQuery({
                   toast.error(t('surtido.validacion.not_in_bd') + ': ' + norm)
                   return
                 }
+                const countKey = matched.displayCode || norm
+                const currentCount = validatedCodeCountsRef.current.get(countKey) || 0
+                const expectedLimit = expectedCodeLimits.get(countKey) || matched.expectedQty || 1
+                if (currentCount >= expectedLimit) {
+                  playSound('duplicate')
+                  toast.warning(t('surtido.validacion.duplicate') + ': ' + norm)
+                  return
+                }
                 const selectedReason = (getRecords(reasonsData)).find((reason) => String(reason.id) === manualEntry.reasonId)
                 // Apply local state immediately, same as doScan — a dropped connection
                 // must not make a manual entry look lost. addManualEventMut.onError
                 // queues the request itself for background sync.
                 playSound('success')
-                scannedOkCodesRef.current.add(norm)
+                validatedCodeCountsRef.current.set(countKey, currentCount + 1)
                 setLastScan({ code: norm, result: 'ok' })
                 setHistory(h => [{ code: norm, result: 'ok', ts: Date.now(), isManual: true }, ...h].slice(0, 500))
                 setCounts(c => ({ ...c, ok: c.ok + 1 }))

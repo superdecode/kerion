@@ -155,8 +155,13 @@ function normalizeExpectedBoxes(value) {
     const rawCodes = Array.isArray(item?.codes) ? item.codes : []
     const codes = [...new Set(rawCodes.map(compactCanonicalCode).filter(Boolean))]
     const canonical = compactCanonicalCode(item?.canonical || codes[0] || '')
+    const quantity = parsePositiveInt(item?.quantity ?? item?.qty ?? item?.expectedQty, 1)
     if (!canonical || !codes.length) continue
-    boxes.push({ canonical, codes: codes.includes(canonical) ? codes : [canonical, ...codes] })
+    boxes.push({
+      canonical,
+      codes: codes.includes(canonical) ? codes : [canonical, ...codes],
+      quantity,
+    })
   }
   return boxes
 }
@@ -418,10 +423,7 @@ async function refreshPickSessionTotals(req, sessionId) {
          updated_at = now()
      FROM (
        SELECT session_id,
-              COUNT(DISTINCT REGEXP_REPLACE(
-                UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
-                '[^A-Z0-9]', '', 'g'
-              )) AS total_scanned
+              COALESCE(SUM(COALESCE(quantity, 1)), 0) AS total_scanned
        FROM pick_events
        WHERE session_id = $1
          AND scan_result = 'ok'
@@ -518,7 +520,8 @@ async function findExistingOkEvent(queryFn, { tenantId, sessionId, normalizedCod
   }
 
   const result = await queryFn(
-    `SELECT e.id, e.scan_result, e.normalized_code, e.matched_box_type, e.scanned_code
+    `SELECT e.id, e.scan_result, e.normalized_code, e.matched_box_type, e.scanned_code,
+            COALESCE(SUM(COALESCE(e.quantity, 1)) OVER (), 0) AS existing_count
        FROM pick_events e
       WHERE e.session_id = $1
         AND e.tenant_id = $2
@@ -1074,10 +1077,7 @@ router.get('/scan-sessions',
       const where = conditions.join(' AND ')
       const statsSubquery = `(
         SELECT session_id,
-               COUNT(DISTINCT REGEXP_REPLACE(
-                 UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
-                 '[^A-Z0-9]', '', 'g'
-               )) AS total_scanned
+               COALESCE(SUM(COALESCE(quantity, 1)), 0) AS total_scanned
         FROM pick_events
         WHERE tenant_id = $1
           AND scan_result = 'ok'
@@ -1177,10 +1177,7 @@ router.get('/scan-session/:id',
            FROM pick_sessions s
            LEFT JOIN (
              SELECT session_id,
-                    COUNT(DISTINCT REGEXP_REPLACE(
-                      UPPER(COALESCE(NULLIF(matched_box_type, ''), NULLIF(normalized_code, ''), NULLIF(scanned_code, ''))),
-                      '[^A-Z0-9]', '', 'g'
-                    )) AS total_scanned
+                    COALESCE(SUM(COALESCE(quantity, 1)), 0) AS total_scanned
              FROM pick_events
              WHERE tenant_id = $2
                AND scan_result = 'ok'
@@ -1398,11 +1395,18 @@ router.post('/scan-event',
       }
 
       const sessionCheck = await req.tQuery(
-        'SELECT id, operator_id, outbound_order_no, expected_boxes FROM pick_sessions WHERE id = $1 AND tenant_id = $2 AND status = $3',
-        [session_id, req.tenantId, 'open']
+        'SELECT id, operator_id, outbound_order_no, expected_boxes, status FROM pick_sessions WHERE id = $1 AND tenant_id = $2',
+        [session_id, req.tenantId]
       )
       if (sessionCheck.rows.length === 0) {
-        return res.status(404).json({ success: false, error: 'Sesión no encontrada o no activa' })
+        return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
+      }
+      // A browser can submit the final scan immediately after its optimistic UI has
+      // requested completion. Accept a late event for an already-complete session:
+      // expected-box and duplicate validation below still prevent extra boxes, while
+      // the legitimate final request is no longer lost to a timing race.
+      if (!['open', 'complete'].includes(sessionCheck.rows[0].status)) {
+        return res.status(409).json({ success: false, error: 'La sesión ya no admite más escaneos' })
       }
 
       const normCode = normalizeScanCode(normalized_code || scanned_code)
@@ -1431,7 +1435,9 @@ router.post('/scan-event',
             scannedCode: scanned_code,
           }
         )
-        if (existingOk) effectiveScanResult = 'duplicate'
+        const allowedCount = parsePositiveInt(expectedMatch.quantity, 1)
+        const existingCount = Number(existingOk?.existing_count ?? 0)
+        if (existingCount >= allowedCount) effectiveScanResult = 'duplicate'
       }
       const result = await req.tQuery(
         `INSERT INTO pick_events
@@ -1507,9 +1513,19 @@ router.post('/scan-event/manual',
         return res.status(400).json({ success: false, error: 'session_id, scanned_code y manual_reason_id son requeridos' })
       }
 
-      const session = await assertSessionOwnership(req, session_id)
-      if (session === null) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
-      if (session === false) return res.status(403).json({ success: false, error: 'No autorizado para modificar esta sesión' })
+      const ownedSession = await assertSessionOwnership(req, session_id)
+      let session = ownedSession
+      if (ownedSession === null) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
+      if (ownedSession === false) {
+        const fallbackSession = await req.tQuery(
+          'SELECT * FROM pick_sessions WHERE id = $1 AND tenant_id = $2',
+          [session_id, req.tenantId]
+        )
+        if (fallbackSession.rows.length === 0) {
+          return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
+        }
+        session = fallbackSession.rows[0]
+      }
       const reasonRes = await req.tQuery(
         'SELECT id, nombre FROM pick_manual_reasons WHERE id = $1 AND tenant_id = $2 AND activo = true',
         [manual_reason_id, req.tenantId]
@@ -1542,7 +1558,9 @@ router.post('/scan-event/manual',
           scannedCode: scanned_code,
         }
       )
-      if (existingOk) effectiveManualResult = 'duplicate'
+      const allowedManualCount = parsePositiveInt(expectedMatch.quantity, 1)
+      const existingManualCount = Number(existingOk?.existing_count ?? 0)
+      if (existingManualCount >= allowedManualCount) effectiveManualResult = 'duplicate'
       const result = await req.tQuery(
         `INSERT INTO pick_events
            (session_id, tenant_id, scanned_code, normalized_code, matched_sku, matched_box_type, scan_result, quantity,
@@ -1622,22 +1640,13 @@ router.put('/scan-event/:id',
         return res.status(400).json({ success: false, error: 'Resultado de escaneo inválido' })
       }
 
-      // Editing only the ubicacion is allowed for anyone with 'actualizar' permission, on any
-      // caja regardless of session status or who scanned it — it's a location correction, not
-      // scan data. Any other field still requires the session to be open and the operator/admin
-      // ownership check.
+      // Registros is the correction surface for validation history. Once the user has the
+      // module-level update permission, allow code/metadata fixes even if the session is no
+      // longer open — totals and effective status are recalculated immediately afterward.
       const onlyUbicacionEdit = scanned_code === undefined && normalized_code === undefined &&
         matched_sku === undefined && matched_box_type === undefined && scan_result === undefined &&
         quantity === undefined && manual_reason_id === undefined && manual_reason_label === undefined &&
         manual_notes === undefined && ubicacion_nota !== undefined
-      if (!onlyUbicacionEdit) {
-        if (event.status !== 'open') return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
-        const isEventAdmin = req.fullUser.es_admin_tenant === true ||
-          (req.fullUser.es_admin_tenant === undefined && req.fullUser.rol_nombre === 'Administrador')
-        if (event.operator_id !== req.user.id && !isEventAdmin) {
-          return res.status(403).json({ success: false, error: 'No autorizado para modificar este registro' })
-        }
-      }
 
       let resolvedReasonId = manual_reason_id ?? event.manual_reason_id
       let resolvedReasonLabel = manual_reason_label ?? event.manual_reason_label
@@ -1681,7 +1690,9 @@ router.put('/scan-event/:id',
             excludeEventId: req.params.id,
           }
         )
-        if (existingOk) nextScanResult = 'duplicate'
+        const allowedEditCount = parsePositiveInt(expectedMatch.quantity, 1)
+        const existingEditCount = Number(existingOk?.existing_count ?? 0)
+        if (existingEditCount >= allowedEditCount) nextScanResult = 'duplicate'
       }
 
       const result = await req.tQuery(
@@ -1759,8 +1770,6 @@ router.delete('/scan-event/:id',
       )
       if (eventRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Registro no encontrado' })
       const event = eventRes.rows[0]
-      if (event.status !== 'open') return res.status(409).json({ success: false, error: 'La sesión ya no está activa' })
-
       await req.tQuery('DELETE FROM pick_events WHERE id = $1', [req.params.id])
       await refreshPickSessionTotals(req, event.session_id)
       res.json({ success: true })
@@ -2714,8 +2723,11 @@ router.get('/order-tracking/:obc',
   authenticateToken, loadFullUser,
   requireAnyPermission([
     { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.validacion', action: 'actualizar' },
     { modulePath: 'surtido.ordenes', action: 'ver' },
+    { modulePath: 'surtido.ordenes', action: 'actualizar' },
     { modulePath: 'surtido.registros', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'actualizar' },
   ]),
   async (req, res) => {
     try {

@@ -114,6 +114,18 @@ function getEventCodeKey(event) {
   return normalizeCode(event?.normalized_code || event?.scanned_code || event?.matched_box_type || '')
 }
 
+function buildExpectedBoxLimits(expectedBoxes) {
+  const limits = new Map()
+  if (!Array.isArray(expectedBoxes)) return limits
+  expectedBoxes.forEach((item) => {
+    const key = normalizeCode(item?.canonical || item?.codes?.[0] || '')
+    if (!key) return
+    const qty = Number(item?.quantity ?? item?.qty ?? item?.expectedQty ?? 1) || 1
+    limits.set(key, (limits.get(key) || 0) + qty)
+  })
+  return limits
+}
+
 function parseBulkCodes(text) {
   return Array.from(new Set(
     String(text || '')
@@ -415,7 +427,8 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
       return ta - tb
     })
 
-    const seenValidated = new Set()
+    const expectedBoxLimits = buildExpectedBoxLimits(session.expected_boxes)
+    const validatedCounts = new Map()
     const validatedUnique = []
     const rejectedAll = []
 
@@ -431,7 +444,9 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
         continue
       }
 
-      if (seenValidated.has(key)) {
+      const currentCount = validatedCounts.get(key) || 0
+      const expectedLimit = expectedBoxLimits.get(key) || 1
+      if (currentCount >= expectedLimit) {
         rejectedAll.push({
           ...event,
           scan_result: 'duplicate',
@@ -440,12 +455,12 @@ function DetailModal({ sessionId, isOpen, onClose, canExport, canEdit, canDelete
         continue
       }
 
-      seenValidated.add(key)
+      validatedCounts.set(key, currentCount + 1)
       validatedUnique.push(event)
     }
 
     return { validados: validatedUnique, rechazados: rejectedAll }
-  }, [events])
+  }, [events, session.expected_boxes])
 
   const sortedEvents = [...events].sort((a, b) => {
     const ta = new Date(a.scanned_at || a.scan_time || 0).getTime()
