@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, AlertTriangle, Camera } from 'lucide-react'
+import { useI18nStore } from '../../stores/i18nStore'
 
 // Loaded on demand — most sessions never open the scanner, so this keeps
 // the ~150kb zxing decoder out of the main bundle entirely.
@@ -92,6 +93,7 @@ function playScanSound() {
 // ZXing (pure JS, no WASM/native API dependency) so it works on older
 // browsers/WebViews that don't implement the native BarcodeDetector API.
 export default function BarcodeScannerModal({ isOpen, onClose, onScan }) {
+  const { t } = useI18nStore()
   const videoRef = useRef(null)
   const controlsRef = useRef(null)
   const detectedRef = useRef(false)

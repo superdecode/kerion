@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AlertTriangle, TrendingUp, X, ChevronRight, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import { useI18nStore } from '../../stores/i18nStore'
 
 const MODULE_META = {
   dropscan:     { label: 'DropScan',     unit: 'guías',       color: 'blue' },
@@ -13,6 +14,7 @@ const MODULE_META = {
 
 function UpgradeModal({ module, usage, onClose }) {
   const { user } = useAuthStore()
+  const { t } = useI18nStore()
   const meta = MODULE_META[module] || { label: module, unit: 'operaciones', color: 'blue' }
   const [form, setForm] = useState({ message: '' })
   const [loading, setLoading] = useState(false)
@@ -112,6 +114,7 @@ function UpgradeModal({ module, usage, onClose }) {
  *   children: the module content to show (blocked behind wall if at_limit)
  */
 export default function ModuleLimitBanner({ module, usage, children }) {
+  const { t } = useI18nStore()
   const [showModal, setShowModal] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 

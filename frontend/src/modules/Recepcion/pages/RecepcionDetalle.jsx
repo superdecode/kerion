@@ -58,6 +58,7 @@ function CopyButton({ text }) {
 }
 
 function CopyInline({ value, className = '', mono = false }) {
+  const { t } = useI18nStore()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = (event) => {

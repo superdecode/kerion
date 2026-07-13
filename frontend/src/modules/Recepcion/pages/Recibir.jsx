@@ -48,6 +48,7 @@ function EstadoBadge({ estado, t }) {
 }
 
 function CopyCell({ value, className = '', muted = false }) {
+  const { t } = useI18nStore()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async (event) => {
