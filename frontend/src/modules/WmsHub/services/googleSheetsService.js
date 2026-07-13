@@ -755,10 +755,14 @@ export async function getOutboundDetail(orderNo) {
   }
 
   let orderRows = await findRows(false)
-  const normOrderNo = normalizeCodeFast(orderNo || '')
-  const looksLikeOutboundOrder = /^OBC[A-Z0-9-]+$/.test(normOrderNo)
-  if (orderRows.length === 0 && getCacheStatus('outbound').partial && !looksLikeOutboundOrder) {
-    orderRows = await findRows(true)
+  // Whenever the cache is only the partial (fast) slice, we cannot trust that
+  // every box row of a found order is present. A truncated packageList makes
+  // detail validation reject boxes that legitimately belong to the order
+  // ("codigo no corresponde"). Force a full fetch when partial, both when the
+  // order was missing entirely and when it was found from an incomplete slice.
+  if (getCacheStatus('outbound').partial) {
+    const fullRows = await findRows(true)
+    if (fullRows.length > orderRows.length) orderRows = fullRows
   }
 
   if (orderRows.length === 0) return { success: true, data: null }

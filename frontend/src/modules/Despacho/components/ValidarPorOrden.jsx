@@ -176,7 +176,17 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
     ;(orderDetail.packageList ?? orderDetail.outboundBoxList ?? []).forEach((p) => {
       rawCodes.push(p.customizeCode, p.boxType, p.boxCode)
     })
-    rawCodes.push(orderDetail.thirdOrderNo, orderDetail.logisticsTrackNo)
+    // Accept any of the identifiers that reference this order: box code (old
+    // code, stored in the sheet), trucking/reference id (new code), reference
+    // order no, or the OBC order number itself.
+    // allCustomizeCodes is spread defensively for callers that pass an
+    // aggregated order; getOutboundDetail already lists every box in packageList.
+    rawCodes.push(
+      orderDetail.thirdOrderNo,
+      orderDetail.logisticsTrackNo,
+      orderDetail.outboundOrderNo,
+      ...(orderDetail.allCustomizeCodes ?? []),
+    )
     return buildLookupCodeSet(rawCodes)
   }, [orderDetail])
 
@@ -680,7 +690,12 @@ export default function ValidarPorOrden({ folioId }) {
       ;(lookupDetail.packageList ?? lookupDetail.outboundBoxList ?? []).forEach(p => {
         rawCodes.push(p.customizeCode, p.boxType, p.boxCode)
       })
-      rawCodes.push(lookupDetail.thirdOrderNo, lookupDetail.logisticsTrackNo)
+      rawCodes.push(
+        lookupDetail.thirdOrderNo,
+        lookupDetail.logisticsTrackNo,
+        lookupDetail.outboundOrderNo,
+        ...(lookupDetail.allCustomizeCodes ?? []),
+      )
       const codes = buildLookupCodeSet(rawCodes)
       if (codes.size > 0 && !codes.has(code)) {
         playSound('error')

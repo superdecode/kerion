@@ -21,6 +21,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtDate, fmtTimeShort, toDateKey, fmtDateString } from '../../../core/utils/dateFormat'
 import { getOutboundList, getOrdenesDispatch, getConductores, getUnidades, findAllOrdersByBarcode } from '../services/despachoService'
 import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
+import { warmOutboundFull } from '../../WmsHub/services/googleSheetsService'
 import { ConductoresModal, UnidadesModal } from '../components/CatalogsModals'
 import IniciarDespachoModal  from '../components/IniciarDespachoModal'
 import DispatchQuantityModal from '../components/DispatchQuantityModal'
@@ -294,6 +295,11 @@ export default function Ordenes() {
     [paginated]
   )
 
+  // Warm the complete outbound dataset (including forward-dated pool orders) on
+  // mount so scans resolve against the full sheet, not just the fast partial
+  // slice. Idempotent: the warmer guards against concurrent loads.
+  useEffect(() => { warmOutboundFull() }, [])
+
   useEffect(() => { setPage(1) }, [search, dateFrom, dateTo, statusFilter, dispatchFilter, tab])
   useEffect(() => { setSelectedIds(new Set()) }, [search, dateFrom, dateTo, statusFilter, dispatchFilter, tab, pageSize])
 
@@ -417,11 +423,15 @@ export default function Ordenes() {
     const memoryMatches = allOrders.filter(matchesInMemory)
     if (memoryMatches.length > 0) {
       const ordersWithRange = memoryMatches.map(order => ({ order, inRange: isInRange(order) }))
-      const inRangeList = ordersWithRange.filter(e => e.inRange)
 
-      if (ordersWithRange.length === 1 && inRangeList.length === 1) {
-        setScanStatus(SCAN_FOUND)
-        setTimeout(() => { setScanInput(''); setScanStatus(SCAN_IDLE); handleOrderFound(memoryMatches[0]) }, 300)
+      // A single match always opens the order. The date filter only scopes the
+      // visible table, never blocks resolving a scan: an order dated outside the
+      // active window still loads, flagged with the out-of-range status so the
+      // operator is warned. Only genuinely ambiguous scans (>1 order) prompt.
+      if (ordersWithRange.length === 1) {
+        const inR = ordersWithRange[0].inRange
+        setScanStatus(inR ? SCAN_FOUND : SCAN_OUT_RANGE)
+        setTimeout(() => { setScanInput(''); setScanStatus(SCAN_IDLE); handleOrderFound(memoryMatches[0]) }, inR ? 300 : 900)
         return
       }
       setScanResolutionData({ orders: ordersWithRange, query: normQ })
@@ -438,11 +448,11 @@ export default function Ordenes() {
       if (!matches || matches.length === 0) { setScanStatus(SCAN_NOT_FOUND); return }
 
       const ordersWithRange = matches.map(order => ({ order, inRange: isInRange(order) }))
-      const inRangeList = ordersWithRange.filter(e => e.inRange)
 
-      if (ordersWithRange.length === 1 && inRangeList.length === 1) {
-        setScanStatus(SCAN_FOUND)
-        setTimeout(() => { setScanInput(''); setScanStatus(SCAN_IDLE); handleOrderFound(matches[0]) }, 300)
+      if (ordersWithRange.length === 1) {
+        const inR = ordersWithRange[0].inRange
+        setScanStatus(inR ? SCAN_FOUND : SCAN_OUT_RANGE)
+        setTimeout(() => { setScanInput(''); setScanStatus(SCAN_IDLE); handleOrderFound(matches[0]) }, inR ? 300 : 900)
         return
       }
       setScanResolutionData({ orders: ordersWithRange, query: normQ })
