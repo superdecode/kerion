@@ -1161,7 +1161,7 @@ export default function RastreoDetalle() {
 
       <Modal
         isOpen={resolveModalOpen}
-        onClose={() => { if (!resolveOrdenMutation.isPending) { setResolveModalOpen(false); setResolveSearch(''); setResolveCausaId(''); setBulkCausaId('') } }}
+        onClose={() => { if (!resolveOrdenMutation.isPending) { setResolveModalOpen(false); setResolveSearch(''); setResolveCausas({}); setResolveBulkCausa('') } }}
         title={isCancelFlow ? t('rastreo.detalle.cancelTitle') : t('rastreo.detalle.resolveTitle')}
         icon={isCancelFlow ? XCircle : CheckCircle2}
         size="lg"
@@ -1177,7 +1177,7 @@ export default function RastreoDetalle() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => { setResolveModalOpen(false); setResolveSearch(''); setResolveCausaId(''); setBulkCausaId('') }}
+                onClick={() => { setResolveModalOpen(false); setResolveSearch(''); setResolveCausas({}); setResolveBulkCausa('') }}
                 disabled={resolveOrdenMutation.isPending}
                 className="btn-ghost text-xs"
               >

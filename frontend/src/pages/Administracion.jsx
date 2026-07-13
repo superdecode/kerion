@@ -111,6 +111,7 @@ const LEVEL_ORDER = ['sin_acceso', 'ver', 'crear', 'actualizar', 'eliminar']
 
 function CopyHoverText({ value, className = '' }) {
   const [copied, setCopied] = useState(false)
+  const { t } = useI18nStore()
 
   const handleCopy = async (event) => {
     event.stopPropagation()

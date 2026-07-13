@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAdminAuthStore } from '../stores/adminAuthStore'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 import {
   LayoutDashboard, Building2, FileText, Bell, LogOut,
   ChevronLeft, ChevronRight, Shield, BarChart3, CreditCard, Lock, X, Eye, EyeOff, MessageSquare, ShieldAlert
@@ -112,6 +113,7 @@ function ChangePasswordModal({ onClose }) {
 
 export default function AdminLayout() {
   const { admin, logout } = useAdminAuthStore()
+  const { t } = useI18nStore()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [showChangePwd, setShowChangePwd] = useState(false)

@@ -94,6 +94,7 @@ function CopyButton({ value }) {
 }
 
 function DetailModal({ event, onClose, onSaved }) {
+  const { t } = useI18nStore()
   const [status, setStatus] = useState(event.status)
   const [notes, setNotes] = useState(event.admin_notes || '')
   const [saving, setSaving] = useState(false)

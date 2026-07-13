@@ -680,6 +680,7 @@ function CanalesTab({ canEdit, canToggle, canRemove }) {
 
 function CanalModal({ canal, onClose, onSubmit, isLoading }) {
   const { t } = useI18nStore()
+  const backendOnline = useAuthStore(s => s.backendOnline)
   const [formData, setFormData] = useState({
     nombre: canal?.nombre || '',
     descripcion: canal?.descripcion || '',

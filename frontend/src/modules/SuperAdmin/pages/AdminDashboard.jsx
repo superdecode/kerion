@@ -6,6 +6,7 @@ import {
   Truck, Boxes, RotateCcw, PackageCheck, Waypoints, X,
 } from 'lucide-react'
 import adminApi from '../services/adminApi'
+import { useI18nStore } from '../../../core/stores/i18nStore'
 
 const STAT_CFG = {
   trial:         { label: 'Trial activo',   color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20',    icon: Clock },
@@ -96,6 +97,7 @@ function fmt(n) {
 }
 
 export default function AdminDashboard() {
+  const { t } = useI18nStore()
   const [data, setData] = useState(null)
   const [usage, setUsage] = useState(null)
   const [loading, setLoading] = useState(true)

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { X, Send, Loader2, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import { useI18nStore } from '../../stores/i18nStore'
 import api from '../../services/api'
 
 const DAILY_LIMIT = 3
@@ -22,6 +23,7 @@ function setLocalCount(userId, count) {
 
 export default function BugReportButton() {
   const { user } = useAuthStore()
+  const { t } = useI18nStore()
   const [open, setOpen] = useState(false)
   const [description, setDescription] = useState('')
   const [sending, setSending] = useState(false)
