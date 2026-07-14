@@ -40,8 +40,15 @@ export const updateScanEvent = (id, body) =>
 export const deleteScanEvent = (id) =>
   api.delete(`/wmshub/scan-event/${id}`).then(r => r.data)
 
-export const getScanSession = (id) =>
-  api.get(`/wmshub/scan-session/${id}`).then(r => r.data)
+// Guards against callers passing a JS null/undefined sessionId through a template
+// literal, which silently becomes the literal string "null"/"undefined" in the URL
+// and turns into a 500 server-side (malformed UUID) instead of failing locally.
+export const getScanSession = (id) => {
+  if (!id || id === 'null' || id === 'undefined') {
+    return Promise.reject(new Error(`getScanSession: invalid session id "${id}"`))
+  }
+  return api.get(`/wmshub/scan-session/${id}`).then(r => r.data)
+}
 
 export const clearSessionEvents = (id) =>
   api.delete(`/wmshub/scan-session/${id}/events`).then(r => r.data)

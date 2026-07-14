@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import crypto from 'crypto'
-import { isDatabaseUnavailableError } from '../../../config/database.js'
+import { isDatabaseUnavailableError, UUID_RE } from '../../../config/database.js'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { requirePermission, getPermissionLevel, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { getToday, instantDateInTZ } from '../../../shared/utils/dateUtils.js'
@@ -1180,6 +1180,9 @@ router.get('/scan-session/:id',
     { modulePath: 'surtido.registros', action: 'ver' },
   ]),
   async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      return res.status(400).json({ success: false, error: 'ID de sesión inválido' })
+    }
     try {
       const [sessionRes, eventsRes] = await Promise.all([
         req.tQuery(
@@ -1246,6 +1249,9 @@ router.put('/scan-session/:id',
     { modulePath: 'surtido.registros', action: 'actualizar' },
   ]),
   async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      return res.status(400).json({ success: false, error: 'ID de sesión inválido' })
+    }
     try {
       const { status, notes, total_scanned, ubicacion_id, ubicacion_nota } = req.body
       if (status !== undefined && !PICK_SESSION_STATUSES.has(String(status))) {
@@ -1349,6 +1355,9 @@ router.delete('/scan-session/:id',
   authenticateToken, loadFullUser,
   requirePermission('surtido.validacion', 'eliminar'),
   async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      return res.status(400).json({ success: false, error: 'ID de sesión inválido' })
+    }
     const client = await req.tGetClient()
     try {
       await client.query('BEGIN')

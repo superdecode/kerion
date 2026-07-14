@@ -12,7 +12,7 @@ const { Pool, types } = pg
 // host's UTC offset. Force UTC parsing explicitly so the value is correct everywhere.
 types.setTypeParser(1114, (val) => (val === null ? null : new Date(`${val.replace(' ', 'T')}Z`)))
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TRANSIENT_DB_ERROR_CODES = new Set([
   '57P01', // admin shutdown
   '57P03', // cannot connect now

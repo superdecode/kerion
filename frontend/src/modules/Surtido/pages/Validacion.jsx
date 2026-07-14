@@ -1332,7 +1332,8 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     if (saved) {
       try {
         const s = JSON.parse(saved)
-        if (s.obc && s.sessionId) {
+        const hasCorruptSessionId = s.sessionId === 'null' || s.sessionId === 'undefined'
+        if (s.obc && s.sessionId && !hasCorruptSessionId) {
           const restoreLocally = () => {
             const queuedOkCodes = useSurtidoStore.getState().pendingSync
               .filter((item) => String(item.payload?.session_id) === String(s.sessionId) && item.payload?.scan_result === 'ok')
@@ -1393,6 +1394,17 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
               // Definitive response from the server (e.g. 404) — safe to discard.
               discardAndRestart()
             })
+          return
+        }
+        if (s.obc && hasCorruptSessionId) {
+          // A JS null/undefined sessionId round-tripped through sessionStorage as the
+          // literal string "null"/"undefined" (root cause of the wmshub
+          // scan-session/null 500s seen in prod — a truthy-string check let it slip
+          // past validation and the 30s background sync kept retrying it forever).
+          // Treat it like a closed session: discard and auto-start a fresh one.
+          sessionStorage.removeItem(storageKey)
+          setObc(s.obc); setStep('session'); setAutoStartPending(true)
+          onUpdateTab({ obc: s.obc, step: 'session' })
           return
         }
       } catch {}
