@@ -135,7 +135,11 @@ export function normalizeCode(rawCode) {
   const idMatch = upper.match(idPattern)
   if (idMatch) return idMatch[1]
 
-  return upper.replace(/[^A-Z0-9_\/-]/g, '')
+  const fallback = upper.replace(/[^A-Z0-9_\/-]/g, '')
+  // Purely-alphabetic strings (no digits) are label field names, not product codes.
+  // e.g. CONTAINER_TYPEBOX from a composite barcode label scanned field-by-field.
+  if (fallback.length > 4 && !/\d/.test(fallback)) return ''
+  return fallback
 }
 
 /**

@@ -30,7 +30,7 @@ import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 import { classifyItem, resolveSwap } from '../utils/classify'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import { checkInventoryDuplicates, saveInventorySession } from '../services/inventarioService'
-import { getUbicaciones, createUbicacion } from '../../WmsHub/services/wmsHubService'
+import { getUbicaciones, createUbicacion, searchUbicaciones } from '../../WmsHub/services/wmsHubService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus, getSheetUrls } from '../../WmsHub/services/googleSheetsService'
 import { fmtDateTime, toDateKey } from '../../../core/utils/dateFormat'
 import QuickCodeSearchModal from '../components/QuickCodeSearchModal'
@@ -150,6 +150,25 @@ const buildCodeVariantSet = (...codes) => {
 const itemMatchesDuplicateSet = (item, variantSet) => {
   const itemCodes = [item?.code, item?.code2].filter(Boolean)
   return itemCodes.some((code) => generateCodeVariations(code).some((variant) => variantSet.has(variant)))
+}
+
+const matchesUbicacionCode = (u, norm) =>
+  (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
+
+// getUbicaciones('inventario') caps the list at 20 rows server-side (catalogs can
+// hold thousands), so a scanned code outside that window would otherwise be
+// reported as "not found" even though it exists and is active. Fall back to the
+// server-side search endpoint — scoped to the typed code — before giving up.
+async function resolveUbicacionByCode(val, ubicaciones) {
+  const norm = val.toLowerCase()
+  const local = (ubicaciones ?? []).find((u) => matchesUbicacionCode(u, norm))
+  if (local) return local
+  try {
+    const { data } = await searchUbicaciones(val, 'inventario')
+    return (data ?? []).find((u) => matchesUbicacionCode(u, norm)) ?? null
+  } catch {
+    return null
+  }
 }
 
 const formatConflictDate = (value, locale = 'es') => {
@@ -631,6 +650,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
   const [inputValue, setInputValue] = useState('')
   const [notFound, setNotFound] = useState(false)
   const [notFoundCode, setNotFoundCode] = useState('')
+  const [isVerifying, setIsVerifying] = useState(false)
   const locationRef = useRef(null)
   const inputShellRef = useRef(null)
   const [dropdownStyle, setDropdownStyle] = useState(null)
@@ -640,6 +660,7 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
       setInputValue('')
       setNotFound(false)
       setNotFoundCode('')
+      setIsVerifying(false)
       setTimeout(() => locationRef.current?.focus(), 80)
     }
   }, [isOpen])
@@ -659,13 +680,12 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
     )
   }, [isOpen, inputValue, notFound, ubicaciones])
 
-  function handleConfirm() {
+  async function handleConfirm() {
     const val = inputValue.trim()
-    if (!val) return
-    const norm = val.toLowerCase()
-    const found = (ubicaciones ?? []).find(u =>
-      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
-    )
+    if (!val || isVerifying) return
+    setIsVerifying(true)
+    const found = await resolveUbicacionByCode(val, ubicaciones)
+    setIsVerifying(false)
     if (found) {
       onUbicacionConfirmed({ id: found.id, codigo: found.codigo, nombre: found.nombre })
     } else {
@@ -686,8 +706,8 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
       footer={
         <div className="flex gap-3 justify-between w-full flex-wrap">
           <button className="btn-ghost text-sm shrink-0" onClick={onSkip}>{t('inventario.escaneo.ubicacion_skip')}</button>
-          <button className="btn-primary text-sm inline-flex items-center gap-2 shrink-0" onClick={handleConfirm} disabled={!inputValue.trim()}>
-            <CheckCircle2 size={14} /> {t('inventario.escaneo.ubicacion_continue')}
+          <button className="btn-primary text-sm inline-flex items-center gap-2 shrink-0" onClick={handleConfirm} disabled={!inputValue.trim() || isVerifying}>
+            {isVerifying ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {t('inventario.escaneo.ubicacion_continue')}
           </button>
         </div>
       }
@@ -728,8 +748,8 @@ function UbicacionInputModal({ isOpen, onClose, onSkip, ubicaciones, onUbicacion
               document.body
             )}
           </div>
-          <button className="btn-primary px-4 py-3.5 rounded-2xl" onClick={handleConfirm} disabled={!inputValue.trim()}>
-            <CheckCircle2 size={16} />
+          <button className="btn-primary px-4 py-3.5 rounded-2xl" onClick={handleConfirm} disabled={!inputValue.trim() || isVerifying}>
+            {isVerifying ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
           </button>
         </div>
 
@@ -1186,6 +1206,7 @@ function ClasificacionPanel({
   const [inputValue, setInputValue] = useState('')
   const [notFound, setNotFound] = useState(false)
   const [notFoundCode, setNotFoundCode] = useState('')
+  const [isVerifying, setIsVerifying] = useState(false)
   const [inlineDropStyle, setInlineDropStyle] = useState(null)
   const inputRef = useRef(null)
   const inputWrapperRef = useRef(null)
@@ -1224,6 +1245,7 @@ function ClasificacionPanel({
     setInputValue('')
     setNotFound(false)
     setNotFoundCode('')
+    setIsVerifying(false)
   }
 
   function closeInput() {
@@ -1231,16 +1253,16 @@ function ClasificacionPanel({
     setInputValue('')
     setNotFound(false)
     setNotFoundCode('')
+    setIsVerifying(false)
     setInlineDropStyle(null)
   }
 
-  function confirmInput(g) {
+  async function confirmInput(g) {
     const val = inputValue.trim()
-    if (!val) return
-    const norm = val.toLowerCase()
-    const found = (ubicaciones ?? []).find(u =>
-      (u.codigo || '').toLowerCase() === norm || (u.nombre || '').toLowerCase() === norm
-    )
+    if (!val || isVerifying) return
+    setIsVerifying(true)
+    const found = await resolveUbicacionByCode(val, ubicaciones)
+    setIsVerifying(false)
     if (found) {
       onGroupUbicacionChange(g, { id: found.id, codigo: found.codigo, nombre: found.nombre })
       closeInput()
@@ -1355,10 +1377,10 @@ function ClasificacionPanel({
                     </div>
                     <button
                       onClick={() => confirmInput(g)}
-                      disabled={!inputValue.trim()}
+                      disabled={!inputValue.trim() || isVerifying}
                       className="p-1.5 rounded-lg bg-accent-500 text-white hover:bg-accent-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
                     >
-                      <CheckCircle2 size={12} />
+                      {isVerifying ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
                     </button>
                     <button
                       onClick={closeInput}
@@ -1931,6 +1953,10 @@ export default function Escaneo() {
     if (!activeTab) { toast.warning(t('inventario.escaneo.no_tab')); return }
     const inv = inventorySnapshot instanceof Map ? inventorySnapshot : new Map()
     const { code, item } = findCodeInInventory(rawCode, inv)
+    // Composite barcode labels are sometimes scanned field-by-field by the reader;
+    // fragments with no product code (e.g. a lone "container_type" field) normalize
+    // to '' and must be dropped instead of registered as a bogus scan.
+    if (!code) return
     const acceptScan = () => {
       if (!item) {
         setPendingCode1({ raw: rawCode, code })
