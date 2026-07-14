@@ -169,6 +169,25 @@ function EditInfoCard({ tenant, activeSub, onSaved }) {
         <Field label="Creado el">
           <p className={disabledCls}>{fmtDateTime(tenant.created_at)}</p>
         </Field>
+        <Field label="Ultima actividad">
+          {(() => {
+            if (!tenant.last_access) return <p className={disabledCls}>Sin actividad registrada</p>
+            const tz = form.zona_horaria || 'America/Mexico_City'
+            const formatter = new Intl.DateTimeFormat('es-MX', {
+              day: '2-digit',
+              month: 'long',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: tz
+            })
+            return (
+              <p className={disabledCls}>
+                {formatter.format(new Date(tenant.last_access))}
+              </p>
+            )
+          })()}
+        </Field>
         <Field label="Trial vence">
           {(() => {
             if (!tenant.trial_expires_at) return <p className={disabledCls}>—</p>

@@ -412,7 +412,14 @@ router.get('/tenants/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params
     const [tenantRes, logRes, subRes] = await Promise.all([
-      query('SELECT t.*, p.name as plan_name FROM tenants t LEFT JOIN plans p ON t.current_plan_id = p.id WHERE t.id = $1', [id]),
+      query(
+        `SELECT t.*, p.name as plan_name,
+                (SELECT MAX(u.ultimo_acceso) FROM usuarios u WHERE u.tenant_id = t.id) as last_access
+           FROM tenants t
+           LEFT JOIN plans p ON t.current_plan_id = p.id
+          WHERE t.id = $1`,
+        [id]
+      ),
       query('SELECT * FROM provisioning_log WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 50', [id]),
       query(
         `SELECT s.id, s.code, s.tenant_id, s.plan_id, s.subscription_type, s.price_amount, s.price_currency,

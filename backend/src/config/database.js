@@ -1,7 +1,16 @@
 import pg from 'pg'
 import env from './env.js'
 
-const { Pool } = pg
+const { Pool, types } = pg
+
+// All `timestamp` (no time zone) columns store UTC wall-clock (DB session TimeZone
+// is UTC). pg's default parser for OID 1114 has no offset to read from the wire
+// value, so it falls back to `new Date(y, m, d, h, mi, s)` — the multi-arg local
+// constructor — which reinterprets those UTC digits in the Node process's own
+// timezone. Anywhere that process isn't running under TZ=UTC (e.g. local dev), every
+// plain timestamp column (ultimo_acceso, created_at, ...) comes back shifted by the
+// host's UTC offset. Force UTC parsing explicitly so the value is correct everywhere.
+types.setTypeParser(1114, (val) => (val === null ? null : new Date(`${val.replace(' ', 'T')}Z`)))
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TRANSIENT_DB_ERROR_CODES = new Set([
