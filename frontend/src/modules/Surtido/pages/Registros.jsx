@@ -1311,10 +1311,6 @@ export default function SurtidoRegistros() {
   const [bulkSearchCodes, setBulkSearchCodes] = useState([])
   const handledDeepLinkRef = useRef('')
 
-  const bulkSearchSet = useMemo(
-    () => new Set(bulkSearchCodes.map(normalizeOrderNo).filter(Boolean)),
-    [bulkSearchCodes]
-  )
   const bulkActive = bulkSearchCodes.length > 0
   const obcActive = !!search.trim() || bulkActive
   const { data, isLoading, isFetching } = useQuery({
@@ -1342,7 +1338,6 @@ export default function SurtidoRegistros() {
         const seen = new Set()
         const records = responses
           .flatMap((payload) => getRecords(payload))
-          .filter((record) => bulkSearchSet.has(normalizeOrderNo(record.outbound_order_no)))
           .filter((record) => {
             if (!record?.id || seen.has(record.id)) return false
             seen.add(record.id)
