@@ -124,7 +124,10 @@ async function fetchAndCacheSheet(tenantId, url, dbWriter = null) {
   })()
 
   _inFlight.set(cacheKey, fetchPromise)
-  fetchPromise.finally(() => _inFlight.delete(cacheKey))
+  // Catch on this derived .finally() promise separately from the returned
+  // fetchPromise — callers catching the returned reference does not stop the
+  // .finally() chain's own rejection from going unhandled and crashing the process.
+  fetchPromise.finally(() => _inFlight.delete(cacheKey)).catch(() => {})
   return fetchPromise
 }
 
