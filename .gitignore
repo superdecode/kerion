@@ -55,6 +55,7 @@ temp/
 .env*.local
 .worktrees/
 .worktrees/
+.superpowers/
 
 # Reference env files that contain REAL secrets — must never be tracked
 .env*.reference
