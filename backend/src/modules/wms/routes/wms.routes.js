@@ -266,6 +266,15 @@ function buildPickOrderTrackingSelect(columns) {
   return selected.map((column) => `ot.${column}`).join(', ')
 }
 
+export function buildOrderTrackingStatusSql() {
+  return `CASE
+        WHEN ot.status = 'cancelled' THEN 'cancelled'
+        WHEN ot.status = 'complete' THEN 'complete'
+        WHEN COALESCE(stats.total_expected, 0) > 0 AND COALESCE(stats.total_scanned, 0) >= COALESCE(stats.total_expected, 0) THEN 'complete'
+        ELSE COALESCE(ot.status, 'validating')
+      END`
+}
+
 function buildPickOrderTrackingSelectWithStats(columns) {
   const preferred = [
     'id', 'tenant_id', 'outbound_order_no', 'third_order_no',
@@ -290,21 +299,12 @@ function buildPickOrderTrackingSelectWithStats(columns) {
     if (column === 'logistics_channel') return 'COALESCE(ot.logistics_channel, stats.logistics_channel) AS logistics_channel'
     if (column === 'outbound_delivery_at') return 'COALESCE(ot.outbound_delivery_at, stats.outbound_delivery_at) AS outbound_delivery_at'
     if (column === 'outbound_box_count') return 'COALESCE(ot.outbound_box_count, stats.outbound_box_count) AS outbound_box_count'
-    // Single source of truth for "is this order done": actual scan counts always win
-    // over the cached ot.status once they say complete — except 'cancelled', a
-    // deliberate business decision unrelated to box count that must never be
-    // silently overridden. Without this, ot.status could be stuck at 'partial' (set
-    // when a session was force-closed short) even after the remaining boxes were
-    // scanned later in a reopened session, showing "Parcial" forever in Ordenes
-    // while Registros (which already derives status from counts) correctly showed
-    // the order as done — the same numbers disagreeing depending on which screen
-    // you looked at.
-    if (column === 'status') return `CASE
-        WHEN ot.status = 'cancelled' THEN 'cancelled'
-        WHEN COALESCE(stats.total_expected, 0) > 0 AND COALESCE(stats.total_scanned, 0) >= COALESCE(stats.total_expected, 0) THEN 'complete'
-        WHEN ot.status = 'complete' AND COALESCE(stats.total_expected, 0) > 0 THEN 'validating'
-        ELSE COALESCE(ot.status, 'validating')
-      END AS status`
+    // Counts may promote an active/partial order once all boxes are scanned, but an
+    // explicit closure must stay closed. In particular, /force-validate deliberately
+    // stores `complete` with fewer scans than expected. Demoting that row back to
+    // `validating` made the UI editable while the write endpoint still (correctly)
+    // treated it as closed, so the next save failed with 409.
+    if (column === 'status') return `${buildOrderTrackingStatusSql()} AS status`
     if (column === 'validation_started_at') return 'COALESCE(ot.validation_started_at, stats.first_session_at) AS validation_started_at'
     if (column === 'validation_completed_at') return 'COALESCE(ot.validation_completed_at, stats.last_session_at) AS validation_completed_at'
     if (column === 'updated_at') return 'COALESCE(ot.updated_at, stats.last_session_at) AS updated_at'
