@@ -1083,41 +1083,72 @@ export default function InventarioRegistros() {
       return next
     })
   }
-  const INV_HEADERS = [
+  const DETAIL_EXPORT_HEADERS = [
     t('inventario.registros.section'),
     t('inventario.registros.type'),
-    t('inventario.registros.date'),
     t('inventario.registros.operator'),
-    t('inventario.escaneo.group_disponible'),
-    t('inventario.escaneo.group_bloqueado'),
-    t('inventario.escaneo.group_nowms'),
-    t('inventario.registros.total'),
+    t('inventario.registros.tarima'),
+    t('inventario.escaneo.code_1'),
+    t('inventario.escaneo.code_2'),
+    t('inventario.registros.work_location'),
+    t('inventario.registros.destination_location'),
+    t('common.status'),
+    t('inventario.registros.scan_date'),
   ]
-  const INV_COLS = [{ wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }]
-  const buildInvRows = (rows) => rows.map(r => [
-    formatSectionCode(r.tarima_code, r.started_at || r.created_at),
-    r.scan_type === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado'),
-    (r.started_at || r.created_at) ? fmtDateTime(r.started_at || r.created_at) : '',
-    r.operator_nombre || '',
-    r.total_ok ?? 0,
-    r.total_blocked ?? 0,
-    r.total_nowms ?? 0,
-    r.total_scans ?? 0,
-  ])
-  const writeInvExcel = (dataRows, filename) => {
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.aoa_to_sheet([INV_HEADERS, ...dataRows])
-    ws['!cols'] = INV_COLS
-    XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.title'))
-    XLSX.writeFile(wb, filename)
-    toast.success(t('inventario.registros.export_success'))
+  const DETAIL_EXPORT_COLS = [
+    { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 22 },
+  ]
+  const buildTarimaCodeMap = (scans, sectionCode) => {
+    const groups = {}
+    scans.forEach((sc) => {
+      const key = normalizeTarimaGroupKey(sc.group_assignment, sectionCode)
+      if (!groups[key]) groups[key] = true
+    })
+    const codeByRaw = {}
+    Object.keys(groups).forEach((rawCode, index) => {
+      codeByRaw[rawCode] = formatTarimaCode(rawCode, sectionCode, index)
+    })
+    return codeByRaw
+  }
+  const buildDetailRowsForSession = (session, scans) => {
+    const sectionCode = formatSectionCode(session.tarima_code, session.started_at || session.created_at)
+    const typeLabel = session.scan_type === 'clasificacion'
+      ? t('inventario.escaneo.type_clasificacion')
+      : t('inventario.escaneo.type_unificado')
+    const origin = session.origin_location || ''
+    const destino = session.ubicacion_codigo || session.ubicacion_nombre || ''
+    const tarimaCodeByRaw = buildTarimaCodeMap(scans, sectionCode)
+    return scans.map(sc => [
+      sectionCode,
+      typeLabel,
+      session.operator_nombre || '',
+      tarimaCodeByRaw[normalizeTarimaGroupKey(sc.group_assignment, sectionCode)] || formatTarimaCode(sc.group_assignment, sectionCode, 0),
+      sc.normalized_code || '',
+      sc.code2 || '',
+      origin,
+      destino,
+      sc.scan_status || '',
+      sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
+    ])
   }
 
-  const handleBulkExport = () => {
+  const handleBulkExport = async () => {
     if (selectedIds.size === 0) return
     setExportingBulk(true)
     try {
-      writeInvExcel(buildInvRows(records.filter(r => selectedIds.has(r.id))), `inventario_registros_${getToday()}.xlsx`)
+      const ids = [...selectedIds]
+      const results = await Promise.all(ids.map(id => getInventorySession(id)))
+      const rows = results.flatMap((res) => {
+        const session = res?.data?.session ?? {}
+        const scans = res?.data?.scans ?? []
+        return buildDetailRowsForSession(session, scans)
+      })
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([DETAIL_EXPORT_HEADERS, ...rows])
+      ws['!cols'] = DETAIL_EXPORT_COLS
+      XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.excel_sheet'))
+      XLSX.writeFile(wb, `inventario_registros_detalle_${getToday()}.xlsx`)
+      toast.success(t('inventario.registros.export_success'))
       setSelectedIds(new Set())
     } catch { toast.error(t('toast.error')) }
     setExportingBulk(false)
