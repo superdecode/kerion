@@ -1137,12 +1137,17 @@ export default function InventarioRegistros() {
     setExportingBulk(true)
     try {
       const ids = [...selectedIds]
-      const results = await Promise.all(ids.map(id => getInventorySession(id)))
-      const rows = results.flatMap((res) => {
-        const session = res?.data?.session ?? {}
-        const scans = res?.data?.scans ?? []
-        return buildDetailRowsForSession(session, scans)
-      })
+      const rows = []
+      for (const id of ids) {
+        try {
+          const res = await getInventorySession(id)
+          const session = res?.data?.session ?? {}
+          const scans = res?.data?.scans ?? []
+          rows.push(...buildDetailRowsForSession(session, scans))
+        } catch (err) {
+          console.error(`Error al cargar la sesión ${id}`, err)
+        }
+      }
       const wb = XLSX.utils.book_new()
       const ws = XLSX.utils.aoa_to_sheet([DETAIL_EXPORT_HEADERS, ...rows])
       ws['!cols'] = DETAIL_EXPORT_COLS
