@@ -1763,6 +1763,7 @@ export default {
     'inventario.registros.scan_date': 'Fecha escaneo',
     'inventario.registros.work_location': 'Ubic. trabajo',
     'inventario.registros.destination_location': 'Ubic. destino',
+    'inventario.registros.origin_location': 'Ubicación origen',
     'inventario.registros.origin_location_placeholder': 'Ubicación origen',
     'inventario.registros.destination_location_search_placeholder': 'Buscar ubicación destino',
     'inventario.registros.detailed_tab': 'Detallado',

@@ -474,18 +474,19 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
         [t('inventario.escaneo.group_nowms'), totals.nowms],
         [t('common.total'), totals.total],
         [],
-        [t('inventario.registros.tarima'), t('inventario.escaneo.code_1'), t('inventario.escaneo.code_2'), t('inventario.escaneo.location'), t('common.status'), t('inventario.registros.scan_date')],
+        [t('inventario.registros.tarima'), t('inventario.escaneo.code_1'), t('inventario.escaneo.code_2'), t('inventario.registros.origin_location'), t('inventario.escaneo.location'), t('common.status'), t('inventario.registros.scan_date')],
         ...scans.map(sc => [
           tarimaCodeByRaw[normalizeTarimaGroupKey(sc.group_assignment, sectionCode)] || formatTarimaCode(sc.group_assignment, sectionCode, 0),
           sc.normalized_code || '',
           sc.code2 || '',
+          sessionData.origin_location || '',
           sc.cell_no || '',
           sc.scan_status || '',
           sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
         ])
       ]
       const ws = XLSX.utils.aoa_to_sheet(info)
-      ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 22 }]
+      ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 22 }]
       XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.excel_sheet'))
       XLSX.writeFile(wb, `inventario_${sectionCode}_${getToday()}.xlsx`)
       toast.success(t('inventario.registros.export_success'))
@@ -1103,12 +1104,13 @@ export default function InventarioRegistros() {
     t('inventario.registros.tarima'),
     t('inventario.escaneo.code_1'),
     t('inventario.escaneo.code_2'),
+    t('inventario.registros.origin_location'),
     t('inventario.escaneo.location'),
     t('common.status'),
     t('inventario.registros.scan_date'),
   ]
   const INV_DETAIL_COLS = [
-    { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 22 },
+    { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 22 },
   ]
   const buildInvDetailRows = (sessions, scansBySessionId) => {
     const rows = []
@@ -1122,7 +1124,9 @@ export default function InventarioRegistros() {
         rows.push([
           sectionCode, tipo, s.operator_nombre || '',
           tarimaCodeByRaw[key] || sectionCode,
-          sc.normalized_code || '', sc.code2 || '', sc.cell_no || '',
+          sc.normalized_code || '', sc.code2 || '',
+          s.origin_location || '',
+          sc.cell_no || '',
           sc.scan_status || '',
           sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
         ])

@@ -1817,6 +1817,7 @@ export default {
     'inventario.registros.scan_date': '扫描时间',
     'inventario.registros.work_location': '作业库位',
     'inventario.registros.destination_location': '目标库位',
+    'inventario.registros.origin_location': '源库位',
     'inventario.registros.origin_location_placeholder': '源库位',
     'inventario.registros.destination_location_search_placeholder': '搜索目标库位',
     'inventario.registros.detailed_tab': '明细',
