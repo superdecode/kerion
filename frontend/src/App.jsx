@@ -188,15 +188,15 @@ function AppRoutes() {
         path="/super-admin"
         element={<AdminProtectedRoute><AdminLayout /></AdminProtectedRoute>}
       >
-        <Route index element={<AdminDashboard />} />
-        <Route path="solicitudes" element={<AdminSolicitudes />} />
-        <Route path="tenants" element={<AdminTenants />} />
-        <Route path="tenants/:id" element={<AdminTenantDetalle />} />
-        <Route path="notificaciones" element={<AdminNotificaciones />} />
-        <Route path="analytics" element={<AdminAnalytics />} />
-        <Route path="errores" element={<AdminErrores />} />
-        <Route path="suscripciones" element={<AdminSuscripciones />} />
-        <Route path="soporte" element={<AdminSoporte />} />
+        <Route index element={<ErrorBoundary><AdminDashboard /></ErrorBoundary>} />
+        <Route path="solicitudes" element={<ErrorBoundary><AdminSolicitudes /></ErrorBoundary>} />
+        <Route path="tenants" element={<ErrorBoundary><AdminTenants /></ErrorBoundary>} />
+        <Route path="tenants/:id" element={<ErrorBoundary><AdminTenantDetalle /></ErrorBoundary>} />
+        <Route path="notificaciones" element={<ErrorBoundary><AdminNotificaciones /></ErrorBoundary>} />
+        <Route path="analytics" element={<ErrorBoundary><AdminAnalytics /></ErrorBoundary>} />
+        <Route path="errores" element={<ErrorBoundary><AdminErrores /></ErrorBoundary>} />
+        <Route path="suscripciones" element={<ErrorBoundary><AdminSuscripciones /></ErrorBoundary>} />
+        <Route path="soporte" element={<ErrorBoundary><AdminSoporte /></ErrorBoundary>} />
       </Route>
 
       {/* TENANT APP — path="/" so this layout only activates for its own child routes,

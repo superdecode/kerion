@@ -4070,7 +4070,10 @@ export default {
     'rec.error.no_permission_val': '您没有打开此验证的权限。',
     'error.boundary.title': '出错了',
     'error.boundary.body': '此模块发生了意外错误。',
+    'error.boundary.chunk_body': '应用程序已更新。请刷新页面以获取最新版本。',
+    'error.boundary.updating': '正在更新应用程序...',
     'common.retry': '重试',
+    'common.reload': '刷新页面',
     // Despacho folio manual order
     'desp.validar.destino.addManualOrder': '添加手动订单',
     // Import modal

@@ -4031,7 +4031,10 @@ export default {
     'rec.error.no_permission_val': 'No tienes permisos para abrir esta validación.',
     'error.boundary.title': 'Algo salió mal',
     'error.boundary.body': 'Error inesperado en este módulo.',
+    'error.boundary.chunk_body': 'Se publicó una actualización de la aplicación. Recarga la página para obtener la última versión.',
+    'error.boundary.updating': 'Actualizando la aplicación...',
     'common.retry': 'Reintentar',
+    'common.reload': 'Recargar página',
     // Despacho folio manual order
     'desp.validar.destino.addManualOrder': 'Agregar orden manual',
     // Import modal
