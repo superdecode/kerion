@@ -19,6 +19,10 @@ export const getInventorySessions = (params) =>
 export const getInventorySession = (id) =>
   api.get(`/wmshub/inventory-session/${id}`, { timeout: 120000 }).then(r => r.data)
 
+// Bulk detail export payload (sessions + all their scans) for the Registros multi-select export
+export const getInventorySessionsExportDetail = (ids) =>
+  api.post('/wmshub/inventory-sessions/export-detail', { ids }, { timeout: 120000 }).then(r => r.data)
+
 export const updateInventorySession = (id, body) =>
   api.patch(`/wmshub/inventory-session/${id}`, body).then(r => r.data)
 

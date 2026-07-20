@@ -2062,6 +2062,64 @@ router.get('/inventory-session/:id',
   }
 )
 
+const INVENTORY_EXPORT_MAX_SESSIONS = 300
+
+// POST /api/wmshub/inventory-sessions/export-detail — full scan-level detail for a bulk
+// selection of sessions (replaces the old summary-only bulk export in Registros).
+router.post('/inventory-sessions/export-detail',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.registros', 'editar'),
+  async (req, res) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids)] : []
+      if (ids.length === 0) {
+        return res.status(400).json({ success: false, error: 'Selecciona al menos una sección' })
+      }
+      if (ids.length > INVENTORY_EXPORT_MAX_SESSIONS) {
+        return res.status(400).json({
+          success: false,
+          error: `Máximo ${INVENTORY_EXPORT_MAX_SESSIONS} secciones por exportación`,
+        })
+      }
+      if (!ids.every((id) => UUID_RE.test(id))) {
+        return res.status(400).json({ success: false, error: 'Identificador de sección inválido' })
+      }
+
+      // Uses the no-timeout export pool: many sessions combined can run into the tens
+      // of thousands of scan rows, same as the single-session export above.
+      const result = await req.tExportTransaction(async (client) => {
+        const [sessionsRes, scansRes] = await Promise.all([
+          client.query(
+            `SELECT s.*, u.nombre_completo as operator_nombre,
+                    ub.codigo as ubicacion_codigo, ub.nombre as ubicacion_nombre
+             FROM inv_sessions s
+             LEFT JOIN usuarios u ON u.id = s.operator_id
+             LEFT JOIN dev_ubicaciones ub ON ub.id = s.ubicacion_id
+             WHERE s.id = ANY($1::uuid[]) AND s.tenant_id = $2`,
+            [ids, req.tenantId]
+          ),
+          client.query(
+            'SELECT * FROM inv_scans WHERE session_id = ANY($1::uuid[]) AND tenant_id = $2 ORDER BY session_id, scanned_at ASC',
+            [ids, req.tenantId]
+          ),
+        ])
+        return { sessionsRes, scansRes }
+      })
+
+      res.json({
+        success: true,
+        data: { sessions: result.sessionsRes.rows, scans: result.scansRes.rows },
+      })
+    } catch (err) {
+      console.error('POST wmshub/inventory-sessions/export-detail error:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ success: false, error: 'Servicio no disponible, intenta de nuevo en unos segundos' })
+      }
+      res.status(500).json({ success: false, error: 'Error preparando exportación detallada' })
+    }
+  }
+)
+
 // PATCH /api/wmshub/inventory-session/:id — update session metadata (origen/destino)
 router.patch('/inventory-session/:id',
   authenticateToken, loadFullUser,

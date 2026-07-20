@@ -25,7 +25,7 @@ import { getTimeBounds } from '../utils/timeBounds'
 import {
   getInventorySessions, getInventorySession, deleteInventorySession,
   createInventoryScan, updateInventoryScan, deleteInventoryScan, checkInventoryDuplicates,
-  updateInventorySession,
+  updateInventorySession, getInventorySessionsExportDetail,
 } from '../services/inventarioService'
 import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 import QuickCodeSearchModal from '../components/QuickCodeSearchModal'
@@ -78,6 +78,19 @@ const formatTarimaCode = (rawCode, sectionCode, index) => {
   const dayMatch = String(sectionCode || '').match(/^(?:SEC-)?(\d{8})M\d+$/)
   const dayKey = dayMatch ? dayMatch[1] : dateKeyFromTimestamp()
   return `PAL-${dayKey}-${String(index + 1).padStart(2, '0')}`
+}
+
+const buildTarimaCodeMap = (scans, sectionCode) => {
+  const groups = {}
+  scans.forEach((sc) => {
+    const key = normalizeTarimaGroupKey(sc.group_assignment, sectionCode)
+    if (!groups[key]) groups[key] = true
+  })
+  const map = {}
+  Object.keys(groups).forEach((rawCode, index) => {
+    map[rawCode] = formatTarimaCode(rawCode, sectionCode, index)
+  })
+  return map
 }
 
 const buildCodeVariantSet = (...codes) => {
@@ -1083,44 +1096,65 @@ export default function InventarioRegistros() {
       return next
     })
   }
-  const INV_HEADERS = [
+  const INV_DETAIL_HEADERS = [
     t('inventario.registros.section'),
     t('inventario.registros.type'),
-    t('inventario.registros.date'),
     t('inventario.registros.operator'),
-    t('inventario.escaneo.group_disponible'),
-    t('inventario.escaneo.group_bloqueado'),
-    t('inventario.escaneo.group_nowms'),
-    t('inventario.registros.total'),
+    t('inventario.registros.tarima'),
+    t('inventario.escaneo.code_1'),
+    t('inventario.escaneo.code_2'),
+    t('inventario.escaneo.location'),
+    t('common.status'),
+    t('inventario.registros.scan_date'),
   ]
-  const INV_COLS = [{ wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }]
-  const buildInvRows = (rows) => rows.map(r => [
-    formatSectionCode(r.tarima_code, r.started_at || r.created_at),
-    r.scan_type === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado'),
-    (r.started_at || r.created_at) ? fmtDateTime(r.started_at || r.created_at) : '',
-    r.operator_nombre || '',
-    r.total_ok ?? 0,
-    r.total_blocked ?? 0,
-    r.total_nowms ?? 0,
-    r.total_scans ?? 0,
-  ])
-  const writeInvExcel = (dataRows, filename) => {
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.aoa_to_sheet([INV_HEADERS, ...dataRows])
-    ws['!cols'] = INV_COLS
-    XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.title'))
-    XLSX.writeFile(wb, filename)
-    toast.success(t('inventario.registros.export_success'))
+  const INV_DETAIL_COLS = [
+    { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 22 },
+  ]
+  const buildInvDetailRows = (sessions, scansBySessionId) => {
+    const rows = []
+    sessions.forEach((s) => {
+      const sectionCode = formatSectionCode(s.tarima_code, s.started_at || s.completed_at || s.created_at)
+      const tipo = s.scan_type === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado')
+      const scans = scansBySessionId[s.id] || []
+      const tarimaCodeByRaw = buildTarimaCodeMap(scans, sectionCode)
+      scans.forEach((sc) => {
+        const key = normalizeTarimaGroupKey(sc.group_assignment, sectionCode)
+        rows.push([
+          sectionCode, tipo, s.operator_nombre || '',
+          tarimaCodeByRaw[key] || sectionCode,
+          sc.normalized_code || '', sc.code2 || '', sc.cell_no || '',
+          sc.scan_status || '',
+          sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
+        ])
+      })
+    })
+    return rows
   }
 
-  const handleBulkExport = () => {
+  const handleBulkExport = async () => {
     if (selectedIds.size === 0) return
     setExportingBulk(true)
     try {
-      writeInvExcel(buildInvRows(records.filter(r => selectedIds.has(r.id))), `inventario_registros_${getToday()}.xlsx`)
+      const ids = Array.from(selectedIds)
+      const { data } = await getInventorySessionsExportDetail(ids)
+      const scansBySessionId = {}
+      ;(data.scans || []).forEach((sc) => {
+        if (!scansBySessionId[sc.session_id]) scansBySessionId[sc.session_id] = []
+        scansBySessionId[sc.session_id].push(sc)
+      })
+      const rows = buildInvDetailRows(data.sessions || [], scansBySessionId)
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([INV_DETAIL_HEADERS, ...rows])
+      ws['!cols'] = INV_DETAIL_COLS
+      XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.title'))
+      XLSX.writeFile(wb, `inventario_registros_detalle_${getToday()}.xlsx`)
+      toast.success(t('inventario.registros.export_success'))
       setSelectedIds(new Set())
-    } catch { toast.error(t('toast.error')) }
-    setExportingBulk(false)
+    } catch (err) {
+      toast.error(err.response?.data?.error || t('toast.error'))
+    } finally {
+      setExportingBulk(false)
+    }
   }
 
   const handleCopyCode = async (event, code) => {
