@@ -21,7 +21,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { fmtDateTime, fmtDate, fmtTimeShort, getToday, subtractDays } from '../../../core/utils/dateFormat'
 import {
-  getScanSessions, getScanSession, getOutboundList, getRecords,
+  getScanSessions, getScanSession, getScanSessionsExportDetail, getOutboundList, getRecords,
   updateScanEvent, deleteScanEvent, addManualScanEvent, getManualEntryReasons, deleteScanSession,
   getOrderTrackingByOBC, getBoxIncidents, getScanOperators, getBoxStatusDetail, updateScanSession, getOrderLogs,
 } from '../services/surtidoService'
@@ -1537,14 +1537,17 @@ export default function SurtidoRegistros() {
     setExportingBulk(true)
     try {
       const selectedRecords = records.filter(r => selectedIds.has(r.id))
-      const details = await Promise.all(selectedRecords.map((record) => getScanSession(record.id)))
+      const { data } = await getScanSessionsExportDetail(selectedRecords.map((record) => record.id))
       const detailMap = new Map()
-      details.forEach((payload, index) => {
-        detailMap.set(selectedRecords[index].id, payload?.data?.events ?? [])
+      ;(data.events || []).forEach((event) => {
+        if (!detailMap.has(event.session_id)) detailMap.set(event.session_id, [])
+        detailMap.get(event.session_id).push(event)
       })
       writeExcel(buildRegistrosRows(selectedRecords, detailMap), `surtido_registros_${getToday()}.xlsx`)
       setSelectedIds(new Set())
-    } catch { toast.error(t('toast.error')) }
+    } catch (err) {
+      toast.error(err.response?.data?.error || t('toast.error'))
+    }
     setExportingBulk(false)
   }
 
@@ -1553,13 +1556,19 @@ export default function SurtidoRegistros() {
     setExportingDetailBulk(true)
     try {
       const selectedRecords = records.filter(r => selectedIds.has(r.id))
-      const details = await Promise.all(selectedRecords.map((record) => getScanSession(record.id)))
-      const rows = []
+      const { data } = await getScanSessionsExportDetail(selectedRecords.map((record) => record.id))
+      const sessionById = new Map((data.sessions || []).map((s) => [s.id, s]))
+      const eventsBySession = new Map()
+      ;(data.events || []).forEach((event) => {
+        if (!eventsBySession.has(event.session_id)) eventsBySession.set(event.session_id, [])
+        eventsBySession.get(event.session_id).push(event)
+      })
 
-      details.forEach((payload, index) => {
-        const session = payload?.data?.session ?? selectedRecords[index] ?? {}
+      const rows = []
+      selectedRecords.forEach((record) => {
+        const session = sessionById.get(record.id) || record
         const wms = wmsMap.get(normalizeOrderNo(session.outbound_order_no)) || {}
-        const events = (payload?.data?.events ?? []).filter((event) => event.scan_result === 'ok')
+        const events = (eventsBySession.get(record.id) || []).filter((event) => event.scan_result === 'ok')
 
         events.forEach((event) => {
           rows.push([
@@ -1575,8 +1584,8 @@ export default function SurtidoRegistros() {
 
       writeDetailExcel(rows, `surtido_detalle_validacion_${getToday()}.xlsx`)
       setSelectedIds(new Set())
-    } catch {
-      toast.error(t('toast.error'))
+    } catch (err) {
+      toast.error(err.response?.data?.error || t('toast.error'))
     }
     setExportingDetailBulk(false)
   }

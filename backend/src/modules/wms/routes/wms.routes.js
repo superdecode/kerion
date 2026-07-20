@@ -1244,6 +1244,87 @@ router.get('/scan-session/:id',
   }
 )
 
+const SURTIDO_EXPORT_MAX_SESSIONS = 300
+
+// POST /api/wmshub/scan-sessions/export-detail — batched session+event detail for the
+// Registros bulk exports. Replaces the old Promise.all(getScanSession) fan-out on the
+// frontend, which fired one query pair per selected row directly against the production
+// pool (max: 4 connections) — selecting more than a handful of rows exhausted the pool
+// and surfaced as a wall of 500s.
+router.post('/scan-sessions/export-detail',
+  authenticateToken, loadFullUser,
+  requireAnyPermission([
+    { modulePath: 'surtido.validacion', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'ver' },
+  ]),
+  async (req, res) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids)] : []
+      if (ids.length === 0) {
+        return res.status(400).json({ success: false, error: 'Selecciona al menos una orden' })
+      }
+      if (ids.length > SURTIDO_EXPORT_MAX_SESSIONS) {
+        return res.status(400).json({
+          success: false,
+          error: `Máximo ${SURTIDO_EXPORT_MAX_SESSIONS} órdenes por exportación`,
+        })
+      }
+      if (!ids.every((id) => UUID_RE.test(id))) {
+        return res.status(400).json({ success: false, error: 'Identificador de sesión inválido' })
+      }
+
+      const [sessionsRes, eventsRes] = await Promise.all([
+        req.tQuery(
+          `SELECT s.*,
+                  COALESCE(stats.total_scanned, 0) AS total_scanned,
+                  COALESCE(rejected_stats.total_rejected, 0) AS total_rejected,
+                  scan_times.first_scan_at,
+                  scan_times.last_scan_at,
+                  u.nombre_completo as operator_nombre
+           FROM pick_sessions s
+           LEFT JOIN (
+             SELECT session_id,
+                    COALESCE(SUM(COALESCE(quantity, 1)), 0) AS total_scanned
+             FROM pick_events
+             WHERE tenant_id = $2 AND session_id = ANY($1::uuid[]) AND scan_result = 'ok'
+             GROUP BY session_id
+           ) stats ON stats.session_id = s.id
+           LEFT JOIN (
+             SELECT session_id, COUNT(*) AS total_rejected
+             FROM pick_events
+             WHERE tenant_id = $2 AND session_id = ANY($1::uuid[]) AND scan_result <> 'ok'
+             GROUP BY session_id
+           ) rejected_stats ON rejected_stats.session_id = s.id
+           LEFT JOIN (
+             SELECT session_id, MIN(scanned_at) AS first_scan_at, MAX(scanned_at) AS last_scan_at
+             FROM pick_events
+             WHERE tenant_id = $2 AND session_id = ANY($1::uuid[])
+             GROUP BY session_id
+           ) scan_times ON scan_times.session_id = s.id
+           LEFT JOIN usuarios u ON u.id = s.operator_id
+           WHERE s.id = ANY($1::uuid[]) AND s.tenant_id = $2`,
+          [ids, req.tenantId]
+        ),
+        req.tQuery(
+          'SELECT * FROM pick_events WHERE session_id = ANY($1::uuid[]) AND tenant_id = $2 ORDER BY session_id, scanned_at ASC',
+          [ids, req.tenantId]
+        ),
+      ])
+
+      res.json({
+        success: true,
+        data: { sessions: sessionsRes.rows, events: eventsRes.rows },
+      })
+    } catch (err) {
+      console.error('POST wmshub/scan-sessions/export-detail error:', err.message)
+      if (isDatabaseUnavailableError(err)) {
+        return res.status(503).json({ success: false, error: 'Servicio no disponible, intenta de nuevo en unos segundos' })
+      }
+      res.status(500).json({ success: false, error: 'Error preparando exportación de registros' })
+    }
+  }
+)
+
 // PUT /api/wmshub/scan-session/:id — update (complete, add notes, update counts)
 router.put('/scan-session/:id',
   authenticateToken, loadFullUser,
