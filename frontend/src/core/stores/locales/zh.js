@@ -3324,6 +3324,8 @@ export default {
     'rec.scan.col.usuario': '操作员',
     'rec.scan.col.hora': '时间',
     'rec.scan.col.fecha_hora': '日期和时间',
+    'rec.scan.copy.tooltip': '复制编码和日期时间',
+    'rec.scan.copy.copied': '已复制',
     'rec.scan.iniciar': '开始复核',
     'rec.scan.esperando': '等待扫描...',
     'rec.scan.enter_hint': '扫描枪或按 Enter 确认',

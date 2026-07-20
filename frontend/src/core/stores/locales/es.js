@@ -3294,6 +3294,8 @@ export default {
     'rec.scan.col.usuario': 'Usuario',
     'rec.scan.col.hora': 'Hora',
     'rec.scan.col.fecha_hora': 'Fecha y hora',
+    'rec.scan.copy.tooltip': 'Copiar código y fecha/hora',
+    'rec.scan.copy.copied': 'Copiado',
     'rec.scan.iniciar': 'Iniciar validación',
     'rec.scan.esperando': 'Esperando escaneo...',
     'rec.scan.enter_hint': 'Escanea con pistola o presiona Enter',
