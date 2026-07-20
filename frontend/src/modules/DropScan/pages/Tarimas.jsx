@@ -430,14 +430,16 @@ export default function Tarimas() {
     if (selectedIds.size === 0) return
     setExportingBulk(true)
     try {
-      const details = await Promise.all(
-        [...selectedIds].map(id => ds.getTarimaDetail(id))
-      )
+      const { tarimas: tarimaRows, guias: guiaRows } = await ds.getTarimasExportDetail([...selectedIds])
+      const guiasByTarima = new Map()
+      guiaRows.forEach((g) => {
+        if (!guiasByTarima.has(g.tarima_id)) guiasByTarima.set(g.tarima_id, [])
+        guiasByTarima.get(g.tarima_id).push(g)
+      })
       const wb = XLSX.utils.book_new()
       const rows = [['Tarima', 'Empresa', 'Canal', 'Operador', 'Estado', 'Guías', 'Inicio', 'Cierre', 'Duración (min)', 'Código Guía', 'Posición', 'Fecha Escaneo', 'Operador Escaneo', 'Peso (kg)']]
-      for (const d of details) {
-        const t = d.tarima
-        const guias = d.guias || []
+      for (const t of tarimaRows) {
+        const guias = guiasByTarima.get(t.id) || []
         if (guias.length === 0) {
           rows.push([t.codigo, t.empresa_nombre, t.canal_nombre, t.operador_nombre, t.estado, t.cantidad_guias, t.fecha_inicio ? fmtDateTime(t.fecha_inicio) : '', t.fecha_cierre ? fmtDateTime(t.fecha_cierre) : '', t.tiempo_armado_segundos ? Math.round(t.tiempo_armado_segundos / 60) : '', '', '', '', '', ''])
         } else {
@@ -453,7 +455,9 @@ export default function Tarimas() {
       toast.success(t('common.exportCompleted'))
       setSelectMode(false)
       setSelectedIds(new Set())
-    } catch { toast.error(t('toast.error')) }
+    } catch (err) {
+      toast.error(err.response?.data?.error || t('toast.error'))
+    }
     setExportingBulk(false)
   }
 

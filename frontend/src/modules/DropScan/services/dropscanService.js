@@ -42,6 +42,11 @@ export const getTarimas = (params) => {
 export const getTarimaDetail = (id) =>
   api.get(`/DropScan/tarimas/${id}`).then(r => r.data)
 
+// Batched tarima+guias detail for bulk export — one request instead of one
+// getTarimaDetail call per selected row.
+export const getTarimasExportDetail = (ids) =>
+  api.post('/DropScan/tarimas/export-detail', { ids }, { timeout: 120000 }).then(r => r.data)
+
 export const getTarimaDuplicados = (id) =>
   api.get(`/DropScan/tarimas/${id}/duplicados`).then(r => r.data)
 

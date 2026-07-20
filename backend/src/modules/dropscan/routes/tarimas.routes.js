@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
 import { dateInTZ } from '../../../shared/utils/dateUtils.js'
-import { query } from '../../../config/database.js'
+import { query, UUID_RE, isDatabaseUnavailableError } from '../../../config/database.js'
 
 const router = Router()
 
@@ -210,6 +210,79 @@ router.get('/:id',
     } catch (error) {
       console.error('Get tarima detail error:', error)
       res.status(500).json({ error: 'Error obteniendo tarima' })
+    }
+  }
+)
+
+const TARIMAS_EXPORT_MAX = 300
+
+// POST /api/dropscan/tarimas/export-detail — batched tarima+guias detail for the bulk
+// export in Tarimas.jsx. Replaces the old Promise.all(getTarimaDetail) fan-out, which
+// fired 3 sequential queries per selected tarima directly against the DB pool — selecting
+// more than a handful of rows exhausted it and surfaced as a wall of 500s.
+// Gated at 'exportar' (not 'ver') to match canExportTarimas, which is the permission the
+// export button itself is rendered behind.
+router.post('/export-detail',
+  authenticateToken, loadFullUser,
+  requirePermission('dropscan.tarimas', 'exportar'),
+  async (req, res) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids)] : []
+      if (ids.length === 0) {
+        return res.status(400).json({ error: 'Selecciona al menos una tarima' })
+      }
+      if (ids.length > TARIMAS_EXPORT_MAX) {
+        return res.status(400).json({ error: `Máximo ${TARIMAS_EXPORT_MAX} tarimas por exportación` })
+      }
+      if (!ids.every((id) => UUID_RE.test(id))) {
+        return res.status(400).json({ error: 'Identificador de tarima inválido' })
+      }
+
+      const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
+
+      const [tarimasRes, guiasRes] = await Promise.all([
+        req.tQuery(
+          `SELECT t.*, e.nombre as empresa_nombre, e.codigo as empresa_codigo,
+                  c.nombre as canal_nombre, c.codigo as canal_codigo,
+                  COALESCE(ui.nombre, s.usuario_operador, u.nombre_completo) as operador_nombre, u.codigo as operador_codigo,
+                  (SELECT fe2.folio_numero FROM folios_entrega_tarimas fet2
+                   JOIN folios_entrega fe2 ON fe2.id = fet2.folio_id
+                   WHERE fet2.tarima_id = t.id AND fet2.eliminado_en IS NULL AND fe2.estado = 'ACTIVO'
+                   LIMIT 1) AS folio_asignado
+           FROM tarimas t
+           JOIN configuraciones e ON t.empresa_id = e.id
+           JOIN configuraciones c ON t.canal_id = c.id
+           JOIN usuarios u ON t.operador_id = u.id
+           LEFT JOIN LATERAL (
+             SELECT usuario_operador, usuario_interno_id FROM sesiones_escaneo
+             WHERE tarima_actual_id = t.id
+                OR (operador_id = t.operador_id AND empresa_id = t.empresa_id AND canal_id = t.canal_id AND ${dateInTZ('fecha_inicio', tz)} = ${dateInTZ('t.fecha_inicio', tz)})
+             ORDER BY (tarima_actual_id = t.id) DESC, fecha_inicio DESC
+             LIMIT 1
+           ) s ON true
+           LEFT JOIN usuarios_internos ui ON s.usuario_interno_id = ui.id
+           WHERE t.id = ANY($1::uuid[]) AND t.tenant_id = $2`,
+          [ids, req.tenantId]
+        ),
+        req.tQuery(
+          `SELECT g.id, g.tarima_id, g.codigo_guia, g.posicion, g.timestamp_escaneo, g.peso_kg,
+                  COALESCE(ui.nombre, g.usuario_operador, u.nombre_completo) as operador_nombre
+           FROM guias g
+           JOIN usuarios u ON g.operador_id = u.id
+           LEFT JOIN usuarios_internos ui ON g.usuario_interno_id = ui.id
+           WHERE g.tarima_id = ANY($1::uuid[]) AND g.tenant_id = $2
+           ORDER BY g.tarima_id, g.posicion ASC`,
+          [ids, req.tenantId]
+        ),
+      ])
+
+      res.json({ tarimas: tarimasRes.rows, guias: guiasRes.rows })
+    } catch (error) {
+      console.error('POST dropscan/tarimas/export-detail error:', error.message)
+      if (isDatabaseUnavailableError(error)) {
+        return res.status(503).json({ error: 'Servicio no disponible, intenta de nuevo en unos segundos' })
+      }
+      res.status(500).json({ error: 'Error preparando exportación de tarimas' })
     }
   }
 )

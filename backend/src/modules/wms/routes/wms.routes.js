@@ -1247,15 +1247,18 @@ router.get('/scan-session/:id',
 const SURTIDO_EXPORT_MAX_SESSIONS = 300
 
 // POST /api/wmshub/scan-sessions/export-detail — batched session+event detail for the
-// Registros bulk exports. Replaces the old Promise.all(getScanSession) fan-out on the
-// frontend, which fired one query pair per selected row directly against the production
-// pool (max: 4 connections) — selecting more than a handful of rows exhausted the pool
-// and surfaced as a wall of 500s.
+// Registros and Ordenes bulk exports. Replaces the old Promise.all(getScanSession)
+// fan-out on the frontend, which fired one query pair per selected row directly against
+// the production pool (max: 4 connections) — selecting more than a handful of rows
+// exhausted the pool and surfaced as a wall of 500s.
+// Gated at 'actualizar' (not 'ver') to match the two export buttons that call this: both
+// Registros' canExport (surtido.registros:actualizar) and Ordenes' canExportOrders
+// (surtido.ordenes:actualizar) require that level before the button even renders.
 router.post('/scan-sessions/export-detail',
   authenticateToken, loadFullUser,
   requireAnyPermission([
-    { modulePath: 'surtido.validacion', action: 'ver' },
-    { modulePath: 'surtido.registros', action: 'ver' },
+    { modulePath: 'surtido.registros', action: 'actualizar' },
+    { modulePath: 'surtido.ordenes', action: 'actualizar' },
   ]),
   async (req, res) => {
     try {
