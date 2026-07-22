@@ -234,6 +234,7 @@ export default function Folios() {
       index + 1,
       folio.folio_numero || '',
       fmtDate(folio.created_at),
+      folioDestinoDisplay(folio),
       folio.estado || '',
       folio.conductor_nombre || '',
       folio.unidad_placa || '',
@@ -250,6 +251,7 @@ export default function Folios() {
         '#',
         t('desp.folio.col.folio'),
         t('desp.folio.col.fechaCreacion'),
+        t('desp.col.destino'),
         t('desp.folio.col.estado'),
         t('desp.folio.col.conductor'),
         t('desp.folio.col.unidad'),
@@ -262,7 +264,7 @@ export default function Folios() {
       ...rows,
     ])
     ws['!cols'] = [
-      { wch: 4 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 22 },
+      { wch: 4 }, { wch: 16 }, { wch: 14 }, { wch: 24 }, { wch: 14 }, { wch: 22 },
       { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 18 }, { wch: 14 },
     ]
     const wb = XLSX.utils.book_new()
