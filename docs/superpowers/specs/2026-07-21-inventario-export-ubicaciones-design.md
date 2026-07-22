@@ -24,30 +24,37 @@ Renombrar y completar las columnas de ubicación en el export de detalles para q
 
 ## Restricción de alcance
 
-`inventario.registros.origin_location` y `inventario.escaneo.location` son claves i18n **compartidas** con encabezados de tablas en pantalla (Registros.jsx líneas 690, 752; Escaneo.jsx líneas 1016, 1148). Renombrar el texto de esas claves cambiaría también esas tablas en vivo, lo cual está fuera de alcance. Por lo tanto, se agregan **claves i18n nuevas, exclusivas del export**, y las claves compartidas no se tocan.
+`inventario.registros.origin_location` y `inventario.escaneo.location` son claves i18n **compartidas** con encabezados de tablas en pantalla (Registros.jsx líneas 690, 752; Escaneo.jsx líneas 1016, 1148). Renombrar el texto de esas claves cambiaría también esas tablas en vivo, lo cual está fuera de alcance. Por lo tanto no se tocan.
+
+**Hallazgo de pre-flight (post-aprobación inicial):** ya existen dos claves i18n, no detectadas en la investigación inicial, que son la etiqueta establecida en otras partes de la UI (modal de detalle de sesión, `QuickCodeSearchModal.jsx`) para dos de estos mismos datos:
+
+- `inventario.registros.work_location` = "Ubic. trabajo" — label ya usado para `sessionData.origin_location` en Registros.jsx:557 y QuickCodeSearchModal.jsx:243.
+- `inventario.registros.destination_location` = "Ubic. destino" — label ya usado para `sessionData.ubicacion_codigo` en Registros.jsx:558 y QuickCodeSearchModal.jsx:247.
+
+Decisión (confirmada con el usuario): **reutilizar ambas claves existentes en el export**, en vez de crear claves nuevas con el texto literal "Ubicacion Trabajo" / "Ubicacion Destino". El texto final en el export será "Ubic. trabajo" y "Ubic. destino", consistente con el resto de la app. Solo se agrega **una** clave i18n nueva y exclusiva del export, para "Ubicación Origen WMS" (no existe ninguna clave reutilizable con ese significado).
 
 ## Diseño
 
-### 1. Claves i18n nuevas
+### 1. Clave i18n nueva
 
 Agregar en `frontend/src/core/stores/locales/es.js` y `frontend/src/core/stores/locales/zh.js`, junto a las claves `inventario.registros.*` existentes:
 
-| Clave | ES | ZH (referencia, mismo significado que claves existentes) |
+| Clave | ES | ZH (referencia) |
 |---|---|---|
-| `inventario.registros.export_ubicacion_trabajo` | Ubicacion Trabajo | 源库位 |
 | `inventario.registros.export_ubicacion_origen_wms` | Ubicacion Origen WMS | 库位 |
-| `inventario.registros.export_ubicacion_destino` | Ubicacion Destino | 目标库位 |
+
+Las otras dos columnas reutilizan `inventario.registros.work_location` y `inventario.registros.destination_location` sin modificarlas.
 
 ### 2. Export masivo (`INV_DETAIL_HEADERS` / `buildInvDetailRows`, Registros.jsx ~1100-1136)
 
-- Header en la posición de "Ubicación origen" → usa `t('inventario.registros.export_ubicacion_trabajo')`. Fuente de dato sin cambios: `s.origin_location`.
+- Header en la posición de "Ubicación origen" → usa `t('inventario.registros.work_location')`. Fuente de dato sin cambios: `s.origin_location`.
 - Header en la posición de "Ubicación" → usa `t('inventario.registros.export_ubicacion_origen_wms')`. Fuente de dato sin cambios: `sc.cell_no`.
-- Nuevo header insertado inmediatamente después → `t('inventario.registros.export_ubicacion_destino')`. Fuente de dato: `s.ubicacion_codigo` (ya presente en el payload de `POST /wmshub/inventory-sessions/export-detail`, `data.sessions[].ubicacion_codigo`).
-- Orden final de columnas: Sección, Tipo, Operador, Tarima, Código 1, Código 2, Ubicacion Trabajo, Ubicacion Origen WMS, Ubicacion Destino, Estado, Fecha escaneo.
+- Nuevo header insertado inmediatamente después → `t('inventario.registros.destination_location')`. Fuente de dato: `s.ubicacion_codigo` (ya presente en el payload de `POST /wmshub/inventory-sessions/export-detail`, `data.sessions[].ubicacion_codigo`).
+- Orden final de columnas: Sección, Tipo, Operador, Tarima, Código 1, Código 2, Ubic. trabajo, Ubicacion Origen WMS, Ubic. destino, Estado, Fecha escaneo.
 
 ### 3. Export de sesión única (`handleExportDetail`, Registros.jsx ~462-494, headers en línea 477)
 
-Mismo tratamiento: renombrar los dos headers existentes a las claves nuevas, insertar el header de Ubicacion Destino, y mapear `sessionData.ubicacion_codigo` en la fila correspondiente (dato ya presente en `GET /wmshub/inventory-session/:id`).
+Mismo tratamiento: header de "Ubicación origen" → clave `work_location`, header de "Ubicación" → clave nueva `export_ubicacion_origen_wms`, insertar header `destination_location`, y mapear `sessionData.ubicacion_codigo` en la fila correspondiente (dato ya presente en `GET /wmshub/inventory-session/:id`).
 
 ### 4. Backend
 
