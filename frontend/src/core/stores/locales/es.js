@@ -1764,6 +1764,7 @@ export default {
     'inventario.registros.work_location': 'Ubic. trabajo',
     'inventario.registros.destination_location': 'Ubic. destino',
     'inventario.registros.origin_location': 'Ubicación origen',
+    'inventario.registros.export_ubicacion_origen_wms': 'Ubicacion Origen WMS',
     'inventario.registros.origin_location_placeholder': 'Ubicación origen',
     'inventario.registros.destination_location_search_placeholder': 'Buscar ubicación destino',
     'inventario.registros.detailed_tab': 'Detallado',
