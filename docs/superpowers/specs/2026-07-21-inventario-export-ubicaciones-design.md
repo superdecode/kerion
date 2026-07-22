@@ -18,9 +18,9 @@ Esto genera confusión al leer el archivo exportado: no es evidente cuál column
 
 Renombrar y completar las columnas de ubicación en el export de detalles para que las 3 sean explícitas:
 
-1. **Ubicacion Trabajo** (antes "Ubicación origen") — dato manual del operador, sin cambios de fuente.
+1. **Ubic. trabajo** (antes "Ubicación origen"; texto final decidido en "Restricción de alcance" abajo) — dato manual del operador, sin cambios de fuente.
 2. **Ubicacion Origen WMS** (antes "Ubicación") — dato real de WMS capturado al escanear, sin cambios de fuente.
-3. **Ubicacion Destino** (nueva) — ubicación destino de la sesión, ya calculada en backend, agregada al mapeo del export.
+3. **Ubic. destino** (nueva; texto final decidido en "Restricción de alcance" abajo) — ubicación destino de la sesión, ya calculada en backend, agregada al mapeo del export.
 
 ## Restricción de alcance
 
