@@ -1105,13 +1105,14 @@ export default function InventarioRegistros() {
     t('inventario.registros.tarima'),
     t('inventario.escaneo.code_1'),
     t('inventario.escaneo.code_2'),
-    t('inventario.registros.origin_location'),
-    t('inventario.escaneo.location'),
+    t('inventario.registros.work_location'),
+    t('inventario.registros.export_ubicacion_origen_wms'),
+    t('inventario.registros.destination_location'),
     t('common.status'),
     t('inventario.registros.scan_date'),
   ]
   const INV_DETAIL_COLS = [
-    { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 22 },
+    { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 22 },
   ]
   const buildInvDetailRows = (sessions, scansBySessionId) => {
     const rows = []
@@ -1128,6 +1129,7 @@ export default function InventarioRegistros() {
           sc.normalized_code || '', sc.code2 || '',
           s.origin_location || '',
           sc.cell_no || '',
+          s.ubicacion_codigo || s.ubicacion_code || '',
           sc.scan_status || '',
           sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
         ])
