@@ -51,6 +51,11 @@ function SortHeader({ label, field, sortField, sortDir, onSort, className = '' }
   )
 }
 
+function folioDestinoDisplay(folio) {
+  if (folio.tipo === 'por_destino') return folio.destino || ''
+  return (folio.destinatarios || []).filter(Boolean).join(', ')
+}
+
 export default function Folios() {
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -494,6 +499,7 @@ export default function Folios() {
                     </th>
                     <SortHeader label={t('desp.folio.col.folio')} field="folio_numero" {...sp} />
                     <SortHeader label={t('desp.folio.col.fechaCreacion')} field="created_at" {...sp} />
+                    <th className="table-header">{t('desp.col.destino')}</th>
                     <SortHeader label={t('desp.folio.col.estado')} field="estado" {...sp} />
                     <SortHeader label={t('desp.folio.col.conductor')} field="conductor_nombre" {...sp} />
                     <SortHeader label={t('desp.folio.col.unidad')} field="unidad_placa" {...sp} />
@@ -505,7 +511,7 @@ export default function Folios() {
                 <tbody className="divide-y divide-warm-50">
                   {paginated.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-14 text-center">
+                      <td colSpan={10} className="py-14 text-center">
                         <PackageCheck className="w-8 h-8 text-warm-200 mx-auto mb-2" />
                         <p className="text-sm text-warm-400 font-medium">{t('desp.folios.empty')}</p>
                       </td>
@@ -533,6 +539,11 @@ export default function Folios() {
                           <span className="text-xs text-warm-700">{fmtDate(folio.created_at)}</span>
                           <span className="text-[10px] text-warm-400">{fmtTimeShort(folio.created_at)}</span>
                         </div>
+                      </td>
+                      <td className="table-cell">
+                        {folioDestinoDisplay(folio)
+                          ? <span className="text-xs text-warm-700">{folioDestinoDisplay(folio)}</span>
+                          : <span className="text-warm-300 text-xs">—</span>}
                       </td>
                       <td className="table-cell">{estadoBadge(folio.estado)}</td>
                       <td className="table-cell">
