@@ -39,6 +39,17 @@ const CAJA_META = {
   cancelada:     { cls: 'bg-warm-100 text-warm-400 border-warm-100',        dot: 'bg-warm-300',    labelKey: 'rastreo.caja.cancelada' },
 }
 
+// pick_box_status.estado for the box, as surfaced by the surtido module — a box can be
+// scanned 'ok' and later flagged from surtido without ever losing that original scan,
+// so this must reflect the box's *current* status, not just "was it ever scanned ok".
+const SURTIDO_ESTADO_META = {
+  validada:    { cls: 'bg-success-100 text-success-700', labelKey: 'rastreo.detalle.surtidoValidada' },
+  reparacion:  { cls: 'bg-warning-100 text-warning-700', labelKey: 'rastreo.detalle.surtidoReparacion' },
+  anormalidad: { cls: 'bg-danger-100 text-danger-700',   labelKey: 'rastreo.detalle.surtidoAnormalidad' },
+  rastreo:     { cls: 'bg-accent-100 text-accent-700',   labelKey: 'rastreo.detalle.surtidoRastreo' },
+  faltante:    { cls: 'bg-danger-100 text-danger-700',   labelKey: 'rastreo.detalle.surtidoFaltante' },
+}
+
 const ACCION_LABEL_KEYS = {
   creada:             'rastreo.hist.creada',
   asignada:           'rastreo.hist.asignada',
@@ -839,7 +850,7 @@ export default function RastreoDetalle() {
                         c.producto || '',
                         c.causa_descripcion || '',
                         c.causa_area || '',
-                        c.validada_en_surtido ? 'SI' : 'NO',
+                        c.surtido_estado ? t(SURTIDO_ESTADO_META[c.surtido_estado]?.labelKey || 'rastreo.detalle.surtidoValidada') : t('rastreo.detalle.surtidoSinValidar'),
                         c.surtido_validacion?.surtido_operator_nombre || '',
                         c.surtido_validacion?.surtido_validated_at ? safeDate(c.surtido_validacion.surtido_validated_at) : '',
                         c.anormalidad_folio || '',
@@ -954,15 +965,17 @@ export default function RastreoDetalle() {
                           <span className="text-xs text-warm-700 font-medium truncate block">{c.producto || t('rastreo.detalle.emptyDash')}</span>
                         </td>
                         <td className="px-3 py-2.5 text-center">
-                          {c.validada_en_surtido ? (
+                          {c.surtido_estado ? (
                             <div className="flex flex-col items-center gap-0.5">
-                              <span className="inline-flex flex-col items-center rounded-xl bg-success-100 px-2 py-1 text-success-700">
+                              <span className={`inline-flex flex-col items-center rounded-xl px-2 py-1 ${SURTIDO_ESTADO_META[c.surtido_estado]?.cls || 'bg-warm-100 text-warm-600'}`}>
                                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold leading-none">
-                                  <CheckCircle2 size={12} className="text-success-500" />
-                                  {t('rastreo.detalle.surtidoValidada')}
+                                  {c.surtido_estado === 'validada'
+                                    ? <CheckCircle2 size={12} className="text-success-500" />
+                                    : <AlertTriangle size={12} />}
+                                  {t(SURTIDO_ESTADO_META[c.surtido_estado]?.labelKey || 'rastreo.detalle.surtidoValidada')}
                                 </span>
                                 {c.surtido_validacion?.surtido_validated_at && (
-                                  <span className="mt-0.5 whitespace-nowrap text-[9px] leading-none text-success-600/80">
+                                  <span className="mt-0.5 whitespace-nowrap text-[9px] leading-none opacity-80">
                                     {safeDate(c.surtido_validacion.surtido_validated_at)}
                                   </span>
                                 )}

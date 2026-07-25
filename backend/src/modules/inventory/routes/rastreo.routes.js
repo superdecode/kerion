@@ -178,6 +178,24 @@ async function isCajaValidadaEnSurtido(queryable, tenantId, outboundOrderNo, caj
   if (!exactVariants.length && !compactVariants.length && !baseVariants.length) return false
 
   try {
+    // pick_box_status is the authoritative current state of the box — a box scanned
+    // 'ok' during surtido can later be flagged from surtido as reparacion/anormalidad/
+    // rastreo/faltante, which updates this row without leaving the original pick_event.
+    // Checking pick_box_status first (instead of only pick_events) is what lets that
+    // later flag actually show up here instead of a stale "validada".
+    const pbsRes = await runDbQuery(
+      queryable,
+      `SELECT estado
+         FROM pick_box_status pbs
+        WHERE pbs.tenant_id = $1
+          AND pbs.outbound_order_no = $2
+          AND ${buildAnyCodeMatch(['pbs.box_code'], { exactParam: 3, compactParam: 4, baseParam: 5 })}
+        ORDER BY pbs.updated_at DESC
+        LIMIT 1`,
+      [tenantId, outboundOrderNo, exactVariants, compactVariants, baseVariants]
+    )
+    if (pbsRes.rows.length > 0) return pbsRes.rows[0].estado === 'validada'
+
     const cols = await getTableColumns(queryable, 'pick_events')
     const matchColumns = ['scanned_code', 'normalized_code', 'matched_box_type']
       .filter(col => cols.has(col))
@@ -1413,7 +1431,8 @@ router.get('/:folio',
                       ps.id AS surtido_session_id,
                       ps.status AS surtido_session_status,
                       ps.operator_id AS surtido_operator_id,
-                      u.nombre_completo AS surtido_operator_nombre
+                      u.nombre_completo AS surtido_operator_nombre,
+                      pbs.estado AS surtido_box_status
                  FROM boxes b
                  JOIN pick_sessions ps
                    ON ps.tenant_id = $1
@@ -1424,6 +1443,13 @@ router.get('/:folio',
                  LEFT JOIN usuarios u
                    ON u.id = ps.operator_id
                   AND u.tenant_id = ps.tenant_id
+                 LEFT JOIN pick_box_status pbs
+                   ON pbs.tenant_id = $1
+                  AND pbs.outbound_order_no = $2
+                  AND (
+                      REGEXP_REPLACE(UPPER(COALESCE(pbs.box_code, '')), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(COALESCE(b.box_code, '')), '[^A-Z0-9]', '', 'g')
+                   OR REGEXP_REPLACE(UPPER(COALESCE(pbs.box_code, '')), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(COALESCE(b.box_type, '')), '[^A-Z0-9]', '', 'g')
+                  )
                 WHERE (
                     REGEXP_REPLACE(UPPER(COALESCE(pe.scanned_code, '')), '[^A-Z0-9]', '', 'g') IN (
                       REGEXP_REPLACE(UPPER(COALESCE(b.box_code, '')), '[^A-Z0-9]', '', 'g'),
@@ -1438,7 +1464,7 @@ router.get('/:folio',
                       REGEXP_REPLACE(UPPER(COALESCE(b.box_type, '')), '[^A-Z0-9]', '', 'g')
                     )
                 )
-                ORDER BY b.id, pe.scanned_at DESC NULLS LAST, pe.id DESC`,
+                ORDER BY b.id, (pbs.estado IS NOT NULL) DESC, pbs.updated_at DESC NULLS LAST, pe.scanned_at DESC NULLS LAST, pe.id DESC`,
               [
                 req.tenantId,
                 orden.outbound_order_no,
@@ -1457,9 +1483,16 @@ router.get('/:folio',
         const cajaSurtidoMap = new Map(cajaSurtidoRows.map(row => [row.rastreo_caja_id, row]))
         cajasWithSurtido = cajasRes.rows.map(caja => {
           const surtidoValidacion = cajaSurtidoMap.get(caja.id) || null
+          // pick_box_status.estado is the box's current status — a box scanned 'ok' in
+          // surtido can later be flagged from surtido as reparacion/anormalidad/rastreo/
+          // faltante, which updates this row without touching the original pick_event.
+          // Falling back to 'validada' only applies when there's an 'ok' scan and no
+          // pick_box_status row at all (legacy data predating that table).
+          const surtidoEstado = surtidoValidacion?.surtido_box_status || (surtidoValidacion ? 'validada' : null)
           return {
             ...caja,
-            validada_en_surtido: !!surtidoValidacion,
+            validada_en_surtido: surtidoEstado === 'validada',
+            surtido_estado: surtidoEstado,
             surtido_validacion: surtidoValidacion,
           }
         })
