@@ -990,7 +990,7 @@ router.get('/scan-sessions',
     try {
       const { page = 1, pageSize = 20, status, operator_id, operator_ids, fecha_inicio, fecha_fin, outbound_order_no, sort, dir, anormalidad } = req.query
       const tz = getTimezone(req)
-      const limit = Math.min(parseInt(pageSize) || 20, 100)
+      const limit = Math.min(parseInt(pageSize) || 20, 500)
       const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit
 
       const SORT_COLUMNS = {
@@ -2054,7 +2054,7 @@ router.get('/inventory-sessions',
     try {
       const { page = 1, pageSize = 20, scan_type, date_from, date_to, q } = req.query
       const tz = getTimezone(req)
-      const limit = Math.min(parseInt(pageSize) || 20, 100)
+      const limit = Math.min(parseInt(pageSize) || 20, 500)
       const offset = (Math.max(parseInt(page) || 1, 1) - 1) * limit
 
       const filters = ['s.tenant_id = $1', "s.status = 'saved'"]

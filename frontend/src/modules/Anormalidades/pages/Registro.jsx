@@ -185,6 +185,7 @@ export default function AnormalidadesRegistro() {
 
   // List state
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('todos')
   const [fechaDesde, setFechaDesde] = useState('')
@@ -207,7 +208,7 @@ export default function AnormalidadesRegistro() {
   const [mejoraFromAnorm, setMejoraFromAnorm] = useState(null) // { anormId, prefill }
 
   const queryParams = useMemo(() => {
-    const p = { page, limit: 20, search: search || undefined }
+    const p = { page, limit: pageSize, search: search || undefined }
     if (activeTab !== 'todos') p.estado = activeTab
     if (fechaDesde) p.fecha_desde = fechaDesde
     if (fechaHasta) p.fecha_hasta = fechaHasta
@@ -220,6 +221,7 @@ export default function AnormalidadesRegistro() {
     return p
   }, [
     page,
+    pageSize,
     search,
     activeTab,
     fechaDesde,
@@ -650,9 +652,10 @@ export default function AnormalidadesRegistro() {
             </div>
             <TablePagination
               page={page}
-              limit={20}
+              pageSize={pageSize}
               total={total}
               onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
             />
           </div>
         )}
