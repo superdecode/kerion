@@ -11,6 +11,9 @@ let inboundLineColumnsCache = null
 const EXPORT_SYNC_WARN_ROWS = 50000
 const EXPORT_SYNC_MAX_ROWS = 100000
 const VALIDATION_HEAVY_ORDER_THRESHOLD = 5000
+// Keep each INSERT comfortably below the database's 12-second per-query deadline.
+// A full 50k-row UNNEST can otherwise time out while maintaining all line indexes.
+const IMPORT_INSERT_CHUNK_SIZE = 2000
 
 function normalizedCodeSql(column) {
   return `UPPER(REGEXP_REPLACE(
@@ -73,11 +76,16 @@ function hasModulePermission(user, modulePath, action) {
 async function generateFolioNumero(req, db = null) {
   const runner = db || { query: (text, params) => req.tQuery(text, params) }
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-  const countRes = await runner.query(
-    `SELECT COUNT(*) FROM inbound_orders WHERE tenant_id=$1 AND folio LIKE $2`,
-    [req.tenantId, `INB-${dateStr}-%`]
+  const prefix = `INB-${dateStr}-`
+  // Do not use COUNT + 1: deleted orders leave gaps, so count can point to a
+  // folio that still exists (e.g. 0002 and 0003 after 0001 was deleted).
+  const sequenceRes = await runner.query(
+    `SELECT COALESCE(MAX(NULLIF(SUBSTRING(folio FROM $2), '')::int), 0) AS max_seq
+       FROM inbound_orders
+      WHERE tenant_id=$1 AND folio LIKE $3`,
+    [req.tenantId, `^${prefix}([0-9]+)$`, `${prefix}%`]
   )
-  const seq = String(parseInt(countRes.rows[0].count) + 1).padStart(4, '0')
+  const seq = String(Number(sequenceRes.rows[0].max_seq) + 1).padStart(4, '0')
   return `INB-${dateStr}-${seq}`
 }
 
@@ -115,6 +123,18 @@ function buildInboundLinesInsertPayload(lines, availableColumns, ctx) {
   const params = activeSpecs.map((spec) => lines.map((line) => spec.values(line, ctx)))
 
   return { columnsSql, unnestSql, params, activeColumns: activeSpecs.map((spec) => spec.column) }
+}
+
+async function insertInboundLinesInChunks(client, lines, availableColumns, ctx) {
+  for (let start = 0; start < lines.length; start += IMPORT_INSERT_CHUNK_SIZE) {
+    const chunk = lines.slice(start, start + IMPORT_INSERT_CHUNK_SIZE)
+    const { columnsSql, unnestSql, params } = buildInboundLinesInsertPayload(chunk, availableColumns, ctx)
+    await client.query(
+      `INSERT INTO inbound_lines (${columnsSql})
+       SELECT * FROM UNNEST(${unnestSql})`,
+      params
+    )
+  }
 }
 
 function normalizeExportScope(value) {
@@ -395,6 +415,11 @@ router.post('/orders',
 
       const order = await req.tTransaction(async (client) => {
         const availableColumns = await getInboundLineColumns(client)
+        // The folio suffix is derived from a daily count. Serialize creation for this
+        // tenant/day so concurrent clicks/imports cannot generate the same folio and
+        // fail with a generic 500 unique-constraint error.
+        const folioLockKey = `recepcion-folio:${req.tenantId}:${new Date().toISOString().slice(0, 10)}`
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [folioLockKey])
         const folio = await generateFolioNumero(req, client)
         const orderRes = await client.query(
           `INSERT INTO inbound_orders (tenant_id, folio, cliente, inbound_order_no, tracking_no, reference_no, total_cajas, responsable_id)
@@ -402,17 +427,14 @@ router.post('/orders',
           [req.tenantId, folio, cliente || null, inboundOrderNo || null, tracking_no || null, reference_no || null, lines.length, req.user.id]
         )
         const createdOrder = orderRes.rows[0]
-        const { columnsSql, unnestSql, params, activeColumns } = buildInboundLinesInsertPayload(
-          lines,
-          availableColumns,
-          { tenantId: req.tenantId, orderId: createdOrder.id }
-        )
-
-        await client.query(
-          `INSERT INTO inbound_lines (${columnsSql})
-           SELECT * FROM UNNEST(${unnestSql})`,
-          params
-        )
+        const { activeColumns } = buildInboundLinesInsertPayload(lines.slice(0, 1), availableColumns, {
+          tenantId: req.tenantId,
+          orderId: createdOrder.id,
+        })
+        await insertInboundLinesInChunks(client, lines, availableColumns, {
+          tenantId: req.tenantId,
+          orderId: createdOrder.id,
+        })
 
         const skippedColumns = [
           'length_oms',
