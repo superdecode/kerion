@@ -215,15 +215,45 @@ export default function ValidarPorDestino({ folioId }) {
   const pendingOnlineRef = useRef(new Set())
 
   // Phones/PDAs use the pinned bottom bar, desktop the one inside the header.
-  // Only one of the two inputs is mounted-visible at a time, so focus has to
-  // follow the active breakpoint or the scanner gun types into a hidden field.
+  // Only one of the two inputs is visible at a time, so focus has to follow the
+  // active breakpoint or the scanner gun types into a hidden field.
+  const [isCompact, setIsCompact] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches
+  )
+  const [isWide, setIsWide] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
+  )
+
   const focusScan = useCallback(() => {
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
-    const ref = isMobile ? scanRefMobile : scanRef
+    const ref = isCompact ? scanRefMobile : scanRef
     ref.current?.focus()
+  }, [isCompact])
+
+  // Resizing across a breakpoint swaps which scan field is rendered. Without this
+  // the caret stayed in the field that just got hidden and scans went nowhere.
+  useEffect(() => {
+    const compactMq = window.matchMedia('(max-width: 639px)')
+    const wideMq = window.matchMedia('(min-width: 1280px)')
+    const onCompact = (e) => setIsCompact(e.matches)
+    const onWide = (e) => setIsWide(e.matches)
+    compactMq.addEventListener('change', onCompact)
+    wideMq.addEventListener('change', onWide)
+    return () => {
+      compactMq.removeEventListener('change', onCompact)
+      wideMq.removeEventListener('change', onWide)
+    }
   }, [])
 
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
+
+  // The orders bottom sheet only exists below xl; widening past it must hand the
+  // panel back to the side column instead of leaving an orphan overlay state.
+  useEffect(() => {
+    if (isWide && mobilePanelOpen) {
+      setMobilePanelOpen(false)
+      setShowPanel(true)
+    }
+  }, [isWide, mobilePanelOpen])
   const [currentTarimaNum, setCurrentTarimaNum] = useState(1)
   const [errorModal, setErrorModal] = useState(null)
   const [showConfirmCancel, setShowConfirmCancel] = useState(false)
@@ -277,9 +307,13 @@ export default function ValidarPorDestino({ folioId }) {
   const editable = !!isActive && canWrite('despacho.folios')
   const currentTarimaRef = genTarimaRef(currentTarimaNum)
 
+  // focusScan is rebuilt when the compact breakpoint flips, so this also re-aims
+  // the caret at whichever scan field is now on screen after a resize.
   useEffect(() => {
-    if (editable) setTimeout(() => focusScan(), 100)
-  }, [editable, folioId])
+    if (!editable) return
+    const timer = setTimeout(() => focusScan(), 100)
+    return () => clearTimeout(timer)
+  }, [editable, folioId, focusScan])
 
   useEffect(() => {
     if (currentTarimaNum !== 1 || scans.length === 0) return
@@ -990,16 +1024,20 @@ export default function ValidarPorDestino({ folioId }) {
 
           {/* Action buttons — right side of row 1 */}
           <div className="flex flex-wrap items-center gap-2 shrink-0 w-full lg:w-auto lg:justify-end">
-            <button
-              type="button"
-              onClick={() => setShowPanel(v => !v)}
-              title={showPanel ? t('desp.validar.destino.ocultarPanel') : t('desp.validar.destino.mostrarPanel')}
-              className={`hidden xl:inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-600 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600 shrink-0 ${
-                showPanel ? 'xl:hidden' : ''
-              }`}
-            >
-              {showPanel ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-            </button>
+            {/* Only offered while the panel is collapsed — when it is open its own
+                edge button closes it. Rendered conditionally instead of stacking
+                `xl:inline-flex` and `xl:hidden`, where the winner depended on
+                Tailwind's output order rather than on the class list. */}
+            {!showPanel && (
+              <button
+                type="button"
+                onClick={() => setShowPanel(true)}
+                title={t('desp.validar.destino.mostrarPanel')}
+                className="hidden xl:inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-600 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600 shrink-0"
+              >
+                <PanelRightOpen size={14} />
+              </button>
+            )}
             {editable && (
               <button
                 type="button"
@@ -1056,7 +1094,6 @@ export default function ValidarPorDestino({ folioId }) {
             placeholder={t('desp.validar.orden.scanPlaceholder')}
             buttonLabel={t('desp.validar.orden.validarBtn')}
             disabled={!editable}
-            showModeSwitch
           />
         </div>
 
@@ -1181,7 +1218,6 @@ export default function ValidarPorDestino({ folioId }) {
           buttonLabel={t('desp.validar.orden.validarBtn')}
           disabled={!editable}
           variant="mobile"
-          showModeSwitch
           hint={`${t('desp.validar.mobile.scanHint')} · ${t('desp.validar.destino.tarimaActiva')}: ${currentTarimaRef}`}
         />
       </div>

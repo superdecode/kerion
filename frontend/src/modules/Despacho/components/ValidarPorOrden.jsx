@@ -347,7 +347,6 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
             placeholder={detailLoading ? 'Cargando datos WMS...' : t('desp.validar.orden.scanPlaceholderPanel')}
             loading={scanning}
             buttonLabel={t('desp.validar.orden.validarBtn')}
-            showModeSwitch
           />
           {scans.length > 0 && (
             <button onClick={() => doDeleteLast()} disabled={deletingLast}
