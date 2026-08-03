@@ -1923,17 +1923,59 @@ const { data: reasonsData } = useQuery({
     updateUbicacionMut.mutate(validation.normalized)
   }
 
+  // The client accepts a scan optimistically (green/"Ok", counted) before the request
+  // to POST /scan-event even resolves. The server is the only one that can see scans
+  // from OTHER tabs/devices on the same session, so it can legitimately downgrade an
+  // 'ok' we just sent to 'duplicate' (still HTTP 201 — the write itself succeeded).
+  // Without this, that downgrade was silently dropped: the box stayed "validado" on
+  // screen forever with no blocking alert, even though pick_events correctly recorded
+  // it as a duplicate.
+  const downgradeOptimisticOk = useCallback((vars) => {
+    const norm = vars.normalized_code || normalizeScanCode(vars.scanned_code)
+    const matched = findMatchedItem(norm, packageMap, productMap)
+    const eventKey = getValidationCodeKey(vars)
+    const countKey = eventKey || matched?.displayCode || norm
+    const current = validatedCodeCountsRef.current.get(countKey) || 0
+    if (current > 0) validatedCodeCountsRef.current.set(countKey, current - 1)
+    if (matched) {
+      setItemCounts(m => {
+        const prev = m.get(matched.displayCode) || 0
+        if (prev <= 0) return m
+        const next = new Map(m)
+        next.set(matched.displayCode, prev - 1)
+        return next
+      })
+    }
+    setCounts(c => ({ ...c, ok: Math.max(0, c.ok - 1), rejected: c.rejected + 1 }))
+    // The big result banner is the part the operator actually looks at; leaving it
+    // green was the whole symptom. Only downgrade it if it still shows this scan —
+    // a later box may already have replaced it.
+    setLastScan(prev => (prev && prev.code === norm ? { ...prev, result: 'duplicate' } : prev))
+    setHistory(h => {
+      const idx = h.findIndex((item) => item.key === vars._dedupeKey)
+      if (idx === -1) return h
+      const next = [...h]
+      next[idx] = { ...next[idx], result: 'duplicate' }
+      return next
+    })
+    playSound('duplicate')
+    toast.warning(t('surtido.validacion.duplicate') + ': ' + norm)
+  }, [packageMap, productMap, t])
+
   const addEventMut = useMutation({
     // 'always' is required for offline scans: the offline persistence lives in onError
     // (enqueueSync below), and networkMode 'online' would pause the mutation offline so
     // neither mutationFn nor onError ever runs — the scan would be lost on reload.
     networkMode: 'always',
     mutationFn: addScanEvent,
-    onSuccess: () => {
+    onSuccess: (data, vars) => {
       // A scan can be the one that completes the order (refreshPickSessionTotals flips
       // pick_order_tracking server-side) — invalidate so Ordenes reflects it immediately
       // instead of serving its cached pre-completion status for up to 5 minutes.
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      if (vars.scan_result === 'ok' && data?.data?.scan_result && data.data.scan_result !== 'ok') {
+        downgradeOptimisticOk(vars)
+      }
     },
     onError: (err, vars) => {
       if (err.response?.status === 404) {
@@ -1956,9 +1998,14 @@ const { data: reasonsData } = useQuery({
     // must run (not pause) offline for that queueing to fire.
     networkMode: 'always',
     mutationFn: (vars) => addManualScanEvent(vars),
-    onSuccess: () => {
+    onSuccess: (data, vars) => {
       // Same reasoning as addEventMut: a manual entry can complete the order too.
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
+      // /scan-event/manual runs the same server-side duplicate check as /scan-event
+      // and can likewise downgrade to 'duplicate' after we already counted it as ok.
+      if (vars.scan_result === 'ok' && data?.data?.scan_result && data.data.scan_result !== 'ok') {
+        downgradeOptimisticOk(vars)
+      }
     },
     onError: (err, vars) => {
       if (err.response?.status === 404) {
@@ -2026,15 +2073,16 @@ const { data: reasonsData } = useQuery({
     playSound('success')
     validatedCodeCountsRef.current.set(countKey, currentCount + 1)
     setLastScan({ code: norm, result: 'ok' })
-    setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
+    const ts = Date.now()
+    const dedupeKey = `OK_${norm}_${ts}`
+    setHistory(h => [{ code: norm, result: 'ok', ts, key: dedupeKey }, ...h].slice(0, 500))
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
     setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
-    const ts = Date.now()
     addEventMut.mutate({
       session_id: sessionId, scanned_code: rawCode, normalized_code: norm,
       matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null,
       matched_sku: matched.type === 'sku' ? matched.sku : null,
-      scan_result: 'ok', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: `OK_${norm}_${ts}`,
+      scan_result: 'ok', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: dedupeKey,
     })
   }, [sessionId, packageMap, productMap, addEventMut, expectedCodeLimits, selectedUbicacion, t])
 
@@ -2061,12 +2109,13 @@ const { data: reasonsData } = useQuery({
     playSound('success')
     validatedCodeCountsRef.current.set(countKey, currentCount + 1)
     setLastScan({ code: norm, result: 'ok' })
-    setHistory(h => [{ code: norm, result: 'ok', ts: Date.now() }, ...h].slice(0, 500))
+    const ts = Date.now()
+    const dedupeKey = `RC_${norm}_${ts}`
+    setHistory(h => [{ code: norm, result: 'ok', ts, key: dedupeKey }, ...h].slice(0, 500))
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
     setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
     if (sessionId) {
-      const ts = Date.now()
-      addEventMut.mutate({ session_id: sessionId, scanned_code: code, normalized_code: norm, scan_result: 'ok', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: `RC_${norm}_${ts}` })
+      addEventMut.mutate({ session_id: sessionId, scanned_code: code, normalized_code: norm, scan_result: 'ok', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: dedupeKey })
     }
     toast.success(t('surtido.escaneo.recount_add_btn') + ': ' + norm)
   }
@@ -2800,7 +2849,9 @@ const { data: reasonsData } = useQuery({
                 playSound('success')
                 validatedCodeCountsRef.current.set(countKey, currentCount + 1)
                 setLastScan({ code: norm, result: 'ok' })
-                setHistory(h => [{ code: norm, result: 'ok', ts: Date.now(), isManual: true }, ...h].slice(0, 500))
+                const ts = Date.now()
+                const dedupeKey = `MAN_${norm}_${ts}`
+                setHistory(h => [{ code: norm, result: 'ok', ts, key: dedupeKey, isManual: true }, ...h].slice(0, 500))
                 setCounts(c => ({ ...c, ok: c.ok + 1 }))
                 setItemCounts(m => {
                   const next = new Map(m)
@@ -2822,7 +2873,7 @@ const { data: reasonsData } = useQuery({
                   manual_reason_label: selectedReason?.nombre || null,
                   manual_notes: manualEntry.notes.trim() || null,
                   ubicacion_nota: selectedUbicacion || null,
-                  _dedupeKey: `MAN_${norm}_${Date.now()}`,
+                  _dedupeKey: dedupeKey,
                 })
               }}
             >
