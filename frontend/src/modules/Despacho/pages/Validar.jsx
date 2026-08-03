@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Plus, X, ScanBarcode, List, MapPin, Layers, Menu } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -64,6 +64,83 @@ function TabBar({ tabs, activeTabId, onSelect, onClose, onAdd, canAdd, t }) {
   )
 }
 
+// Phones and PDAs have no room for the desktop tab strip: sessions move into a
+// bottom sheet reachable from the compact bar under the header.
+function MobileSessionPicker({ tabs, activeTabId, onSelect, onClose, onCloseTab, t }) {
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="md:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className="md:hidden fixed inset-x-0 bottom-0 z-50 flex max-h-[70vh] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <div className="flex items-center gap-2 border-b border-warm-100 px-4 py-3">
+          <Layers className="h-4 w-4 shrink-0 text-primary-500" />
+          <p className="flex-1 text-sm font-bold text-warm-800">{t('desp.validar.mobile.sesionesTitle')}</p>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('common.close')}
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 text-warm-500 active:scale-95"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3">
+          <div className="space-y-2">
+            {tabs.map(tab => {
+              const isActive = tab.id === activeTabId
+              return (
+                <div
+                  key={tab.id}
+                  className={`flex items-center gap-2 rounded-2xl border px-3 py-2.5 transition-colors ${
+                    isActive ? 'border-primary-300 bg-primary-50' : 'border-warm-200 bg-white'
+                  }`}
+                >
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tab.tipo === 'por_destino' ? 'bg-accent-400' : 'bg-primary-400'}`} />
+                  <button
+                    type="button"
+                    onClick={() => { onSelect(tab.id); onClose() }}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="block truncate font-mono text-sm font-bold text-warm-800">{tab.label}</span>
+                    <span className="text-[11px] text-warm-500">
+                      {tab.tipo === 'por_destino'
+                        ? t('desp.validar.tipo.porDestino.label')
+                        : t('desp.validar.tipo.porOrden.label')}
+                    </span>
+                  </button>
+                  {tabs.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => onCloseTab(tab.id)}
+                      aria-label={t('desp.validar.mobile.cerrarSesion')}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-warm-200 text-warm-500 active:scale-95"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
 export default function Validar() {
   const { addToast } = useToastStore()
   const { t } = useI18nStore()
@@ -89,6 +166,7 @@ export default function Validar() {
   })
 
   const [showTypeModal, setShowTypeModal] = useState(false)
+  const [mobilePickerOpen, setMobilePickerOpen] = useState(false)
 
   // Keep a ref of current tabs to avoid stale closures in the navigation effect
   const tabsRef = useRef(tabs)
@@ -211,7 +289,7 @@ export default function Validar() {
           <h1 className="text-base font-bold text-warm-800 truncate whitespace-nowrap">{t('desp.validar.title')}</h1>
         </div>
 
-        <div className="flex-1 min-w-0 h-11 overflow-hidden">
+        <div className="flex-1 min-w-0 h-0 md:h-11 overflow-hidden">
           {tabs.length > 0 && (
             <TabBar
               tabs={tabs}
@@ -236,6 +314,50 @@ export default function Validar() {
           </div>
         </div>
       </header>
+
+      {/* Mobile session bar — replaces the desktop tab strip on phones/PDAs */}
+      {tabs.length > 0 && (
+        <div className="md:hidden flex items-center gap-2 border-b border-warm-100 bg-white px-3 py-2.5 shrink-0">
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+            tabs.find(tab => tab.id === activeTabId)?.tipo === 'por_destino' ? 'bg-accent-400' : 'bg-primary-400'
+          }`} />
+          <span className="min-w-0 flex-1 truncate font-mono text-sm font-bold text-warm-800">
+            {tabs.find(tab => tab.id === activeTabId)?.label ?? '—'}
+          </span>
+          {tabs.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setMobilePickerOpen(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-2.5 py-1.5 text-xs font-semibold text-primary-700 active:scale-95"
+            >
+              <Layers size={12} /> {tabs.length}
+            </button>
+          )}
+          {canCreate && tabs.length < MAX_TABS && (
+            <button
+              type="button"
+              onClick={openAdd}
+              aria-label={t('desp.validar.nuevaSesion')}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-success-200 bg-success-50 text-success-600 active:scale-95"
+            >
+              <Plus size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {mobilePickerOpen && (
+          <MobileSessionPicker
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSelect={saveActiveTab}
+            onClose={() => setMobilePickerOpen(false)}
+            onCloseTab={closeTab}
+            t={t}
+          />
+        )}
+      </AnimatePresence>
 
       {tabs.length === 0 ? (
         /* Empty state — matches Inventario Escaneo pattern */
@@ -314,7 +436,7 @@ export default function Validar() {
               {tab.tipo === 'por_destino' ? (
                 <ValidarPorDestino folioId={tab.folioId} />
               ) : (
-                <div className="flex-1 overflow-y-auto px-5 py-4">
+                <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-5 sm:py-4">
                   <ValidarPorOrden folioId={tab.folioId} />
                 </div>
               )}
