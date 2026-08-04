@@ -1786,6 +1786,13 @@ const { data: reasonsData } = useQuery({
                     : queued
                 )),
               }))
+              // The active session's React state still holds the offline temp id
+              // (e.g. "offline-<uuid>") until this is remapped — otherwise every new
+              // scan made after reconnecting keeps submitting that temp id as
+              // session_id, which fails the backend's UUID column check.
+              if (String(sessionId) === String(item.tempSessionId)) {
+                setSessionId(replayed.data.id)
+              }
             }
             processed.push(item.key)
           } catch (error) {
