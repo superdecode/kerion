@@ -1501,6 +1501,12 @@ router.post('/scan-event',
       if (!session_id || !scanned_code || !scan_result) {
         return res.status(400).json({ success: false, error: 'session_id, scanned_code y scan_result son requeridos' })
       }
+      // An offline client can replay a queued scan whose session was never created,
+      // so session_id may still be a temp id like "offline-<uuid>". Reject it as 400:
+      // a 500 from the uuid cast would make the client retry this forever.
+      if (!UUID_RE.test(String(session_id))) {
+        return res.status(400).json({ success: false, error: 'ID de sesión inválido' })
+      }
       if (!PICK_SCAN_RESULTS.has(String(scan_result))) {
         return res.status(400).json({ success: false, error: 'Resultado de escaneo inválido' })
       }
@@ -1629,6 +1635,9 @@ router.post('/scan-event/manual',
 
       if (!session_id || !scanned_code || !manual_reason_id) {
         return res.status(400).json({ success: false, error: 'session_id, scanned_code y manual_reason_id son requeridos' })
+      }
+      if (!UUID_RE.test(String(session_id))) {
+        return res.status(400).json({ success: false, error: 'ID de sesión inválido' })
       }
 
       const ownedSession = await assertSessionOwnership(req, session_id)
@@ -2326,6 +2335,9 @@ router.post('/inventory-scan',
 
       if (!session_id || !scanned_code || !scan_status) {
         return res.status(400).json({ success: false, error: 'session_id, scanned_code y scan_status son requeridos' })
+      }
+      if (!UUID_RE.test(String(session_id))) {
+        return res.status(400).json({ success: false, error: 'ID de sesión inválido' })
       }
       if (!INV_SCAN_STATUSES.has(String(scan_status))) {
         return res.status(400).json({ success: false, error: 'Estado de inventario inválido' })
@@ -3446,6 +3458,9 @@ router.delete('/scan-session/:id/events',
   authenticateToken, loadFullUser,
   requirePermission('surtido.validacion', 'eliminar'),
   async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      return res.status(400).json({ success: false, error: 'ID de sesión inválido' })
+    }
     try {
       const session = await assertSessionOwnership(req, req.params.id)
       if (session === null || session?.status !== 'open') {

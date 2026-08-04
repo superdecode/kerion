@@ -286,6 +286,22 @@ function createOfflineSessionId() {
     : `offline-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+function isOfflineSessionId(value) {
+  return String(value ?? '').startsWith('offline-')
+}
+
+// A queued item still carrying a temp session id means its create_session never
+// succeeded (it failed permanently and was dropped). Replaying it can only ever
+// produce an error, and because that error was a 500 it was retried every 30s
+// forever while blocking the rest of the FIFO queue.
+function isOrphanedPendingItem(item) {
+  if (item.kind === 'create_session') return false
+  const sessionRef = item.kind === 'ubicacion' || item.kind === 'finalize'
+    ? item.payload?.id
+    : item.payload?.session_id
+  return isOfflineSessionId(sessionRef)
+}
+
 function buildCompletedSnapshot({
   source,
   reason = 'already_validated',
@@ -1332,7 +1348,14 @@ function TabSession({ tabId, isActive, initialObc, initialAutoStart, onSessionCh
     if (saved) {
       try {
         const s = JSON.parse(saved)
-        const hasCorruptSessionId = s.sessionId === 'null' || s.sessionId === 'undefined'
+        // A temp offline id whose create_session is no longer queued can never be
+        // resolved to a real session, so treat it as corrupt too — restoring it
+        // would send scans that the server can only reject.
+        const hasOrphanedOfflineId = isOfflineSessionId(s.sessionId) &&
+          !useSurtidoStore.getState().pendingSync.some(
+            (item) => item.kind === 'create_session' && String(item.tempSessionId) === String(s.sessionId)
+          )
+        const hasCorruptSessionId = s.sessionId === 'null' || s.sessionId === 'undefined' || hasOrphanedOfflineId
         if (s.obc && s.sessionId && !hasCorruptSessionId) {
           const restoreLocally = () => {
             const queuedOkCodes = useSurtidoStore.getState().pendingSync
@@ -1771,6 +1794,12 @@ const { data: reasonsData } = useQuery({
         const orderedQueue = [...queue].sort((a, b) =>
           Number(a.kind === 'finalize') - Number(b.kind === 'finalize'))
         for (const item of orderedQueue) {
+          // Drop instead of replaying: its session was never created, so this can
+          // never succeed and would otherwise block the queue permanently.
+          if (isOrphanedPendingItem(item)) {
+            processed.push(item.key)
+            continue
+          }
           try {
             const replayed = await replayPendingValidation(item)
             if (item.kind === 'create_session' && replayed?.data?.id) {
