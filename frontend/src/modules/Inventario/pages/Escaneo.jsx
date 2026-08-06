@@ -1597,6 +1597,11 @@ export default function Escaneo() {
   const { data: moduleUsage } = useModuleUsage()
   const code2Ref = useRef(null)
   const originLocationRef = useRef(null)
+  // Barcode scanners fire Enter within milliseconds of each other. processScan is
+  // async (awaits the DB duplicate check), so without this lock two near-simultaneous
+  // scans of the same code both read stale (pre-insert) session state and both pass
+  // the duplicate check, letting the duplicate in without ever showing the warning.
+  const scanLockRef = useRef(false)
 
   const {
     tabs, activeTabId, pendingCode1,
@@ -1951,64 +1956,78 @@ export default function Escaneo() {
   async function processScan(rawCode) {
     if (!rawCode.trim()) return
     if (!activeTab) { toast.warning(t('inventario.escaneo.no_tab')); return }
-    const inv = inventorySnapshot instanceof Map ? inventorySnapshot : new Map()
-    const { code, item } = findCodeInInventory(rawCode, inv)
-    // Composite barcode labels are sometimes scanned field-by-field by the reader;
-    // fragments with no product code (e.g. a lone "container_type" field) normalize
-    // to '' and must be dropped instead of registered as a bogus scan.
-    if (!code) return
-    const acceptScan = () => {
-      if (!item) {
-        setPendingCode1({ raw: rawCode, code })
-        playSound('error')
-        toast.warning(t('inventario.escaneo.enter_code2'))
-        setLastScan({ status: 'nowms', code })
-        return
+    if (scanLockRef.current) return
+    scanLockRef.current = true
+    try {
+      const inv = inventorySnapshot instanceof Map ? inventorySnapshot : new Map()
+      const { code, item } = findCodeInInventory(rawCode, inv)
+      // Composite barcode labels are sometimes scanned field-by-field by the reader;
+      // fragments with no product code (e.g. a lone "container_type" field) normalize
+      // to '' and must be dropped instead of registered as a bogus scan.
+      if (!code) return
+      const acceptScan = () => {
+        if (!item) {
+          setPendingCode1({ raw: rawCode, code })
+          playSound('error')
+          toast.warning(t('inventario.escaneo.enter_code2'))
+          setLastScan({ status: 'nowms', code })
+          return
+        }
+        const { status, label } = classifyItem(item)
+        doAddItem({ raw: rawCode, code, code2: null, wasSwapped: false, status, label,
+          sku: item.customizeCode || '-', product: item.productName || '-', location: item.cellNo || '-', groupAssignment: 'auto' })
       }
-      const { status, label } = classifyItem(item)
-      doAddItem({ raw: rawCode, code, code2: null, wasSwapped: false, status, label,
-        sku: item.customizeCode || '-', product: item.productName || '-', location: item.cellNo || '-', groupAssignment: 'auto' })
-    }
 
-    if (!item) {
       await confirmPotentialDuplicate({ codes: [code], displayCode: code, onAccept: acceptScan })
-      return
+    } finally {
+      scanLockRef.current = false
     }
-    await confirmPotentialDuplicate({ codes: [code], displayCode: code, onAccept: acceptScan })
   }
 
   async function processCode2(rawCode2) {
     if (!rawCode2.trim() || !pendingCode1) return
-    const inv = inventorySnapshot instanceof Map ? inventorySnapshot : new Map()
-    const code2Result = findCodeInInventory(rawCode2, inv)
-    if (pendingCode1.code === code2Result.code) {
-      toast.warning(t('inventario.escaneo.same_codes')); playSound('error'); return
+    if (scanLockRef.current) return
+    scanLockRef.current = true
+    try {
+      const inv = inventorySnapshot instanceof Map ? inventorySnapshot : new Map()
+      const code2Result = findCodeInInventory(rawCode2, inv)
+      if (pendingCode1.code === code2Result.code) {
+        toast.warning(t('inventario.escaneo.same_codes')); playSound('error'); return
+      }
+      const newItem = { ...resolveSwap(pendingCode1, code2Result, rawCode2), groupAssignment: 'auto' }
+      await confirmPotentialDuplicate({
+        codes: [pendingCode1.code, code2Result.code],
+        displayCode: `${newItem.code}${newItem.code2 ? ` / ${newItem.code2}` : ''}`,
+        onAccept: () => {
+          clearPendingCode1()
+          doAddItem(newItem)
+          setTimeout(() => scanRef.current?.focus(), 80)
+        },
+      })
+    } finally {
+      scanLockRef.current = false
     }
-    const newItem = { ...resolveSwap(pendingCode1, code2Result, rawCode2), groupAssignment: 'auto' }
-    await confirmPotentialDuplicate({
-      codes: [pendingCode1.code, code2Result.code],
-      displayCode: `${newItem.code}${newItem.code2 ? ` / ${newItem.code2}` : ''}`,
-      onAccept: () => {
-        clearPendingCode1()
-        doAddItem(newItem)
-        setTimeout(() => scanRef.current?.focus(), 80)
-      },
-    })
   }
 
   async function handleSkipCode2() {
     if (!pendingCode1) return
-    const p = pendingCode1
-    clearPendingCode1()
-    await confirmPotentialDuplicate({
-      codes: [p.code],
-      displayCode: p.code,
-      onAccept: () => {
-        doAddItem({ raw: p.raw, code: p.code, code2: null, wasSwapped: false,
-          status: 'nowms', label: 'NO WMS', sku: '-', product: '-', location: '-', groupAssignment: 'auto' })
-        setTimeout(() => scanRef.current?.focus(), 80)
-      },
-    })
+    if (scanLockRef.current) return
+    scanLockRef.current = true
+    try {
+      const p = pendingCode1
+      clearPendingCode1()
+      await confirmPotentialDuplicate({
+        codes: [p.code],
+        displayCode: p.code,
+        onAccept: () => {
+          doAddItem({ raw: p.raw, code: p.code, code2: null, wasSwapped: false,
+            status: 'nowms', label: 'NO WMS', sku: '-', product: '-', location: '-', groupAssignment: 'auto' })
+          setTimeout(() => scanRef.current?.focus(), 80)
+        },
+      })
+    } finally {
+      scanLockRef.current = false
+    }
   }
 
   /* ─── NO SESSION: empty state ─────────────────────────── */
