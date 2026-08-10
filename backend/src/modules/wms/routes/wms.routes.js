@@ -419,6 +419,109 @@ function generatedTarimaCode(sectionCode, index) {
   return `PAL-${dayKey}-${String(index + 1).padStart(2, '0')}`
 }
 
+// ── Inventory scan batch helpers (shared by session create and session append) ──
+
+// Stamps every scan with a valid ISO scanned_at and reports the batch's own span.
+// activeSeconds is the span of THIS batch alone — when the batch is appended to an
+// existing tarima, only this span is added to the tarima's active time, never the idle
+// gap since the previous batch closed.
+function normalizeInventoryScanBatch(scans = []) {
+  const normalizedScans = scans.map((scan) => {
+    const scannedAt = scan?.scanned_at ? new Date(scan.scanned_at) : new Date()
+    return {
+      ...scan,
+      scanned_at: Number.isNaN(scannedAt.getTime()) ? new Date().toISOString() : scannedAt.toISOString(),
+    }
+  })
+  const times = normalizedScans
+    .map((scan) => new Date(scan.scanned_at).getTime())
+    .filter((value) => Number.isFinite(value))
+  const firstMs = times.length > 0 ? Math.min(...times) : Date.now()
+  const lastMs = times.length > 0 ? Math.max(...times) : Date.now()
+  return {
+    normalizedScans,
+    startedAt: new Date(firstMs).toISOString(),
+    completedAt: new Date(lastMs).toISOString(),
+    activeSeconds: Math.max(0, Math.floor((lastMs - firstMs) / 1000)),
+  }
+}
+
+function prepareInventoryScanRows(scans, fallbackAt) {
+  return scans.map((scan, index) => {
+    const scannedCode = normalizeOptionalText(
+      scan.scanned_code || scan.raw || scan.code || scan.normalized_code || scan.code2
+    )
+    const normalizedCode = normalizeScanCode(
+      scan.normalized_code || scan.code || scan.scanned_code || scan.raw || scan.code2
+    )
+    const scanStatus = String(scan.scan_status || '').trim()
+
+    if (!scannedCode || !normalizedCode || !INV_SCAN_STATUSES.has(scanStatus)) {
+      throw new Error(`Datos de escaneo inválidos en posición ${index + 1}`)
+    }
+
+    return {
+      ...scan,
+      scanned_code: scannedCode,
+      normalized_code: normalizedCode,
+      scan_status: scanStatus,
+      code2: normalizeOptionalText(scan.code2),
+      sku: normalizeOptionalText(scan.sku),
+      product_name: normalizeOptionalText(scan.product_name),
+      cell_no: normalizeOptionalText(scan.cell_no),
+      group_assignment: normalizeOptionalText(scan.group_assignment) || 'auto',
+      scanned_at: scan.scanned_at || fallbackAt,
+      was_swapped: Boolean(scan.was_swapped),
+    }
+  })
+}
+
+async function insertInventoryScanRows(client, { sessionId, tenantId, operatorId, rows, fallbackAt }) {
+  if (rows.length === 0) return
+  const COLS = 13
+  const values = rows.map((_, i) => {
+    const b = i * COLS
+    return `(${Array.from({ length: COLS }, (_, k) => `$${b + k + 1}`).join(',')})`
+  }).join(',')
+  const params = rows.flatMap(s => [
+    sessionId, tenantId, s.scanned_code, s.normalized_code, s.code2 || null,
+    s.was_swapped || false, s.scan_status, s.sku || null,
+    s.product_name || null, s.cell_no || null, s.group_assignment || 'auto',
+    s.scanned_at || fallbackAt, operatorId || null,
+  ])
+  await client.query(
+    `INSERT INTO inv_scans
+       (session_id, tenant_id, scanned_code, normalized_code, code2, was_swapped,
+        scan_status, sku, product_name, cell_no, group_assignment, scanned_at, operator_id)
+     VALUES ${values}`,
+    params
+  )
+}
+
+async function recordInventoryContribution(client, { sessionId, tenantId, operatorId, scansAdded, firstScanAt, lastScanAt, activeSeconds }) {
+  const seqRes = await client.query(
+    'SELECT COALESCE(MAX(sequence), 0) + 1 AS n FROM inv_session_contributions WHERE session_id = $1',
+    [sessionId]
+  )
+  await client.query(
+    `INSERT INTO inv_session_contributions
+       (tenant_id, session_id, operator_id, sequence, scans_added, first_scan_at, last_scan_at, active_seconds)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [tenantId, sessionId, operatorId || null, seqRes.rows[0].n, scansAdded, firstScanAt, lastScanAt, activeSeconds]
+  )
+  return seqRes.rows[0].n
+}
+
+function inventoryContributionsQuery(sessionIdParam) {
+  return `SELECT c.id, c.session_id, c.sequence, c.operator_id, c.scans_added,
+                 c.first_scan_at, c.last_scan_at, c.active_seconds, c.created_at,
+                 u.nombre_completo AS operator_nombre
+            FROM inv_session_contributions c
+            LEFT JOIN usuarios u ON u.id = c.operator_id
+           WHERE c.session_id = ${sessionIdParam} AND c.tenant_id = $2
+           ORDER BY c.sequence ASC`
+}
+
 async function assertSessionOwnership(req, sessionId) {
   const sessionRes = await req.tQuery(
     'SELECT * FROM pick_sessions WHERE id = $1 AND tenant_id = $2',
@@ -1936,18 +2039,7 @@ router.post('/inventory-session',
       }
       const tz = getTimezone(req)
 
-      const normalizedScans = scans.map((scan) => {
-        const scannedAt = scan?.scanned_at ? new Date(scan.scanned_at) : new Date()
-        return {
-          ...scan,
-          scanned_at: Number.isNaN(scannedAt.getTime()) ? new Date().toISOString() : scannedAt.toISOString(),
-        }
-      })
-      const scanTimes = normalizedScans
-        .map((scan) => new Date(scan.scanned_at).getTime())
-        .filter((value) => Number.isFinite(value))
-      const startedAt = new Date(scanTimes.length > 0 ? Math.min(...scanTimes) : Date.now()).toISOString()
-      const completedAt = new Date(scanTimes.length > 0 ? Math.max(...scanTimes) : Date.now()).toISOString()
+      const { normalizedScans, startedAt, completedAt, activeSeconds } = normalizeInventoryScanBatch(scans)
 
       await client.query('BEGIN')
       await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [tenantLockKey(req.tenantId, 'inventory-section')])
@@ -1982,61 +2074,25 @@ router.post('/inventory-session',
       const sessionRes = await client.query(
         `INSERT INTO inv_sessions
            (tenant_id, operator_id, scan_type, status, started_at, completed_at, notes, ubicacion_id,
-            tarima_code, origin_location, total_scans, total_ok, total_blocked, total_nowms)
-         VALUES ($1,$2,$3,'saved',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            tarima_code, origin_location, total_scans, total_ok, total_blocked, total_nowms, active_seconds)
+         VALUES ($1,$2,$3,'saved',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          RETURNING *`,
         [req.tenantId, req.user.id, scan_type, startedAt, completedAt, normalizedNotes, ubicacion_id || null,
-         sectionCode, origin_location || null, totals.total, totals.ok, totals.blocked, totals.nowms]
+         sectionCode, origin_location || null, totals.total, totals.ok, totals.blocked, totals.nowms, activeSeconds]
       )
       const session = sessionRes.rows[0]
 
-      if (scansWithGroups.length > 0) {
-        const preparedScans = scansWithGroups.map((scan, index) => {
-          const scannedCode = normalizeOptionalText(
-            scan.scanned_code || scan.raw || scan.code || scan.normalized_code || scan.code2
-          )
-          const normalizedCode = normalizeScanCode(
-            scan.normalized_code || scan.code || scan.scanned_code || scan.raw || scan.code2
-          )
-          const scanStatus = String(scan.scan_status || '').trim()
+      const preparedScans = prepareInventoryScanRows(scansWithGroups, startedAt)
+      await insertInventoryScanRows(client, {
+        sessionId: session.id, tenantId: req.tenantId, operatorId: req.user.id,
+        rows: preparedScans, fallbackAt: startedAt,
+      })
 
-          if (!scannedCode || !normalizedCode || !INV_SCAN_STATUSES.has(scanStatus)) {
-            throw new Error(`Datos de escaneo inválidos en posición ${index + 1}`)
-          }
-
-          return {
-            ...scan,
-            scanned_code: scannedCode,
-            normalized_code: normalizedCode,
-            scan_status: scanStatus,
-            code2: normalizeOptionalText(scan.code2),
-            sku: normalizeOptionalText(scan.sku),
-            product_name: normalizeOptionalText(scan.product_name),
-            cell_no: normalizeOptionalText(scan.cell_no),
-            group_assignment: normalizeOptionalText(scan.group_assignment) || 'auto',
-            scanned_at: scan.scanned_at || startedAt,
-            was_swapped: Boolean(scan.was_swapped),
-          }
-        })
-
-        const values = preparedScans.map((_, i) => {
-          const b = i * 12
-          return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12})`
-        }).join(',')
-        const params = preparedScans.flatMap(s => [
-          session.id, req.tenantId, s.scanned_code, s.normalized_code, s.code2 || null,
-          s.was_swapped || false, s.scan_status, s.sku || null,
-          s.product_name || null, s.cell_no || null, s.group_assignment || 'auto',
-          s.scanned_at || startedAt,
-        ])
-        await client.query(
-          `INSERT INTO inv_scans
-             (session_id, tenant_id, scanned_code, normalized_code, code2, was_swapped,
-              scan_status, sku, product_name, cell_no, group_assignment, scanned_at)
-           VALUES ${values}`,
-          params
-        )
-      }
+      await recordInventoryContribution(client, {
+        sessionId: session.id, tenantId: req.tenantId, operatorId: req.user.id,
+        scansAdded: preparedScans.length, firstScanAt: startedAt, lastScanAt: completedAt,
+        activeSeconds,
+      })
 
       await client.query('COMMIT')
       res.status(201).json({ success: true, data: session })
@@ -2124,7 +2180,7 @@ router.get('/inventory-session/:id',
       // Uses the no-timeout export pool: a session's scan list can run into the tens of
       // thousands of rows, which routinely exceeded the main pool's 12s statement_timeout.
       const result = await req.tExportTransaction(async (client) => {
-        const [sessionRes, scansRes] = await Promise.all([
+        const [sessionRes, scansRes, contribRes] = await Promise.all([
           client.query(
             `SELECT s.*, u.nombre_completo as operator_nombre,
                     ub.codigo as ubicacion_codigo, ub.nombre as ubicacion_nombre
@@ -2137,14 +2193,22 @@ router.get('/inventory-session/:id',
           client.query(
             // Defense-in-depth tenant_id — RLS is inert under the current BYPASSRLS
             // role, and this runs in parallel with the session check above.
-            'SELECT * FROM inv_scans WHERE session_id = $1 AND tenant_id = $2 ORDER BY scanned_at ASC',
+            'SELECT sc.*, u.nombre_completo AS operator_nombre FROM inv_scans sc LEFT JOIN usuarios u ON u.id = sc.operator_id WHERE sc.session_id = $1 AND sc.tenant_id = $2 ORDER BY sc.scanned_at ASC',
             [req.params.id, req.tenantId]
           ),
+          client.query(inventoryContributionsQuery('$1'), [req.params.id, req.tenantId]),
         ])
-        return { sessionRes, scansRes }
+        return { sessionRes, scansRes, contribRes }
       })
       if (result.sessionRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Sesión no encontrada' })
-      res.json({ success: true, data: { session: result.sessionRes.rows[0], scans: result.scansRes.rows } })
+      res.json({
+        success: true,
+        data: {
+          session: result.sessionRes.rows[0],
+          scans: result.scansRes.rows,
+          contributions: result.contribRes.rows,
+        },
+      })
     } catch (err) {
       console.error('GET wmshub/inventory-session/:id error:', err.message)
       if (isDatabaseUnavailableError(err)) {
@@ -2256,6 +2320,353 @@ router.patch('/inventory-session/:id',
     } catch (err) {
       console.error('PATCH wmshub/inventory-session/:id error:', err.message)
       res.status(500).json({ success: false, error: 'Error actualizando sesión' })
+    }
+  }
+)
+
+// GET /api/wmshub/inventory-ubicacion-activity?ubicacion_id=&scan_type=
+// "¿Esta ubicación ya tiene tarima registrada hoy?" — answered BEFORE saving so the
+// operator gets the choice (append vs. new tarima) instead of a blocked save or a
+// silent second tarima for boxes that fit in the first one.
+//
+// Registered under its own path, not /inventory-session/<something>, because
+// GET /inventory-session/:id would capture it as an id.
+router.get('/inventory-ubicacion-activity',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.escaneo', 'crear'),
+  async (req, res) => {
+    try {
+      const ubicacionId = parseInt(req.query.ubicacion_id, 10)
+      if (!Number.isInteger(ubicacionId)) {
+        return res.status(400).json({ success: false, error: 'ubicacion_id inválido' })
+      }
+      const tz = getTimezone(req)
+      const today = getToday(tz)
+      const params = [req.tenantId, ubicacionId, today]
+      let scanTypeFilter = ''
+      if (req.query.scan_type) {
+        if (!['unificado', 'clasificacion'].includes(String(req.query.scan_type))) {
+          return res.status(400).json({ success: false, error: 'scan_type inválido' })
+        }
+        params.push(String(req.query.scan_type))
+        scanTypeFilter = ` AND s.scan_type = $${params.length}`
+      }
+
+      const sessionsRes = await req.tQuery(
+        `SELECT s.id, s.tarima_code, s.scan_type, s.started_at, s.completed_at, s.active_seconds,
+                s.total_scans, s.total_ok, s.total_blocked, s.total_nowms,
+                s.operator_id, s.origin_location, s.notes,
+                u.nombre_completo AS operator_nombre,
+                ub.codigo AS ubicacion_codigo, ub.nombre AS ubicacion_nombre
+           FROM inv_sessions s
+           LEFT JOIN usuarios u ON u.id = s.operator_id
+           LEFT JOIN dev_ubicaciones ub ON ub.id = s.ubicacion_id
+          WHERE s.tenant_id = $1
+            AND s.ubicacion_id = $2
+            AND s.status = 'saved'
+            AND ${instantDateInTZ('s.started_at', tz)} = $3${scanTypeFilter}
+          ORDER BY s.started_at DESC
+          LIMIT 10`,
+        params
+      )
+
+      const sessions = sessionsRes.rows
+      if (sessions.length === 0) {
+        return res.json({ success: true, data: { date: today, sessions: [] } })
+      }
+
+      const sessionIds = sessions.map(s => s.id)
+      const [contribRes, groupsRes] = await Promise.all([
+        req.tQuery(
+          `SELECT c.session_id, c.sequence, c.operator_id, c.scans_added,
+                  c.first_scan_at, c.last_scan_at, c.active_seconds,
+                  u.nombre_completo AS operator_nombre
+             FROM inv_session_contributions c
+             LEFT JOIN usuarios u ON u.id = c.operator_id
+            WHERE c.tenant_id = $1 AND c.session_id = ANY($2::uuid[])
+            ORDER BY c.session_id, c.sequence ASC`,
+          [req.tenantId, sessionIds]
+        ),
+        // Per-tarima breakdown. A clasificación section holds one tarima per
+        // classification bucket, and an appended batch may only join the tarima of its
+        // OWN bucket — the client needs these counts to show which tarima it is about to
+        // grow (or to say that this bucket does not exist in the section yet).
+        req.tQuery(
+          `SELECT session_id, group_assignment,
+                  COUNT(*) AS total,
+                  COUNT(*) FILTER (WHERE scan_status = 'ok') AS total_ok,
+                  COUNT(*) FILTER (WHERE scan_status = 'blocked') AS total_blocked,
+                  COUNT(*) FILTER (WHERE scan_status = 'nowms') AS total_nowms
+             FROM inv_scans
+            WHERE tenant_id = $1 AND session_id = ANY($2::uuid[])
+            GROUP BY session_id, group_assignment`,
+          [req.tenantId, sessionIds]
+        ),
+      ])
+
+      const contribBySession = new Map()
+      contribRes.rows.forEach((row) => {
+        if (!contribBySession.has(row.session_id)) contribBySession.set(row.session_id, [])
+        contribBySession.get(row.session_id).push(row)
+      })
+      const groupsBySession = new Map()
+      groupsRes.rows.forEach((row) => {
+        if (!groupsBySession.has(row.session_id)) groupsBySession.set(row.session_id, [])
+        groupsBySession.get(row.session_id).push(row)
+      })
+
+      res.json({
+        success: true,
+        data: {
+          date: today,
+          sessions: sessions.map((s) => {
+            const groups = groupsBySession.get(s.id) || []
+            // bucket key (ok/blocked/nowms) → tarima code, as written at create time.
+            let bucketMap = {}
+            if (s.scan_type === 'clasificacion') {
+              try {
+                const parsed = JSON.parse(s.notes || 'null')
+                if (parsed?.tarimas && typeof parsed.tarimas === 'object') bucketMap = parsed.tarimas
+              } catch { /* plain-text notes */ }
+            }
+            return {
+              ...s,
+              contributions: contribBySession.get(s.id) || [],
+              groups: groups.map(g => ({
+                ...g,
+                total: Number(g.total),
+                total_ok: Number(g.total_ok),
+                total_blocked: Number(g.total_blocked),
+                total_nowms: Number(g.total_nowms),
+              })),
+              bucket_map: bucketMap,
+            }
+          }),
+        },
+      })
+    } catch (err) {
+      console.error('GET wmshub/inventory-ubicacion-activity error:', err.message)
+      res.status(500).json({ success: false, error: 'Error consultando actividad de la ubicación' })
+    }
+  }
+)
+
+// POST /api/wmshub/inventory-session/:id/append — add boxes to an existing tarima.
+//
+// Any operator with escaneo.crear may append to any tarima of the tenant, including one
+// opened by somebody else: two people working the same ubicación at the same time is the
+// normal case this exists for. Attribution stays exact — the new boxes carry the
+// appending operator on inv_scans.operator_id and the stretch is logged as its own row in
+// inv_session_contributions, while the session keeps its original operator as owner.
+router.post('/inventory-session/:id/append',
+  authenticateToken, loadFullUser,
+  requirePermission('inventario.escaneo', 'crear'),
+  async (req, res) => {
+    if (!UUID_RE.test(String(req.params.id))) {
+      return res.status(400).json({ success: false, error: 'ID de sesión inválido' })
+    }
+    const client = await req.tGetClient()
+    try {
+      const { scans = [], target_group, target_group_key, scan_type } = req.body
+      if (!Array.isArray(scans) || scans.length === 0) {
+        return res.status(400).json({ success: false, error: 'No hay registros para agregar' })
+      }
+      if (scan_type && !['unificado', 'clasificacion'].includes(String(scan_type))) {
+        return res.status(400).json({ success: false, error: 'scan_type inválido' })
+      }
+
+      await client.query('BEGIN')
+      // Serializes concurrent appends to the SAME tarima (two operators finishing at the
+      // same second): totals and active_seconds are read-modify-write.
+      await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [tenantLockKey(req.tenantId, `inv-session-${req.params.id}`)])
+
+      const sessionRes = await client.query(
+        'SELECT * FROM inv_sessions WHERE id = $1 AND tenant_id = $2',
+        [req.params.id, req.tenantId]
+      )
+      if (sessionRes.rows.length === 0) {
+        await client.query('ROLLBACK')
+        return res.status(404).json({ success: false, error: 'Tarima no encontrada' })
+      }
+      const session = sessionRes.rows[0]
+      if (session.status !== 'saved') {
+        await client.query('ROLLBACK')
+        return res.status(409).json({ success: false, error: 'La tarima no está disponible para agregar cajas' })
+      }
+
+      // A unificado batch and a clasificación section are not the same kind of tarima —
+      // merging across them would put boxes under a classification they were never
+      // sorted into. The client already filters by scan_type; this covers a stale modal
+      // whose candidate list was fetched before the tab's type changed.
+      if (scan_type && String(scan_type) !== session.scan_type) {
+        await client.query('ROLLBACK')
+        return res.status(409).json({
+          success: false,
+          error: `La tarima es de tipo ${session.scan_type} y el registro es ${scan_type}`,
+        })
+      }
+
+      const tz = getTimezone(req)
+      const sessionDay = dateKeyInTZ(session.started_at, tz)
+      if (sessionDay !== dateKeyInTZ(Date.now(), tz)) {
+        await client.query('ROLLBACK')
+        return res.status(409).json({ success: false, error: 'Solo se pueden agregar cajas a tarimas del día en curso' })
+      }
+
+      // active_seconds is backfilled for every pre-existing row by migration 107, but a
+      // row whose completed_at was NULL keeps it NULL — falling back to 0 there would
+      // silently erase the tarima's original worked time on the first append.
+      const priorActiveSeconds = session.active_seconds !== null && session.active_seconds !== undefined
+        ? Number(session.active_seconds)
+        : (session.started_at && session.completed_at
+          ? Math.max(0, Math.floor((new Date(session.completed_at) - new Date(session.started_at)) / 1000))
+          : 0)
+
+      const before = {
+        total_scans: session.total_scans || 0,
+        total_ok: session.total_ok || 0,
+        total_blocked: session.total_blocked || 0,
+        total_nowms: session.total_nowms || 0,
+        active_seconds: priorActiveSeconds,
+        completed_at: session.completed_at,
+      }
+
+      const { normalizedScans, startedAt, completedAt, activeSeconds } = normalizeInventoryScanBatch(scans)
+
+      // Clasificación sections hold one PAL-… tarima per bucket (ok/blocked/nowms), and
+      // the bucket → PAL mapping lives in the session's notes JSON, written at create
+      // time. Resolving through it is what makes the appended boxes land on the SAME
+      // pallet instead of spawning a new one next to it — the whole point of merging.
+      // A bucket the section never had yet becomes a new PAL code, and the mapping is
+      // persisted so Registros and later appends resolve it too.
+      let groupAssignment = 'unificado'
+      let nextNotes = null
+      let groupIsNew = false
+      if (session.scan_type === 'clasificacion') {
+        const existingRes = await client.query(
+          'SELECT DISTINCT group_assignment FROM inv_scans WHERE session_id = $1 AND tenant_id = $2',
+          [session.id, req.tenantId]
+        )
+        const existing = existingRes.rows.map(r => r.group_assignment).filter(Boolean)
+
+        let notes = null
+        try {
+          const parsed = JSON.parse(session.notes || 'null')
+          if (parsed && typeof parsed === 'object') notes = parsed
+        } catch { /* unificado-style plain-text notes — no mapping to read */ }
+        const tarimaMap = notes?.tarimas && typeof notes.tarimas === 'object' ? notes.tarimas : {}
+
+        const requestedCode = normalizeOptionalText(target_group)
+        const bucketKey = normalizeOptionalText(target_group_key)
+        const mappedCode = bucketKey ? tarimaMap[bucketKey] : null
+
+        if (requestedCode && existing.includes(requestedCode)) {
+          groupAssignment = requestedCode
+        } else if (mappedCode) {
+          groupAssignment = mappedCode
+        } else {
+          let index = existing.length
+          let candidate = generatedTarimaCode(session.tarima_code, index)
+          while (existing.includes(candidate)) {
+            index += 1
+            candidate = generatedTarimaCode(session.tarima_code, index)
+          }
+          groupAssignment = candidate
+          groupIsNew = true
+          if (notes && bucketKey) {
+            nextNotes = JSON.stringify({ ...notes, tarimas: { ...tarimaMap, [bucketKey]: groupAssignment } })
+          }
+        }
+      }
+
+      const preparedScans = prepareInventoryScanRows(
+        normalizedScans.map(s => ({ ...s, group_assignment: groupAssignment })),
+        startedAt
+      )
+
+      await insertInventoryScanRows(client, {
+        sessionId: session.id, tenantId: req.tenantId, operatorId: req.user.id,
+        rows: preparedScans, fallbackAt: startedAt,
+      })
+
+      const sequence = await recordInventoryContribution(client, {
+        sessionId: session.id, tenantId: req.tenantId, operatorId: req.user.id,
+        scansAdded: preparedScans.length, firstScanAt: startedAt, lastScanAt: completedAt,
+        activeSeconds,
+      })
+
+      // Only this batch's own span is added. The idle gap since the previous batch closed
+      // is deliberately excluded — the tarima was not being worked during it, and charging
+      // it would understate productivity for work that is genuinely one tarima.
+      const nextActiveSeconds = before.active_seconds + activeSeconds
+
+      const updatedRes = await client.query(
+        `UPDATE inv_sessions s
+            SET total_scans = stats.total_scans,
+                total_ok = stats.total_ok,
+                total_blocked = stats.total_blocked,
+                total_nowms = stats.total_nowms,
+                active_seconds = $3,
+                completed_at = s.started_at + ($3::int * interval '1 second'),
+                notes = COALESCE($4, s.notes),
+                updated_at = now()
+           FROM (
+             SELECT COUNT(*) AS total_scans,
+                    COUNT(*) FILTER (WHERE scan_status = 'ok') AS total_ok,
+                    COUNT(*) FILTER (WHERE scan_status = 'blocked') AS total_blocked,
+                    COUNT(*) FILTER (WHERE scan_status = 'nowms') AS total_nowms
+               FROM inv_scans WHERE session_id = $1
+           ) stats
+          WHERE s.id = $1 AND s.tenant_id = $2
+          RETURNING s.*`,
+        [session.id, req.tenantId, nextActiveSeconds, nextNotes]
+      )
+      const updated = updatedRes.rows[0]
+
+      await client.query('COMMIT')
+
+      auditLog(req, 'INVENTARIO_TARIMA_APPEND', 'inv_session', session.id, {
+        tarima_code: session.tarima_code,
+        ubicacion_id: session.ubicacion_id,
+        owner_operator_id: session.operator_id,
+        appended_by: req.user.id,
+        sequence,
+        scans_added: preparedScans.length,
+        batch_active_seconds: activeSeconds,
+        total_before: before.total_scans,
+        total_after: updated.total_scans,
+      })
+
+      res.json({
+        success: true,
+        data: {
+          session: updated,
+          summary: {
+            scans_before: before.total_scans,
+            scans_added: preparedScans.length,
+            scans_after: updated.total_scans,
+            active_seconds_before: before.active_seconds,
+            active_seconds_added: activeSeconds,
+            active_seconds_after: updated.active_seconds,
+            batch_started_at: startedAt,
+            batch_completed_at: completedAt,
+            sequence,
+            group_assignment: groupAssignment,
+            group_is_new: groupIsNew,
+          },
+        },
+      })
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {})
+      console.error('POST wmshub/inventory-session/:id/append error:', err)
+      const message = err?.message || 'Error agregando cajas a la tarima'
+      const status = /Datos de escaneo inválidos/i.test(message) ? 400 : 500
+      res.status(status).json({
+        success: false,
+        error: status === 400 ? message : 'Error agregando cajas a la tarima',
+      })
+    } finally {
+      client.release()
     }
   }
 )

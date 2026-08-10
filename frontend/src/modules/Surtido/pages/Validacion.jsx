@@ -19,7 +19,7 @@ import StatusPill from '../../../core/components/common/StatusPill'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
-import { generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
+import { extractBaseCode, generateCodeVariations, normalizeCodeFast, normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import {
   getOutboundList, getOutboundDetail,
@@ -206,12 +206,64 @@ function buildExpectedCodeLimits(detailData) {
   return limits
 }
 
-function findMatchedItem(code, packageMap) {
+// productMap was accepted by every call site but never read — SKU-level codes could
+// never match, so any order validated by SKU rejected every scan as "no encontrado".
+function findMatchedItem(code, packageMap, productMap) {
   for (const variant of generateCodeVariations(code, false)) {
-    const matched = packageMap.get(variant)
+    const matched = packageMap.get(variant) || productMap?.get(variant)
     if (matched) return matched
   }
   return null
+}
+
+// Below this length a containment/base comparison stops identifying anything.
+const LOOSE_MATCH_MIN_LEN = 6
+
+function itemCodeCandidates(entry) {
+  return [entry.displayCode, entry.customizeCode, entry.boxType, entry.boxCode, entry.sku]
+    .map(c => normalizeCodeFast(c || ''))
+    .filter(c => c.length >= LOOSE_MATCH_MIN_LEN)
+}
+
+function uniqueItemEntries(packageMap, productMap) {
+  const seen = new Set()
+  const entries = []
+  for (const map of [packageMap, productMap]) {
+    map?.forEach(entry => {
+      if (entry && !seen.has(entry)) { seen.add(entry); entries.push(entry) }
+    })
+  }
+  return entries
+}
+
+/**
+ * Reconteo/revalidación lookup: exact-variant match first, then base-code equality
+ * (61193379 vs 61193379-1, i.e. the box barcode without its box suffix), then
+ * containment either way — the same tolerance QuickSearchModal already applies over
+ * the same sheet data.
+ *
+ * Deliberately NOT used by doScan: first-pass validation stays strict so a partial
+ * barcode can never silently validate the wrong box. Reconteo is a second pass over
+ * boxes the operator is physically holding, where the strict miss is the actual bug
+ * ("Código no encontrado en la orden" for a code that does belong to the order).
+ *
+ * Returns every plausible entry — a base code shared by several boxes of the same
+ * order is ambiguous by nature, and the caller resolves it against the pending count.
+ */
+function findLooseCandidates(code, packageMap, productMap) {
+  const exact = findMatchedItem(code, packageMap, productMap)
+  if (exact) return [exact]
+  const norm = normalizeCodeFast(code)
+  if (norm.length < LOOSE_MATCH_MIN_LEN) return []
+  const base = extractBaseCode(norm)
+  const byBase = []
+  const byContains = []
+  for (const entry of uniqueItemEntries(packageMap, productMap)) {
+    const candidates = itemCodeCandidates(entry)
+    if (candidates.some(c => extractBaseCode(c) === base)) { byBase.push(entry); continue }
+    if (candidates.some(c => c.includes(norm) || norm.includes(c))) byContains.push(entry)
+  }
+  return byBase.length > 0 ? byBase : byContains
 }
 
 function validateOrderBoxData(detailData) {
@@ -769,7 +821,7 @@ function ScanFeedTable({ items, t }) {
 }
 
 /* ─── Recount modal ───────────────────────────────────────── */
-function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
+function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, resolveOrderCode, t }) {
   const toast = useToastStore.getState()
   const [recountInput, setRecountInput] = useState('')
   const [recountItems, setRecountItems] = useState([])
@@ -785,15 +837,25 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
     if (!norm) return
     const alreadyInRecount = recountItems.some(r => r.code === norm)
     const alreadyInSession = sessionHistory.some(h => h.code === norm && h.result === 'ok')
+    // The status used to be decided against the session alone, so a code that does not
+    // belong to the order at all still showed as "Nuevo" with an Add button — and the
+    // order check only ran on click, surfacing as "Código no encontrado en la orden"
+    // after the operator had already accepted it. Resolve against the order up front.
+    const resolved = resolveOrderCode ? resolveOrderCode(norm) : { inOrder: true, pending: true }
     let status
     if (alreadyInRecount) {
       status = 'duplicado'
-    } else if (alreadyInSession) {
+    } else if (!resolved.inOrder) {
+      status = 'fuera_orden'
+    } else if (alreadyInSession || resolved.pending === false) {
+      // pending === false means every expected unit of that box is already validated —
+      // the session-history code comparison alone misses it when the scanned code and
+      // the order's box code differ by suffix.
       status = 'ya_registrado'
     } else {
       status = 'nuevo'
     }
-    setRecountItems(prev => [{ code: norm, status, ts: Date.now() }, ...prev])
+    setRecountItems(prev => [{ code: norm, status, matchedCode: resolved.matchedCode || null, ts: Date.now() }, ...prev])
     recountRef.current.value = ''
   }
 
@@ -829,6 +891,7 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
     ya_registrado: 'bg-success-50 text-success-700 border-success-200',
     duplicado:     'bg-warning-50 text-warning-700 border-warning-200',
     nuevo:         'bg-primary-50 text-primary-700 border-primary-200',
+    fuera_orden:   'bg-danger-50 text-danger-700 border-danger-200',
   }
 
   return (
@@ -856,6 +919,11 @@ function RecountModal({ isOpen, onClose, sessionHistory, onAddToSession, t }) {
           ) : recountItems.map((item, i) => (
             <div key={i} className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs ${statusCls[item.status]}`}>
               <span className="font-mono font-semibold flex-1 truncate">{item.code}</span>
+              {item.matchedCode && item.matchedCode !== item.code && (
+                <span className="font-mono text-[11px] opacity-70 shrink-0 hidden sm:inline">
+                  {t('surtido.escaneo.recount_matched_as')}: {item.matchedCode}
+                </span>
+              )}
               <span className="font-semibold shrink-0">
                 {t(`surtido.escaneo.recount_${item.status}`)}
               </span>
@@ -2122,18 +2190,43 @@ const { data: reasonsData } = useQuery({
     })
   }, [sessionId, packageMap, productMap, addEventMut, expectedCodeLimits, selectedUbicacion, t])
 
+  // Count key + remaining capacity for one candidate item, so the recount path can
+  // pick the box that still has pending units instead of blindly taking the first
+  // match (several boxes of one order legitimately share a base code).
+  function itemCountState(norm, item) {
+    const eventKey = getValidationCodeKey({ normalized_code: norm, matched_box_type: item.type === 'box' ? (item.boxType || item.boxCode) : null })
+    const countKey = eventKey || item.displayCode || norm
+    const currentCount = validatedCodeCountsRef.current.get(countKey) || 0
+    const expectedLimit = expectedCodeLimits.get(countKey) || item.expectedQty || 1
+    return { countKey, currentCount, expectedLimit }
+  }
+
+  // Used by the recount modal to label a code before the operator commits to it.
+  function resolveOrderCode(code) {
+    const norm = normalizeScanCode(code) || normalizeCodeFast(code)
+    const candidates = findLooseCandidates(norm, packageMap, productMap)
+    if (candidates.length === 0) return { inOrder: false, matchedCode: null }
+    const pending = candidates.find(item => {
+      const { currentCount, expectedLimit } = itemCountState(norm, item)
+      return currentCount < expectedLimit
+    })
+    const chosen = pending || candidates[0]
+    return { inOrder: true, matchedCode: chosen.displayCode || null, pending: Boolean(pending) }
+  }
+
   function addCodeToSession(code) {
     const norm = normalizeScanCode(code)
-    const matched = findMatchedItem(norm, packageMap, productMap)
-    if (!matched) {
+    const candidates = findLooseCandidates(norm, packageMap, productMap)
+    if (candidates.length === 0) {
       playSound('error')
       toast.error(t('surtido.validacion.not_in_bd') + ': ' + norm)
       return
     }
-    const eventKey = getValidationCodeKey({ normalized_code: norm, matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null })
-    const countKey = eventKey || matched.displayCode || norm
-    const currentCount = validatedCodeCountsRef.current.get(countKey) || 0
-    const expectedLimit = expectedCodeLimits.get(countKey) || matched.expectedQty || 1
+    const matched = candidates.find(item => {
+      const { currentCount, expectedLimit } = itemCountState(norm, item)
+      return currentCount < expectedLimit
+    }) || candidates[0]
+    const { countKey, currentCount, expectedLimit } = itemCountState(norm, matched)
     if (currentCount >= expectedLimit) {
       playSound('duplicate')
       setLastScan({ code: norm, result: 'duplicate' })
@@ -2151,7 +2244,16 @@ const { data: reasonsData } = useQuery({
     setCounts(c => ({ ...c, ok: c.ok + 1 }))
     setItemCounts(m => { const next = new Map(m); next.set(matched.displayCode, (m.get(matched.displayCode) || 0) + 1); return next })
     if (sessionId) {
-      addEventMut.mutate({ session_id: sessionId, scanned_code: code, normalized_code: norm, scan_result: 'ok', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: dedupeKey })
+      // matched_box_type/matched_sku must travel with the event like doScan does:
+      // getValidationCodeKey rebuilds the count key from them when the session is
+      // rehydrated from pick_events, and an event missing them keys off the raw code
+      // instead, double-counting the box after a reload.
+      addEventMut.mutate({
+        session_id: sessionId, scanned_code: code, normalized_code: norm,
+        matched_box_type: matched.type === 'box' ? (matched.boxType || matched.boxCode) : null,
+        matched_sku: matched.type === 'sku' ? matched.sku : null,
+        scan_result: 'ok', quantity: 1, ubicacion_nota: selectedUbicacion || null, _dedupeKey: dedupeKey,
+      })
     }
     toast.success(t('surtido.escaneo.recount_add_btn') + ': ' + norm)
   }
@@ -2848,6 +2950,7 @@ const { data: reasonsData } = useQuery({
         onClose={() => setShowRecount(false)}
         sessionHistory={history}
         onAddToSession={addCodeToSession}
+        resolveOrderCode={resolveOrderCode}
         t={t}
       />
 

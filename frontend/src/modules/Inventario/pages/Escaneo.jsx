@@ -29,7 +29,9 @@ import { findCodeInInventory } from '../../Shared/Wms/findCodeInInventory'
 import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 import { classifyItem, resolveSwap } from '../utils/classify'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
-import { checkInventoryDuplicates, saveInventorySession } from '../services/inventarioService'
+import {
+  appendInventorySession, checkInventoryDuplicates, getUbicacionActivity, saveInventorySession,
+} from '../services/inventarioService'
 import { getUbicaciones, createUbicacion, searchUbicaciones } from '../../WmsHub/services/wmsHubService'
 import { refreshSheet, getCacheTimestamp, getCacheStatus, getSheetUrls } from '../../WmsHub/services/googleSheetsService'
 import { fmtDateTime, toDateKey } from '../../../core/utils/dateFormat'
@@ -639,6 +641,157 @@ function ClasificacionSummaryModal({ isOpen, group, tab, tabIndex, onSave, onClo
               <CheckCircle2 size={11} /> {t('inventario.escaneo.countConfirmed')}
             </p>
           )}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function fmtDurationSecs(secs) {
+  const total = Math.max(0, Math.floor(Number(secs) || 0))
+  if (total < 60) return `${total}s`
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`
+}
+
+// For a clasificación section, the boxes may only join the tarima of their OWN
+// classification bucket. Returns the tarima that will grow, its current box count, and
+// whether it has to be opened inside the section.
+function resolveTargetTarima(session, groupKey) {
+  if (!session) return null
+  if (session.scan_type !== 'clasificacion' || !groupKey) {
+    return { code: session.tarima_code, boxes: Number(session.total_scans || 0), isNew: false, sameBucket: true }
+  }
+  const mapped = session.bucket_map?.[groupKey] || null
+  const group = mapped ? (session.groups || []).find(g => g.group_assignment === mapped) : null
+  return {
+    code: mapped,
+    boxes: group ? Number(group.total || 0) : 0,
+    isNew: !group,
+    sameBucket: Boolean(group),
+  }
+}
+
+/* ─── Merge into an existing tarima at the same ubicación ──────────────────── */
+// Shown instead of blocking the save. The operator sees what already exists at that
+// spot today and decides: fold these boxes into that tarima, or register a new one.
+function MergeTarimaModal({ isOpen, activity, incomingCount, incomingSeconds, groupKey, groupLabel, onAppend, onCreateNew, onClose, isBusy }) {
+  const { t } = useI18nStore()
+  const sessions = activity?.sessions ?? []
+  const [selectedId, setSelectedId] = useState(null)
+
+  useEffect(() => {
+    if (isOpen) setSelectedId(sessions[0]?.id ?? null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, sessions.length])
+
+  if (!isOpen || sessions.length === 0) return null
+  const target = sessions.find(s => s.id === selectedId) || sessions[0]
+  const resolved = resolveTargetTarima(target, groupKey)
+  const currentBoxes = resolved?.boxes ?? Number(target.total_scans || 0)
+  const currentSecs = Number(target.active_seconds || 0)
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={t('inventario.escaneo.merge_title')} icon={Layers} size="lg"
+      footer={
+        <div className="flex flex-wrap gap-2 justify-end">
+          <button className="btn-ghost" onClick={onClose} disabled={isBusy}>{t('common.cancel')}</button>
+          <button className="btn-secondary" onClick={onCreateNew} disabled={isBusy}>
+            {t('inventario.escaneo.merge_create_new')}
+          </button>
+          <button className="btn-primary inline-flex items-center gap-2" onClick={() => onAppend(target)} disabled={isBusy || !target}>
+            {isBusy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            {t('inventario.escaneo.merge_append')}
+          </button>
+        </div>
+      }>
+      <div className="space-y-3 text-sm">
+        <p className="text-xs text-warm-600">{t('inventario.escaneo.merge_body')}</p>
+
+        {groupKey && (
+          <div className={`rounded-2xl border px-3 py-2.5 text-xs ${
+            resolved?.sameBucket
+              ? 'border-success-200 bg-success-50 text-success-700'
+              : 'border-warning-200 bg-warning-50 text-warning-700'
+          }`}>
+            {resolved?.sameBucket ? (
+              <span>
+                {t('inventario.escaneo.merge_bucket_match').replace('{{grupo}}', groupLabel || groupKey)}{' '}
+                <span className="font-mono font-semibold">{resolved.code}</span>
+              </span>
+            ) : (
+              t('inventario.escaneo.merge_bucket_new').replace('{{grupo}}', groupLabel || groupKey)
+            )}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {sessions.map((s) => {
+            const isSelected = s.id === target.id
+            const rowTarget = resolveTargetTarima(s, groupKey)
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSelectedId(s.id)}
+                className={`w-full text-left rounded-2xl border p-3 transition-colors ${
+                  isSelected ? 'border-primary-400 bg-primary-50/70' : 'border-warm-200 bg-white hover:border-primary-200'
+                }`}>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-semibold text-primary-700 text-xs">{s.tarima_code || '—'}</span>
+                  <span className="badge text-[11px] font-semibold bg-warm-100 text-warm-600">{s.scan_type}</span>
+                  <span className="ml-auto text-xs font-bold text-warm-700">
+                    {groupKey && s.scan_type === 'clasificacion'
+                      ? `${rowTarget.boxes} / ${s.total_scans}`
+                      : s.total_scans} {t('inventario.escaneo.merge_boxes')}
+                  </span>
+                </div>
+                <div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-1 text-[11px] text-warm-500">
+                  <span className="truncate">{s.operator_nombre || '—'}</span>
+                  <span className="font-mono">{s.started_at ? fmtDateTime(s.started_at) : '—'}</span>
+                  <span className="font-mono">{fmtDurationSecs(s.active_seconds)}</span>
+                </div>
+                {(s.contributions?.length ?? 0) > 1 && (
+                  <p className="mt-1 text-[11px] text-accent-600">
+                    {t('inventario.escaneo.merge_contributors').replace('{{n}}', String(s.contributions.length))}
+                  </p>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="rounded-2xl border border-primary-100 bg-gradient-to-r from-primary-50 via-white to-accent-50/55 p-3 space-y-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-warm-600">{t('inventario.escaneo.merge_boxes_current')}</span>
+            <span className="font-mono font-semibold text-warm-800">{currentBoxes}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-warm-600">{t('inventario.escaneo.merge_boxes_new')}</span>
+            <span className="font-mono font-semibold text-success-700">+{incomingCount}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-primary-100 pt-1.5 text-sm">
+            <span className="font-semibold text-warm-700">{t('inventario.escaneo.merge_boxes_total')}</span>
+            <span className="font-mono font-bold text-primary-700">{currentBoxes + incomingCount}</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-warm-200 bg-warm-50/70 p-3 space-y-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-warm-600">{t('inventario.escaneo.merge_time_current')}</span>
+            <span className="font-mono font-semibold text-warm-800">{fmtDurationSecs(currentSecs)}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-warm-600">{t('inventario.escaneo.merge_time_new')}</span>
+            <span className="font-mono font-semibold text-success-700">+{fmtDurationSecs(incomingSeconds)}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-warm-200 pt-1.5 text-sm">
+            <span className="font-semibold text-warm-700">{t('inventario.escaneo.merge_time_total')}</span>
+            <span className="font-mono font-bold text-warm-900">{fmtDurationSecs(currentSecs + incomingSeconds)}</span>
+          </div>
+          <p className="text-[11px] text-warm-500">{t('inventario.escaneo.merge_time_note')}</p>
         </div>
       </div>
     </Modal>
@@ -1666,6 +1819,8 @@ export default function Escaneo() {
   const [showClasifSummaryModal, setShowClasifSummaryModal] = useState(false)
   const [pendingClasifGroup, setPendingClasifGroup] = useState(null)
   const [mobilePickerOpen, setMobilePickerOpen] = useState(false)
+  // { activity, saveVars, payload, incomingCount, incomingSeconds }
+  const [mergePending, setMergePending] = useState(null)
 
   const buildSessionDuplicateConflicts = useCallback((codes) => {
     if (!activeTab) return []
@@ -1741,36 +1896,49 @@ export default function Escaneo() {
     setPendingInlineGroup(null)
   }, [activeTabId])
 
+  // Shared by the normal save and by the "append to existing tarima" path, which needs
+  // the very same scan list plus its own box count and elapsed span for the preview.
+  const buildSavePayload = useCallback((vars = {}) => {
+    const saveVars = typeof vars === 'string' ? { group: vars } : (vars || {})
+    const clasifGroup = saveVars.group || null
+    const tab = useInventarioStore.getState().tabs.find(t => t.id === activeTabId)
+    if (!tab) throw new Error('No active tab')
+    const isClasificacion = tab.scanType === 'clasificacion'
+    const itemsToSave = isClasificacion && clasifGroup
+      ? tab.items.filter(item => getItemGroup(item) === clasifGroup)
+      : tab.items
+    if (isClasificacion && clasifGroup && itemsToSave.length === 0) {
+      throw new Error('No hay registros para la tarima seleccionada')
+    }
+
+    const payload = {
+      scan_type: tab.scanType,
+      ubicacion_id: saveVars.ubicacionId ?? ubicacionId ?? null,
+      tarima_code: null,
+      origin_location: originLocation || null,
+      scans: itemsToSave.map(item => ({
+        scanned_code: item.raw || item.scanned_code || item.code || item.normalized_code || item.code2 || '',
+        normalized_code: item.code || item.normalized_code || item.raw || item.scanned_code || item.code2 || '',
+        code2: item.code2 || null,
+        was_swapped: item.wasSwapped || false, scan_status: item.status,
+        sku: item.sku !== '-' ? item.sku : null, product_name: item.product !== '-' ? item.product : null,
+        cell_no: item.location !== '-' ? item.location : null,
+        scanned_at: item.ts ? new Date(item.ts).toISOString() : null,
+        group_assignment: isClasificacion ? getItemGroup(item) : 'unificado',
+      })),
+    }
+
+    const bounds = getTimeBounds(itemsToSave, { fallbackStart: tab.createdAt })
+    const spanSeconds = bounds.start && bounds.end
+      ? Math.max(0, Math.floor((new Date(bounds.end) - new Date(bounds.start)) / 1000))
+      : 0
+
+    return { saveVars, payload, itemCount: itemsToSave.length, spanSeconds, scanType: tab.scanType }
+  }, [activeTabId, ubicacionId, originLocation])
+
   const saveSessionMut = useMutation({
     mutationFn: (vars = {}) => {
-      const saveVars = typeof vars === 'string' ? { group: vars } : (vars || {})
-      const clasifGroup = saveVars.group || null
-      const tab = useInventarioStore.getState().tabs.find(t => t.id === activeTabId)
-      if (!tab) throw new Error('No active tab')
-      const isClasificacion = tab.scanType === 'clasificacion'
-      const itemsToSave = isClasificacion && clasifGroup
-        ? tab.items.filter(item => getItemGroup(item) === clasifGroup)
-        : tab.items
-      if (isClasificacion && clasifGroup && itemsToSave.length === 0) {
-        throw new Error('No hay registros para la tarima seleccionada')
-      }
-
-      const payload = {
-        scan_type: tab.scanType,
-        ubicacion_id: saveVars.ubicacionId ?? ubicacionId ?? null,
-        tarima_code: null,
-        origin_location: originLocation || null,
-        scans: itemsToSave.map(item => ({
-          scanned_code: item.raw || item.scanned_code || item.code || item.normalized_code || item.code2 || '',
-          normalized_code: item.code || item.normalized_code || item.raw || item.scanned_code || item.code2 || '',
-          code2: item.code2 || null,
-          was_swapped: item.wasSwapped || false, scan_status: item.status,
-          sku: item.sku !== '-' ? item.sku : null, product_name: item.product !== '-' ? item.product : null,
-          cell_no: item.location !== '-' ? item.location : null,
-          scanned_at: item.ts ? new Date(item.ts).toISOString() : null,
-          group_assignment: isClasificacion ? getItemGroup(item) : 'unificado',
-        })),
-      }
+      const { payload } = buildSavePayload(vars)
 
       // Offline: queue immediately instead of letting axios hang for its full
       // timeout against a dead connection — that's what made this look "stuck
@@ -1790,35 +1958,116 @@ export default function Escaneo() {
       })
     },
     onSuccess: (result, vars) => {
-      playSound('complete')
       const saveVars = typeof vars === 'string' ? { group: vars } : (vars || {})
-      const clasifGroup = saveVars.group || null
-      setShowSummaryModal(false)
-      setShowClasifSummaryModal(false)
-      setPendingClasifGroup(null)
-      setUbicacionId(null)
-      if (clasifGroup) {
-        const tab = useInventarioStore.getState().tabs.find(t => t.id === activeTabId)
-        if (tab) {
-          const indices = tab.items
-            .map((item, i) => (getItemGroup(item) === clasifGroup ? i : -1))
-            .filter(i => i !== -1)
-          if (indices.length === tab.items.length) restartTab(activeTabId)
-          else removeItems(activeTabId, indices)
-        }
-      } else {
-        closeTab(activeTabId)
-      }
-      toast.success(result?.queuedOffline
+      finishSave(saveVars, result?.queuedOffline
         ? 'Sin conexión — guardado localmente, se sincronizará al reconectar'
         : t('inventario.escaneo.session_started'))
-      setTimeout(() => scanRef.current?.focus(), 80)
     },
     onError: (error) => {
       const message = error?.response?.data?.error || error?.message || t('toast.error')
       toast.error(message)
     },
   })
+
+  // Clears the scanned boxes from the tab and closes the flow. Identical whether the
+  // boxes became a new tarima or were appended to an existing one.
+  function finishSave(saveVars, message) {
+    playSound('complete')
+    const clasifGroup = saveVars?.group || null
+    setShowSummaryModal(false)
+    setShowClasifSummaryModal(false)
+    setPendingClasifGroup(null)
+    setMergePending(null)
+    setUbicacionId(null)
+    if (clasifGroup) {
+      const tab = useInventarioStore.getState().tabs.find(t => t.id === activeTabId)
+      if (tab) {
+        const indices = tab.items
+          .map((item, i) => (getItemGroup(item) === clasifGroup ? i : -1))
+          .filter(i => i !== -1)
+        if (indices.length === tab.items.length) restartTab(activeTabId)
+        else removeItems(activeTabId, indices)
+      }
+    } else {
+      closeTab(activeTabId)
+    }
+    toast.success(message)
+    setTimeout(() => scanRef.current?.focus(), 80)
+  }
+
+  const appendSessionMut = useMutation({
+    mutationFn: ({ sessionId, payload, saveVars }) =>
+      appendInventorySession(sessionId, {
+        scans: payload.scans,
+        // The bucket key (ok/blocked/nowms) the server maps to this section's existing
+        // PAL tarima, so the boxes join that pallet instead of opening a new one.
+        target_group_key: saveVars?.group || null,
+        // Server-side guard against merging a unificado batch into a clasificación
+        // section (or the reverse) if the modal's candidate list went stale.
+        scan_type: payload.scan_type,
+      }),
+    onSuccess: (result, vars) => {
+      const added = result?.data?.summary?.scans_added ?? vars.payload.scans.length
+      const after = result?.data?.summary?.scans_after ?? added
+      finishSave(
+        vars.saveVars,
+        t('inventario.escaneo.merge_success')
+          .replace('{{added}}', String(added))
+          .replace('{{total}}', String(after))
+          .replace('{{tarima}}', vars.tarimaCode || '')
+      )
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.error || error?.message || t('toast.error')
+      toast.error(message)
+    },
+  })
+
+  // Gate between "guardar" and the actual write: if this ubicación already has a tarima
+  // registered today, offer to append instead of quietly creating a second one.
+  const checkUbicacionMut = useMutation({
+    mutationFn: async (vars) => {
+      const built = buildSavePayload(vars)
+      const targetUbicacion = built.payload.ubicacion_id
+      // No ubicación, or offline (the append endpoint needs the server's current totals
+      // and cannot be replayed safely from the offline queue) — save as usual.
+      if (!targetUbicacion || useOfflineStore.getState().status === 'offline') {
+        return { built, activity: null }
+      }
+      const activity = await getUbicacionActivity({
+        ubicacion_id: targetUbicacion,
+        scan_type: built.scanType,
+      }).catch(() => null)
+      return { built, activity: activity?.data ?? null }
+    },
+    onSuccess: ({ built, activity }) => {
+      if (!activity || (activity.sessions?.length ?? 0) === 0) {
+        saveSessionMut.mutate(built.saveVars)
+        return
+      }
+      // Take over the screen from the summary modal rather than stacking on top of it;
+      // cancelling puts the operator back exactly where they were.
+      const fromClasif = Boolean(built.saveVars.group)
+      setShowSummaryModal(false)
+      setShowClasifSummaryModal(false)
+      setMergePending({
+        activity,
+        saveVars: built.saveVars,
+        payload: built.payload,
+        incomingCount: built.itemCount,
+        incomingSeconds: built.spanSeconds,
+        fromClasif,
+      })
+    },
+    onError: (error) => {
+      const message = error?.message || t('toast.error')
+      toast.error(message)
+    },
+  })
+
+  function requestSave(vars = {}) {
+    checkUbicacionMut.mutate(vars)
+  }
 
   const createUbicacionMut = useMutation({
     mutationFn: ({ codigo }) => createUbicacion({ codigo, nombre: codigo }),
@@ -2537,9 +2786,9 @@ export default function Escaneo() {
         isCreating={createUbicacionMut.isPending}
       />
       <SessionSummaryModal isOpen={showSummaryModal} tab={activeTab}
-        onSave={() => saveSessionMut.mutate()}
+        onSave={() => requestSave()}
         onContinue={() => setShowSummaryModal(false)}
-        isSaving={saveSessionMut.isPending}
+        isSaving={saveSessionMut.isPending || checkUbicacionMut.isPending}
         ubicacionValidated={ubicacionValidated}
         onChangeUbicacion={() => { setShowSummaryModal(false); setShowUbicacionModal(true) }}
         originLocation={originLocation}
@@ -2549,15 +2798,46 @@ export default function Escaneo() {
         group={pendingClasifGroup}
         tab={activeTab}
         tabIndex={activeTab ? tabs.findIndex(t => t.id === activeTab.id) : 0}
-        onSave={() => saveSessionMut.mutate({
+        onSave={() => requestSave({
           group: pendingClasifGroup,
           ubicacionId: ubicacionValidated?.id ?? ubicacionId ?? null,
         })}
         onClose={() => { setShowClasifSummaryModal(false); setPendingClasifGroup(null) }}
-        isSaving={saveSessionMut.isPending}
+        isSaving={saveSessionMut.isPending || checkUbicacionMut.isPending}
         ubicacionValidated={ubicacionValidated}
         onChangeUbicacion={() => { setShowClasifSummaryModal(false); setShowUbicacionModal(true) }}
         originLocation={originLocation}
+      />
+      <MergeTarimaModal
+        isOpen={!!mergePending}
+        activity={mergePending?.activity}
+        incomingCount={mergePending?.incomingCount ?? 0}
+        incomingSeconds={mergePending?.incomingSeconds ?? 0}
+        groupKey={mergePending?.saveVars?.group || null}
+        groupLabel={mergePending?.saveVars?.group
+          ? t(STATUS_META[mergePending.saveVars.group]?.labelKey || 'inventario.escaneo.group_disponible')
+          : null}
+        isBusy={appendSessionMut.isPending || saveSessionMut.isPending}
+        onAppend={(target) => {
+          if (!mergePending || !target) return
+          appendSessionMut.mutate({
+            sessionId: target.id,
+            payload: mergePending.payload,
+            saveVars: mergePending.saveVars,
+            tarimaCode: target.tarima_code,
+          })
+        }}
+        onCreateNew={() => {
+          const saveVars = mergePending?.saveVars ?? {}
+          setMergePending(null)
+          saveSessionMut.mutate(saveVars)
+        }}
+        onClose={() => {
+          const fromClasif = mergePending?.fromClasif
+          setMergePending(null)
+          if (fromClasif) setShowClasifSummaryModal(true)
+          else setShowSummaryModal(true)
+        }}
       />
       <DuplicateModal isOpen={!!duplicatePending} code={duplicatePending?.code} conflicts={duplicatePending?.conflicts || []}
         onConfirm={() => {

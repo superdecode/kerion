@@ -293,12 +293,21 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
     scanBounds.start || sessionData.started_at || session?.started_at || sessionData.created_at || session?.created_at
   )
 
+  const contributions = data?.data?.contributions ?? []
+
   const duration = (() => {
-    if (!scanBounds.start || !scanBounds.end) return '—'
-    const ms = new Date(scanBounds.end) - new Date(scanBounds.start)
-    const min = Math.floor(ms / 60000)
-    const sec = Math.floor((ms % 60000) / 1000)
-    return `${min}m ${sec}s`
+    // active_seconds is the sum of each work stretch's own span. For a tarima that was
+    // appended to (same ubicación, later in the day, possibly another operator), deriving
+    // this from first/last scan instead would bill the idle gap between stretches to the
+    // tarima and distort productivity. Falls back to the scan span for pre-107 rows.
+    const active = sessionData.active_seconds ?? session?.active_seconds
+    const totalSec = active !== null && active !== undefined
+      ? Number(active)
+      : (scanBounds.start && scanBounds.end
+        ? Math.floor((new Date(scanBounds.end) - new Date(scanBounds.start)) / 1000)
+        : null)
+    if (totalSec === null || !Number.isFinite(totalSec)) return '—'
+    return `${Math.floor(totalSec / 60)}m ${totalSec % 60}s`
   })()
 
   const tarimas = useMemo(() => {
@@ -618,6 +627,37 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
               )
             })}
           </div>
+
+          {contributions.length > 1 && (
+            <div className="overflow-x-auto rounded-xl border border-accent-100">
+              <table className="w-full min-w-[420px] text-xs">
+                <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
+                  <tr>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.contributions')}</span></th>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.contribution_operator')}</span></th>
+                    <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>{t('inventario.escaneo.contribution_boxes')}</span></th>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.start_date')}</span></th>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.end_date')}</span></th>
+                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('inventario.escaneo.contribution_time')}</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-warm-100">
+                  {contributions.map((c) => (
+                    <tr key={c.id}>
+                      <td className="px-3 py-2 font-mono text-xs text-warm-600">#{c.sequence}</td>
+                      <td className="px-3 py-2 text-xs text-warm-700 font-medium">{c.operator_nombre || '—'}</td>
+                      <td className="px-3 py-2 text-center font-mono text-xs text-warm-700">{c.scans_added}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-warm-600">{c.first_scan_at ? fmtTimeShort(c.first_scan_at) : '—'}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-warm-600">{c.last_scan_at ? fmtTimeShort(c.last_scan_at) : '—'}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-warm-700">
+                        {Math.floor((c.active_seconds || 0) / 60)}m {(c.active_seconds || 0) % 60}s
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {tarimas.length === 0 ? (
             <p className="text-sm text-warm-400 text-center py-10">{t('common.noData')}</p>
