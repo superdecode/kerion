@@ -120,7 +120,11 @@ export function normalizeCode(rawCode) {
     /\bID\s*:\s*"?(\d+[\/\-]\d+)/i,
     /\bID"?"?(\d+[\/\-]\d+)/i,
     /^"?(\d+[\/\-]\d+)"?/,
-    /(\d{6,}[\/\-]\d{1,4})/,
+    // Whole-string only: a bare numeric box code (optionally quote-wrapped), not a
+    // digits[/-]digits run embedded inside a longer alphanumeric code. Unanchored, this
+    // used to strip real prefixes like "GK-1349U-" off codes such as "GK-1349U-260803/46",
+    // truncating them down to just "260803/46".
+    /^"?(\d{6,}[\/\-]\d{1,4})"?$/,
   ]
 
   for (const pattern of patterns) {
