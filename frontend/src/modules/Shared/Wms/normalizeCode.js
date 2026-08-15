@@ -140,9 +140,11 @@ export function normalizeCode(rawCode) {
   if (idMatch) return idMatch[1]
 
   const fallback = upper.replace(/[^A-Z0-9_\/-]/g, '')
-  // Purely-alphabetic strings (no digits) are label field names, not product codes.
-  // e.g. CONTAINER_TYPEBOX from a composite barcode label scanned field-by-field.
-  if (fallback.length > 4 && !/\d/.test(fallback)) return ''
+  // Purely-alphabetic strings with no digits AND no separator are label field names,
+  // not product codes (e.g. CONTAINER_TYPEBOX from a composite barcode label scanned
+  // field-by-field). A real multi-segment code like "ABC-DEF/GHI" has no digits either
+  // but must not be nuked just for that — the "/-" check keeps those intact.
+  if (fallback.length > 4 && !/\d/.test(fallback) && !/[\/-]/.test(fallback)) return ''
   return fallback
 }
 
@@ -214,9 +216,11 @@ export function normalizeScanCode(rawCode) {
   if (idMatch) return idMatch[1]
 
   const fallback = upper.replace(/[^A-Z0-9_\/-]/g, '')
-  // Purely-alphabetic strings (no digits) are label field names, not product codes.
-  // e.g. SELLERCONTAINERTYPEBOX from Amazon FBA labels.
-  if (fallback.length > 4 && !/\d/.test(fallback)) return ''
+  // Purely-alphabetic strings with no digits AND no separator are label field names,
+  // not product codes (e.g. SELLERCONTAINERTYPEBOX from Amazon FBA labels). A real
+  // multi-segment code like "ABC-DEF/GHI" has no digits either but must not be nuked
+  // just for that — the "/-" check keeps those intact.
+  if (fallback.length > 4 && !/\d/.test(fallback) && !/[\/-]/.test(fallback)) return ''
   return fallback
 }
 

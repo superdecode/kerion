@@ -1356,6 +1356,7 @@ export default {
     'inventario.escaneo.code2_waiting': 'Esperando Código 2 para',
     'inventario.escaneo.code2_placeholder': 'Código 2 (Enter)',
     'inventario.escaneo.same_codes': 'Código 1 y código 2 son iguales',
+    'inventario.escaneo.code_not_recognized': 'Código no reconocido, intenta escanear de nuevo',
     'inventario.escaneo.skip_code2': 'Omitir',
     'inventario.escaneo.empty_hint': 'Escanea un Código para Comenzar',
     'inventario.escaneo.session_started': 'Sesión de Escaneo Iniciada',
