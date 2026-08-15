@@ -1,6 +1,6 @@
 import { memo, useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query'
 import {
   ScanLine, Loader2, X, Check, CheckCircle2, XCircle, AlertCircle,
   Layers, MapPin, Trash2, Radio, Clock3, Search, MoveRight,
@@ -284,12 +284,19 @@ export default function ValidarPorDestino({ folioId }) {
     staleTime: 30_000,
   })
 
+  // A background poll landing while a scan is being submitted can overwrite the
+  // optimistic entry added in doAddScan's onMutate with a server snapshot that
+  // doesn't include it yet, making a just-scanned code appear to vanish. Pause
+  // polling while a scan for this folio is in flight; onMutate's cancelQueries
+  // already handles a poll that was in flight when the mutation started.
+  const addScanPendingCount = useIsMutating({ mutationKey: ['despacho-add-scan', folioId] })
+
   const { data: scansData, isLoading: loadingScans } = useQuery({
     queryKey: ['despacho-folio-scans', folioId],
     queryFn: () => getFolioScans(folioId),
     enabled: !!folioId,
     staleTime: 10_000,
-    refetchInterval: 15_000,
+    refetchInterval: addScanPendingCount > 0 ? false : 15_000,
   })
 
   const folio = folioData?.folio
@@ -507,6 +514,7 @@ export default function ValidarPorDestino({ folioId }) {
   })
 
   const { mutate: doAddScan } = useMutation({
+    mutationKey: ['despacho-add-scan', folioId],
     mutationFn: (body) => addFolioScan(folioId, body),
     onMutate: async (body) => {
       const queryKey = ['despacho-folio-scans', folioId]
