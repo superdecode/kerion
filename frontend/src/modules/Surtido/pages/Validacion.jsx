@@ -32,6 +32,8 @@ import { captureErrorEvent } from '../../../core/services/errorTelemetry'
 import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
 import { useSurtidoStore } from '../stores/surtidoStore'
 import { validateLocationValue } from '../utils/locationValue'
+import ValidacionTypeModal from '../components/ValidacionTypeModal'
+import ValidarPorLote from '../components/ValidarPorLote'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 
 const SCANNER_TOTAL_MS = 2000       // base budget first-char→Enter for scanner barcodes
@@ -63,7 +65,7 @@ function safeParseJson(raw) {
 
 
 function buildDefaultTab(label) {
-  return { id: genId(), label }
+  return { id: genId(), label, tipo: 'por_orden' }
 }
 
 function hasStoredSessionForTab(tabId) {
@@ -79,7 +81,10 @@ function normalizeStoredTabs(value, fallbackLabel) {
       if (!tab || typeof tab !== 'object') return null
       const id = typeof tab.id === 'string' && tab.id.trim() ? tab.id : genId()
       const label = typeof tab.label === 'string' && tab.label.trim() ? tab.label : fallbackLabel
-      return { id, label }
+      // Las pestanas guardadas antes de la validacion por lote no traen tipo.
+      const tipo = tab.tipo === 'por_lote' ? 'por_lote' : 'por_orden'
+      const fecha = tipo === 'por_lote' && typeof tab.fecha === 'string' ? tab.fecha : undefined
+      return fecha ? { id, label, tipo, fecha } : { id, label, tipo }
     })
     .filter(Boolean)
 
@@ -3372,6 +3377,7 @@ export default function SurtidoValidacion() {
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
   const [refreshingSheet, setRefreshingSheet] = useState(false)
   const [mobilePickerOpen, setMobilePickerOpen] = useState(false)
+  const [showTypeModal, setShowTypeModal] = useState(false)
 
   const [tabs, setTabs] = useState(() => {
     const saved = safeParseJson(localStorage.getItem(TABS_KEY))
@@ -3428,10 +3434,17 @@ export default function SurtidoValidacion() {
   }, [activeTabId])
 
   function addTab() {
+    setShowTypeModal(true)
+  }
+
+  function handleSelectTipo({ tipo, fecha }) {
     const newId = genId()
-    const newTab = { id: newId, label: newTabLabel }
+    const newTab = tipo === 'por_lote'
+      ? { id: newId, label: `${t('surtido.lote.tab.label')} ${fecha}`, tipo, fecha }
+      : { id: newId, label: newTabLabel, tipo: 'por_orden' }
     setTabs(prev => [...prev, newTab])
     setActiveTabId(newId)
+    setShowTypeModal(false)
   }
 
   function closeTab(tabId) {
@@ -3495,7 +3508,7 @@ export default function SurtidoValidacion() {
       return
     }
     const newId = genId()
-    setTabs(prev => [...prev, { id: newId, label: obc }])
+    setTabs(prev => [...prev, { id: newId, label: obc, tipo: 'por_orden' }])
     setActiveTabId(newId)
     setPendingTabObcs(prev => ({ ...prev, [newId]: obc }))
   }
@@ -3638,6 +3651,13 @@ export default function SurtidoValidacion() {
       <div className="flex-1 flex overflow-hidden relative">
         {tabs.map(tab => (
           <div key={tab.id} className={`absolute inset-0 flex ${tab.id === activeTabId ? '' : 'hidden'}`}>
+            {tab.tipo === 'por_lote' ? (
+              <ValidarPorLote
+                tabId={tab.id}
+                fecha={tab.fecha}
+                isActive={tab.id === activeTabId}
+              />
+            ) : (
             <TabSession
               tabId={tab.id}
               isActive={tab.id === activeTabId}
@@ -3659,6 +3679,7 @@ export default function SurtidoValidacion() {
               onOpenObc={addTabWithObc}
               checkDuplicateObc={(obc) => tabs.some((t) => t.id !== tab.id && t.label === obc)}
             />
+            )}
           </div>
         ))}
       </div>
@@ -3666,6 +3687,11 @@ export default function SurtidoValidacion() {
         isOpen={showQuickSearch}
         onClose={() => setShowQuickSearch(false)}
         onValidate={addTabWithObc}
+      />
+      <ValidacionTypeModal
+        isOpen={showTypeModal}
+        onClose={() => setShowTypeModal(false)}
+        onSelect={handleSelectTipo}
       />
     </div>
   )
