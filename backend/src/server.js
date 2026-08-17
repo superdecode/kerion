@@ -67,6 +67,7 @@ import recepcionReporteRoutes from './modules/recepcion/routes/reporte.routes.js
 import devDashboardRoutes from './modules/devoluciones/routes/dashboard.routes.js'
 import invDashboardRoutes from './modules/inventory/routes/dashboard.routes.js'
 import surtidoDashboardRoutes from './modules/wms/routes/surtido.dashboard.routes.js'
+import pickBatchRoutes from './modules/wms/routes/pickBatch.routes.js'
 
 // Node's fetch/undici can emit an async 'error' after a request's own promise
 // chain has already settled (e.g. an HTTP/2 stream reset from an upstream
@@ -234,6 +235,7 @@ app.use('/api/devoluciones', tenantContext, tenantDB, moduleGuard('devoluciones'
 
 // WMS Hub module (Surtido) — specific routes before catch-all
 app.use('/api/wmshub/dashboard', tenantContext, tenantDB, moduleGuard('surtido'), surtidoDashboardRoutes)
+app.use('/api/wmshub/pick-batch', tenantContext, tenantDB, moduleGuard('surtido'), pickBatchRoutes)
 app.use('/api/wmshub', tenantContext, tenantDB, moduleGuard('surtido'), wmsHubRoutes)
 
 // Anormalidades module
