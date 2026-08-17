@@ -107,10 +107,10 @@ describe('matchInPool', () => {
 
   it('un alias compartido entre ordenes distintas tambien es ambiguo', () => {
     const compartido = buildLotePool([
-      { outboundOrderNo: 'OBC-A', outboundTime: '2026-08-17 10:00:00', packageList: [{ customizeCode: 'MISMO', quantity: 1 }] },
-      { outboundOrderNo: 'OBC-B', outboundTime: '2026-08-17 10:00:00', packageList: [{ customizeCode: 'MISMO', quantity: 1 }] },
+      { outboundOrderNo: 'OBC-A', outboundTime: '2026-08-17 10:00:00', packageList: [{ customizeCode: 'MISMO-1', quantity: 1 }] },
+      { outboundOrderNo: 'OBC-B', outboundTime: '2026-08-17 10:00:00', packageList: [{ customizeCode: 'MISMO-1', quantity: 1 }] },
     ], '2026-08-17')
-    expect(matchInPool(compartido, 'MISMO').status).toBe('ambiguous')
+    expect(matchInPool(compartido, 'MISMO-1').status).toBe('ambiguous')
   })
 
   it('una caja con codigo propio sigue resolviendo aunque comparta boxType', () => {
