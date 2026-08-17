@@ -2,6 +2,7 @@ import api from '../../../core/services/api'
 import {
   getOutboundList as getOutboundListFromSheets,
   getOutboundDetail as getOutboundDetailFromSheets,
+  getOutboundBatchByDate as getOutboundBatchByDateFromSheets,
 } from '../../WmsHub/services/googleSheetsService'
 
 export const getRecords = (payload) => {
@@ -15,6 +16,8 @@ export const getRecords = (payload) => {
 export const getOutboundList = () => getOutboundListFromSheets()
 
 export const getOutboundDetail = (orderNo) => getOutboundDetailFromSheets(orderNo)
+
+export const getOutboundBatchByDate = (dateKey) => getOutboundBatchByDateFromSheets(dateKey)
 
 export const getScanSessions = (params) =>
   api.get('/wmshub/scan-sessions', { params }).then(r => r.data)
