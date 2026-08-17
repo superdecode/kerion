@@ -113,6 +113,51 @@ export function resolveEventResults(expectedBoxesRaw, events) {
 }
 
 /**
+ * Una orden ya validada no se puede volver a validar por ningun metodo. Es la
+ * misma condicion "genuinelyComplete" que aplica POST /scan-session: la sesion
+ * no esta abierta y ya alcanzo las cajas esperadas. Sin este filtro, confirmar
+ * un lote reabriria (status='open') una orden terminada y le agregaria cajas
+ * en silencio.
+ */
+export function findLockedOrders(rows) {
+  return (rows || []).filter((row) => (
+    row.status !== 'open'
+    && Number(row.total_expected) > 0
+    && Number(row.total_scanned) >= Number(row.total_expected)
+  ))
+}
+
+export class OrdersAlreadyValidatedError extends Error {
+  constructor(orders) {
+    super('Hay órdenes que ya fueron validadas')
+    this.name = 'OrdersAlreadyValidatedError'
+    this.code = 'ORDERS_ALREADY_VALIDATED'
+    this.orders = orders
+  }
+}
+
+/**
+ * Estado de validacion de un conjunto de ordenes, para que el modo lote sepa
+ * cuales ya estan cerradas antes de que el operador escanee sus cajas.
+ */
+export async function getOrdersValidationState(req, obcs) {
+  const lista = [...new Set((obcs || []).map(o => String(o).trim()).filter(Boolean))]
+  if (lista.length === 0) return []
+  const result = await req.tQuery(
+    `SELECT DISTINCT ON (s.outbound_order_no)
+            s.outbound_order_no, s.status, s.total_expected, s.total_scanned,
+            s.completed_at, s.batch_id, u.nombre_completo AS operator_nombre
+     FROM pick_sessions s
+     LEFT JOIN usuarios u ON u.id = s.operator_id
+     WHERE s.tenant_id = $1 AND s.outbound_order_no = ANY($2)
+     ORDER BY s.outbound_order_no, s.updated_at DESC`,
+    [req.tenantId, lista]
+  )
+  const bloqueadas = new Set(findLockedOrders(result.rows).map(r => r.outbound_order_no))
+  return result.rows.map(row => ({ ...row, locked: bloqueadas.has(row.outbound_order_no) }))
+}
+
+/**
  * Confirma un lote completo en una sola transacción: si algo falla, no queda
  * ni el lote ni una sola sesión a medias, y el borrador local del operador
  * sigue intacto para reintentar.
@@ -125,6 +170,23 @@ export async function commitBatch(req, body) {
     const tenantId = req.tenantId
     const operatorId = req.fullUser?.id || req.user?.id || null
     const updatedBy = req.user?.email || String(operatorId)
+
+    // Antes de escribir nada: ninguna orden del lote puede estar ya validada.
+    // Se aborta el commit entero en vez de dejar medio lote adentro — el
+    // borrador del operador sigue local e intacto para corregirlo.
+    const obcs = [...new Set(body.orders.map(o => String(o.outbound_order_no)))]
+    const previas = await client.query(
+      `SELECT DISTINCT ON (s.outbound_order_no)
+              s.outbound_order_no, s.status, s.total_expected, s.total_scanned,
+              u.nombre_completo AS operator_nombre
+       FROM pick_sessions s
+       LEFT JOIN usuarios u ON u.id = s.operator_id
+       WHERE s.tenant_id = $1 AND s.outbound_order_no = ANY($2)
+       ORDER BY s.outbound_order_no, s.updated_at DESC`,
+      [tenantId, obcs]
+    )
+    const bloqueadas = findLockedOrders(previas.rows)
+    if (bloqueadas.length > 0) throw new OrdersAlreadyValidatedError(bloqueadas)
 
     const totalCajas = body.orders.reduce(
       (sum, o) => sum + o.events.filter(e => e.scan_result === 'ok').length, 0

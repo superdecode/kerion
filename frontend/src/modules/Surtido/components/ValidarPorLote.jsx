@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Layers, CheckCircle2, XCircle, AlertCircle, Trash2, RefreshCw, PackageX, X,
+  Layers, CheckCircle2, XCircle, AlertCircle, Trash2, RefreshCw, PackageX, X, Lock,
 } from 'lucide-react'
 import ScanInputBar from '../../Shared/Wms/ScanInputBar'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
@@ -12,7 +12,7 @@ import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import { fmtTimeShort } from '../../../core/utils/dateFormat'
 import { refreshSheet } from '../../WmsHub/services/googleSheetsService'
-import { getOutboundBatchByDate, commitPickBatch } from '../services/surtidoService'
+import { getOutboundBatchByDate, commitPickBatch, getOrdersValidationState } from '../services/surtidoService'
 import { buildLotePool } from '../utils/lotePool'
 import { useLoteDraft } from '../hooks/useLoteDraft'
 import LoteResumenCards from './LoteResumenCards'
@@ -26,6 +26,7 @@ const RESULT_STYLES = {
   duplicate: { icon: AlertCircle,  fg: 'text-warning-600', bg: 'bg-warning-50' },
   not_found: { icon: XCircle,      fg: 'text-danger-600',  bg: 'bg-danger-50' },
   ambiguous: { icon: XCircle,      fg: 'text-danger-600',  bg: 'bg-danger-50' },
+  already_validated: { icon: Lock, fg: 'text-danger-600',  bg: 'bg-danger-50' },
 }
 
 function ScanFeed({ scans, canRemove, onRemove, t }) {
@@ -111,7 +112,25 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
     [data, fecha]
   )
 
-  const lote = useLoteDraft({ tabId, dateKey: fecha, pool, operatorId: user?.id, permission })
+  // Estado real de cada orden del pool: cuáles ya se validaron (por orden o
+  // por lote). Sin esto el operador escanearía cajas que el commit rechazaría.
+  const obcs = useMemo(() => pool.orders.map(o => o.outboundOrderNo), [pool])
+  const { data: estadoData } = useQuery({
+    queryKey: ['surtido-lote-estado', fecha, obcs.length],
+    queryFn: () => getOrdersValidationState(obcs),
+    enabled: obcs.length > 0,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+  const validatedOrders = useMemo(
+    () => new Set((estadoData?.data ?? []).filter(o => o.locked).map(o => o.outbound_order_no)),
+    [estadoData]
+  )
+
+  const lote = useLoteDraft({
+    tabId, dateKey: fecha, pool, operatorId: user?.id, permission, validatedOrders,
+  })
 
   const ubicacionPorTarima = useMemo(
     () => new Map(lote.draft.tarimas.filter(tar => tar.ubicacionNota).map(tar => [tar.ref, tar.ubicacionNota])),
@@ -156,6 +175,9 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
     } else if (outcome.result === 'not_found') {
       playSound('error')
       toast.error(t('surtido.lote.scan.notFound'))
+    } else if (outcome.result === 'already_validated') {
+      playSound('error')
+      toast.error(`${t('surtido.lote.scan.alreadyValidated')} ${outcome.orderNo}`)
     }
     focusScan()
   }, [focusScan, t, toast])
@@ -209,7 +231,15 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
     // El borrador NO se borra: es el único punto donde el operador podría
     // perder trabajo, así que queda intacto para reintentar.
     onError: (err) => {
-      toast.error(err?.response?.data?.error || t('surtido.lote.confirmar.error'))
+      const data = err?.response?.data
+      if (data?.code === 'ORDERS_ALREADY_VALIDATED') {
+        const obcsEnConflicto = (data.details?.orders ?? []).map(o => o.outbound_order_no).join(', ')
+        toast.error(`${t('surtido.lote.confirmar.yaValidadas')} ${obcsEnConflicto}`)
+        // El estado del pool quedó viejo: se refresca para bloquear esas cajas.
+        qc.invalidateQueries({ queryKey: ['surtido-lote-estado'] })
+        return
+      }
+      toast.error(data?.error || t('surtido.lote.confirmar.error'))
     },
   })
 
@@ -306,6 +336,7 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
           onToggle={() => setSidebarVisible(v => !v)}
           operadorNombre={operadorNombre}
           ubicacionPorTarima={ubicacionPorTarima}
+          validatedOrders={validatedOrders}
         />
       </div>
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateCommitPayload, resolveEventResults } from '../modules/wms/services/pickBatchService.js'
+import { validateCommitPayload, resolveEventResults, findLockedOrders } from '../modules/wms/services/pickBatchService.js'
 import { normalizeExpectedBoxes } from '../modules/wms/utils/pickBoxes.js'
 
 const payloadValido = {
@@ -154,5 +154,36 @@ describe('resolveEventResults', () => {
 
   it('no revienta con una lista vacia de eventos', () => {
     expect(resolveEventResults(boxes, []).events).toEqual([])
+  })
+})
+
+describe('findLockedOrders', () => {
+  const fila = (over) => ({
+    outbound_order_no: 'OBC-1', status: 'complete',
+    total_expected: 2, total_scanned: 2, operator_nombre: 'Ana', ...over,
+  })
+
+  it('bloquea una orden terminada', () => {
+    expect(findLockedOrders([fila({})]).map(o => o.outbound_order_no)).toEqual(['OBC-1'])
+  })
+
+  it('no bloquea una orden abierta', () => {
+    expect(findLockedOrders([fila({ status: 'open' })])).toEqual([])
+  })
+
+  it('no bloquea una sesion cerrada a medias', () => {
+    expect(findLockedOrders([fila({ total_scanned: 1 })])).toEqual([])
+  })
+
+  it('no bloquea una sesion sin cajas esperadas', () => {
+    expect(findLockedOrders([fila({ total_expected: 0, total_scanned: 0 })])).toEqual([])
+  })
+
+  it('bloquea cuando se escaneo de mas', () => {
+    expect(findLockedOrders([fila({ total_scanned: 5 })])).toHaveLength(1)
+  })
+
+  it('devuelve vacio sin filas', () => {
+    expect(findLockedOrders([])).toEqual([])
   })
 })

@@ -140,6 +140,10 @@ export const getScanOperators = () =>
 export const commitPickBatch = (body) =>
   api.post('/wmshub/pick-batch/commit', body, { timeout: 120000 }).then(r => r.data)
 
+// Estado de validación de las órdenes del pool: cuáles ya están cerradas.
+export const getOrdersValidationState = (obcs) =>
+  api.post('/wmshub/pick-batch/estado-ordenes', { obcs }).then(r => r.data)
+
 export const getPickBatches = (params) =>
   api.get('/wmshub/pick-batch', { params }).then(r => r.data)
 

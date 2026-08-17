@@ -301,3 +301,40 @@ describe('buildCommitPayload', () => {
     expect(payload.tarimas).toEqual([])
   })
 })
+
+describe('ordenes ya validadas', () => {
+  const validadas = new Set(['OBC-1'])
+
+  it('rechaza la caja de una orden ya validada', () => {
+    const { draft, outcome } = scanDraft(nuevo(), pool, 'AAA-1', { validatedOrders: validadas })
+    expect(outcome).toMatchObject({ result: 'already_validated', orderNo: 'OBC-1' })
+    expect(draft.scans[0].result).toBe('already_validated')
+  })
+
+  it('no la cuenta como caja validada', () => {
+    const { draft } = scanDraft(nuevo(), pool, 'AAA-1', { validatedOrders: validadas })
+    expect(draftSummary(draft, pool).cajasValidadas).toBe(0)
+  })
+
+  it('no la manda al servidor al confirmar', () => {
+    let d = scanDraft(nuevo(), pool, 'AAA-1', { validatedOrders: validadas }).draft
+    d = scanDraft(d, pool, 'BBB-1', { validatedOrders: validadas }).draft
+    d = closeTarima(d, 'A1-01-01-01').draft
+    const payload = buildCommitPayload(d, pool, '')
+    expect(payload.orders.map(o => o.outbound_order_no)).toEqual(['OBC-2'])
+  })
+
+  it('forzar tampoco la deja pasar', () => {
+    const { outcome } = scanDraft(nuevo(), pool, 'AAA-1', { validatedOrders: validadas, force: true })
+    expect(outcome.result).toBe('already_validated')
+  })
+
+  it('las demas ordenes siguen validandose', () => {
+    const { outcome } = scanDraft(nuevo(), pool, 'BBB-1', { validatedOrders: validadas })
+    expect(outcome.result).toBe('ok')
+  })
+
+  it('sin lista de validadas todo sigue igual', () => {
+    expect(scanDraft(nuevo(), pool, 'AAA-1').outcome.result).toBe('ok')
+  })
+})

@@ -47,7 +47,7 @@ export function clearDraft(tabId) {
   try { localStorage.removeItem(LOTE_DRAFT_KEY(tabId)) } catch {}
 }
 
-export function useLoteDraft({ tabId, dateKey, pool, operatorId, permission }) {
+export function useLoteDraft({ tabId, dateKey, pool, operatorId, permission, validatedOrders = null }) {
   const [draft, setDraft] = useState(() => {
     const guardado = loadDraft(tabId)
     if (guardado && guardado.dateKey === dateKey) return guardado
@@ -71,16 +71,16 @@ export function useLoteDraft({ tabId, dateKey, pool, operatorId, permission }) {
   // síncrona: de eso dependen el sonido, el toast y el modal de forzado. Por
   // eso leen draftRef.current en vez del estado de la clausura.
   const scan = useCallback((rawCode) => {
-    const salida = scanDraft(draftRef.current, pool, rawCode)
+    const salida = scanDraft(draftRef.current, pool, rawCode, { validatedOrders })
     if (salida.outcome.result !== 'needs_force') commitDraft(salida.draft)
     return salida.outcome
-  }, [pool, commitDraft])
+  }, [pool, commitDraft, validatedOrders])
 
   const forceScan = useCallback((rawCode) => {
-    const salida = scanDraft(draftRef.current, pool, rawCode, { force: true })
+    const salida = scanDraft(draftRef.current, pool, rawCode, { force: true, validatedOrders })
     commitDraft(salida.draft)
     return salida.outcome
-  }, [pool, commitDraft])
+  }, [pool, commitDraft, validatedOrders])
 
   const closeActiveTarima = useCallback((ubicacion) => {
     const salida = closeTarima(draftRef.current, ubicacion)

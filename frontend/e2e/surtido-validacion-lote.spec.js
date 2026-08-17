@@ -53,9 +53,12 @@ async function injectTenantAuth(page) {
 
 /** @type {{ body: any } | null} */
 let commitRecibido = null
+/** @type {any[]} */
+let ordenesValidadas = []
 
 async function mockBackend(page) {
   commitRecibido = null
+  ordenesValidadas = []
 
   // Playwright evalúa las rutas en orden inverso al de registro, así que el
   // catch-all va PRIMERO para que las específicas de abajo lo tapen a él.
@@ -73,6 +76,14 @@ async function mockBackend(page) {
 
   await page.route('**/api/wmshub/proxy/sheet**', route =>
     route.fulfill({ status: 200, contentType: 'text/csv', body: SHEET_CSV })
+  )
+
+  await page.route('**/api/wmshub/pick-batch/estado-ordenes', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: ordenesValidadas }),
+    })
   )
 
   await page.route('**/api/wmshub/pick-batch/commit', async (route) => {
@@ -205,6 +216,23 @@ test.describe('Surtido — validación por lote', () => {
     expect(evento).toMatchObject({
       scan_result: 'ok', tarima_ref: 'T01', ubicacion_nota: 'A1-01-01-01', forced_date_mismatch: false,
     })
+  })
+
+  test('rechaza las cajas de una orden ya validada', async ({ page }) => {
+    ordenesValidadas = [{
+      outbound_order_no: 'OBC-1001', status: 'complete',
+      total_expected: 2, total_scanned: 2, operator_nombre: 'Otro', locked: true,
+    }]
+    await abrirLote(page)
+
+    await expect(page.getByText('Ya validada')).toBeVisible()
+
+    await escanear(page, 'AAA-1')
+    await expect(page.getByText(/ya fue validada y no admite más cajas/)).toBeVisible()
+
+    // La orden que sí está abierta sigue funcionando.
+    await escanear(page, 'BBB-1')
+    await expect(page.getByText(/Caja asignada a OBC-1002/)).toBeVisible()
   })
 
   test('el borrador sobrevive un refresh', async ({ page }) => {

@@ -2,7 +2,9 @@ import { Router } from 'express'
 import { UUID_RE } from '../../../config/database.js'
 import { authenticateToken, loadFullUser } from '../../../shared/middleware/auth.js'
 import { requirePermission } from '../../../shared/middleware/permissions.js'
-import { validateCommitPayload, commitBatch } from '../services/pickBatchService.js'
+import {
+  validateCommitPayload, commitBatch, getOrdersValidationState, OrdersAlreadyValidatedError,
+} from '../services/pickBatchService.js'
 
 const router = Router()
 
@@ -18,8 +20,43 @@ router.post('/commit',
       const data = await commitBatch(req, req.body)
       res.status(201).json({ success: true, data })
     } catch (err) {
+      if (err instanceof OrdersAlreadyValidatedError) {
+        return res.status(409).json({
+          success: false,
+          code: err.code,
+          error: 'Hay órdenes del lote que ya fueron validadas',
+          details: {
+            orders: err.orders.map(o => ({
+              outbound_order_no: o.outbound_order_no,
+              operator: o.operator_nombre || null,
+              total_scanned: o.total_scanned,
+              total_expected: o.total_expected,
+            })),
+          },
+        })
+      }
       console.error('POST wmshub/pick-batch/commit error:', err.message)
       res.status(500).json({ success: false, error: 'Error confirmando el lote de validación' })
+    }
+  }
+)
+
+// Estado de validación de un conjunto de órdenes. El modo lote lo consulta al
+// cargar el pool para saber cuáles ya están cerradas y no dejar escanearlas.
+router.post('/estado-ordenes',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.validacion', 'ver'),
+  async (req, res) => {
+    try {
+      const obcs = Array.isArray(req.body?.obcs) ? req.body.obcs : []
+      if (obcs.length > 2000) {
+        return res.status(400).json({ success: false, error: 'Demasiadas órdenes en la consulta' })
+      }
+      const data = await getOrdersValidationState(req, obcs)
+      res.json({ success: true, data })
+    } catch (err) {
+      console.error('POST wmshub/pick-batch/estado-ordenes error:', err.message)
+      res.status(500).json({ success: false, error: 'Error consultando el estado de las órdenes' })
     }
   }
 )

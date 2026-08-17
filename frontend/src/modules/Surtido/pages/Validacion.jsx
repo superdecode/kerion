@@ -1887,7 +1887,10 @@ const { data: reasonsData } = useQuery({
     }))
   }
 
-  const clearSession = () => {
+  // close=true (por defecto) cierra la pestana y devuelve al inicio; close=false
+  // la deja abierta en el paso de busqueda para validar otra orden sin volver a
+  // pasar por el selector de tipo.
+  const clearSession = ({ close = true } = {}) => {
     sessionStorage.removeItem(storageKey)
     validatedCodeCountsRef.current = new Map()
     setStep('search'); setObc(null); setSessionId(null); setSessionStart(null)
@@ -1900,7 +1903,7 @@ const { data: reasonsData } = useQuery({
     setAutoStartPending(false)
     autoFinalizeLockRef.current = false
     sessionCreateFiredRef.current = false
-    onUpdateTab({ obc: null, step: 'search' })
+    onUpdateTab({ obc: null, step: 'search', close })
   }
 
   const copyObc = () => {
@@ -3129,21 +3132,18 @@ const { data: reasonsData } = useQuery({
                     clearSession()
                   }}
                 >
-                  {isLocked ? t('surtido.validacion.close_only') : t('surtido.validacion.complete_save_close')}
+                  {isLocked ? t('surtido.validacion.close_only') : t('surtido.validacion.complete_finish')}
                 </button>
-                {!isLocked && (
-                  <button
-                    className="btn-primary inline-flex h-10 items-center gap-2"
-                    onClick={() => {
-                      setShowCompletionModal(false)
-                      clearSession()
-                      onNewOrder?.()
-                    }}
-                  >
-                    <ScanBarcode size={14} />
-                    {t('surtido.validacion.complete_new_order')}
-                  </button>
-                )}
+                <button
+                  className="btn-primary inline-flex h-10 items-center gap-2"
+                  onClick={() => {
+                    setShowCompletionModal(false)
+                    clearSession({ close: false })
+                  }}
+                >
+                  <ScanBarcode size={14} />
+                  {t('surtido.validacion.complete_new_order')}
+                </button>
               </div>
             }
           >
@@ -3552,9 +3552,18 @@ export default function SurtidoValidacion() {
     clearLoteDraft(tabId)
   }
 
-  function handleUpdateTab(tabId, { obc, step }) {
+  function handleUpdateTab(tabId, { obc, step, close = true }) {
     if (!obc || step === 'search') {
-      // La sesion termino o se cancelo: la pestana se cierra y, si era la
+      if (!close) {
+        // El operador eligio seguir con otra orden: la pestana se queda abierta
+        // en el paso de busqueda, sin pasar de nuevo por el selector de tipo.
+        setTabs(prev => prev.map(tab => (
+          tab.id === tabId ? { ...tab, label: newTabLabel, tipo: 'por_orden' } : tab
+        )))
+        setActiveTabId(tabId)
+        return
+      }
+      // La sesion termino y no continua: la pestana se cierra y, si era la
       // ultima, el operador vuelve a la pantalla de inicio con el boton central.
       setTabs(prev => {
         const next = prev.filter(tab => tab.id !== tabId)

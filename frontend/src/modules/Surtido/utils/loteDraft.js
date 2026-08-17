@@ -58,7 +58,7 @@ function buildScan(draft, code, rawCode, over) {
   }
 }
 
-export function scanDraft(draft, pool, rawCode, { force = false } = {}) {
+export function scanDraft(draft, pool, rawCode, { force = false, validatedOrders = null } = {}) {
   const code = normalizeScanCode(rawCode)
   if (!code) return { draft, outcome: { result: 'ignored', code: '', orderNo: null } }
 
@@ -75,6 +75,20 @@ export function scanDraft(draft, pool, rawCode, { force = false } = {}) {
   if (status === 'none') {
     const scan = buildScan(draft, code, rawCode, { result: 'not_found' })
     return { draft: appendScan(draft, scan), outcome: { result: 'not_found', code, orderNo: null } }
+  }
+
+  // Una orden ya validada (por orden o por lote) no admite mas cajas. Se revisa
+  // antes que el forzado y el duplicado: ninguno de los dos aplica si la orden
+  // ya esta cerrada, y el backend rechazaria el commit entero.
+  if (validatedOrders && matches.some(m => validatedOrders.has(m.outboundOrderNo))) {
+    const match = matches.find(m => validatedOrders.has(m.outboundOrderNo))
+    const scan = buildScan(draft, code, rawCode, {
+      result: 'already_validated', orderNo: match.outboundOrderNo, canonical: match.canonical,
+    })
+    return {
+      draft: appendScan(draft, scan),
+      outcome: { result: 'already_validated', code, orderNo: match.outboundOrderNo },
+    }
   }
 
   if (status === 'adjacent' && !force) {

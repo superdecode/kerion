@@ -81,7 +81,7 @@ function OrderDetail({ progreso, operadorNombre, ubicacionPorTarima, t }) {
   )
 }
 
-function OrderRow({ order, progreso, expandido, onToggle, operadorNombre, ubicacionPorTarima, t }) {
+function OrderRow({ order, progreso, expandido, onToggle, operadorNombre, ubicacionPorTarima, yaValidada, t }) {
   const validadas = progreso.validated.length
   return (
     <div className="border-b border-warm-100 last:border-b-0">
@@ -99,6 +99,11 @@ function OrderRow({ order, progreso, expandido, onToggle, operadorNombre, ubicac
             <p className="text-xs text-warm-700 font-medium truncate">{order.receiverName}</p>
           )}
         </div>
+        {yaValidada && (
+          <span className="badge text-[10px] font-semibold bg-danger-50 text-danger-700 shrink-0">
+            {t('surtido.lote.panel.yaValidada')}
+          </span>
+        )}
         <span className="text-[11px] font-semibold text-warm-500 tabular-nums shrink-0">
           {validadas}/{order.expectedCount}
         </span>
@@ -128,7 +133,7 @@ function Section({ icon: Icon, title, count, tone, children }) {
   )
 }
 
-export default function LotePoolSidebar({ pool, progress, visible, onToggle, operadorNombre, ubicacionPorTarima }) {
+export default function LotePoolSidebar({ pool, progress, visible, onToggle, operadorNombre, ubicacionPorTarima, validatedOrders }) {
   const { t } = useI18nStore()
   const [expandida, setExpandida] = useState(null)
 
@@ -177,6 +182,7 @@ export default function LotePoolSidebar({ pool, progress, visible, onToggle, ope
               onToggle={() => setExpandida(expandida === order.outboundOrderNo ? null : order.outboundOrderNo)}
               operadorNombre={operadorNombre}
               ubicacionPorTarima={ubicacionPorTarima}
+              yaValidada={validatedOrders?.has(order.outboundOrderNo) ?? false}
               t={t}
             />
           ))}
@@ -197,6 +203,7 @@ export default function LotePoolSidebar({ pool, progress, visible, onToggle, ope
               onToggle={() => setExpandida(expandida === order.outboundOrderNo ? null : order.outboundOrderNo)}
               operadorNombre={operadorNombre}
               ubicacionPorTarima={ubicacionPorTarima}
+              yaValidada={validatedOrders?.has(order.outboundOrderNo) ?? false}
               t={t}
             />
           ))}
