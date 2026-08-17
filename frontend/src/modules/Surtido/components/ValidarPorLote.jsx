@@ -79,6 +79,13 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
     () => new Set((estadoData?.data ?? []).filter(o => o.locked).map(o => o.outbound_order_no)),
     [estadoData]
   )
+  // Conteos reales (total_scanned/total_expected) de una orden que ya se
+  // validó en otra sesión — el panel los usa en vez del progreso de este
+  // borrador, que para esas órdenes siempre está vacío.
+  const validationSnapshots = useMemo(
+    () => new Map((estadoData?.data ?? []).filter(o => o.locked).map(o => [o.outbound_order_no, o])),
+    [estadoData]
+  )
 
   const lote = useLoteDraft({
     tabId, dateKey: fecha, pool, operatorId: user?.id, permission, validatedOrders,
@@ -235,11 +242,12 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
       canConfirm: canCreate && lote.summary.cajasValidadas > 0 && !isOffline,
       onConfirm: abrirConfirmacion,
       panelCount: pool.orders.length,
+      panelVisible: sidebarVisible,
       onTogglePanel: () => setSidebarVisible(v => !v),
     })
   }, [
     onSessionChange, isActive, pool.orders.length, fecha, isOffline,
-    lote.summary.cajasValidadas, canCreate,
+    lote.summary.cajasValidadas, canCreate, sidebarVisible,
   ]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {
@@ -341,6 +349,7 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
           operadorNombre={operadorNombre}
           ubicacionPorTarima={ubicacionPorTarima}
           validatedOrders={validatedOrders}
+          validationSnapshots={validationSnapshots}
           canRemoveScanById={lote.canRemoveScanById}
           onRemoveScan={lote.removeScanById}
         />

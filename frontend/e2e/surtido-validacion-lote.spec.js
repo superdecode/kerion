@@ -239,6 +239,22 @@ test.describe('Surtido — validación por lote', () => {
     await expect(page.locator('header')).toHaveCount(1)
   })
 
+  test('el boton de panel solo aparece cuando el panel esta oculto, en la misma cabecera', async ({ page }) => {
+    await abrirLote(page)
+    const header = page.locator('header')
+    const toggle = header.getByRole('button', { name: 'Mostrar panel de órdenes' })
+
+    // El panel arranca visible: el botón para reabrirlo no debe estar.
+    await expect(toggle).toHaveCount(0)
+
+    // Se colapsa desde el propio panel (su botón de cerrar) y el toggle aparece.
+    await page.locator('aside').getByRole('button', { name: 'Cerrar', exact: true }).click()
+    await expect(toggle).toBeVisible()
+
+    await toggle.click()
+    await expect(toggle).toHaveCount(0)
+  })
+
   test('cancelar lote esta disponible desde el arranque, sin haber escaneado nada', async ({ page }) => {
     await abrirLote(page)
     // Sin ningún escaneo todavía — el botón debe seguir habilitado para poder
@@ -271,14 +287,27 @@ test.describe('Surtido — validación por lote', () => {
     })
   })
 
-  test('rechaza las cajas de una orden ya validada', async ({ page }) => {
+  test('una orden validada en otra sesion se etiqueta Validada, con el conteo real', async ({ page }) => {
+    // total_expected/total_scanned a propósito DISTINTOS del 2 que el sheet
+    // de hoy muestra para OBC-1001 — si la tarjeta mostrara el progreso local
+    // (vacío, 0/2) en vez del snapshot real del servidor, esta prueba fallaría.
     ordenesValidadas = [{
       outbound_order_no: 'OBC-1001', status: 'complete',
-      total_expected: 2, total_scanned: 2, operator_nombre: 'Otro', locked: true,
+      total_expected: 5, total_scanned: 5, operator_nombre: 'Otro Operador', locked: true,
     }]
     await abrirLote(page)
 
-    await expect(page.getByText('Ya validada')).toBeVisible()
+    // Ya no se llama "Ya validada" — es "Validada", igual que una orden
+    // completada en este mismo lote.
+    await expect(page.getByText('Validada', { exact: true })).toBeVisible()
+    await expect(page.getByText('Ya validada')).toHaveCount(0)
+    await expect(page.getByText('5/5')).toBeVisible()
+
+    // El texto del OBC está dentro del botón interno de "copiar" (stopPropagation);
+    // se hace clic en el badge de conteo para expandir la tarjeta sin copiar nada.
+    await page.getByText('5/5').click()
+    await expect(page.getByText('Validada en otra sesión')).toBeVisible()
+    await expect(page.getByText('Otro Operador')).toBeVisible()
 
     await escanear(page, 'AAA-1')
     await expect(page.getByText(/ya fue validada y no admite más cajas/)).toBeVisible()

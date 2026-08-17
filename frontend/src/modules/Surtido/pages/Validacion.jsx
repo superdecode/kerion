@@ -3681,14 +3681,19 @@ export default function SurtidoValidacion() {
       )}
       {activeSession?.kind === 'por_lote' && (
         <>
-          <button
-            className="xl:hidden h-8 px-2 rounded-lg text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
-            onClick={activeSession.onTogglePanel}
-            title={t('surtido.lote.panel.title')}
-          >
-            <PanelRightOpen className="w-3.5 h-3.5" />
-            {activeSession.panelCount}
-          </button>
+          {/* Mismo botón que "Mostrar panel de órdenes" en Despacho: cuadrado
+              con borde, solo visible mientras el panel está oculto — cuando
+              está abierto, su propio encabezado trae el botón de cerrar. */}
+          {!activeSession.panelVisible && (
+            <button
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 bg-white text-warm-600 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600 shrink-0"
+              onClick={activeSession.onTogglePanel}
+              title={t('surtido.lote.panel.mostrarPanel')}
+              aria-label={t('surtido.lote.panel.mostrarPanel')}
+            >
+              <PanelRightOpen className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button
             className="h-8 px-2 rounded-lg text-danger-600 bg-danger-50 hover:bg-danger-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={activeSession.onCancel}

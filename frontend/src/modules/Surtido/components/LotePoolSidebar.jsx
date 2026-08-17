@@ -1,8 +1,8 @@
 import { memo, useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { CheckCircle2, PanelRightClose, PanelRightOpen, Search, X, Copy, Trash2 } from 'lucide-react'
+import { CheckCircle2, PanelRightClose, Search, X, Copy, Trash2 } from 'lucide-react'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
-import { fmtTimeShort } from '../../../core/utils/dateFormat'
+import { fmtTimeShort, fmtDateTime } from '../../../core/utils/dateFormat'
 
 // Mismo patrón que OrderSearchBox en Despacho/ValidarPorDestino: debounce corto,
 // input controlado localmente para no re-renderizar la lista en cada tecla.
@@ -41,14 +41,34 @@ const SidebarSearchBox = memo(function SidebarSearchBox({ onSearchChange, placeh
 })
 
 // Estado único por orden — reemplaza el desglose "falta N" repetido por caja:
-// un solo badge que dice qué hace falta hacer con la orden.
-function estadoOrden({ complete, yaValidada }, t) {
-  if (yaValidada) return { label: t('surtido.lote.panel.yaValidada'), cls: 'bg-danger-50 text-danger-700' }
-  if (complete) return { label: t('surtido.lote.panel.validada'), cls: 'bg-success-100 text-success-700' }
+// un solo badge que dice qué hace falta hacer con la orden. Una orden ya
+// validada (en este lote o en cualquier otra sesión) se llama "Validada" sin
+// más — no hay un estado distinto de "ya" para el operador.
+function estadoOrden(completa, t) {
+  if (completa) return { label: t('surtido.lote.panel.validada'), cls: 'bg-success-100 text-success-700' }
   return { label: t('surtido.lote.panel.pendiente'), cls: 'bg-warm-100 text-warm-600' }
 }
 
-function OrderDetail({ progreso, operadorNombre, ubicacionPorTarima, canRemoveScanById, onRemoveScan, t }) {
+function OrderDetail({ progreso, operadorNombre, ubicacionPorTarima, snapshot, canRemoveScanById, onRemoveScan, t }) {
+  // Validada en otra sesión (por orden, o por lote en otro momento): no hay
+  // desglose de cajas que mostrar aquí — esos escaneos viven en aquella
+  // sesión, no en este borrador. Se muestra quién y cuándo la cerró.
+  if (snapshot) {
+    return (
+      <div className="px-3.5 pb-3.5 pt-1 border-t border-warm-100">
+        <div className="rounded-lg bg-success-50 border border-success-100 px-3 py-2.5">
+          <p className="text-[11px] font-semibold text-success-700">
+            {t('surtido.lote.panel.validadaPrevia')}
+          </p>
+          <p className="text-[10px] text-warm-500 mt-0.5">
+            {snapshot.operator_nombre || '—'}
+            {snapshot.completed_at ? ` · ${fmtDateTime(snapshot.completed_at)}` : ''}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="px-3.5 pb-3.5 pt-1 border-t border-warm-100">
       {progreso.pendingBoxes.length > 0 && (
@@ -107,13 +127,18 @@ function OrderDetail({ progreso, operadorNombre, ubicacionPorTarima, canRemoveSc
   )
 }
 
-function OrderCard({ order, progreso, expandido, onToggle, operadorNombre, ubicacionPorTarima, yaValidada, canRemoveScanById, onRemoveScan, t, addToast }) {
-  const validadas = progreso.validated.length
-  const estado = estadoOrden({ complete: progreso.complete, yaValidada }, t)
+function OrderCard({ order, progreso, expandido, onToggle, operadorNombre, ubicacionPorTarima, snapshot, canRemoveScanById, onRemoveScan, t, addToast }) {
+  // Una orden ya validada en otra sesión no tiene escaneos EN ESTE borrador
+  // (progreso.validated viene vacío) — su conteo real es el que reporta el
+  // snapshot del servidor, no el de este lote.
+  const completa = Boolean(snapshot) || progreso.complete
+  const validadas = snapshot ? snapshot.total_scanned : progreso.validated.length
+  const esperadas = snapshot ? snapshot.total_expected : order.expectedCount
+  const estado = estadoOrden(completa, t)
 
   return (
     <div className={`rounded-2xl border transition-all ${
-      progreso.complete ? 'border-success-200 bg-gradient-to-br from-success-50/60 via-white to-white' : 'border-warm-200/90 bg-white'
+      completa ? 'border-success-200 bg-gradient-to-br from-success-50/60 via-white to-white' : 'border-warm-200/90 bg-white'
     }`}>
       <button type="button" onClick={onToggle} className="w-full text-left p-3">
         <div className="flex items-start justify-between gap-2">
@@ -130,9 +155,9 @@ function OrderCard({ order, progreso, expandido, onToggle, operadorNombre, ubica
             <Copy className="h-3 w-3 shrink-0 text-warm-300 opacity-0 transition-opacity group-hover:opacity-100" />
           </button>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black tabular-nums ${
-            progreso.complete ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-600'
+            completa ? 'bg-success-100 text-success-700' : 'bg-warm-100 text-warm-600'
           }`}>
-            {validadas}/{order.expectedCount}
+            {validadas}/{esperadas}
           </span>
         </div>
         {order.receiverName && (
@@ -147,6 +172,7 @@ function OrderCard({ order, progreso, expandido, onToggle, operadorNombre, ubica
           progreso={progreso}
           operadorNombre={operadorNombre}
           ubicacionPorTarima={ubicacionPorTarima}
+          snapshot={snapshot}
           canRemoveScanById={canRemoveScanById}
           onRemoveScan={onRemoveScan}
           t={t}
@@ -158,12 +184,19 @@ function OrderCard({ order, progreso, expandido, onToggle, operadorNombre, ubica
 
 const FILTROS = ['todas', 'pendientes', 'completas']
 
-export default function LotePoolSidebar({ pool, progress, visible, onToggle, operadorNombre, ubicacionPorTarima, validatedOrders, canRemoveScanById, onRemoveScan }) {
+export default function LotePoolSidebar({ pool, progress, visible, onToggle, operadorNombre, ubicacionPorTarima, validatedOrders, validationSnapshots, canRemoveScanById, onRemoveScan }) {
   const { t } = useI18nStore()
   const { addToast } = useToastStore()
   const [expandida, setExpandida] = useState(null)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState('todas')
+
+  // Efectivamente completa: o se llenó en este borrador, o el servidor ya
+  // reporta la orden como validada en otra sesión. Los filtros y el conteo de
+  // arriba tienen que coincidir con lo que ve cada tarjeta.
+  const esCompleta = useCallback((o) => (
+    (validatedOrders?.has(o.outboundOrderNo) ?? false) || (progress.get(o.outboundOrderNo)?.complete ?? false)
+  ), [validatedOrders, progress])
 
   const buscadas = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
@@ -175,31 +208,19 @@ export default function LotePoolSidebar({ pool, progress, visible, onToggle, ope
 
   const counts = useMemo(() => ({
     todas: buscadas.length,
-    pendientes: buscadas.filter(o => !progress.get(o.outboundOrderNo)?.complete).length,
-    completas: buscadas.filter(o => progress.get(o.outboundOrderNo)?.complete).length,
-  }), [buscadas, progress])
+    pendientes: buscadas.filter(o => !esCompleta(o)).length,
+    completas: buscadas.filter(o => esCompleta(o)).length,
+  }), [buscadas, esCompleta])
 
   const filtradas = useMemo(() => {
-    if (filtro === 'pendientes') return buscadas.filter(o => !progress.get(o.outboundOrderNo)?.complete)
-    if (filtro === 'completas') return buscadas.filter(o => progress.get(o.outboundOrderNo)?.complete)
+    if (filtro === 'pendientes') return buscadas.filter(o => !esCompleta(o))
+    if (filtro === 'completas') return buscadas.filter(o => esCompleta(o))
     return buscadas
-  }, [buscadas, filtro, progress])
+  }, [buscadas, filtro, esCompleta])
 
-  if (!visible) {
-    // Botón flotante, sin borde ni línea de división con el contenido — mismo
-    // criterio que los demás botones de esta pantalla (Despacho/DropScan usan
-    // pastillas de color, no bordes).
-    return (
-      <button
-        onClick={onToggle}
-        aria-label={t('surtido.lote.panel.title')}
-        title={t('surtido.lote.panel.title')}
-        className="hidden lg:flex fixed right-4 top-20 z-30 h-10 w-10 items-center justify-center rounded-full bg-white text-primary-600 shadow-lg hover:bg-primary-50 hover:shadow-xl transition-all"
-      >
-        <PanelRightOpen size={16} />
-      </button>
-    )
-  }
+  // El botón para reabrir el panel colapsado vive en la cabecera de la
+  // página (junto a Cancelar/Confirmar) — no aquí, para no duplicar controles.
+  if (!visible) return null
 
   return (
     <aside className="w-full lg:w-[22rem] shrink-0 border-t lg:border-t-0 lg:border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 flex flex-col min-h-0">
@@ -259,7 +280,7 @@ export default function LotePoolSidebar({ pool, progress, visible, onToggle, ope
               onToggle={() => setExpandida(expandida === order.outboundOrderNo ? null : order.outboundOrderNo)}
               operadorNombre={operadorNombre}
               ubicacionPorTarima={ubicacionPorTarima}
-              yaValidada={validatedOrders?.has(order.outboundOrderNo) ?? false}
+              snapshot={validationSnapshots?.get(order.outboundOrderNo) ?? null}
               canRemoveScanById={canRemoveScanById}
               onRemoveScan={onRemoveScan}
               t={t}
