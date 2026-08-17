@@ -33,6 +33,7 @@ import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../..
 import { useSurtidoStore } from '../stores/surtidoStore'
 import { validateLocationValue } from '../utils/locationValue'
 import ValidacionTypeModal from '../components/ValidacionTypeModal'
+import { loadDraft } from '../hooks/useLoteDraft'
 import ValidarPorLote from '../components/ValidarPorLote'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 
@@ -71,6 +72,13 @@ function buildDefaultTab(label) {
 function hasStoredSessionForTab(tabId) {
   const stored = safeParseJson(sessionStorage.getItem(SESSION_KEY(tabId)))
   return !!(stored?.obc && stored?.sessionId)
+}
+
+// Una pestana de lote no tiene sesion por orden en sessionStorage: su trabajo
+// vive en el borrador de localStorage. Sin esto, la poda de pestanas huerfanas
+// se la llevaba en cada recarga y el borrador quedaba inalcanzable.
+function hasStoredLoteDraft(tabId) {
+  return loadDraft(tabId) !== null
 }
 
 function normalizeStoredTabs(value, fallbackLabel) {
@@ -3419,7 +3427,10 @@ export default function SurtidoValidacion() {
 
   useEffect(() => {
     setTabs((prev) => {
-      const cleanTabs = prev.filter((tab) => tab.label === newTabLabel || hasStoredSessionForTab(tab.id))
+      const cleanTabs = prev.filter((tab) => (
+        tab.label === newTabLabel
+        || (tab.tipo === 'por_lote' ? hasStoredLoteDraft(tab.id) : hasStoredSessionForTab(tab.id))
+      ))
       if (cleanTabs.length > 0) return cleanTabs
       return [buildDefaultTab(newTabLabel)]
     })

@@ -6,7 +6,6 @@ import {
 import ScanInputBar from '../../Shared/Wms/ScanInputBar'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
-import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
@@ -94,7 +93,6 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
   const [confirmarModal, setConfirmarModal] = useState(null)
   const [notes, setNotes] = useState('')
   const [sidebarVisible, setSidebarVisible] = useState(true)
-  const [offlineBlocked, setOfflineBlocked] = useState(false)
 
   const permission = hasPermission('surtido.validacion', 'eliminar') ? 'eliminar' : 'crear'
   const canCreate = hasPermission('surtido.validacion', 'crear')
@@ -215,8 +213,13 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
     },
   })
 
+  // Sin red no se confirma, pero el operador NO queda bloqueado: el borrador
+  // sigue local e intacto y puede seguir escaneando hasta que vuelva la red.
   function abrirConfirmacion() {
-    if (isOffline) { setOfflineBlocked(true); return }
+    if (isOffline) {
+      toast.warning(t('surtido.lote.confirmar.offline'))
+      return
+    }
     setConfirmarModal('confirmar')
   }
 
@@ -316,8 +319,12 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
         </button>
         <button
           onClick={abrirConfirmacion}
-          disabled={!canCreate || lote.summary.tarimasCerradas === 0 || tarimaAbierta}
-          title={tarimaAbierta ? t('surtido.lote.confirmar.tarimaAbierta') : undefined}
+          disabled={!canCreate || lote.summary.tarimasCerradas === 0 || tarimaAbierta || isOffline}
+          title={
+            isOffline ? t('surtido.lote.confirmar.offline')
+              : tarimaAbierta ? t('surtido.lote.confirmar.tarimaAbierta')
+              : undefined
+          }
           className="btn-primary ml-auto inline-flex items-center gap-1.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <CheckCircle2 size={14} /> {t('surtido.lote.confirmar')}
@@ -349,12 +356,6 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
           }
           doCommit()
         }}
-      />
-
-      <OfflineBlockedModal
-        isBlocked={offlineBlocked}
-        message={t('surtido.lote.confirmar.error')}
-        onRetry={() => { setOfflineBlocked(false); abrirConfirmacion() }}
       />
     </div>
   )
