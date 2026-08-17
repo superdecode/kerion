@@ -55,10 +55,13 @@ async function injectTenantAuth(page) {
 let commitRecibido = null
 /** @type {any[]} */
 let ordenesValidadas = []
+/** @type {any[]} */
+let rechazosRecibidos = []
 
 async function mockBackend(page) {
   commitRecibido = null
   ordenesValidadas = []
+  rechazosRecibidos = []
 
   // Playwright evalúa las rutas en orden inverso al de registro, así que el
   // catch-all va PRIMERO para que las específicas de abajo lo tapen a él.
@@ -86,6 +89,11 @@ async function mockBackend(page) {
     })
   )
 
+  await page.route('**/api/wmshub/pick-batch/rejection', async (route) => {
+    rechazosRecibidos.push(JSON.parse(route.request().postData() || '{}'))
+    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ success: true }) })
+  })
+
   await page.route('**/api/wmshub/pick-batch/commit', async (route) => {
     commitRecibido = { body: JSON.parse(route.request().postData() || '{}') }
     await route.fulfill({
@@ -96,7 +104,14 @@ async function mockBackend(page) {
   })
 }
 
-async function abrirLote(page) {
+// La ubicación se pide ANTES de poder escanear — no hay input de escaneo hasta
+// confirmarla, igual que en el modo por orden.
+async function capturarUbicacion(page, texto) {
+  await page.getByLabel('Ubicación de la tarima').fill(texto)
+  await page.getByRole('button', { name: 'Guardar' }).click()
+}
+
+async function abrirLote(page, { ubicacion = 'A1-01-01-01' } = {}) {
   await page.goto('/surtido/validacion', { waitUntil: 'domcontentloaded' })
   // Sin sesiones abiertas la pantalla es el estado vacío con el botón central.
   await page.getByRole('button', { name: 'Iniciar validación' }).click()
@@ -106,6 +121,7 @@ async function abrirLote(page) {
   await page.locator('input[type="date"]').fill(FECHA)
   await page.getByRole('button', { name: /Iniciar lote/i }).click()
   await expect(page.getByText('Órdenes completas')).toBeVisible({ timeout: 15000 })
+  if (ubicacion) await capturarUbicacion(page, ubicacion)
 }
 
 async function escanear(page, codigo) {
@@ -139,6 +155,19 @@ test.describe('Surtido — validación por lote', () => {
     await pestana.getByRole('button', { name: 'Cerrar' }).click()
 
     await expect(page.getByRole('button', { name: 'Iniciar validación' })).toBeVisible({ timeout: 10000 })
+  })
+
+  test('el modal muestra el resumen de ordenes y cajas al elegir la fecha', async ({ page }) => {
+    await page.goto('/surtido/validacion', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Iniciar validación' }).click()
+    await page.getByRole('button', { name: /^Validación por Lote/ }).click()
+    await page.locator('input[type="date"]').fill(FECHA)
+
+    // Dos órdenes, 3 cajas (AAA-1, AAA-2, BBB-1) — antes de darle Iniciar lote.
+    const pillOrdenes = page.locator('div', { hasText: 'órdenes' }).last()
+    await expect(pillOrdenes).toContainText('2', { timeout: 10000 })
+    const pillCajas = page.locator('div', { hasText: 'cajas' }).last()
+    await expect(pillCajas).toContainText('3')
   })
 
   test('carga el pool de la fecha elegida', async ({ page }) => {
@@ -176,27 +205,35 @@ test.describe('Surtido — validación por lote', () => {
     await expect(page.getByText(/Caja asignada a OBC-0999/)).toBeVisible()
   })
 
-  test('cerrar una tarima pide ubicacion y abre la siguiente', async ({ page }) => {
+  test('la ubicacion se pide antes de poder escanear', async ({ page }) => {
+    await abrirLote(page, { ubicacion: null })
+    // Sin ubicación no hay input de escaneo — solo la puerta que la pide.
+    await expect(page.getByPlaceholder('Escanea una caja del lote')).toHaveCount(0)
+    await expect(page.getByLabel('Ubicación de la tarima')).toBeVisible()
+
+    await capturarUbicacion(page, 'A1-01-01-01')
+    await expect(page.getByPlaceholder('Escanea una caja del lote')).toBeVisible()
+  })
+
+  test('siguiente tarima cierra la actual y vuelve a pedir ubicacion', async ({ page }) => {
     await abrirLote(page)
     await escanear(page, 'AAA-1')
 
-    await page.getByRole('button', { name: 'Cerrar tarima' }).click()
-    await page.getByLabel('Ubicación de la tarima').fill('A1-01-01-01')
-    await page.getByRole('button', { name: 'Guardar' }).click()
+    await page.getByRole('button', { name: 'Siguiente tarima' }).click()
+    // T02 todavía no tiene ubicación: vuelve a aparecer la puerta.
+    await expect(page.getByLabel('Ubicación de la tarima')).toBeVisible()
+    await capturarUbicacion(page, 'B2-02-02-02')
 
-    // T02 aparece en la tarjeta de resumen y en el panel de tarima.
+    // T02 aparece en la tarjeta de resumen y T01 queda en las cerradas.
     await expect(page.getByText('T02').first()).toBeVisible()
     await expect(page.getByText('A1-01-01-01').first()).toBeVisible()
+    await expect(page.getByText('B2-02-02-02').first()).toBeVisible()
   })
 
-  test('confirmar manda el lote con tarima, ubicacion y orden asignada', async ({ page }) => {
+  test('confirmar manda el lote con tarima, ubicacion y orden asignada, sin cerrar la tarima', async ({ page }) => {
     await abrirLote(page)
     await escanear(page, 'AAA-1')
     await escanear(page, 'BBB-1')
-
-    await page.getByRole('button', { name: 'Cerrar tarima' }).click()
-    await page.getByLabel('Ubicación de la tarima').fill('A1-01-01-01')
-    await page.getByRole('button', { name: 'Guardar' }).click()
 
     await page.getByRole('button', { name: 'Confirmar lote' }).click()
     await page.getByRole('button', { name: 'Confirmar lote' }).last().click()
@@ -233,6 +270,29 @@ test.describe('Surtido — validación por lote', () => {
     // La orden que sí está abierta sigue funcionando.
     await escanear(page, 'BBB-1')
     await expect(page.getByText(/Caja asignada a OBC-1002/)).toBeVisible()
+  })
+
+  test('la barra de resultado permite deshacer el ultimo escaneo', async ({ page }) => {
+    await abrirLote(page)
+    await escanear(page, 'AAA-1')
+    await expect(page.getByText(/Caja asignada a OBC-1001/)).toBeVisible()
+
+    await page.getByRole('button', { name: 'Deshacer' }).click()
+    // El escaneo desapareció: se puede volver a escanear el mismo código como ok.
+    await escanear(page, 'AAA-1')
+    await expect(page.getByText(/Caja asignada a OBC-1001/)).toBeVisible()
+  })
+
+  test('los rechazos se registran para trazabilidad y aparecen en su propia seccion', async ({ page }) => {
+    await abrirLote(page)
+    await escanear(page, 'ZZZ-9')
+    await expect(page.getByText(/no pertenece a ninguna orden del lote/)).toBeVisible()
+
+    await expect.poll(() => rechazosRecibidos.length).toBeGreaterThan(0)
+    expect(rechazosRecibidos[0]).toMatchObject({ fecha_lote: FECHA, reason: 'not_found' })
+
+    await page.getByRole('button', { name: /Rechazos/ }).click()
+    await expect(page.getByText('No encontrado')).toBeVisible()
   })
 
   test('el borrador sobrevive un refresh', async ({ page }) => {

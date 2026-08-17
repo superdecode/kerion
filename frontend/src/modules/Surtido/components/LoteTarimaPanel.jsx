@@ -1,87 +1,41 @@
-import { useState, useRef, useEffect } from 'react'
-import { Layers, MapPin, Check, Trash2, X } from 'lucide-react'
+import { useState } from 'react'
+import { Layers, MoveRight, Trash2, X, Radio } from 'lucide-react'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { fmtTimeShort } from '../../../core/utils/dateFormat'
 
-export default function LoteTarimaPanel({ draft, onCloseTarima, onRemoveTarima, canRemoveTarima }) {
+/**
+ * Barra compacta de la tarima activa (ya con ubicación — LoteUbicacionGate
+ * resuelve eso antes de mostrar esto) más el listado de tarimas cerradas.
+ */
+export default function LoteTarimaPanel({ draft, onNextTarima, onRemoveTarima, canRemoveTarima }) {
   const { t } = useI18nStore()
-  const [capturando, setCapturando] = useState(false)
-  const [ubicacion, setUbicacion] = useState('')
   const [confirmarBorrado, setConfirmarBorrado] = useState(null)
-  const inputRef = useRef(null)
 
-  useEffect(() => {
-    if (capturando) requestAnimationFrame(() => inputRef.current?.focus())
-  }, [capturando])
-
+  const activa = draft.tarimas.find(tar => tar.ref === draft.activeTarimaRef)
   const cajasEnTarima = draft.scans.filter(
     s => s.tarimaRef === draft.activeTarimaRef && s.result === 'ok'
   ).length
   const cerradas = draft.tarimas.filter(tar => tar.closedAt)
 
-  function confirmarUbicacion() {
-    const valor = ubicacion.trim()
-    if (!valor) return
-    const error = onCloseTarima(valor)
-    if (!error) {
-      setUbicacion('')
-      setCapturando(false)
-    }
-  }
-
   return (
     <div className="card overflow-hidden">
-      <div className="px-4 py-3 border-b border-warm-100 flex items-center gap-2">
-        <Layers size={14} className="text-accent-500 shrink-0" />
-        <span className="text-xs font-semibold text-warm-600">{t('surtido.lote.tarima.activa')}</span>
-        <span className="font-mono font-semibold text-primary-700 text-sm">{draft.activeTarimaRef}</span>
-        <span className="ml-auto text-[11px] text-warm-500 tabular-nums">
+      <div className="px-4 py-3 flex items-center gap-2.5 flex-wrap">
+        <span className="inline-flex items-center gap-1 rounded-full border border-accent-200 bg-accent-50 px-2.5 py-1 text-xs font-bold text-accent-700">
+          <Radio className="w-3 h-3" />{draft.activeTarimaRef}
+        </span>
+        <span className="font-mono text-xs text-warm-600 truncate">{activa?.ubicacionNota}</span>
+        <span className="text-[11px] text-warm-500 tabular-nums">
           {cajasEnTarima} {t('surtido.lote.tarima.cajas')}
         </span>
-      </div>
-
-      <div className="px-4 py-3">
-        {capturando ? (
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 min-w-0">
-              <MapPin size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-warm-400" />
-              <input
-                ref={inputRef}
-                value={ubicacion}
-                onChange={e => setUbicacion(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') { e.preventDefault(); confirmarUbicacion() }
-                  if (e.key === 'Escape') { setCapturando(false); setUbicacion('') }
-                }}
-                placeholder={t('surtido.lote.tarima.ubicacionPlaceholder')}
-                aria-label={t('surtido.lote.tarima.ubicacion')}
-                className="input-field w-full text-sm font-mono pl-8"
-              />
-            </div>
-            <button
-              onClick={confirmarUbicacion}
-              disabled={!ubicacion.trim()}
-              className="btn-primary inline-flex items-center gap-1.5 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Check size={13} /> {t('common.save')}
-            </button>
-            <button
-              onClick={() => { setCapturando(false); setUbicacion('') }}
-              aria-label={t('common.cancel')}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-warm-200 text-warm-500 hover:bg-warm-100 transition-colors shrink-0"
-            >
-              <X size={13} />
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setCapturando(true)}
-            disabled={cajasEnTarima === 0}
-            className="btn-secondary w-full inline-flex items-center justify-center gap-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <MapPin size={14} /> {t('surtido.lote.tarima.cerrar')}
-          </button>
-        )}
+        <button
+          onClick={onNextTarima}
+          disabled={cajasEnTarima === 0}
+          title={cajasEnTarima === 0 ? t('surtido.lote.tarima.sinEscaneos') : ''}
+          className="ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-xl border border-accent-300 bg-accent-50 text-accent-700 text-xs font-semibold hover:bg-accent-100 transition-colors disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-accent-50"
+        >
+          <MoveRight className="w-3.5 h-3.5" />
+          {t('surtido.lote.tarima.siguiente')}
+        </button>
       </div>
 
       {cerradas.length > 0 && (

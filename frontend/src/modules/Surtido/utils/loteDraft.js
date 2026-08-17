@@ -69,12 +69,12 @@ export function scanDraft(draft, pool, rawCode, { force = false, validatedOrders
   // igual al validar contra el snapshot de la orden.
   if (status === 'ambiguous') {
     const scan = buildScan(draft, code, rawCode, { result: 'ambiguous' })
-    return { draft: appendScan(draft, scan), outcome: { result: 'ambiguous', code, orderNo: null } }
+    return { draft: appendScan(draft, scan), outcome: { result: 'ambiguous', code, orderNo: null, scanId: scan.id } }
   }
 
   if (status === 'none') {
     const scan = buildScan(draft, code, rawCode, { result: 'not_found' })
-    return { draft: appendScan(draft, scan), outcome: { result: 'not_found', code, orderNo: null } }
+    return { draft: appendScan(draft, scan), outcome: { result: 'not_found', code, orderNo: null, scanId: scan.id } }
   }
 
   // Una orden ya validada (por orden o por lote) no admite mas cajas. Se revisa
@@ -87,7 +87,7 @@ export function scanDraft(draft, pool, rawCode, { force = false, validatedOrders
     })
     return {
       draft: appendScan(draft, scan),
-      outcome: { result: 'already_validated', code, orderNo: match.outboundOrderNo },
+      outcome: { result: 'already_validated', code, orderNo: match.outboundOrderNo, scanId: scan.id },
     }
   }
 
@@ -114,7 +114,7 @@ export function scanDraft(draft, pool, rawCode, { force = false, validatedOrders
     })
     return {
       draft: appendScan(draft, scan),
-      outcome: { result: 'duplicate', code, orderNo: match.outboundOrderNo },
+      outcome: { result: 'duplicate', code, orderNo: match.outboundOrderNo, scanId: scan.id },
     }
   }
 
@@ -128,27 +128,46 @@ export function scanDraft(draft, pool, rawCode, { force = false, validatedOrders
     draft: appendScan(draft, scan),
     outcome: {
       result: 'ok', code, orderNo: match.outboundOrderNo,
-      orderDateKey: match.dateKey, loteDateKey: draft.dateKey,
+      orderDateKey: match.dateKey, loteDateKey: draft.dateKey, scanId: scan.id,
     },
   }
 }
 
-export function closeTarima(draft, ubicacionRaw) {
-  const tieneEscaneos = draft.scans.some(
-    s => s.tarimaRef === draft.activeTarimaRef && s.result === 'ok'
-  )
-  if (!tieneEscaneos) return { draft, error: 'sin_escaneos', summary: null }
-
+/**
+ * Fija la ubicación de la tarima activa. Se pide ANTES de escanear — igual que
+ * el modo por orden pide la ubicación al abrir la sesión — así que esto no
+ * cierra la tarima ni exige que ya tenga cajas: solo dice dónde va a estar lo
+ * que se escanee después.
+ */
+export function setTarimaUbicacion(draft, ubicacionRaw) {
   const validation = validateLocationValue(ubicacionRaw)
   // El summary viaja junto al reason: es el mismo texto que el modo por orden
   // ya muestra ante una ubicación inválida, y evita duplicarlo en i18n.
   if (!validation.ok) return { draft, error: validation.reason, summary: validation.summary }
 
+  const tarimas = draft.tarimas.map(tar =>
+    tar.ref === draft.activeTarimaRef ? { ...tar, ubicacionNota: validation.normalized } : tar
+  )
+  return { draft: { ...draft, tarimas }, error: null, summary: null }
+}
+
+/**
+ * Cierra la tarima activa (ya tiene ubicación, capturada antes de escanear) y
+ * abre la siguiente, todavía sin ubicación — así que el gate de la Task
+ * siguiente se repite antes de que caiga la primera caja en ella.
+ */
+export function advanceTarima(draft) {
+  const activa = draft.tarimas.find(tar => tar.ref === draft.activeTarimaRef)
+  if (!activa?.ubicacionNota) return { draft, error: 'sin_ubicacion' }
+
+  const tieneEscaneos = draft.scans.some(
+    s => s.tarimaRef === draft.activeTarimaRef && s.result === 'ok'
+  )
+  if (!tieneEscaneos) return { draft, error: 'sin_escaneos' }
+
   const closedAt = Date.now()
   const tarimas = draft.tarimas.map(tar =>
-    tar.ref === draft.activeTarimaRef
-      ? { ...tar, ubicacionNota: validation.normalized, closedAt }
-      : tar
+    tar.ref === draft.activeTarimaRef ? { ...tar, closedAt } : tar
   )
   const siguiente = nextTarimaRef(tarimas.map(tar => tar.ref))
   return {
@@ -158,7 +177,6 @@ export function closeTarima(draft, ubicacionRaw) {
       activeTarimaRef: siguiente,
     },
     error: null,
-    summary: null,
   }
 }
 
@@ -242,10 +260,12 @@ function findPoolOrder(pool, orderNo) {
 }
 
 export function buildCommitPayload(draft, pool, notes) {
-  // Solo se confirma lo que está en una tarima cerrada con ubicación: una
-  // tarima abierta todavía no tiene dónde decir que está.
-  const cerradas = draft.tarimas.filter(tar => tar.closedAt && tar.ubicacionNota)
-  const ubicacionPorTarima = new Map(cerradas.map(tar => [tar.ref, tar.ubicacionNota]))
+  // Se confirma cualquier tarima con ubicación, cerrada o no — la ubicación se
+  // captura antes de escanear, así que la tarima activa ya la tiene apenas
+  // llega su primera caja. Solo queda fuera una tarima sin ubicación (nunca
+  // debería tener escaneos, porque la UI bloquea el escaneo hasta que se fija).
+  const conUbicacion = draft.tarimas.filter(tar => tar.ubicacionNota)
+  const ubicacionPorTarima = new Map(conUbicacion.map(tar => [tar.ref, tar.ubicacionNota]))
 
   const eventos = draft.scans.filter(
     s => (s.result === 'ok' || s.result === 'duplicate')
@@ -289,11 +309,21 @@ export function buildCommitPayload(draft, pool, notes) {
   return {
     fecha_lote: draft.dateKey,
     notes: notes || null,
-    tarimas: cerradas.map(tar => ({
+    tarimas: conUbicacion.map(tar => ({
       tarima_ref: tar.ref,
       ubicacion_nota: tar.ubicacionNota,
-      closed_at: new Date(tar.closedAt).toISOString(),
+      closed_at: tar.closedAt ? new Date(tar.closedAt).toISOString() : null,
     })),
     orders,
   }
+}
+
+/**
+ * Escaneos que no se pudieron asignar a ninguna caja (o que sí, pero no
+ * cuentan como una nueva unidad válida): sin match, ambiguos, de una orden ya
+ * cerrada, o duplicados. Es lo único que le queda al operador para revisar
+ * qué se rechazó, porque el feed permanente de escaneos ya no existe.
+ */
+export function rejectedScans(draft) {
+  return draft.scans.filter(s => s.result !== 'ok')
 }

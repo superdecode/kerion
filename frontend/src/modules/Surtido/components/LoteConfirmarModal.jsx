@@ -3,7 +3,7 @@ import Modal from '../../../core/components/common/Modal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 
 export default function LoteConfirmarModal({
-  isOpen, mode, summary, tarimaAbierta, notes, onNotesChange, onConfirm, onClose, isPending,
+  isOpen, mode, summary, notes, onNotesChange, onConfirm, onClose, isPending,
 }) {
   const { t } = useI18nStore()
   const esCancelar = mode === 'cancelar'
@@ -30,7 +30,7 @@ export default function LoteConfirmarModal({
           </button>
           <button
             onClick={onConfirm}
-            disabled={isPending || (!esCancelar && tarimaAbierta)}
+            disabled={isPending}
             className={`inline-flex items-center gap-2 text-sm disabled:opacity-40 disabled:cursor-not-allowed ${
               esCancelar ? 'btn-danger' : 'btn-primary'
             }`}
@@ -44,14 +44,6 @@ export default function LoteConfirmarModal({
       <p className="text-sm text-warm-700 leading-relaxed">
         {esCancelar ? bodyCancelar : bodyConfirmar}
       </p>
-
-      {!esCancelar && tarimaAbierta && (
-        <div className="mt-2.5 rounded-xl border border-warning-200 bg-warning-50/60 px-3 py-2">
-          <p className="text-xs font-medium text-warning-700">
-            {t('surtido.lote.confirmar.tarimaAbierta')}
-          </p>
-        </div>
-      )}
 
       {!esCancelar && (
         <div className="mt-3">

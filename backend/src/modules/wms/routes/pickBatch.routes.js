@@ -61,6 +61,69 @@ router.post('/estado-ordenes',
   }
 )
 
+const REJECTION_REASONS = new Set(['not_found', 'ambiguous', 'already_validated', 'duplicate'])
+
+// Traza en tiempo real de un escaneo que no se pudo asignar como una unidad
+// válida — independiente de si el lote llega a confirmarse o se cancela.
+// Best-effort: el cliente lo manda "fire and forget" y no bloquea el escaneo.
+router.post('/rejection',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.validacion', 'crear'),
+  async (req, res) => {
+    try {
+      const { fecha_lote, scanned_code, normalized_code, reason, related_order_no, tarima_ref, scanned_at } = req.body
+      if (!fecha_lote || !scanned_code || !normalized_code) {
+        return res.status(400).json({ success: false, error: 'fecha_lote, scanned_code y normalized_code son requeridos' })
+      }
+      if (!REJECTION_REASONS.has(String(reason))) {
+        return res.status(400).json({ success: false, error: 'reason inválido' })
+      }
+      const result = await req.tQuery(
+        `INSERT INTO pick_rejections
+           (tenant_id, fecha_lote, operator_id, scanned_code, normalized_code, reason, related_order_no, tarima_ref, scanned_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9::timestamptz, now()))
+         RETURNING *`,
+        [req.tenantId, fecha_lote, req.fullUser?.id || req.user?.id || null, String(scanned_code).trim(),
+         String(normalized_code).trim(), reason, related_order_no || null, tarima_ref || null, scanned_at || null]
+      )
+      res.status(201).json({ success: true, data: result.rows[0] })
+    } catch (err) {
+      console.error('POST wmshub/pick-batch/rejection error:', err.message)
+      res.status(500).json({ success: false, error: 'Error registrando el rechazo' })
+    }
+  }
+)
+
+router.get('/rejections',
+  authenticateToken, loadFullUser,
+  requirePermission('surtido.validacion', 'ver'),
+  async (req, res) => {
+    try {
+      const { fecha_inicio, fecha_fin, operator_id } = req.query
+      const conditions = ['r.tenant_id = $1']
+      const params = [req.tenantId]
+      let p = 2
+      if (fecha_inicio) { conditions.push(`r.fecha_lote >= $${p++}`); params.push(fecha_inicio) }
+      if (fecha_fin)    { conditions.push(`r.fecha_lote <= $${p++}`); params.push(fecha_fin) }
+      if (operator_id)  { conditions.push(`r.operator_id = $${p++}`); params.push(Number(operator_id)) }
+
+      const result = await req.tQuery(
+        `SELECT r.*, u.nombre_completo AS operator_nombre
+         FROM pick_rejections r
+         LEFT JOIN usuarios u ON u.id = r.operator_id
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY r.scanned_at DESC
+         LIMIT 500`,
+        params
+      )
+      res.json({ success: true, data: result.rows })
+    } catch (err) {
+      console.error('GET wmshub/pick-batch/rejections error:', err.message)
+      res.status(500).json({ success: false, error: 'Error listando rechazos' })
+    }
+  }
+)
+
 router.get('/',
   authenticateToken, loadFullUser,
   requirePermission('surtido.validacion', 'ver'),

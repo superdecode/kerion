@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Layers, CheckCircle2, XCircle, AlertCircle, Trash2, RefreshCw, PackageX, X, Lock,
+  Layers, CheckCircle2, RefreshCw, PackageX, X,
+  PanelRightOpen, AlertTriangle, ChevronDown,
 } from 'lucide-react'
 import ScanInputBar from '../../Shared/Wms/ScanInputBar'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
@@ -10,76 +11,27 @@ import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
-import { fmtTimeShort } from '../../../core/utils/dateFormat'
+import { normalizeScanCode } from '../../Shared/Wms/normalizeCode'
 import { refreshSheet } from '../../WmsHub/services/googleSheetsService'
-import { getOutboundBatchByDate, commitPickBatch, getOrdersValidationState } from '../services/surtidoService'
+import {
+  getOutboundBatchByDate, commitPickBatch, getOrdersValidationState, reportPickRejection,
+} from '../services/surtidoService'
 import { buildLotePool } from '../utils/lotePool'
 import { useLoteDraft } from '../hooks/useLoteDraft'
 import LoteResumenCards from './LoteResumenCards'
+import LoteUbicacionGate from './LoteUbicacionGate'
 import LoteTarimaPanel from './LoteTarimaPanel'
+import LoteResultBar from './LoteResultBar'
+import LoteRechazosPanel from './LoteRechazosPanel'
 import LotePoolSidebar from './LotePoolSidebar'
 import LoteForzarFechaModal from './LoteForzarFechaModal'
 import LoteConfirmarModal from './LoteConfirmarModal'
 
-const RESULT_STYLES = {
-  ok:        { icon: CheckCircle2, fg: 'text-success-600', bg: 'bg-success-50' },
-  duplicate: { icon: AlertCircle,  fg: 'text-warning-600', bg: 'bg-warning-50' },
-  not_found: { icon: XCircle,      fg: 'text-danger-600',  bg: 'bg-danger-50' },
-  ambiguous: { icon: XCircle,      fg: 'text-danger-600',  bg: 'bg-danger-50' },
-  already_validated: { icon: Lock, fg: 'text-danger-600',  bg: 'bg-danger-50' },
-}
+const RESULT_BAR_MS = 10_000
 
-function ScanFeed({ scans, canRemove, onRemove, t }) {
-  if (scans.length === 0) {
-    return (
-      <div className="px-4 py-6 text-center">
-        <p className="text-xs text-warm-400">{t('surtido.lote.scan.sinEscaneos')}</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="divide-y divide-warm-100">
-      {scans.map(scan => {
-        const style = RESULT_STYLES[scan.result] ?? RESULT_STYLES.not_found
-        const Icon = style.icon
-        return (
-          <div key={scan.id} className="px-3 py-2 flex items-center gap-2">
-            <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${style.bg}`}>
-              <Icon className={`w-3.5 h-3.5 ${style.fg}`} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-mono text-xs text-warm-600 truncate">{scan.code}</p>
-              {scan.orderNo && (
-                <p className="font-mono text-[11px] font-semibold text-primary-700 truncate">{scan.orderNo}</p>
-              )}
-            </div>
-            {scan.forcedDateMismatch && (
-              <span className="badge text-[10px] font-semibold bg-warning-50 text-warning-700 shrink-0">
-                {t('surtido.lote.forzada')}
-              </span>
-            )}
-            <span className="font-mono text-[11px] text-primary-700 font-semibold shrink-0">{scan.tarimaRef}</span>
-            <span className="text-[11px] text-warm-400 tabular-nums shrink-0">
-              {fmtTimeShort(new Date(scan.ts))}
-            </span>
-            {canRemove(scan.id) ? (
-              <button
-                onClick={() => onRemove(scan)}
-                aria-label={t('surtido.lote.scan.eliminar')}
-                className="w-6 h-6 flex items-center justify-center rounded-lg text-warm-400 hover:bg-danger-50 hover:text-danger-600 transition-colors shrink-0"
-              >
-                <Trash2 size={12} />
-              </button>
-            ) : (
-              <span className="w-6 shrink-0" title={t('surtido.lote.sinPermisoEliminar')} />
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+// Razones que sí se registran para trazabilidad — un duplicado sigue siendo
+// una caja real de la orden, así que también cuenta como algo a revisar.
+const REJECTION_REASONS = new Set(['not_found', 'ambiguous', 'already_validated', 'duplicate'])
 
 export default function ValidarPorLote({ tabId, fecha, isActive }) {
   const { t } = useI18nStore()
@@ -94,6 +46,9 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
   const [confirmarModal, setConfirmarModal] = useState(null)
   const [notes, setNotes] = useState('')
   const [sidebarVisible, setSidebarVisible] = useState(true)
+  const [rechazosAbiertos, setRechazosAbiertos] = useState(false)
+  const [ultimoResultado, setUltimoResultado] = useState(null)
+  const resultTimerRef = useRef(null)
 
   const permission = hasPermission('surtido.validacion', 'eliminar') ? 'eliminar' : 'crear'
   const canCreate = hasPermission('surtido.validacion', 'crear')
@@ -137,19 +92,11 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
     [lote.draft.tarimas]
   )
 
-  // La tarima activa con escaneos pero sin cerrar bloquea la confirmación: sus
-  // cajas todavía no tienen ubicación que registrar.
-  const tarimaAbierta = lote.draft.scans.some(
-    s => s.tarimaRef === lote.draft.activeTarimaRef && s.result === 'ok'
-  )
-
   const ordenesConEscaneos = useMemo(
     () => new Set(lote.draft.scans.filter(s => s.result === 'ok' && s.orderNo).map(s => s.orderNo)).size,
     [lote.draft.scans]
   )
   const summaryExtendido = { ...lote.summary, ordenesConEscaneos }
-
-  const feed = useMemo(() => [...lote.draft.scans].reverse().slice(0, 100), [lote.draft.scans])
 
   useEffect(() => {
     if (!isActive) return
@@ -158,29 +105,44 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
     return () => window.removeEventListener('pointerdown', handler)
   }, [isActive])
 
+  useEffect(() => () => { if (resultTimerRef.current) clearTimeout(resultTimerRef.current) }, [])
+
   const focusScan = useCallback(() => {
     requestAnimationFrame(() => scanRef.current?.focus())
   }, [])
 
+  const mostrarResultado = useCallback((outcome) => {
+    setUltimoResultado({ ...outcome, id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}` })
+    if (resultTimerRef.current) clearTimeout(resultTimerRef.current)
+    resultTimerRef.current = setTimeout(() => setUltimoResultado(null), RESULT_BAR_MS)
+  }, [])
+
+  // Un rechazo se manda al servidor apenas ocurre — no espera a que el lote se
+  // confirme, así que sobrevive aunque el operador cancele todo el borrador.
+  const registrarRechazo = useCallback((outcome, tarimaRef) => {
+    if (!REJECTION_REASONS.has(outcome.result)) return
+    reportPickRejection({
+      fecha_lote: fecha,
+      scanned_code: outcome.code,
+      normalized_code: normalizeScanCode(outcome.code) || outcome.code,
+      reason: outcome.result,
+      related_order_no: outcome.orderNo || null,
+      tarima_ref: tarimaRef,
+    })
+  }, [fecha])
+
   const aplicarOutcome = useCallback((outcome) => {
     if (outcome.result === 'ok') {
       playSound('success')
-      toast.success(`${t('surtido.lote.scan.ok')} ${outcome.orderNo}`)
     } else if (outcome.result === 'duplicate') {
       playSound('duplicate')
-      toast.warning(`${t('surtido.lote.scan.duplicate')}: ${outcome.code}`)
-    } else if (outcome.result === 'ambiguous') {
+    } else {
       playSound('error')
-      toast.error(t('surtido.lote.scan.ambiguous'))
-    } else if (outcome.result === 'not_found') {
-      playSound('error')
-      toast.error(t('surtido.lote.scan.notFound'))
-    } else if (outcome.result === 'already_validated') {
-      playSound('error')
-      toast.error(`${t('surtido.lote.scan.alreadyValidated')} ${outcome.orderNo}`)
     }
+    mostrarResultado(outcome)
+    registrarRechazo(outcome, lote.draft.activeTarimaRef)
     focusScan()
-  }, [focusScan, t, toast])
+  }, [focusScan, mostrarResultado, registrarRechazo, lote.draft.activeTarimaRef])
 
   const handleScan = useCallback((rawCode) => {
     if (!canCreate) return
@@ -200,22 +162,22 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
     aplicarOutcome(lote.forceScan(pendiente.rawCode))
   }
 
-  function handleCloseTarima(ubicacion) {
-    const error = lote.closeActiveTarima(ubicacion)
+  function handleSetUbicacion(ubicacion) {
+    const error = lote.setUbicacion(ubicacion)
     if (!error) {
       playSound('complete')
       focusScan()
       return null
     }
-    if (error.reason === 'sin_escaneos') {
+    playSound('error')
+    return error.summary || t('surtido.lote.tarima.ubicacionInvalida')
+  }
+
+  function handleNextTarima() {
+    const error = lote.nextTarima()
+    if (error === 'sin_escaneos') {
       toast.warning(t('surtido.lote.tarima.sinEscaneos'))
-    } else {
-      // summary viene de validateLocationValue: el mismo texto que ya muestra
-      // el modo por orden ante una ubicación inválida.
-      playSound('error')
-      toast.error(error.summary || t('surtido.lote.tarima.sinEscaneos'))
     }
-    return error
   }
 
   const { mutate: doCommit, isPending: isCommitting } = useMutation({
@@ -289,43 +251,91 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      {/* Barra superior: fecha + acciones de operación, con íconos y color propio */}
+      <div className="shrink-0 border-b border-warm-100 bg-white px-3 py-2.5 sm:px-4 flex flex-wrap items-center gap-2">
+        <Layers size={14} className="text-accent-500 shrink-0" />
+        <span className="font-mono font-semibold text-primary-700 text-sm">{fecha}</span>
+        <span className="badge text-[11px] font-semibold bg-warm-100 text-warm-600">
+          {t('surtido.lote.borrador')}
+        </span>
+        <button
+          onClick={() => setSidebarVisible(v => !v)}
+          className="xl:hidden inline-flex h-8 items-center gap-1.5 rounded-xl border border-primary-200 bg-primary-50 px-2.5 text-[11px] font-semibold text-primary-700"
+        >
+          <PanelRightOpen className="h-3.5 w-3.5" />
+          {pool.orders.length}
+        </button>
+
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setConfirmarModal('cancelar')}
+            disabled={lote.draft.scans.length === 0}
+            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl border border-danger-200 bg-danger-50 text-danger-700 text-xs font-semibold hover:bg-danger-100 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <X size={14} /> {t('surtido.lote.cancelar')}
+          </button>
+          <button
+            onClick={abrirConfirmacion}
+            disabled={!canCreate || lote.summary.cajasValidadas === 0 || isOffline}
+            title={isOffline ? t('surtido.lote.confirmar.offline') : undefined}
+            className="btn-success h-9 inline-flex items-center gap-1.5 px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <CheckCircle2 size={14} /> {t('surtido.lote.confirmar')}
+          </button>
+        </div>
+      </div>
+
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 min-w-0">
         <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <Layers size={14} className="text-accent-500 shrink-0" />
-            <span className="font-mono font-semibold text-primary-700 text-sm">{fecha}</span>
-            <span className="badge text-[11px] font-semibold bg-warm-100 text-warm-600">
-              {t('surtido.lote.borrador')}
-            </span>
-          </div>
-
           <LoteResumenCards summary={lote.summary} />
 
-          <ScanInputBar
-            inputRef={scanRef}
-            onSubmit={handleScan}
-            placeholder={t('surtido.lote.scan.placeholder')}
-            buttonLabel={t('surtido.lote.scan.boton')}
-            disabled={!canCreate}
-          />
+          {!lote.activeTarimaHasUbicacion ? (
+            <LoteUbicacionGate
+              tarimaRef={lote.draft.activeTarimaRef}
+              onConfirm={handleSetUbicacion}
+              isActive={isActive}
+            />
+          ) : (
+            <>
+              <ScanInputBar
+                inputRef={scanRef}
+                onSubmit={handleScan}
+                placeholder={t('surtido.lote.scan.placeholder')}
+                buttonLabel={t('surtido.lote.scan.boton')}
+                disabled={!canCreate}
+              />
+              <LoteResultBar
+                result={ultimoResultado}
+                canUndo={Boolean(ultimoResultado) && lote.canRemoveScanById(ultimoResultado.scanId)}
+                onUndo={() => { lote.removeScanById(ultimoResultado.scanId); setUltimoResultado(null); focusScan() }}
+              />
+            </>
+          )}
 
           <LoteTarimaPanel
             draft={lote.draft}
-            onCloseTarima={handleCloseTarima}
+            onNextTarima={handleNextTarima}
             onRemoveTarima={lote.removeTarimaByRef}
             canRemoveTarima={lote.canRemoveTarimaByRef}
           />
 
           <div className="card overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-warm-100">
-              <span className="text-xs font-semibold text-warm-600">{t('surtido.lote.scan.feed')}</span>
-            </div>
-            <ScanFeed
-              scans={feed}
-              canRemove={lote.canRemoveScanById}
-              onRemove={(scan) => lote.removeScanById(scan.id)}
-              t={t}
-            />
+            <button
+              onClick={() => setRechazosAbiertos(v => !v)}
+              className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-warm-50 transition-colors"
+            >
+              <AlertTriangle size={13} className="text-danger-500 shrink-0" />
+              <span className="text-xs font-semibold text-warm-600">{t('surtido.lote.tabs.rechazos')}</span>
+              {lote.rejected.length > 0 && (
+                <span className="badge text-[10px] font-bold bg-danger-100 text-danger-700">{lote.rejected.length}</span>
+              )}
+              <ChevronDown size={13} className={`ml-auto text-warm-400 transition-transform ${rechazosAbiertos ? 'rotate-180' : ''}`} />
+            </button>
+            {rechazosAbiertos && (
+              <div className="border-t border-warm-100">
+                <LoteRechazosPanel rejected={lote.rejected} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -337,29 +347,9 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
           operadorNombre={operadorNombre}
           ubicacionPorTarima={ubicacionPorTarima}
           validatedOrders={validatedOrders}
+          canRemoveScanById={lote.canRemoveScanById}
+          onRemoveScan={lote.removeScanById}
         />
-      </div>
-
-      <div className="shrink-0 border-t border-warm-100 bg-white px-3 py-2.5 sm:px-4 flex items-center gap-2">
-        <button
-          onClick={() => setConfirmarModal('cancelar')}
-          disabled={lote.draft.scans.length === 0}
-          className="btn-secondary inline-flex items-center gap-1.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <X size={14} /> {t('surtido.lote.cancelar')}
-        </button>
-        <button
-          onClick={abrirConfirmacion}
-          disabled={!canCreate || lote.summary.tarimasCerradas === 0 || tarimaAbierta || isOffline}
-          title={
-            isOffline ? t('surtido.lote.confirmar.offline')
-              : tarimaAbierta ? t('surtido.lote.confirmar.tarimaAbierta')
-              : undefined
-          }
-          className="btn-primary ml-auto inline-flex items-center gap-1.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <CheckCircle2 size={14} /> {t('surtido.lote.confirmar')}
-        </button>
       </div>
 
       <LoteForzarFechaModal
@@ -373,7 +363,6 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
         isOpen={Boolean(confirmarModal)}
         mode={confirmarModal ?? 'confirmar'}
         summary={summaryExtendido}
-        tarimaAbierta={tarimaAbierta}
         notes={notes}
         onNotesChange={setNotes}
         isPending={isCommitting}

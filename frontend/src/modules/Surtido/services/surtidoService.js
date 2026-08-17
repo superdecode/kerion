@@ -144,6 +144,10 @@ export const commitPickBatch = (body) =>
 export const getOrdersValidationState = (obcs) =>
   api.post('/wmshub/pick-batch/estado-ordenes', { obcs }).then(r => r.data)
 
+// Traza de un escaneo rechazado, best-effort: no bloquea el escaneo si falla.
+export const reportPickRejection = (body) =>
+  api.post('/wmshub/pick-batch/rejection', body).catch(() => {})
+
 export const getPickBatches = (params) =>
   api.get('/wmshub/pick-batch', { params }).then(r => r.data)
 

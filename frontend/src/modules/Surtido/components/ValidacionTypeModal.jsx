@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { List, Layers, CalendarDays, ScanBarcode, ArrowRight } from 'lucide-react'
+import { List, Layers, CalendarDays, ScanBarcode, ArrowRight, Package, Boxes, Loader2 } from 'lucide-react'
 import Modal from '../../../core/components/common/Modal'
 import { useI18nStore } from '../../../core/stores/i18nStore'
+import { getOutboundBatchByDate } from '../services/surtidoService'
+import { buildLotePool } from '../utils/lotePool'
 
 const EASE = [0.16, 1, 0.3, 1]
 
@@ -50,6 +53,26 @@ export default function ValidacionTypeModal({ isOpen, onClose, onSelect }) {
       setFecha(todayDateKey())
     }
   }, [isOpen])
+
+  // Al escoger la fecha del lote, se carga de inmediato cuántas órdenes y
+  // cajas hay que validar — el operador ve el tamaño del trabajo antes de
+  // comprometerse a iniciarlo.
+  const { data: batchData, isFetching: cargandoResumen } = useQuery({
+    queryKey: ['surtido-lote-preview', fecha],
+    queryFn: () => getOutboundBatchByDate(fecha),
+    enabled: isOpen && tipo === 'por_lote' && Boolean(fecha),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  })
+  const resumenFecha = useMemo(() => {
+    if (!batchData) return null
+    const pool = buildLotePool(batchData.data?.orders ?? [], fecha)
+    return {
+      ordenes: pool.orders.length,
+      cajas: pool.orders.reduce((sum, o) => sum + o.expectedCount, 0),
+    }
+  }, [batchData, fecha])
 
   const puedeContinuar = tipo === 'por_orden' || (tipo === 'por_lote' && Boolean(fecha))
 
@@ -139,6 +162,29 @@ export default function ValidacionTypeModal({ isOpen, onClose, onSelect }) {
                 className="input-field w-full text-xs"
               />
               <p className="mt-1 text-[11px] text-warm-500">{t('surtido.lote.fecha.help')}</p>
+
+              {cargandoResumen ? (
+                <div className="mt-2.5 flex items-center gap-2 text-xs text-warm-500">
+                  <Loader2 size={12} className="animate-spin" />
+                  {t('surtido.lote.fecha.cargandoResumen')}
+                </div>
+              ) : resumenFecha && (
+                <div className="mt-2.5 grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-1.5 rounded-lg bg-white/80 border border-accent-200 px-2.5 py-1.5">
+                    <Package size={12} className="text-accent-600 shrink-0" />
+                    <span className="text-xs font-bold text-warm-800 tabular-nums">{resumenFecha.ordenes}</span>
+                    <span className="text-[10px] text-warm-500">{t('surtido.lote.fecha.ordenes')}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 rounded-lg bg-white/80 border border-accent-200 px-2.5 py-1.5">
+                    <Boxes size={12} className="text-accent-600 shrink-0" />
+                    <span className="text-xs font-bold text-warm-800 tabular-nums">{resumenFecha.cajas}</span>
+                    <span className="text-[10px] text-warm-500">{t('surtido.lote.fecha.cajas')}</span>
+                  </div>
+                  {resumenFecha.ordenes === 0 && (
+                    <p className="col-span-2 text-[11px] text-warning-700">{t('surtido.lote.fecha.sinOrdenes')}</p>
+                  )}
+                </div>
+              )}
             </div>
           </motion.div>
         )}

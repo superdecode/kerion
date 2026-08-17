@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  createDraft, scanDraft, closeTarima, removeScan, removeTarima,
-  canRemoveScan, canRemoveTarima, draftSummary, orderProgress, buildCommitPayload,
+  createDraft, scanDraft, setTarimaUbicacion, advanceTarima, removeScan, removeTarima,
+  canRemoveScan, canRemoveTarima, draftSummary, orderProgress, buildCommitPayload, rejectedScans,
 } from '../utils/loteDraft'
 
 /**
@@ -67,7 +67,7 @@ export function useLoteDraft({ tabId, dateKey, pool, operatorId, permission, val
 
   useEffect(() => { saveDraft(tabId, draft) }, [tabId, draft])
 
-  // scan, forceScan y closeActiveTarima devuelven su resultado de forma
+  // scan, forceScan, setUbicacion y nextTarima devuelven su resultado de forma
   // síncrona: de eso dependen el sonido, el toast y el modal de forzado. Por
   // eso leen draftRef.current en vez del estado de la clausura.
   const scan = useCallback((rawCode) => {
@@ -82,10 +82,16 @@ export function useLoteDraft({ tabId, dateKey, pool, operatorId, permission, val
     return salida.outcome
   }, [pool, commitDraft, validatedOrders])
 
-  const closeActiveTarima = useCallback((ubicacion) => {
-    const salida = closeTarima(draftRef.current, ubicacion)
+  const setUbicacion = useCallback((ubicacion) => {
+    const salida = setTarimaUbicacion(draftRef.current, ubicacion)
     if (!salida.error) commitDraft(salida.draft)
     return salida.error ? { reason: salida.error, summary: salida.summary } : null
+  }, [commitDraft])
+
+  const nextTarima = useCallback(() => {
+    const salida = advanceTarima(draftRef.current)
+    if (!salida.error) commitDraft(salida.draft)
+    return salida.error ?? null
   }, [commitDraft])
 
   const removeScanById = useCallback(
@@ -102,14 +108,19 @@ export function useLoteDraft({ tabId, dateKey, pool, operatorId, permission, val
 
   const summary = useMemo(() => draftSummary(draft, pool), [draft, pool])
   const progress = useMemo(() => orderProgress(draft, pool), [draft, pool])
+  const rejected = useMemo(() => rejectedScans(draft), [draft])
+  const activeTarima = draft.tarimas.find(tar => tar.ref === draft.activeTarimaRef) ?? null
 
   return {
     draft,
     summary,
     progress,
+    rejected,
+    activeTarimaHasUbicacion: Boolean(activeTarima?.ubicacionNota),
     scan,
     forceScan,
-    closeActiveTarima,
+    setUbicacion,
+    nextTarima,
     removeScanById,
     removeTarimaByRef,
     canRemoveScanById: (id) => canRemoveScan(draft, id, permission),
