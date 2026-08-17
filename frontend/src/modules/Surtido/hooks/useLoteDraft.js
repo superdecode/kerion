@@ -85,7 +85,7 @@ export function useLoteDraft({ tabId, dateKey, pool, operatorId, permission }) {
   const closeActiveTarima = useCallback((ubicacion) => {
     const salida = closeTarima(draftRef.current, ubicacion)
     if (!salida.error) commitDraft(salida.draft)
-    return salida.error
+    return salida.error ? { reason: salida.error, summary: salida.summary } : null
   }, [commitDraft])
 
   const removeScanById = useCallback(

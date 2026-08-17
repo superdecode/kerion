@@ -123,10 +123,12 @@ export function closeTarima(draft, ubicacionRaw) {
   const tieneEscaneos = draft.scans.some(
     s => s.tarimaRef === draft.activeTarimaRef && s.result === 'ok'
   )
-  if (!tieneEscaneos) return { draft, error: 'sin_escaneos' }
+  if (!tieneEscaneos) return { draft, error: 'sin_escaneos', summary: null }
 
   const validation = validateLocationValue(ubicacionRaw)
-  if (!validation.ok) return { draft, error: validation.reason }
+  // El summary viaja junto al reason: es el mismo texto que el modo por orden
+  // ya muestra ante una ubicación inválida, y evita duplicarlo en i18n.
+  if (!validation.ok) return { draft, error: validation.reason, summary: validation.summary }
 
   const closedAt = Date.now()
   const tarimas = draft.tarimas.map(tar =>
@@ -142,6 +144,7 @@ export function closeTarima(draft, ubicacionRaw) {
       activeTarimaRef: siguiente,
     },
     error: null,
+    summary: null,
   }
 }
 
