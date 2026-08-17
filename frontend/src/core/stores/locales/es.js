@@ -3927,6 +3927,8 @@ export default {
     'desp.validar.modal.preparandoDestinos': 'Preparando destinos para la fecha seleccionada...',
     'desp.validar.modal.sinDestinosFecha': 'No hay destinos disponibles para esa fecha.',
     'desp.validar.modal.selDestinoLista': 'Selecciona un destino de la lista para crear el folio.',
+    'desp.validar.modal.dispatchWarn': 'No se pudo verificar el estado de despacho: podrían aparecer órdenes canceladas o ya validadas en otro folio.',
+    'desp.validar.modal.pendientesParciales': '{n} orden(es) vienen de un folio previo: solo se esperan sus cajas pendientes.',
     'desp.validar.modal.preparandoDestinosTitle': 'Preparando destinos',
     'desp.validar.modal.preparandoDestinosBody': 'La fecha ya fue tomada. Cargando opciones disponibles...',
     'desp.validar.orden.ordenes': 'órdenes',

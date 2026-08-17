@@ -6,7 +6,7 @@ import { List, MapPin, ArrowRight, Loader2, ScanBarcode, CalendarDays, User, Tru
 import Modal from '../../../core/components/common/Modal'
 import CatalogEmptyHint from '../../../core/components/common/CatalogEmptyHint'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { getOutboundList } from '../services/despachoService'
+import { getOutboundList, getOrdenesDispatch } from '../services/despachoService'
 import { getOrderDateKey, getOrderDateTimeRaw } from '../utils/orderDate'
 
 const EASE = [0.16, 1, 0.3, 1]
@@ -40,6 +40,36 @@ const FOLIO_TYPE_DEFS = [
 
 function getDestinoName(order) {
   return String(order?.receiverName || order?.logisticsChannel || '').trim()
+}
+
+const CANCELLED_WMS_STATUSES = new Set(['cancelled', 'canceled', 'cancelado'])
+const ACTIVE_FOLIO_STATES = new Set(['borrador', 'en_proceso'])
+const CLOSED_ORDER_STATES = new Set(['cargado', 'entregado'])
+
+// Returns null when the order must NOT be offered for a new folio (cancelled,
+// already assigned to an active folio, or fully validated in a previous one).
+// Otherwise returns how many boxes are still pending to scan for that order.
+function getPendingForOrder(record, dispatch) {
+  const wmsStatus = String(record?.trackingStatus || record?.status || '').trim().toLowerCase()
+  if (CANCELLED_WMS_STATUSES.has(wmsStatus)) return null
+
+  const sheetBoxes = Number(record?.outboundBoxCount) || 0
+
+  if (!dispatch) return { expected: sheetBoxes || null, partial: false }
+  if (dispatch.order_estado === 'devolucion') return null
+  if (ACTIVE_FOLIO_STATES.has(dispatch.folio_estado)) return null
+  if (CLOSED_ORDER_STATES.has(dispatch.order_estado)) return null
+
+  const expectedTotal = Number(dispatch.expected_total) || sheetBoxes || 0
+  const scannedTotal = Number(dispatch.scanned_total) || 0
+  if (expectedTotal > 0 && scannedTotal >= expectedTotal) return null
+
+  const remaining = expectedTotal > 0 ? expectedTotal - scannedTotal : sheetBoxes
+
+  return {
+    expected: remaining > 0 ? remaining : null,
+    partial: scannedTotal > 0,
+  }
 }
 
 
@@ -82,6 +112,25 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
     retry: false,
   })
 
+  // Dispatch state per outbound order — cancelled orders and boxes already
+  // validated in a previous folio must never be offered again.
+  const { data: dispatchData, isLoading: loadingDispatch, isError: dispatchFailed } = useQuery({
+    queryKey: ['despacho-ordenes-dispatch'],
+    queryFn: getOrdenesDispatch,
+    enabled: isOpen && tipoSelected === 'por_destino',
+    staleTime: 0,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: false,
+  })
+
+  const dispatchMap = useMemo(() => {
+    const map = new Map()
+    for (const d of (dispatchData?.dispatch ?? [])) {
+      map.set(d.outbound_order_no, d)
+    }
+    return map
+  }, [dispatchData])
+
   const deferredFechaEnvio = useDeferredValue(fechaEnvio)
   const deferredDestinoSearch = useDeferredValue(destinoSearch)
   const allOutboundRecords = outboundRaw?.data?.records ?? []
@@ -94,13 +143,16 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
       const destinoName = getDestinoName(record)
       if (!dateKey || !destinoName) return
 
+      const pending = getPendingForOrder(record, dispatchMap.get(record.outboundOrderNo))
+      if (!pending) return
+
       if (!byDate.has(dateKey)) byDate.set(dateKey, new Map())
       const destinosForDate = byDate.get(dateKey)
 
       if (!destinosForDate.has(destinoName)) {
         destinosForDate.set(destinoName, { name: destinoName, orders: [] })
       }
-      destinosForDate.get(destinoName).orders.push(record)
+      destinosForDate.get(destinoName).orders.push({ ...record, __pending: pending })
     })
 
     const sortedByDate = new Map()
@@ -111,7 +163,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
       )
     })
     return sortedByDate
-  }, [allOutboundRecords])
+  }, [allOutboundRecords, dispatchMap])
 
   const destinoOptions = useMemo(() => {
     if (!deferredFechaEnvio) return []
@@ -127,10 +179,18 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
   const selectedDestinoOption = destinoOptions.find(d => d.name === destinoSelected) ?? null
 
   // Derived — never stored in state to avoid sync bugs
-  const derivedOrders = (() => {
-    if (!selectedDestinoOption) return []
-    return selectedDestinoOption.orders
-  })()
+  const derivedOrders = selectedDestinoOption?.orders ?? []
+
+  // Orders half-validated in a previous folio: the new folio only waits for their
+  // pending boxes (bultos_esperados below), and re-scanning one already validated
+  // is rejected by the API (DUPLICATE_ORDER_BOX).
+  const partialOrderNos = useMemo(() => (
+    (selectedDestinoOption?.orders ?? [])
+      .filter(o => o.__pending?.partial)
+      .map(o => o.outboundOrderNo)
+      .filter(Boolean)
+      .sort()
+  ), [selectedDestinoOption])
 
   function selectDestino(d) {
     setShowDestinoError(false)
@@ -157,7 +217,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
   const isPreparingDestinos = (
     tipoSelected === 'por_destino' &&
     !!fechaEnvio &&
-    (loadingDestinos || shouldKeepLoadingDestinos || deferredFechaEnvio !== fechaEnvio)
+    (loadingDestinos || loadingDispatch || shouldKeepLoadingDestinos || deferredFechaEnvio !== fechaEnvio)
   )
 
   function handleCreate() {
@@ -188,7 +248,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
         outbound_order_no: o.outboundOrderNo,
         destinatario: getDestinoName(o),
         bultos: 0,
-        bultos_esperados: o.outboundBoxCount || null,
+        bultos_esperados: o.__pending?.expected ?? o.outboundBoxCount ?? null,
         outbound_date: getOrderDateTimeRaw(o) || null,
         notas: JSON.stringify({
           validation_scope: 'por_destino',
@@ -197,6 +257,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
           thirdOrderNo: o.thirdOrderNo || null,
           logisticsChannel: o.logisticsChannel || null,
           allCustomizeCodes: Array.isArray(o.allCustomizeCodes) ? o.allCustomizeCodes : [],
+          partial_reenvio: !!o.__pending?.partial,
         }),
       }))
     }
@@ -382,6 +443,12 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                     >
                       <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-500">{t('desp.validar.modal.selDestino')}</p>
 
+                      {dispatchFailed && (
+                        <p className="text-[11px] font-medium text-warning-700">
+                          {t('desp.validar.modal.dispatchWarn')}
+                        </p>
+                      )}
+
                       {/* Fecha + Destino search in one row */}
                       <div className="grid grid-cols-[160px_1fr] gap-2">
                         <div>
@@ -528,7 +595,7 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                               <div>
                                 <p className="text-[9px] text-warm-400 uppercase tracking-wide">{t('desp.validar.modal.cajasEsp')}</p>
                                 <p className="text-sm font-bold text-warm-800 tabular-nums">
-                                  {derivedOrders.reduce((s, o) => s + (o.outboundBoxCount || 0), 0) || '—'}
+                                  {derivedOrders.reduce((s, o) => s + (o.__pending?.expected || o.outboundBoxCount || 0), 0) || '—'}
                                 </p>
                               </div>
                             </div>
@@ -536,6 +603,11 @@ export default function FolioTypeModal({ isOpen, onClose, onCreate, conductores 
                           {derivedOrders.length === 0 && (
                             <p className="text-[11px] text-warning-600 mt-1.5">
                               {t('desp.validar.modal.sinOrdenesDate')}
+                            </p>
+                          )}
+                          {partialOrderNos.length > 0 && (
+                            <p className="text-[11px] text-accent-700 mt-1.5">
+                              {t('desp.validar.modal.pendientesParciales').replace('{n}', String(partialOrderNos.length))}
                             </p>
                           )}
                         </motion.div>

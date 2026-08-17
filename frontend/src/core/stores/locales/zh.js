@@ -3954,6 +3954,8 @@ export default {
     'desp.validar.modal.preparandoDestinos': '正在准备所选日期的目的地...',
     'desp.validar.modal.sinDestinosFecha': '该日期暂无可用目的地。',
     'desp.validar.modal.selDestinoLista': '请从列表中选择目的地以创建发货单。',
+    'desp.validar.modal.dispatchWarn': '无法确认发运状态：可能会出现已取消或已在其他发货单中验证的订单。',
+    'desp.validar.modal.pendientesParciales': '{n} 个订单来自上一个发货单：仅等待其未扫描的箱子。',
     'desp.validar.modal.preparandoDestinosTitle': '正在准备目的地',
     'desp.validar.modal.preparandoDestinosBody': '日期已确认，正在加载可用目的地...',
     'desp.validar.orden.ordenes': '订单',

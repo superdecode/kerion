@@ -205,15 +205,40 @@ router.get('/',
 // Dispatch status for outbound orders
 router.get('/ordenes-dispatch',
   authenticateToken, loadFullUser,
-  requirePermission('despacho.ordenes', 'ver'),
+  // Also reachable with despacho.validar/folios: the folio creation modal needs it
+  // to hide cancelled and already-validated orders.
+  requireDespachoValidar('ver'),
   async (req, res) => {
     try {
+      // scanned_total / expected_total aggregate every non-cancelled folio the order
+      // appears in, so a second folio for the same destination only offers what is
+      // still pending. Box codes are deliberately NOT joined here: this endpoint
+      // polls every 30s and dispatch_order_scans is large — re-scanning a box that
+      // already went out is blocked at scan time (DUPLICATE_ORDER_BOX) instead.
       const result = await req.tQuery(
-        `SELECT DISTINCT ON (fo.outbound_order_no)
+        `WITH activos AS (
+           SELECT id FROM dispatch_folios
+           WHERE tenant_id = $1
+             AND estado IN ('borrador','en_proceso','cerrado')
+             AND deleted_at IS NULL
+         ),
+         totales AS (
+           SELECT fo2.outbound_order_no,
+                  COALESCE(SUM(fo2.bultos), 0)        AS scanned_total,
+                  MAX(fo2.bultos_esperados)           AS expected_total
+           FROM dispatch_folio_orders fo2
+           JOIN activos a ON a.id = fo2.folio_id
+           WHERE fo2.tenant_id = $1
+           GROUP BY fo2.outbound_order_no
+         )
+         SELECT DISTINCT ON (fo.outbound_order_no)
                 fo.outbound_order_no, fo.estado AS order_estado, fo.folio_id,
-                fo.notas, f.folio_numero, f.estado AS folio_estado
+                fo.notas, f.folio_numero, f.estado AS folio_estado,
+                COALESCE(t.scanned_total, 0) AS scanned_total,
+                t.expected_total
          FROM dispatch_folio_orders fo
          LEFT JOIN dispatch_folios f ON f.id = fo.folio_id
+         LEFT JOIN totales t ON t.outbound_order_no = fo.outbound_order_no
          WHERE fo.tenant_id = $1
            AND (
              (fo.folio_id IS NULL AND fo.estado = 'devolucion')
@@ -721,6 +746,33 @@ router.post('/:id/scans',
           error.code = 'DUPLICATE_CROSS_FOLIO'
           error.folio_numero = crossFolioRes.rows[0].folio_numero
           throw error
+        }
+
+        // The check above is scoped to the day so an unrelated code can be reused
+        // later. For the SAME outbound order the box is never valid twice: a second
+        // folio for the destination must only accept what is still pending.
+        if (normalizedOrderNo) {
+          const sameOrderRes = await client.query(
+            `SELECT f.folio_numero
+             FROM dispatch_order_scans s
+             LEFT JOIN dispatch_folio_orders fo ON fo.id = s.folio_order_id
+             JOIN dispatch_folios f ON f.id = COALESCE(s.folio_id, fo.folio_id)
+             WHERE s.tenant_id = $1
+               AND s.codigo_caja = $2
+               AND f.id != $3
+               AND f.estado != 'cancelado'
+               AND f.deleted_at IS NULL
+               AND COALESCE(s.matched_order_no, fo.outbound_order_no) = $4
+             LIMIT 1`,
+            [req.tenantId, codigoCaja, req.params.id, normalizedOrderNo]
+          )
+          if (sameOrderRes.rows.length > 0) {
+            const error = new Error(`Caja ya validada para esta orden en folio ${sameOrderRes.rows[0].folio_numero}`)
+            error.status = 409
+            error.code = 'DUPLICATE_ORDER_BOX'
+            error.folio_numero = sameOrderRes.rows[0].folio_numero
+            throw error
+          }
         }
 
         let ensuredOrderId = null

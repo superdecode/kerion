@@ -576,7 +576,7 @@ export default function ValidarPorDestino({ folioId }) {
       const msg = err?.response?.data?.error || 'Error registrando escaneo'
       if (code === 'DUPLICATE_IN_FOLIO') {
         setErrorModal({ type: 'duplicate', message: msg })
-      } else if (code === 'DUPLICATE_CROSS_FOLIO') {
+      } else if (code === 'DUPLICATE_CROSS_FOLIO' || code === 'DUPLICATE_ORDER_BOX') {
         setErrorModal({ type: 'cross_folio', message: msg, folio_numero: err?.response?.data?.folio_numero })
       } else {
         addToast(msg, 'error')
