@@ -186,11 +186,15 @@ export default function LotePoolSidebar({ pool, progress, visible, onToggle, ope
   }, [buscadas, filtro, progress])
 
   if (!visible) {
+    // Botón flotante, sin borde ni línea de división con el contenido — mismo
+    // criterio que los demás botones de esta pantalla (Despacho/DropScan usan
+    // pastillas de color, no bordes).
     return (
       <button
         onClick={onToggle}
         aria-label={t('surtido.lote.panel.title')}
-        className="hidden lg:flex w-9 shrink-0 items-start justify-center pt-3 border-l border-warm-100 bg-white text-warm-400 hover:text-warm-700 transition-colors"
+        title={t('surtido.lote.panel.title')}
+        className="hidden lg:flex fixed right-4 top-20 z-30 h-10 w-10 items-center justify-center rounded-full bg-white text-primary-600 shadow-lg hover:bg-primary-50 hover:shadow-xl transition-all"
       >
         <PanelRightOpen size={16} />
       </button>

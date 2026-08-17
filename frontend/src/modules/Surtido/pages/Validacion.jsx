@@ -3682,7 +3682,7 @@ export default function SurtidoValidacion() {
       {activeSession?.kind === 'por_lote' && (
         <>
           <button
-            className="xl:hidden h-8 px-2 rounded-lg border border-primary-200 bg-primary-50 text-primary-700 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+            className="xl:hidden h-8 px-2 rounded-lg text-primary-600 bg-primary-50 hover:bg-primary-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
             onClick={activeSession.onTogglePanel}
             title={t('surtido.lote.panel.title')}
           >

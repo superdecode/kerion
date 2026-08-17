@@ -227,7 +227,10 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
       kind: 'por_lote',
       fecha,
       isOffline,
-      canCancel: lote.draft.scans.length > 0,
+      // Disponible siempre que haya una sesión de lote abierta — igual que el
+      // botón Cancelar del modo por orden, que no depende de haber escaneado
+      // nada: sirve para abandonar la operación completa en cualquier momento.
+      canCancel: canCreate,
       onCancel: () => setConfirmarModal('cancelar'),
       canConfirm: canCreate && lote.summary.cajasValidadas > 0 && !isOffline,
       onConfirm: abrirConfirmacion,
@@ -236,7 +239,7 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
     })
   }, [
     onSessionChange, isActive, pool.orders.length, fecha, isOffline,
-    lote.draft.scans.length, lote.summary.cajasValidadas, canCreate,
+    lote.summary.cajasValidadas, canCreate,
   ]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {

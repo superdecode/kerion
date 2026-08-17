@@ -239,6 +239,13 @@ test.describe('Surtido — validación por lote', () => {
     await expect(page.locator('header')).toHaveCount(1)
   })
 
+  test('cancelar lote esta disponible desde el arranque, sin haber escaneado nada', async ({ page }) => {
+    await abrirLote(page)
+    // Sin ningún escaneo todavía — el botón debe seguir habilitado para poder
+    // abandonar la operación completa, no solo para limpiar escaneos.
+    await expect(page.getByRole('button', { name: 'Cancelar lote' })).toBeEnabled()
+  })
+
   test('confirmar manda el lote con tarima, ubicacion y orden asignada, sin cerrar la tarima', async ({ page }) => {
     await abrirLote(page)
     await escanear(page, 'AAA-1')
