@@ -135,3 +135,16 @@ export const getOrderLogs = (obc) =>
 
 export const getScanOperators = () =>
   api.get('/wmshub/scan-operators').then(r => r.data)
+
+// Validación por lote
+export const commitPickBatch = (body) =>
+  api.post('/wmshub/pick-batch/commit', body, { timeout: 120000 }).then(r => r.data)
+
+export const getPickBatches = (params) =>
+  api.get('/wmshub/pick-batch', { params }).then(r => r.data)
+
+export const getPickBatch = (id) =>
+  api.get(`/wmshub/pick-batch/${id}`).then(r => r.data)
+
+export const deletePickBatchTarima = (id, tarimaRef) =>
+  api.delete(`/wmshub/pick-batch/${id}/tarima/${encodeURIComponent(tarimaRef)}`).then(r => r.data)
