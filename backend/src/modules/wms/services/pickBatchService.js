@@ -2,6 +2,7 @@ import {
   normalizeExpectedBoxes, matchExpectedBox,
   normalizeOptionalText, parsePositiveInt,
 } from '../utils/pickBoxes.js'
+import { upsertOrderTrackingSnapshot } from '../utils/orderTracking.js'
 
 /**
  * Confirmación de una validación de surtido por lote.
@@ -168,6 +169,18 @@ export async function commitBatch(req, body) {
 
       let session
       if (existing.rows.length > 0) {
+        // Si la orden estaba abierta por otro operador, el lote se la queda —
+        // bloquear todo el commit por una orden en disputa seria peor. Pero la
+        // toma de control queda escrita, igual que en POST /scan-session.
+        const previa = existing.rows[0]
+        const mismoOperador = Number(previa.operator_id) === Number(operatorId)
+        const notaTakeover = (previa.status === 'open' && !mismoOperador)
+          ? `Retomada por lote ${body.fecha_lote} (${req.fullUser?.nombre_completo || req.user?.email || 'otro operador'})`
+          : null
+        const notasFinales = notaTakeover
+          ? (previa.notes ? `${previa.notes} | ${notaTakeover}` : notaTakeover)
+          : previa.notes
+
         const updated = await client.query(
           `UPDATE pick_sessions
            SET operator_id = $1,
@@ -181,6 +194,7 @@ export async function commitBatch(req, body) {
                outbound_delivery_at = COALESCE(outbound_delivery_at, $7),
                third_order_no = COALESCE(third_order_no, $8),
                expected_boxes = CASE WHEN jsonb_array_length($9::jsonb) > 0 THEN $9::jsonb ELSE expected_boxes END,
+               notes = $12,
                updated_at = now()
            WHERE id = $10 AND tenant_id = $11
            RETURNING *`,
@@ -188,7 +202,7 @@ export async function commitBatch(req, body) {
            normalizeOptionalText(order.receiver_name), normalizeOptionalText(order.logistics_track_no),
            normalizeOptionalText(order.logistics_channel), order.outbound_delivery_at || null,
            normalizeOptionalText(order.third_order_no), JSON.stringify(expectedBoxes),
-           existing.rows[0].id, tenantId]
+           previa.id, tenantId, notasFinales]
         )
         session = updated.rows[0]
       } else {
@@ -241,6 +255,17 @@ export async function commitBatch(req, body) {
           }
         }
       }
+
+      // Mismo snapshot que hace POST /scan-session: sin esto la orden no se
+      // refleja en Ordenes ni en el seguimiento tras validarla por lote.
+      await upsertOrderTrackingSnapshot(client, tenantId, order.outbound_order_no, {
+        third_order_no: order.third_order_no,
+        receiver_name: order.receiver_name,
+        logistics_track_no: order.logistics_track_no,
+        logistics_channel: order.logistics_channel,
+        outbound_delivery_at: order.outbound_delivery_at,
+        outbound_box_count: totalExpected,
+      })
 
       const totalesRes = await client.query(
         `SELECT COALESCE(SUM(COALESCE(quantity, 1)), 0)::int AS total_scanned

@@ -125,7 +125,7 @@ router.delete('/:id/tarima/:ref',
           `DELETE FROM pick_events e
            USING pick_sessions s
            WHERE e.session_id = s.id AND s.batch_id = $1 AND e.tenant_id = $2 AND e.tarima_ref = $3
-           RETURNING s.id AS session_id`,
+           RETURNING s.id AS session_id, e.scan_result`,
           [req.params.id, req.tenantId, req.params.ref]
         )
         await client.query(
@@ -133,6 +133,9 @@ router.delete('/:id/tarima/:ref',
           [req.params.id, req.tenantId, req.params.ref]
         )
         const sessionIds = [...new Set(afectadas.rows.map(r => r.session_id))]
+        // total_cajas solo contó los 'ok' al crear el lote, así que solo esos se
+        // descuentan: restar rowCount dejaría el contador por debajo de lo real.
+        const cajasOk = afectadas.rows.filter(r => r.scan_result === 'ok').length
         for (const sessionId of sessionIds) {
           await client.query(
             `UPDATE pick_sessions s
@@ -151,7 +154,7 @@ router.delete('/:id/tarima/:ref',
                total_cajas = GREATEST(total_cajas - $3, 0),
                updated_at = now()
            WHERE id = $1 AND tenant_id = $2`,
-          [req.params.id, req.tenantId, afectadas.rowCount]
+          [req.params.id, req.tenantId, cajasOk]
         )
         return { eventos_eliminados: afectadas.rowCount, sesiones_afectadas: sessionIds.length }
       })
