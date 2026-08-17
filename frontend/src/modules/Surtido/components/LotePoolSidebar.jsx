@@ -121,9 +121,9 @@ function OrderCard({ order, progreso, expandido, onToggle, operadorNombre, ubica
             type="button"
             onClick={async (e) => {
               e.stopPropagation()
-              try { await navigator.clipboard.writeText(order.outboundOrderNo); addToast('Orden copiada', 'success') } catch {}
+              try { await navigator.clipboard.writeText(order.outboundOrderNo); addToast(t('surtido.lote.panel.ordenCopiada'), 'success') } catch {}
             }}
-            title="Copiar orden"
+            title={t('surtido.lote.panel.copiarOrden')}
             className="group inline-flex min-w-0 items-start gap-1.5 text-left"
           >
             <span className="min-w-0 font-mono text-xs font-black text-primary-700 break-all">{order.outboundOrderNo}</span>

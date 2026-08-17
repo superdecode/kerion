@@ -2243,6 +2243,8 @@ export default {
     'surtido.lote.fecha.ordenes':             '订单',
     'surtido.lote.fecha.cajas':               '箱',
     'surtido.lote.fecha.sinOrdenes':          '该日期没有出库订单。',
+    'surtido.lote.panel.copiarOrden':        '复制订单号',
+    'surtido.lote.panel.ordenCopiada':        '订单号已复制',
     'surtido.lote.panel.buscarPlaceholder':   '搜索订单或收件人...',
     'surtido.lote.panel.filtro.todas':        '全部',
     'surtido.lote.panel.filtro.pendientes':   '待验货',

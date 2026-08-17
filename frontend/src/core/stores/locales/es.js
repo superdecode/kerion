@@ -2243,6 +2243,8 @@ export default {
     'surtido.lote.fecha.ordenes':             'órdenes',
     'surtido.lote.fecha.cajas':               'cajas',
     'surtido.lote.fecha.sinOrdenes':          'No hay órdenes de salida para esta fecha.',
+    'surtido.lote.panel.copiarOrden':        'Copiar orden',
+    'surtido.lote.panel.ordenCopiada':        'Orden copiada',
     'surtido.lote.panel.buscarPlaceholder':   'Buscar orden o destinatario...',
     'surtido.lote.panel.filtro.todas':        'Todas',
     'surtido.lote.panel.filtro.pendientes':   'Pendientes',
