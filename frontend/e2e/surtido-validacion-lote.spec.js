@@ -87,10 +87,11 @@ async function mockBackend(page) {
 
 async function abrirLote(page) {
   await page.goto('/surtido/validacion', { waitUntil: 'domcontentloaded' })
-  // La pestaña por defecto también se llama "Nueva Sesión"; el botón de agregar
-  // es el único que lleva ese texto en su title.
-  await page.locator('button[title="Nueva Sesión"]').click()
-  await page.getByText('Validación por Lote').click()
+  // Sin sesiones abiertas la pantalla es el estado vacío con el botón central.
+  await page.getByRole('button', { name: 'Iniciar validación' }).click()
+  // "Validación por Lote" aparece también en la tarjeta de modos del estado
+  // vacío; el del modal es el que es un botón.
+  await page.getByRole('button', { name: /^Validación por Lote/ }).click()
   await page.locator('input[type="date"]').fill(FECHA)
   await page.getByRole('button', { name: /Iniciar lote/i }).click()
   await expect(page.getByText('Órdenes completas')).toBeVisible({ timeout: 15000 })
@@ -106,6 +107,27 @@ test.describe('Surtido — validación por lote', () => {
   test.beforeEach(async ({ page }) => {
     await injectTenantAuth(page)
     await mockBackend(page)
+  })
+
+  test('arranca sin pestanas y con boton central', async ({ page }) => {
+    await page.goto('/surtido/validacion', { waitUntil: 'domcontentloaded' })
+
+    await expect(page.getByRole('button', { name: 'Iniciar validación' })).toBeVisible()
+    await expect(page.getByText('Modos de validación')).toBeVisible()
+    // Ninguna pestaña: ni la barra de sesiones ni el botón de agregar.
+    await expect(page.locator('button[title="Nueva Sesión"]')).toHaveCount(0)
+  })
+
+  test('cerrar la ultima sesion devuelve a la pantalla de inicio', async ({ page }) => {
+    await abrirLote(page)
+    await expect(page.locator('button[title="Nueva Sesión"]')).toHaveCount(1)
+
+    // La X de cerrar vive dentro de la pestaña y solo se ve al pasar el cursor.
+    const pestana = page.locator('button', { hasText: 'Lote 2026-08-17' }).first()
+    await pestana.hover()
+    await pestana.getByRole('button', { name: 'Cerrar' }).click()
+
+    await expect(page.getByRole('button', { name: 'Iniciar validación' })).toBeVisible({ timeout: 10000 })
   })
 
   test('carga el pool de la fecha elegida', async ({ page }) => {
