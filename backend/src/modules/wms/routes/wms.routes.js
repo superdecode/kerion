@@ -6,6 +6,10 @@ import { requirePermission, getPermissionLevel, resolvePermission } from '../../
 import { getToday, instantDateInTZ } from '../../../shared/utils/dateUtils.js'
 import { normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 import { checkModuleLimitForUpdate } from '../../middleware/usageGuard.js'
+import {
+  compactCanonicalCode, normalizeExpectedBoxes, matchExpectedBox,
+  normalizeOptionalText, parsePositiveInt,
+} from '../utils/pickBoxes.js'
 
 const SURTIDO_COUNT_QUERY = `SELECT COUNT(*) FROM pick_order_tracking WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`
 
@@ -147,48 +151,8 @@ function dateKeyInTZ(value, tz = DEFAULT_TZ) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(date).replace(/-/g, '')
 }
 
-function compactCanonicalCode(raw) {
-  return normalizeScanCode(raw).replace(/[^A-Z0-9]/g, '')
-}
 
-function normalizeExpectedBoxes(value) {
-  if (!Array.isArray(value)) return []
-  const boxesByCanonical = new Map()
-  for (const item of value) {
-    const rawCodes = Array.isArray(item?.codes) ? item.codes : []
-    const codes = [...new Set(rawCodes.map(compactCanonicalCode).filter(Boolean))]
-    const canonical = compactCanonicalCode(item?.canonical || codes[0] || '')
-    const quantity = parsePositiveInt(item?.quantity ?? item?.qty ?? item?.expectedQty, 1)
-    if (!canonical || !codes.length) continue
-    const existing = boxesByCanonical.get(canonical)
-    if (existing) {
-      // Repeated rows in the outbound detail are the only way a code can have
-      // more than one allowed scan. Preserve that explicit source quantity.
-      existing.quantity += quantity
-      existing.codes = [...new Set([...existing.codes, ...codes, canonical])]
-      continue
-    }
-    boxesByCanonical.set(canonical, {
-      canonical,
-      codes: codes.includes(canonical) ? codes : [canonical, ...codes],
-      quantity,
-    })
-  }
-  return [...boxesByCanonical.values()]
-}
 
-function matchExpectedBox(expectedBoxes, scannedCode) {
-  const scanned = compactCanonicalCode(scannedCode)
-  if (!scanned) return null
-  const matches = expectedBoxes.filter((box) => box.codes.includes(scanned))
-  if (matches.length === 0) return null
-  // A shared alias (for example a generic box type) cannot identify which box
-  // is being validated. Never assign it to an arbitrary row from the order.
-  if (new Set(matches.map((box) => box.canonical)).size !== 1) {
-    return { ambiguous: true }
-  }
-  return matches[0]
-}
 
 function requireAnyPermission(requirements) {
   return (req, res, next) => {
@@ -210,16 +174,7 @@ function isValidSectionCode(code) {
   return /^SEC-\d{8}M\d{2,}$/.test(String(code || '').trim())
 }
 
-function normalizeOptionalText(value) {
-  if (value === undefined || value === null) return null
-  const trimmed = String(value).trim()
-  return trimmed || null
-}
 
-function parsePositiveInt(value, fallback = 1) {
-  const parsed = Number.parseInt(value, 10)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
-}
 
 async function runDbQuery(queryable, text, params = []) {
   if (typeof queryable.tQuery === 'function') return queryable.tQuery(text, params)
