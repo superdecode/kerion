@@ -1788,6 +1788,7 @@ const { data: reasonsData } = useQuery({
     // there's an actual session to act on.
     if (step !== 'session' || !isActive || !sessionId) { onSessionChange(null); return }
     onSessionChange({
+      kind: 'por_orden',
       pendingCount: surtidoPendingCount,
       isSyncing,
       onRecount:  canDelete && !sessionCompleteLocked ? () => setShowRecount(true) : null,
@@ -3642,7 +3643,7 @@ export default function SurtidoValidacion() {
           refreshing={refreshingSheet}
         />
       </span>
-      {activeSession && (
+      {activeSession?.kind === 'por_orden' && (
         <>
           {activeSession.pendingCount > 0 && (
             <span className="px-2 py-1.5 rounded-lg text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1">
@@ -3676,6 +3677,36 @@ export default function SurtidoValidacion() {
               <span className="hidden md:inline">{t('surtido.escaneo.finalize')}</span>
             </button>
           )}
+        </>
+      )}
+      {activeSession?.kind === 'por_lote' && (
+        <>
+          <button
+            className="xl:hidden h-8 px-2 rounded-lg border border-primary-200 bg-primary-50 text-primary-700 transition-all inline-flex items-center gap-1.5 text-xs font-semibold"
+            onClick={activeSession.onTogglePanel}
+            title={t('surtido.lote.panel.title')}
+          >
+            <PanelRightOpen className="w-3.5 h-3.5" />
+            {activeSession.panelCount}
+          </button>
+          <button
+            className="h-8 px-2 rounded-lg text-danger-600 bg-danger-50 hover:bg-danger-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={activeSession.onCancel}
+            disabled={!activeSession.canCancel}
+            title={t('surtido.lote.cancelar')}
+          >
+            <X className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{t('surtido.lote.cancelar')}</span>
+          </button>
+          <button
+            className="h-8 px-2.5 md:px-4 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-all inline-flex items-center gap-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={activeSession.onConfirm}
+            disabled={!activeSession.canConfirm}
+            title={activeSession.isOffline ? t('surtido.lote.confirmar.offline') : t('surtido.lote.confirmar')}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{t('surtido.lote.confirmar')}</span>
+          </button>
         </>
       )}
       <button
@@ -3759,6 +3790,7 @@ export default function SurtidoValidacion() {
                 tabId={tab.id}
                 fecha={tab.fecha}
                 isActive={tab.id === activeTabId}
+                onSessionChange={tab.id === activeTabId ? setActiveSession : undefined}
               />
             ) : (
             <TabSession

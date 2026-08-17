@@ -230,6 +230,15 @@ test.describe('Surtido — validación por lote', () => {
     await expect(page.getByText('B2-02-02-02').first()).toBeVisible()
   })
 
+  test('cancelar y confirmar viven en la cabecera compartida de la pagina, no en una barra propia', async ({ page }) => {
+    await abrirLote(page)
+    const header = page.locator('header')
+    await expect(header.getByRole('button', { name: 'Cancelar lote' })).toBeVisible()
+    await expect(header.getByRole('button', { name: 'Confirmar lote' })).toBeVisible()
+    // Solo debe existir un <header> — nada de una segunda cabecera propia del lote.
+    await expect(page.locator('header')).toHaveCount(1)
+  })
+
   test('confirmar manda el lote con tarima, ubicacion y orden asignada, sin cerrar la tarima', async ({ page }) => {
     await abrirLote(page)
     await escanear(page, 'AAA-1')

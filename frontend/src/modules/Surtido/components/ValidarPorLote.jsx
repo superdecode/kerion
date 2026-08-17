@@ -1,9 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  Layers, CheckCircle2, RefreshCw, PackageX, X,
-  PanelRightOpen, AlertTriangle, ChevronDown,
-} from 'lucide-react'
+import { RefreshCw, PackageX, AlertTriangle, ChevronDown } from 'lucide-react'
 import ScanInputBar from '../../Shared/Wms/ScanInputBar'
 import { playSound, initAudio } from '../../Shared/Wms/playSound'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -33,7 +30,7 @@ const RESULT_BAR_MS = 10_000
 // una caja real de la orden, así que también cuenta como algo a revisar.
 const REJECTION_REASONS = new Set(['not_found', 'ambiguous', 'already_validated', 'duplicate'])
 
-export default function ValidarPorLote({ tabId, fecha, isActive }) {
+export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
@@ -220,6 +217,28 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
     refetch()
   }
 
+  // Los botones de operación (cancelar/confirmar/panel) viven en la cabecera
+  // compartida de la página — no en una barra propia de este componente. Mismo
+  // mecanismo que ya usa TabSession para el modo por orden (onSessionChange).
+  useEffect(() => {
+    if (!onSessionChange) return
+    if (!isActive || pool.orders.length === 0) { onSessionChange(null); return }
+    onSessionChange({
+      kind: 'por_lote',
+      fecha,
+      isOffline,
+      canCancel: lote.draft.scans.length > 0,
+      onCancel: () => setConfirmarModal('cancelar'),
+      canConfirm: canCreate && lote.summary.cajasValidadas > 0 && !isOffline,
+      onConfirm: abrirConfirmacion,
+      panelCount: pool.orders.length,
+      onTogglePanel: () => setSidebarVisible(v => !v),
+    })
+  }, [
+    onSessionChange, isActive, pool.orders.length, fecha, isOffline,
+    lote.draft.scans.length, lote.summary.cajasValidadas, canCreate,
+  ]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (isLoading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3">
@@ -251,42 +270,14 @@ export default function ValidarPorLote({ tabId, fecha, isActive }) {
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
-      {/* Barra superior: fecha + acciones de operación, con íconos y color propio */}
-      <div className="shrink-0 border-b border-warm-100 bg-white px-3 py-2.5 sm:px-4 flex flex-wrap items-center gap-2">
-        <Layers size={14} className="text-accent-500 shrink-0" />
-        <span className="font-mono font-semibold text-primary-700 text-sm">{fecha}</span>
-        <span className="badge text-[11px] font-semibold bg-warm-100 text-warm-600">
-          {t('surtido.lote.borrador')}
-        </span>
-        <button
-          onClick={() => setSidebarVisible(v => !v)}
-          className="xl:hidden inline-flex h-8 items-center gap-1.5 rounded-xl border border-primary-200 bg-primary-50 px-2.5 text-[11px] font-semibold text-primary-700"
-        >
-          <PanelRightOpen className="h-3.5 w-3.5" />
-          {pool.orders.length}
-        </button>
-
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => setConfirmarModal('cancelar')}
-            disabled={lote.draft.scans.length === 0}
-            className="h-9 inline-flex items-center gap-1.5 px-3 rounded-xl border border-danger-200 bg-danger-50 text-danger-700 text-xs font-semibold hover:bg-danger-100 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <X size={14} /> {t('surtido.lote.cancelar')}
-          </button>
-          <button
-            onClick={abrirConfirmacion}
-            disabled={!canCreate || lote.summary.cajasValidadas === 0 || isOffline}
-            title={isOffline ? t('surtido.lote.confirmar.offline') : undefined}
-            className="btn-success h-9 inline-flex items-center gap-1.5 px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <CheckCircle2 size={14} /> {t('surtido.lote.confirmar')}
-          </button>
-        </div>
-      </div>
-
       <div className="flex-1 flex flex-col lg:flex-row min-h-0 min-w-0">
         <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4 space-y-3">
+          {/* Fecha del lote — la pestaña ya lleva el mismo dato; esto solo lo
+              confirma sin repetir la cabecera de la página. */}
+          <p className="text-[11px] font-semibold text-warm-500">
+            {t('surtido.lote.borrador')} · <span className="font-mono text-warm-600">{fecha}</span>
+          </p>
+
           <LoteResumenCards summary={lote.summary} />
 
           {!lote.activeTarimaHasUbicacion ? (
