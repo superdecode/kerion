@@ -1609,7 +1609,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         refocus()
         return
       }
-      if (matchingLines.length === 0 && hasCompleteLineSet) {
+      if (matchingLines.length === 0 && hasCompleteLineSet && !isLinesError) {
         const crossOrder = await findPendingCrossOrder(code)
         if (crossOrder) {
           playSound('warning')
