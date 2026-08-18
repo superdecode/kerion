@@ -155,6 +155,31 @@ describe('resolveEventResults', () => {
   it('no revienta con una lista vacia de eventos', () => {
     expect(resolveEventResults(boxes, []).events).toEqual([])
   })
+
+  it('respeta cajas ya escaneadas en OTRA sesion (seedCounts)', () => {
+    // Simula una orden que ya tenia 1 escaneo real de AAA1 (limite 1) en una
+    // sesion previa (por ejemplo, validada por orden y despues reabierta para
+    // terminarla por lote). Sin el seed, este evento se contaria como 'ok' de
+    // nuevo — una caja fisica contada dos veces en total_scanned.
+    const seed = new Map([['AAA1', 1]])
+    const { events } = resolveEventResults(boxes, [ev({})], seed)
+    expect(events[0].resolved_result).toBe('duplicate')
+  })
+
+  it('el seed se suma al conteo dentro del propio commit', () => {
+    const seed = new Map([['AAA2', 1]])
+    const dos = [
+      ev({ client_event_id: 'a', normalized_code: 'AAA-2' }),
+      ev({ client_event_id: 'b', normalized_code: 'AAA-2' }),
+    ]
+    // AAA2 permite 2; el seed ya consumió 1, así que solo queda 1 unidad libre.
+    expect(resolveEventResults(boxes, dos, seed).events.map(e => e.resolved_result)).toEqual(['ok', 'duplicate'])
+  })
+
+  it('sin seed el comportamiento no cambia', () => {
+    const { events } = resolveEventResults(boxes, [ev({})], new Map())
+    expect(events[0].resolved_result).toBe('ok')
+  })
 })
 
 describe('findLockedOrders', () => {

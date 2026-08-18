@@ -237,12 +237,23 @@ router.delete('/:id/tarima/:ref',
         // descuentan: restar rowCount dejaría el contador por debajo de lo real.
         const cajasOk = afectadas.rows.filter(r => r.scan_result === 'ok').length
         for (const sessionId of sessionIds) {
+          // Recalcula tambien el status: si la sesion estaba 'complete' y la
+          // tarima borrada la deja por debajo de lo esperado, dejarla en
+          // 'complete' seria inconsistente con su propio total_scanned.
           await client.query(
             `UPDATE pick_sessions s
              SET total_scanned = COALESCE((
                    SELECT SUM(COALESCE(quantity, 1))::int FROM pick_events
                    WHERE session_id = $1 AND tenant_id = $2 AND scan_result = 'ok'
                  ), 0),
+                 status = CASE
+                   WHEN s.status <> 'open' AND s.total_expected > 0 AND COALESCE((
+                     SELECT SUM(COALESCE(quantity, 1))::int FROM pick_events
+                     WHERE session_id = $1 AND tenant_id = $2 AND scan_result = 'ok'
+                   ), 0) >= s.total_expected THEN 'complete'
+                   WHEN s.status <> 'open' THEN 'with_discrepancies'
+                   ELSE s.status
+                 END,
                  updated_at = now()
              WHERE s.id = $1 AND s.tenant_id = $2`,
             [sessionId, req.tenantId]

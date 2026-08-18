@@ -78,11 +78,16 @@ export function validateCommitPayload(body) {
  * de su orden, con las mismas reglas que POST /scan-event: un código que no
  * pertenece a la orden (o un alias ambiguo) baja a 'unexpected', y exceder las
  * unidades esperadas baja a 'duplicate'. El cliente propone; el servidor decide.
+ *
+ * seedCounts (canonical -> cuántas unidades ya se escanearon en OTRA sesión,
+ * ej. una validación por orden previa que se retoma por lote) se suma al
+ * conteo antes de procesar este lote — sin esto, una caja ya escaneada fuera
+ * de este commit se contaría como 'ok' otra vez en vez de 'duplicate'.
  */
-export function resolveEventResults(expectedBoxesRaw, events) {
+export function resolveEventResults(expectedBoxesRaw, events, seedCounts = new Map()) {
   const expectedBoxes = normalizeExpectedBoxes(expectedBoxesRaw)
   const errors = []
-  const usados = new Map()
+  const usados = new Map(seedCounts)
 
   const resolved = (events || []).map((event) => {
     if (event.scan_result !== 'ok') {
@@ -215,7 +220,6 @@ export async function commitBatch(req, body) {
     const sessions = []
 
     for (const order of body.orders) {
-      const { events: resolvedEvents } = resolveEventResults(order.expected_boxes, order.events)
       const expectedBoxes = normalizeExpectedBoxes(order.expected_boxes)
       const parsedExpected = Number.parseInt(order.total_expected, 10)
       const totalExpected = Number.isInteger(parsedExpected) && parsedExpected > 0 ? parsedExpected : 0
@@ -281,6 +285,34 @@ export async function commitBatch(req, body) {
         )
         session = created.rows[0]
       }
+
+      // La orden puede llegar con avance PARCIAL de otra sesión (ej. validada a
+      // medias por orden y retomada por lote) sin estar bloqueada por
+      // findLockedOrders (que solo excluye órdenes ya COMPLETAS). El cliente no
+      // tiene forma de saber qué se escaneó fuera de este lote, así que sin este
+      // conteo previo una caja ya validada en la sesión reusada se contaría
+      // como 'ok' otra vez en vez de 'duplicate', inflando total_scanned por
+      // encima de las cajas físicas reales. Se excluyen los client_event_id de
+      // este propio commit para no penalizar un reintento idempotente.
+      let seedCounts = new Map()
+      if (existing.rows.length > 0) {
+        const thisCommitIds = order.events.map(e => e.client_event_id)
+        // client_event_id es NULL en todo evento del modo por orden (nunca lo
+        // manda POST /scan-event) — "= ANY(...)" con NULL a la izquierda da
+        // NULL, no FALSE, así que excluiría esas filas del conteo por completo.
+        // Se cubre explícitamente con "client_event_id IS NULL OR ...".
+        const seedRes = await client.query(
+          `SELECT matched_box_type, COUNT(*)::int AS n
+           FROM pick_events
+           WHERE session_id = $1 AND tenant_id = $2 AND scan_result = 'ok'
+             AND matched_box_type IS NOT NULL
+             AND (client_event_id IS NULL OR NOT (client_event_id = ANY($3::text[])))
+           GROUP BY matched_box_type`,
+          [session.id, tenantId, thisCommitIds]
+        )
+        seedCounts = new Map(seedRes.rows.map(r => [r.matched_box_type, r.n]))
+      }
+      const { events: resolvedEvents } = resolveEventResults(order.expected_boxes, order.events, seedCounts)
 
       let insertados = 0
       for (const event of resolvedEvents) {
