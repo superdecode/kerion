@@ -36,6 +36,7 @@ export default defineConfig({
   },
   server: {
     port: 4500,
+    strictPort: true,
     host: '0.0.0.0',
     open: true,
     hmr: {

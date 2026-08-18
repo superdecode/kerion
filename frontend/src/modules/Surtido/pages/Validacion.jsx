@@ -8,7 +8,7 @@ import {
   ArrowLeft, RotateCcw, List, Package, Clock, Play, RefreshCw,
   ScanBarcode, ScanLine, Square, Timer, Zap, ChevronRight, BadgeCheck, ShieldCheck,
   MapPin, XOctagon, Plus, Edit3, X, AlertTriangle, Copy, Check,
-  PanelRightClose, PanelRightOpen, Save, PartyPopper, Layers, Database,
+  PanelRightClose, PanelRightOpen, Save, PartyPopper, Layers, Database, Lock,
 } from 'lucide-react'
 import Header from '../../../core/components/layout/Header'
 import BarcodeScannerModal from '../../../core/components/common/BarcodeScannerModal'
@@ -31,6 +31,10 @@ import { refreshSheet, getCacheTimestamp, getCacheStatus } from '../../WmsHub/se
 import { captureErrorEvent } from '../../../core/services/errorTelemetry'
 import { fmtDate, fmtDateTime as formatDateTimeTz, fmtTimeShort } from '../../../core/utils/dateFormat'
 import { useSurtidoStore } from '../stores/surtidoStore'
+import { validateLocationValue } from '../utils/locationValue'
+import ValidacionTypeModal from '../components/ValidacionTypeModal'
+import { loadDraft, clearDraft as clearLoteDraft } from '../hooks/useLoteDraft'
+import ValidarPorLote from '../components/ValidarPorLote'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 
 const SCANNER_TOTAL_MS = 2000       // base budget first-char→Enter for scanner barcodes
@@ -49,7 +53,6 @@ function scannerTimeBudgetMs(length) {
 const TABS_KEY = 'kirion_surtido_tabs'
 const ACTIVE_TAB_KEY = 'kirion_surtido_active_tab'
 const SESSION_KEY = (tabId) => `kirion_surtido_session_${tabId}`
-const LOCATION_MAX_LENGTH = 16
 
 function genId() { return Math.random().toString(36).slice(2, 9) }
 function safeParseJson(raw) {
@@ -61,72 +64,17 @@ function safeParseJson(raw) {
   }
 }
 
-function normalizeLocationValue(raw) {
-  if (!raw) return ''
-  return String(raw)
-    .trim()
-    .toUpperCase()
-    .replace(/[\x00-\x1F\x7F]/g, '')
-    .replace(/[‐‑‒–—−]/g, '-')
-    .replace(/[／⁄]/g, '/')
-    // ES/EN keyboards produce different glyphs on the same key when toggling
-    // layouts (straight ", curly “ ” „ ‟, prime ″, acute/backtick used as a
-    // quote). Location codes use one as a separator — normalize them all to a
-    // single canonical " so it's recognized regardless of which layout typed it.
-    .replace(/[""„‟´`ˮ″]/g, '"')
-    .replace(/\s+/g, '')
-}
-
-function validateLocationValue(raw) {
-  const trimmed = String(raw || '').trim()
-  const normalized = normalizeLocationValue(trimmed)
-  const quoteCount = (normalized.match(/"/g) || []).length
-  // A single " is a legitimate location separator (see normalizeLocationValue).
-  // Only treat it as a scanned JSON payload once there are 2+ — that's what an
-  // actual "key":"value" structure looks like — plus the unambiguous JSON
-  // structure characters and known payload field names.
-  const looksStructuredPayload =
-    /[{}[\]]/u.test(trimmed)
-    || quoteCount > 1
-    || /(?:reference_id|ops_data|container_type|source|seller)/i.test(trimmed)
-
-  if (!normalized) {
-    return { ok: false, reason: 'empty', summary: 'La ubicacion esta vacia.', normalized: '' }
-  }
-  if (looksStructuredPayload) {
-    return {
-      ok: false,
-      reason: 'payload',
-      summary: 'Se detecto un payload de escaner y no una ubicacion valida.',
-      normalized,
-    }
-  }
-  if (!/^[A-Z0-9/"-]+$/.test(normalized)) {
-    return {
-      ok: false,
-      reason: 'charset',
-      summary: 'La ubicacion solo permite letras, numeros, "-", "/" y una " de separacion.',
-      normalized,
-    }
-  }
-  if (normalized.length > LOCATION_MAX_LENGTH) {
-    return {
-      ok: false,
-      reason: 'length',
-      summary: `La ubicacion excede el maximo permitido de ${LOCATION_MAX_LENGTH} caracteres.`,
-      normalized,
-    }
-  }
-  return { ok: true, normalized }
-}
-
-function buildDefaultTab(label) {
-  return { id: genId(), label }
-}
 
 function hasStoredSessionForTab(tabId) {
   const stored = safeParseJson(sessionStorage.getItem(SESSION_KEY(tabId)))
   return !!(stored?.obc && stored?.sessionId)
+}
+
+// Una pestana de lote no tiene sesion por orden en sessionStorage: su trabajo
+// vive en el borrador de localStorage. Sin esto, la poda de pestanas huerfanas
+// se la llevaba en cada recarga y el borrador quedaba inalcanzable.
+function hasStoredLoteDraft(tabId) {
+  return loadDraft(tabId) !== null
 }
 
 function normalizeStoredTabs(value, fallbackLabel) {
@@ -137,7 +85,10 @@ function normalizeStoredTabs(value, fallbackLabel) {
       if (!tab || typeof tab !== 'object') return null
       const id = typeof tab.id === 'string' && tab.id.trim() ? tab.id : genId()
       const label = typeof tab.label === 'string' && tab.label.trim() ? tab.label : fallbackLabel
-      return { id, label }
+      // Las pestanas guardadas antes de la validacion por lote no traen tipo.
+      const tipo = tab.tipo === 'por_lote' ? 'por_lote' : 'por_orden'
+      const fecha = tipo === 'por_lote' && typeof tab.fecha === 'string' ? tab.fecha : undefined
+      return fecha ? { id, label, tipo, fecha } : { id, label, tipo }
     })
     .filter(Boolean)
 
@@ -1837,6 +1788,7 @@ const { data: reasonsData } = useQuery({
     // there's an actual session to act on.
     if (step !== 'session' || !isActive || !sessionId) { onSessionChange(null); return }
     onSessionChange({
+      kind: 'por_orden',
       pendingCount: surtidoPendingCount,
       isSyncing,
       onRecount:  canDelete && !sessionCompleteLocked ? () => setShowRecount(true) : null,
@@ -1936,7 +1888,10 @@ const { data: reasonsData } = useQuery({
     }))
   }
 
-  const clearSession = () => {
+  // close=true (por defecto) cierra la pestana y devuelve al inicio; close=false
+  // la deja abierta en el paso de busqueda para validar otra orden sin volver a
+  // pasar por el selector de tipo.
+  const clearSession = ({ close = true } = {}) => {
     sessionStorage.removeItem(storageKey)
     validatedCodeCountsRef.current = new Map()
     setStep('search'); setObc(null); setSessionId(null); setSessionStart(null)
@@ -1949,7 +1904,7 @@ const { data: reasonsData } = useQuery({
     setAutoStartPending(false)
     autoFinalizeLockRef.current = false
     sessionCreateFiredRef.current = false
-    onUpdateTab({ obc: null, step: 'search' })
+    onUpdateTab({ obc: null, step: 'search', close })
   }
 
   const copyObc = () => {
@@ -3178,21 +3133,18 @@ const { data: reasonsData } = useQuery({
                     clearSession()
                   }}
                 >
-                  {isLocked ? t('surtido.validacion.close_only') : t('surtido.validacion.complete_save_close')}
+                  {isLocked ? t('surtido.validacion.close_only') : t('surtido.validacion.complete_finish')}
                 </button>
-                {!isLocked && (
-                  <button
-                    className="btn-primary inline-flex h-10 items-center gap-2"
-                    onClick={() => {
-                      setShowCompletionModal(false)
-                      clearSession()
-                      onNewOrder?.()
-                    }}
-                  >
-                    <ScanBarcode size={14} />
-                    {t('surtido.validacion.complete_new_order')}
-                  </button>
-                )}
+                <button
+                  className="btn-primary inline-flex h-10 items-center gap-2"
+                  onClick={() => {
+                    setShowCompletionModal(false)
+                    clearSession({ close: false })
+                  }}
+                >
+                  <ScanBarcode size={14} />
+                  {t('surtido.validacion.complete_new_order')}
+                </button>
               </div>
             }
           >
@@ -3336,15 +3288,14 @@ function TabBar({ tabs, activeTabId, onSelect, onAdd, onClose, canAdd, t }) {
             }`}>
             <ScanBarcode size={12} className={tab.id === activeTabId ? 'text-primary-500' : 'text-warm-400'} />
             <span className="max-w-[120px] truncate">{tab.label}</span>
-            {tabs.length > 1 && (
-              <span
-                role="button"
-                tabIndex={-1}
-                onClick={e => { e.stopPropagation(); onClose(tab.id) }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-warm-200 text-warm-400 hover:text-warm-700 transition-all ml-0.5">
-                <X size={10} />
-              </span>
-            )}
+            <span
+              role="button"
+              tabIndex={-1}
+              aria-label={t('common.close')}
+              onClick={e => { e.stopPropagation(); onClose(tab.id) }}
+              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-warm-200 text-warm-400 hover:text-warm-700 transition-all ml-0.5">
+              <X size={10} />
+            </span>
           </button>
         ))}
         {canAdd && tabs.length < 5 && (
@@ -3400,14 +3351,13 @@ function MobileSessionPicker({ tabs, activeTabId, onSelect, onClose, onCloseTab,
               {tab.id === activeTabId && (
                 <span className="text-[10px] font-bold text-violet-600 bg-violet-100 px-1.5 py-0.5 rounded shrink-0">{t('surtido.validacion.card_active')}</span>
               )}
-              {tabs.length > 1 && (
-                <button
-                  onClick={e => { e.stopPropagation(); onCloseTab(tab.id) }}
-                  className="p-1.5 hover:bg-danger-100 rounded-lg text-warm-300 hover:text-danger-500 transition-colors shrink-0"
-                >
-                  <X size={13} />
-                </button>
-              )}
+              <button
+                onClick={e => { e.stopPropagation(); onCloseTab(tab.id) }}
+                aria-label={t('common.close')}
+                className="p-1.5 hover:bg-danger-100 rounded-lg text-warm-300 hover:text-danger-500 transition-colors shrink-0"
+              >
+                <X size={13} />
+              </button>
             </button>
           ))}
         </div>
@@ -3417,6 +3367,87 @@ function MobileSessionPicker({ tabs, activeTabId, onSelect, onClose, onCloseTab,
 }
 
 /* ─── Main export ─────────────────────────────────────────── */
+// Pantalla de inicio cuando no hay ninguna sesion abierta: mismo patron que
+// DropScan — sin pestanas, un boton central, y debajo los dos modos explicados.
+function EmptyState({ onStart, canCreate, t }) {
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      <div className="max-w-2xl mx-auto">
+        <motion.div
+          className="text-center mb-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <motion.div
+            className="w-24 h-24 rounded-3xl gradient-primary flex items-center justify-center mx-auto mb-6 shadow-glow-lg"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.15, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={{ scale: 1.05, rotate: 3 }}
+          >
+            <ScanBarcode className="w-12 h-12 text-white" />
+          </motion.div>
+          <h2 className="text-2xl font-bold text-warm-800 mb-2">{t('surtido.validacion.empty.title')}</h2>
+          <p className="text-sm text-warm-500 mb-8 leading-relaxed">{t('surtido.validacion.empty.desc')}</p>
+          {canCreate ? (
+            <motion.button
+              onClick={onStart}
+              className="btn-primary inline-flex items-center gap-2.5 px-8 py-3.5 text-base shadow-glow"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              <Play className="w-5 h-5" />
+              {t('surtido.validacion.empty.start')}
+            </motion.button>
+          ) : (
+            <button
+              disabled
+              title={t('surtido.validacion.empty.noPermiso')}
+              className="inline-flex items-center gap-2.5 px-8 py-3.5 text-base font-semibold rounded-2xl bg-warm-200 text-warm-400 cursor-not-allowed opacity-70"
+            >
+              <Lock className="w-5 h-5" />
+              {t('surtido.validacion.empty.start')}
+            </button>
+          )}
+        </motion.div>
+
+        <motion.div
+          className="card overflow-hidden"
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <div className="px-5 py-4 border-b border-warm-100 flex items-center gap-2">
+            <Layers size={14} className="text-primary-500 shrink-0" />
+            <span className="text-sm font-semibold text-warm-700">{t('surtido.validacion.empty.modos')}</span>
+          </div>
+          <div className="divide-y divide-warm-100">
+            <div className="px-5 py-3.5 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center shrink-0 mt-0.5">
+                <List size={14} className="text-primary-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-warm-800">{t('surtido.lote.tipo.porOrden.label')}</p>
+                <p className="text-xs text-warm-500 mt-0.5 leading-relaxed">{t('surtido.lote.tipo.porOrden.desc')}</p>
+              </div>
+            </div>
+            <div className="px-5 py-3.5 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-accent-100 flex items-center justify-center shrink-0 mt-0.5">
+                <Layers size={14} className="text-accent-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-warm-800">{t('surtido.lote.tipo.porLote.label')}</p>
+                <p className="text-xs text-warm-500 mt-0.5 leading-relaxed">{t('surtido.lote.tipo.porLote.desc')}</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  )
+}
+
 export default function SurtidoValidacion() {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
@@ -3430,17 +3461,17 @@ export default function SurtidoValidacion() {
   const [sheetTs, setSheetTs] = useState(() => getCacheTimestamp('outbound'))
   const [refreshingSheet, setRefreshingSheet] = useState(false)
   const [mobilePickerOpen, setMobilePickerOpen] = useState(false)
+  const [showTypeModal, setShowTypeModal] = useState(false)
 
-  const [tabs, setTabs] = useState(() => {
-    const saved = safeParseJson(localStorage.getItem(TABS_KEY))
-    const normalized = normalizeStoredTabs(saved, newTabLabel)
-    if (normalized.length > 0) return normalized
-    return [buildDefaultTab(newTabLabel)]
-  })
+  // Sin sesiones no hay pestanas: la pantalla es un estado vacio con un boton
+  // central, igual que DropScan. Las pestanas aparecen solo cuando hay trabajo.
+  const [tabs, setTabs] = useState(() =>
+    normalizeStoredTabs(safeParseJson(localStorage.getItem(TABS_KEY)), newTabLabel)
+  )
   const [activeTabId, setActiveTabId] = useState(() => {
     const saved = localStorage.getItem(ACTIVE_TAB_KEY)
     if (saved) return saved
-    return tabs[0]?.id
+    return tabs[0]?.id ?? null
   })
 
   const obcParam = searchParams.get('obc')
@@ -3451,31 +3482,38 @@ export default function SurtidoValidacion() {
     if (!obcParam || initialObcConsumed) return
     setInitialObcConsumed(true)
     const activeTab = tabs.find(t => t.id === activeTabId)
-    if (activeTab?.label === newTabLabel || !activeTab?.label) {
+    // Sin pestanas abiertas el deep-link tiene que crear la suya, porque ya no
+    // existe una pestana por defecto donde aterrizar.
+    if (!activeTab) {
+      const newId = genId()
+      setTabs(prev => [...prev, { id: newId, label: obcParam, tipo: 'por_orden' }])
+      setActiveTabId(newId)
+      setPendingTabObcs(prev => ({ ...prev, [newId]: obcParam }))
+      return
+    }
+    if (activeTab.label === newTabLabel || !activeTab.label) {
       setTabs(prev => prev.map(tab => tab.id === activeTabId ? { ...tab, label: obcParam } : tab))
     }
   }, [obcParam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (tabs.length === 0) {
-      const fallback = buildDefaultTab(newTabLabel)
-      setTabs([fallback])
-      setActiveTabId(fallback.id)
+      if (activeTabId !== null) setActiveTabId(null)
       return
     }
-
     if (!tabs.some((tab) => tab.id === activeTabId)) {
       setActiveTabId(tabs[0].id)
     }
-  }, [activeTabId, newTabLabel, tabs])
+  }, [activeTabId, tabs])
 
+  // Al cargar la pagina se descartan las pestanas sin trabajo guardado. Si no
+  // queda ninguna, la pantalla muestra el estado vacio en vez de una pestana
+  // fantasma que el operador tendria que cerrar a mano.
   useEffect(() => {
-    setTabs((prev) => {
-      const cleanTabs = prev.filter((tab) => tab.label === newTabLabel || hasStoredSessionForTab(tab.id))
-      if (cleanTabs.length > 0) return cleanTabs
-      return [buildDefaultTab(newTabLabel)]
-    })
-  }, [newTabLabel])
+    setTabs((prev) => prev.filter((tab) => (
+      tab.tipo === 'por_lote' ? hasStoredLoteDraft(tab.id) : hasStoredSessionForTab(tab.id)
+    )))
+  }, [])
 
   useEffect(() => {
     try { localStorage.setItem(TABS_KEY, JSON.stringify(tabs)) } catch {}
@@ -3486,19 +3524,25 @@ export default function SurtidoValidacion() {
   }, [activeTabId])
 
   function addTab() {
+    setShowTypeModal(true)
+  }
+
+  function handleSelectTipo({ tipo, fecha }) {
     const newId = genId()
-    const newTab = { id: newId, label: newTabLabel }
+    const newTab = tipo === 'por_lote'
+      ? { id: newId, label: `${t('surtido.lote.tab.label')} ${fecha}`, tipo, fecha }
+      : { id: newId, label: newTabLabel, tipo: 'por_orden' }
     setTabs(prev => [...prev, newTab])
     setActiveTabId(newId)
+    setShowTypeModal(false)
   }
 
   function closeTab(tabId) {
     setTabs(prev => {
       const next = prev.filter(t => t.id !== tabId)
       if (next.length === 0) {
-        const fresh = buildDefaultTab(newTabLabel)
-        setActiveTabId(fresh.id)
-        return [fresh]
+        setActiveTabId(null)
+        return next
       }
       if (tabId === activeTabId) {
         setActiveTabId(next[next.length - 1].id)
@@ -3506,18 +3550,26 @@ export default function SurtidoValidacion() {
       return next
     })
     try { sessionStorage.removeItem(SESSION_KEY(tabId)) } catch {}
+    clearLoteDraft(tabId)
   }
 
-  function handleUpdateTab(tabId, { obc, step }) {
+  function handleUpdateTab(tabId, { obc, step, close = true }) {
     if (!obc || step === 'search') {
+      if (!close) {
+        // El operador eligio seguir con otra orden: la pestana se queda abierta
+        // en el paso de busqueda, sin pasar de nuevo por el selector de tipo.
+        setTabs(prev => prev.map(tab => (
+          tab.id === tabId ? { ...tab, label: newTabLabel, tipo: 'por_orden' } : tab
+        )))
+        setActiveTabId(tabId)
+        return
+      }
+      // La sesion termino y no continua: la pestana se cierra y, si era la
+      // ultima, el operador vuelve a la pantalla de inicio con el boton central.
       setTabs(prev => {
-        if (prev.length === 1) {
-          return prev.map(tab => tab.id === tabId ? { ...tab, label: newTabLabel } : tab)
-        }
         const next = prev.filter(tab => tab.id !== tabId)
-        const fallback = next[next.length - 1] || buildDefaultTab(newTabLabel)
-        setActiveTabId(fallback.id)
-        return next.length > 0 ? next : [fallback]
+        setActiveTabId(next.length > 0 ? next[next.length - 1].id : null)
+        return next
       })
     } else {
       setTabs(prev => prev.map(tab => {
@@ -3553,7 +3605,7 @@ export default function SurtidoValidacion() {
       return
     }
     const newId = genId()
-    setTabs(prev => [...prev, { id: newId, label: obc }])
+    setTabs(prev => [...prev, { id: newId, label: obc, tipo: 'por_orden' }])
     setActiveTabId(newId)
     setPendingTabObcs(prev => ({ ...prev, [newId]: obc }))
   }
@@ -3591,7 +3643,7 @@ export default function SurtidoValidacion() {
           refreshing={refreshingSheet}
         />
       </span>
-      {activeSession && (
+      {activeSession?.kind === 'por_orden' && (
         <>
           {activeSession.pendingCount > 0 && (
             <span className="px-2 py-1.5 rounded-lg text-xs font-semibold text-warning-600 bg-warning-50 flex items-center gap-1">
@@ -3627,6 +3679,41 @@ export default function SurtidoValidacion() {
           )}
         </>
       )}
+      {activeSession?.kind === 'por_lote' && (
+        <>
+          {/* Mismo botón que "Mostrar panel de órdenes" en Despacho: cuadrado
+              con borde, solo visible mientras el panel está oculto — cuando
+              está abierto, su propio encabezado trae el botón de cerrar. */}
+          {!activeSession.panelVisible && (
+            <button
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 bg-white text-warm-600 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600 shrink-0"
+              onClick={activeSession.onTogglePanel}
+              title={t('surtido.lote.panel.mostrarPanel')}
+              aria-label={t('surtido.lote.panel.mostrarPanel')}
+            >
+              <PanelRightOpen className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            className="h-8 px-2 rounded-lg text-danger-600 bg-danger-50 hover:bg-danger-100 transition-all inline-flex items-center gap-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={activeSession.onCancel}
+            disabled={!activeSession.canCancel}
+            title={t('surtido.lote.cancelar')}
+          >
+            <X className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{t('surtido.lote.cancelar')}</span>
+          </button>
+          <button
+            className="h-8 px-2.5 md:px-4 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-all inline-flex items-center gap-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={activeSession.onConfirm}
+            disabled={!activeSession.canConfirm}
+            title={activeSession.isOffline ? t('surtido.lote.confirmar.offline') : t('surtido.lote.confirmar')}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{t('surtido.lote.confirmar')}</span>
+          </button>
+        </>
+      )}
       <button
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-warm-200 bg-warm-100 text-warm-400 transition-all hover:bg-primary-50 hover:text-primary-600"
         onClick={() => setShowQuickSearch(true)}
@@ -3641,7 +3728,8 @@ export default function SurtidoValidacion() {
     <div className="flex flex-col h-full">
       <Header hideUserOnMobile title={t('surtido.validacion.title')} subtitle={t('nav.surtido_wms')} actions={headerActions} />
 
-      {/* Desktop tab bar */}
+      {/* Barra de pestanas — solo con sesiones abiertas */}
+      {tabs.length > 0 && (
       <div className="hidden md:block">
         <TabBar
           tabs={tabs}
@@ -3653,8 +3741,10 @@ export default function SurtidoValidacion() {
           t={t}
         />
       </div>
+      )}
 
       {/* Mobile session bar */}
+      {tabs.length > 0 && (
       <div className="md:hidden flex items-center gap-2 px-3 py-2.5 border-b border-warm-100 bg-white shrink-0">
         <ScanBarcode size={14} className="text-violet-500 shrink-0" />
         <div className="flex-1 min-w-0">
@@ -3679,6 +3769,7 @@ export default function SurtidoValidacion() {
           </button>
         )}
       </div>
+      )}
 
       <AnimatePresence>
         {mobilePickerOpen && (
@@ -3693,9 +3784,20 @@ export default function SurtidoValidacion() {
           />
         )}
       </AnimatePresence>
+      {tabs.length === 0 ? (
+        <EmptyState onStart={addTab} canCreate={canCreateValidation} t={t} />
+      ) : (
       <div className="flex-1 flex overflow-hidden relative">
         {tabs.map(tab => (
           <div key={tab.id} className={`absolute inset-0 flex ${tab.id === activeTabId ? '' : 'hidden'}`}>
+            {tab.tipo === 'por_lote' ? (
+              <ValidarPorLote
+                tabId={tab.id}
+                fecha={tab.fecha}
+                isActive={tab.id === activeTabId}
+                onSessionChange={tab.id === activeTabId ? setActiveSession : undefined}
+              />
+            ) : (
             <TabSession
               tabId={tab.id}
               isActive={tab.id === activeTabId}
@@ -3717,13 +3819,20 @@ export default function SurtidoValidacion() {
               onOpenObc={addTabWithObc}
               checkDuplicateObc={(obc) => tabs.some((t) => t.id !== tab.id && t.label === obc)}
             />
+            )}
           </div>
         ))}
       </div>
+      )}
       <QuickSearchModal
         isOpen={showQuickSearch}
         onClose={() => setShowQuickSearch(false)}
         onValidate={addTabWithObc}
+      />
+      <ValidacionTypeModal
+        isOpen={showTypeModal}
+        onClose={() => setShowTypeModal(false)}
+        onSelect={handleSelectTipo}
       />
     </div>
   )

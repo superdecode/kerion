@@ -792,3 +792,44 @@ export async function getOutboundDetail(orderNo) {
     },
   }
 }
+
+/**
+ * Pool de órdenes para la validación por lote.
+ *
+ * Una sola pasada sobre las filas ya cargadas del sheet — cada fila es una
+ * caja, así que el packageList de cada orden sale del mismo agrupado y no hace
+ * falta una llamada de detalle por orden.
+ *
+ * Fuerza el fetch completo cuando el cache está en su slice parcial: un pool
+ * truncado rechazaría cajas que sí pertenecen al lote.
+ *
+ * Devuelve TODAS las órdenes del sheet; el filtrado por fecha lo hace
+ * buildLotePool (utils/lotePool.js), que es donde está probado.
+ */
+export async function getOutboundBatchByDate(dateKey) {
+  const rows = await loadSheet('outbound', getCacheStatus('outbound').partial)
+  const [headerRow, ...dataRows] = rows
+  const map = buildHeaderMap(headerRow, OUTBOUND_ALIASES)
+
+  const orderMap = new Map()
+  const SPARSE_FIELDS = ['thirdOrderNo', 'logisticsTrackNo', 'logisticsChannel', 'receiverName', 'outboundTime', 'whCode']
+
+  for (const row of dataRows) {
+    const r = mapRowToOutbound(row, map)
+    if (!r.outboundOrderNo) continue
+    let entry = orderMap.get(r.outboundOrderNo)
+    if (!entry) {
+      entry = { ...r, packageList: [] }
+      orderMap.set(r.outboundOrderNo, entry)
+    } else {
+      SPARSE_FIELDS.forEach(f => { if (!entry[f] && r[f]) entry[f] = r[f] })
+    }
+    entry.packageList.push({ boxType: r.boxType, customizeCode: r.customizeCode, quantity: r.quantity })
+  }
+
+  const orders = [...orderMap.values()].map(o => ({
+    ...o,
+    outboundBoxCount: o.outboundBoxCount || o.packageList.length,
+  }))
+  return { success: true, data: { dateKey, orders } }
+}

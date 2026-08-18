@@ -2,6 +2,7 @@ import api from '../../../core/services/api'
 import {
   getOutboundList as getOutboundListFromSheets,
   getOutboundDetail as getOutboundDetailFromSheets,
+  getOutboundBatchByDate as getOutboundBatchByDateFromSheets,
 } from '../../WmsHub/services/googleSheetsService'
 
 export const getRecords = (payload) => {
@@ -15,6 +16,8 @@ export const getRecords = (payload) => {
 export const getOutboundList = () => getOutboundListFromSheets()
 
 export const getOutboundDetail = (orderNo) => getOutboundDetailFromSheets(orderNo)
+
+export const getOutboundBatchByDate = (dateKey) => getOutboundBatchByDateFromSheets(dateKey)
 
 export const getScanSessions = (params) =>
   api.get('/wmshub/scan-sessions', { params }).then(r => r.data)
@@ -132,3 +135,24 @@ export const getOrderLogs = (obc) =>
 
 export const getScanOperators = () =>
   api.get('/wmshub/scan-operators').then(r => r.data)
+
+// Validación por lote
+export const commitPickBatch = (body) =>
+  api.post('/wmshub/pick-batch/commit', body, { timeout: 120000 }).then(r => r.data)
+
+// Estado de validación de las órdenes del pool: cuáles ya están cerradas.
+export const getOrdersValidationState = (obcs) =>
+  api.post('/wmshub/pick-batch/estado-ordenes', { obcs }).then(r => r.data)
+
+// Traza de un escaneo rechazado, best-effort: no bloquea el escaneo si falla.
+export const reportPickRejection = (body) =>
+  api.post('/wmshub/pick-batch/rejection', body).catch(() => {})
+
+export const getPickBatches = (params) =>
+  api.get('/wmshub/pick-batch', { params }).then(r => r.data)
+
+export const getPickBatch = (id) =>
+  api.get(`/wmshub/pick-batch/${id}`).then(r => r.data)
+
+export const deletePickBatchTarima = (id, tarimaRef) =>
+  api.delete(`/wmshub/pick-batch/${id}/tarima/${encodeURIComponent(tarimaRef)}`).then(r => r.data)

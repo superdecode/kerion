@@ -6,6 +6,11 @@ import { requirePermission, getPermissionLevel, resolvePermission } from '../../
 import { getToday, instantDateInTZ } from '../../../shared/utils/dateUtils.js'
 import { normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
 import { checkModuleLimitForUpdate } from '../../middleware/usageGuard.js'
+import {
+  compactCanonicalCode, normalizeExpectedBoxes, matchExpectedBox,
+  normalizeOptionalText, parsePositiveInt,
+} from '../utils/pickBoxes.js'
+import { runDbQuery, getPublicTableColumns, upsertOrderTrackingSnapshot } from '../utils/orderTracking.js'
 
 const SURTIDO_COUNT_QUERY = `SELECT COUNT(*) FROM pick_order_tracking WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`
 
@@ -16,7 +21,6 @@ const PICK_SCAN_RESULTS = new Set(['ok', 'unexpected', 'duplicate', 'not_found']
 const INV_SCAN_STATUSES = new Set(['ok', 'blocked', 'nowms'])
 const ORDER_TRACKING_STATUSES = new Set(['pending_assignment', 'assigned', 'sorting', 'pending_validation', 'validating', 'complete', 'partial', 'cancelled'])
 const CLOSED_ORDER_TRACKING_STATUSES = new Set(['complete', 'partial'])
-const _tableColumnCache = new Map()
 
 // ── Sheet CSV cache (per tenant+url, stale-while-revalidate) ───────────────
 const _csvCache = new Map()
@@ -147,48 +151,8 @@ function dateKeyInTZ(value, tz = DEFAULT_TZ) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(date).replace(/-/g, '')
 }
 
-function compactCanonicalCode(raw) {
-  return normalizeScanCode(raw).replace(/[^A-Z0-9]/g, '')
-}
 
-function normalizeExpectedBoxes(value) {
-  if (!Array.isArray(value)) return []
-  const boxesByCanonical = new Map()
-  for (const item of value) {
-    const rawCodes = Array.isArray(item?.codes) ? item.codes : []
-    const codes = [...new Set(rawCodes.map(compactCanonicalCode).filter(Boolean))]
-    const canonical = compactCanonicalCode(item?.canonical || codes[0] || '')
-    const quantity = parsePositiveInt(item?.quantity ?? item?.qty ?? item?.expectedQty, 1)
-    if (!canonical || !codes.length) continue
-    const existing = boxesByCanonical.get(canonical)
-    if (existing) {
-      // Repeated rows in the outbound detail are the only way a code can have
-      // more than one allowed scan. Preserve that explicit source quantity.
-      existing.quantity += quantity
-      existing.codes = [...new Set([...existing.codes, ...codes, canonical])]
-      continue
-    }
-    boxesByCanonical.set(canonical, {
-      canonical,
-      codes: codes.includes(canonical) ? codes : [canonical, ...codes],
-      quantity,
-    })
-  }
-  return [...boxesByCanonical.values()]
-}
 
-function matchExpectedBox(expectedBoxes, scannedCode) {
-  const scanned = compactCanonicalCode(scannedCode)
-  if (!scanned) return null
-  const matches = expectedBoxes.filter((box) => box.codes.includes(scanned))
-  if (matches.length === 0) return null
-  // A shared alias (for example a generic box type) cannot identify which box
-  // is being validated. Never assign it to an arbitrary row from the order.
-  if (new Set(matches.map((box) => box.canonical)).size !== 1) {
-    return { ambiguous: true }
-  }
-  return matches[0]
-}
 
 function requireAnyPermission(requirements) {
   return (req, res, next) => {
@@ -210,45 +174,9 @@ function isValidSectionCode(code) {
   return /^SEC-\d{8}M\d{2,}$/.test(String(code || '').trim())
 }
 
-function normalizeOptionalText(value) {
-  if (value === undefined || value === null) return null
-  const trimmed = String(value).trim()
-  return trimmed || null
-}
 
-function parsePositiveInt(value, fallback = 1) {
-  const parsed = Number.parseInt(value, 10)
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
-}
 
-async function runDbQuery(queryable, text, params = []) {
-  if (typeof queryable.tQuery === 'function') return queryable.tQuery(text, params)
-  return queryable.query(text, params)
-}
 
-async function getPublicTableColumns(queryable, tableName) {
-  if (_tableColumnCache.has(tableName)) return _tableColumnCache.get(tableName)
-  const allowedTables = new Set(['pick_order_tracking', 'pick_sessions'])
-  if (!allowedTables.has(tableName)) {
-    throw new Error(`Unsupported table for column introspection: ${tableName}`)
-  }
-  let cols
-  try {
-    const probe = await runDbQuery(queryable, `SELECT * FROM ${tableName} LIMIT 0`, [])
-    cols = new Set((probe.fields || []).map((field) => field.name))
-  } catch {
-    const result = await runDbQuery(
-      queryable,
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = $1`,
-      [tableName]
-    )
-    cols = new Set(result.rows.map((row) => row.column_name))
-  }
-  _tableColumnCache.set(tableName, cols)
-  return cols
-}
 
 function buildPickOrderTrackingSelect(columns) {
   const preferred = [
@@ -364,41 +292,6 @@ function buildPickSessionsStatsSubquery(sessionColumns, includeSessionCount = fa
   `
 }
 
-async function upsertOrderTrackingSnapshot(queryable, tenantId, outboundOrderNo, snapshot = {}) {
-  if (!outboundOrderNo) return
-  const trackingColumns = await getPublicTableColumns(queryable, 'pick_order_tracking')
-  const insertColumns = ['tenant_id', 'outbound_order_no']
-  const insertValues = [tenantId, outboundOrderNo]
-  const updates = []
-
-  const snapshotFields = [
-    ['third_order_no', normalizeOptionalText(snapshot.third_order_no)],
-    ['receiver_name', normalizeOptionalText(snapshot.receiver_name)],
-    ['logistics_track_no', normalizeOptionalText(snapshot.logistics_track_no)],
-    ['logistics_channel', normalizeOptionalText(snapshot.logistics_channel)],
-    ['outbound_delivery_at', normalizeOptionalText(snapshot.outbound_delivery_at)],
-    ['outbound_box_count', Number.isFinite(Number(snapshot.outbound_box_count)) ? Number(snapshot.outbound_box_count) : null],
-  ]
-
-  for (const [field, value] of snapshotFields) {
-    if (!trackingColumns.has(field)) continue
-    insertColumns.push(field)
-    insertValues.push(value)
-    updates.push(`${field} = COALESCE(pick_order_tracking.${field}, EXCLUDED.${field})`)
-  }
-
-  if (trackingColumns.has('updated_at')) updates.push('updated_at = now()')
-  const placeholders = insertColumns.map((_, index) => `$${index + 1}`).join(', ')
-
-  await runDbQuery(
-    queryable,
-    `INSERT INTO pick_order_tracking (${insertColumns.join(', ')})
-     VALUES (${placeholders})
-     ON CONFLICT (tenant_id, outbound_order_no) DO UPDATE SET
-       ${updates.join(', ')}`,
-    insertValues
-  )
-}
 
 async function generateInventorySectionCode(client, tenantId, tz, referenceDate = null) {
   const dayKey = dateKeyInTZ(referenceDate || Date.now(), tz)

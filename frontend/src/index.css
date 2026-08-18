@@ -250,7 +250,12 @@
   }
 
   .sidebar-scrollbar {
+    scrollbar-width: thin;
     scrollbar-color: rgba(96, 165, 250, 0.42) transparent;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar {
+    width: 6px;
   }
 
   .table-shell {
