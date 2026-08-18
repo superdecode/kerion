@@ -309,17 +309,6 @@ function buildFlexibleMatchWhere(columns, params) {
   return `(${buildMatchCase(columns, params)}) IS NOT NULL`
 }
 
-function buildStrictCodeMatch(columns, { exactParam, compactParam, baseParam }) {
-  const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = ANY($${exactParam}::text[])`).join(' OR ')
-  const compactCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') = $${compactParam}`).join(' OR ')
-  const baseCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') LIKE $${baseParam}::text || '%'`).join(' OR ')
-  return `(
-    ${upperCols}
-    OR ${compactCols}
-    OR (COALESCE($${baseParam}::text, '') <> '' AND (${baseCols}))
-  )`
-}
-
 function buildExactOnlyWhere(columns, { exactParam, compactParam }) {
   const upperCols = columns.map(col => `UPPER(COALESCE(${col}, '')) = ANY($${exactParam}::text[])`).join(' OR ')
   const compactCols = columns.map(col => `REGEXP_REPLACE(UPPER(COALESCE(${col}, '')), '[^A-Z0-9]', '', 'g') = $${compactParam}`).join(' OR ')

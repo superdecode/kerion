@@ -4,7 +4,7 @@ import { authenticateToken, loadFullUser, auditLog } from '../../../shared/middl
 import { getPermissionLevel, requirePermission, resolvePermission } from '../../../shared/middleware/permissions.js'
 import { checkModuleLimit } from '../../middleware/usageGuard.js'
 import { getRecepcionValidationRecordCount, refreshRecepcionOrderState } from '../utils/orderState.js'
-import { generateCodeVariations, normalizeScanCode } from '../../../shared/utils/codeNormalization.js'
+import { generateCodeVariations } from '../../../shared/utils/codeNormalization.js'
 
 const router = Router()
 let inboundLineColumnsCache = null
