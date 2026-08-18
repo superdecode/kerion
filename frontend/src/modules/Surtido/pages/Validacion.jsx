@@ -3700,7 +3700,7 @@ export default function SurtidoValidacion() {
             disabled={!activeSession.canCancel}
             title={t('surtido.lote.cancelar')}
           >
-            <X className="w-3.5 h-3.5" />
+            <XOctagon className="w-3.5 h-3.5" />
             <span className="hidden md:inline">{t('surtido.lote.cancelar')}</span>
           </button>
           <button

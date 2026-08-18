@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { MoveRight, Trash2, X, Radio, ChevronDown, CheckCircle2 } from 'lucide-react'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { fmtTimeShort } from '../../../core/utils/dateFormat'
+import { fmtDateTimeMini } from '../../../core/utils/dateFormat'
 
-// Lista de cajas escaneadas de una tarima (activa o cerrada), con hora de
-// escaneo — el mismo detalle que ya se ve por orden en el panel derecho,
-// pero agrupado por tarima para poder revisarla sin buscar orden por orden.
+// Lista de cajas escaneadas de una tarima (activa o cerrada), con fecha,
+// hora y OBC asignado — el mismo detalle que ya se ve por orden en el panel
+// derecho, pero agrupado por tarima para revisarla sin buscar orden por orden.
 function ScansList({ scans, t }) {
   if (scans.length === 0) {
     return <p className="px-4 pb-3 pt-1 text-[11px] text-warm-400">{t('surtido.lote.tarima.sinEscaneos')}</p>
@@ -17,14 +17,16 @@ function ScansList({ scans, t }) {
           <CheckCircle2 size={10} className="text-success-500 shrink-0" />
           <span className="font-mono text-warm-600 truncate">{scan.code}</span>
           {scan.orderNo && (
-            <span className="font-mono text-warm-400 truncate">· {scan.orderNo}</span>
+            <span className="badge text-[9px] font-mono font-semibold bg-primary-50 text-primary-700 shrink-0">
+              {scan.orderNo}
+            </span>
           )}
           {scan.forcedDateMismatch && (
             <span className="badge text-[9px] font-semibold bg-warning-50 text-warning-700 shrink-0">
               {t('surtido.lote.forzada')}
             </span>
           )}
-          <span className="ml-auto shrink-0 text-warm-400 tabular-nums">{fmtTimeShort(new Date(scan.ts))}</span>
+          <span className="ml-auto shrink-0 text-warm-400 tabular-nums">{fmtDateTimeMini(new Date(scan.ts))}</span>
         </div>
       ))}
     </div>

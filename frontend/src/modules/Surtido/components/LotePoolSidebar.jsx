@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { CheckCircle2, PanelRightClose, Search, X, Copy, Trash2 } from 'lucide-react'
+import { CheckCircle2, ChevronDown, PanelRightClose, Search, X, Copy, Trash2 } from 'lucide-react'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { fmtTimeShort, fmtDateTime } from '../../../core/utils/dateFormat'
@@ -163,9 +163,12 @@ function OrderCard({ order, progreso, expandido, onToggle, operadorNombre, ubica
         {order.receiverName && (
           <p className="mt-1 text-[11px] text-warm-500 font-medium truncate">{order.receiverName}</p>
         )}
-        <span className={`mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${estado.cls}`}>
-          {estado.label}
-        </span>
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${estado.cls}`}>
+            {estado.label}
+          </span>
+          <ChevronDown size={13} className={`ml-auto shrink-0 text-warm-300 transition-transform ${expandido ? 'rotate-180' : ''}`} />
+        </div>
       </button>
       {expandido && (
         <OrderDetail
