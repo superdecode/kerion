@@ -30,7 +30,7 @@ const RESULT_BAR_MS = 10_000
 // una caja real de la orden, así que también cuenta como algo a revisar.
 const REJECTION_REASONS = new Set(['not_found', 'ambiguous', 'already_validated', 'duplicate'])
 
-export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange }) {
+export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange, onCloseTab }) {
   const { t } = useI18nStore()
   const toast = useToastStore.getState()
   const qc = useQueryClient()
@@ -403,9 +403,14 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
         onClose={() => setConfirmarModal(null)}
         onConfirm={() => {
           if (confirmarModal === 'cancelar') {
-            lote.cancelDraft()
             setNotes('')
             setConfirmarModal(null)
+            // Cancelar borra el borrador y cierra la pestaña — no deja una
+            // sesión "vacía" abierta que el operador tendría que cerrar
+            // aparte, y evita que los botones de la cabecera queden
+            // huérfanos apuntando a un lote que ya no existe.
+            if (onCloseTab) onCloseTab()
+            else lote.cancelDraft()
             return
           }
           doCommit()

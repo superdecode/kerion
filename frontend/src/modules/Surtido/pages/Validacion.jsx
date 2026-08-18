@@ -3538,6 +3538,11 @@ export default function SurtidoValidacion() {
   }
 
   function closeTab(tabId) {
+    // Cerrar la pestaña activa deja a activeSession apuntando a un tab que ya
+    // no existe hasta que la siguiente pestaña (si hay una) corra su propio
+    // efecto de onSessionChange — sin esto, los botones de la cabecera
+    // (Cancelar/Confirmar/panel) quedaban huérfanos en pantalla.
+    if (tabId === activeTabId) setActiveSession(null)
     setTabs(prev => {
       const next = prev.filter(t => t.id !== tabId)
       if (next.length === 0) {
@@ -3796,6 +3801,7 @@ export default function SurtidoValidacion() {
                 fecha={tab.fecha}
                 isActive={tab.id === activeTabId}
                 onSessionChange={tab.id === activeTabId ? setActiveSession : undefined}
+                onCloseTab={() => closeTab(tab.id)}
               />
             ) : (
             <TabSession

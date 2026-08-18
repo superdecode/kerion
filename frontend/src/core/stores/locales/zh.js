@@ -2237,7 +2237,7 @@ export default {
     'surtido.lote.confirmar.offline':        '离线状态无法确认批次。已扫描的内容仍已保存，网络恢复后请重试。',
     'surtido.lote.confirmar.exito':          '批次 {lote} 已确认',
     'surtido.lote.confirmar.error':          '批次确认失败。草稿仍已保存，请重试。',
-    'surtido.lote.cancelar':                 '取消批次',
+    'surtido.lote.cancelar':                 '取消',
     'surtido.lote.cancelar.title':           '取消整个批次',
     'surtido.lote.cancelar.intro':           '你即将取消整个批次。',
     'surtido.lote.cancelar.kpi.cajas':       '将删除的箱数',

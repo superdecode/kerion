@@ -2168,7 +2168,7 @@ export default {
     'surtido.lote.confirmar.offline':        'Sin conexión no se puede confirmar el lote. Lo escaneado sigue guardado; reintenta cuando vuelva la red.',
     'surtido.lote.confirmar.exito':          'Lote {lote} confirmado',
     'surtido.lote.confirmar.error':          'No se pudo confirmar el lote. El borrador sigue guardado; vuelve a intentarlo.',
-    'surtido.lote.cancelar':                 'Cancelar lote',
+    'surtido.lote.cancelar':                 'Cancelar',
     'surtido.lote.cancelar.title':           'Cancelar el lote completo',
     'surtido.lote.cancelar.intro':           'Estás por cancelar el lote completo.',
     'surtido.lote.cancelar.kpi.cajas':       'Cajas a borrar',
