@@ -31,6 +31,11 @@ const CSV_MAX_TOTAL_BYTES = parseInt(process.env.CSV_MAX_TOTAL_BYTES, 10) || 6_0
 const CSV_DB_CACHE_MAX_BYTES = parseInt(process.env.CSV_DB_CACHE_MAX_BYTES, 10) || 1_500_000
 const CSV_MAX_LIMIT_ROWS = parseInt(process.env.CSV_MAX_LIMIT_ROWS, 10) || 3000
 const WMS_PREWARM_SHEETS = process.env.WMS_PREWARM_SHEETS === 'true'
+// Kept well under tenantContext's 12s DB deadline so a slow/degraded docs.google.com
+// can't pin a serverless instance open for 25s at a time — that inflates fluid_duration
+// billing and, under concurrent load, delays unrelated requests on the same instance.
+// A short timeout fails fast into the stale-cache fallback below instead.
+const CSV_FETCH_TIMEOUT_MS = parseInt(process.env.CSV_FETCH_TIMEOUT_MS, 10) || 9000
 
 function getLastNRows(text, n) {
   if (!n || n <= 0) return text
@@ -113,7 +118,7 @@ async function fetchAndCacheSheet(tenantId, url, dbWriter = null) {
     try {
       const res = await fetch(url, {
         headers: { Accept: 'text/csv,text/plain' },
-        signal: AbortSignal.timeout(25000),
+        signal: AbortSignal.timeout(CSV_FETCH_TIMEOUT_MS),
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const text = await res.text()

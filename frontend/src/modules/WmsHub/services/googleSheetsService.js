@@ -397,7 +397,10 @@ async function fetchSheetAsCSV(url, limit = 0) {
   const params = { url }
   if (limit > 0) params.limit = limit
   try {
-    const res = await api.get('/wmshub/proxy/sheet', { params, timeout: 25000 })
+    // Backend caps its own Google fetch at ~9s (CSV_FETCH_TIMEOUT_MS) and falls back to
+    // stale cache on timeout, so the response always comes back well before this — this
+    // just needs enough margin over that plus normal request/cache-lookup overhead.
+    const res = await api.get('/wmshub/proxy/sheet', { params, timeout: 15000 })
     return typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
   } catch (err) {
     const status = err?.response?.status
