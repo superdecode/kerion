@@ -1405,6 +1405,7 @@ export default {
     'inventario.escaneo.code2_waiting': '等待第2个条码',
     'inventario.escaneo.code2_placeholder': '第2个条码（enter）',
     'inventario.escaneo.same_codes': '条码1与条码2相同',
+    'inventario.escaneo.code_not_recognized': '无法识别的条码，请重新扫描',
     'inventario.escaneo.skip_code2': '跳过',
     'inventario.escaneo.empty_hint': '扫描条码开始操作',
     'inventario.escaneo.session_started': '扫描会话已开始',

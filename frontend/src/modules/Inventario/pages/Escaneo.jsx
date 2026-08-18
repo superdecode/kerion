@@ -2212,8 +2212,10 @@ export default function Escaneo() {
       const { code, item } = findCodeInInventory(rawCode, inv)
       // Composite barcode labels are sometimes scanned field-by-field by the reader;
       // fragments with no product code (e.g. a lone "container_type" field) normalize
-      // to '' and must be dropped instead of registered as a bogus scan.
-      if (!code) return
+      // to '' and must be dropped instead of registered as a bogus scan. Surface it
+      // instead of failing silently, since a real code normalizing to '' looks
+      // identical to the scanner not firing at all.
+      if (!code) { toast.warning(t('inventario.escaneo.code_not_recognized')); playSound('error'); return }
       const acceptScan = () => {
         if (!item) {
           setPendingCode1({ raw: rawCode, code })
@@ -2240,6 +2242,7 @@ export default function Escaneo() {
     try {
       const inv = inventorySnapshot instanceof Map ? inventorySnapshot : new Map()
       const code2Result = findCodeInInventory(rawCode2, inv)
+      if (!code2Result.code) { toast.warning(t('inventario.escaneo.code_not_recognized')); playSound('error'); return }
       if (pendingCode1.code === code2Result.code) {
         toast.warning(t('inventario.escaneo.same_codes')); playSound('error'); return
       }
