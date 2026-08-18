@@ -55,9 +55,10 @@ describe.skipIf(!DB_AVAILABLE)('Multi-tenant data isolation', () => {
     })
     appPool = adminPool
 
-    // Fetch first two tenants from DB for testing
+    // Fetch first two tenants from DB for testing. tenants has no soft-delete column —
+    // status is the closest thing, and any two real tenants are fine for RLS isolation checks.
     const res = await adminPool.query(
-      "SELECT id, slug FROM tenants WHERE eliminado = false ORDER BY created_at LIMIT 2"
+      "SELECT id, slug FROM tenants ORDER BY created_at LIMIT 2"
     )
     if (res.rows.length < 2) {
       throw new Error('Need at least 2 tenants in DB to run isolation tests')
@@ -139,7 +140,7 @@ describe.skipIf(!DB_AVAILABLE)('Multi-tenant data isolation', () => {
 
     // Insert once
     await adminPool.query(
-      'INSERT INTO wms_cache (tenant_id, key, value) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+      "INSERT INTO wms_cache (tenant_id, key, data, expires_at) VALUES ($1, $2, $3, now() + interval '1 hour') ON CONFLICT DO NOTHING",
       [tenantA.id, testKey, JSON.stringify({ test: true })]
     )
 
@@ -147,7 +148,7 @@ describe.skipIf(!DB_AVAILABLE)('Multi-tenant data isolation', () => {
     let threw = false
     try {
       await adminPool.query(
-        'INSERT INTO wms_cache (tenant_id, key, value) VALUES ($1, $2, $3)',
+        "INSERT INTO wms_cache (tenant_id, key, data, expires_at) VALUES ($1, $2, $3, now() + interval '1 hour')",
         [tenantA.id, testKey, JSON.stringify({ test: 2 })]
       )
     } catch (e) {
@@ -163,7 +164,7 @@ describe.skipIf(!DB_AVAILABLE)('Multi-tenant data isolation', () => {
 
     // Same key is allowed for a different tenant (no PK collision)
     await adminPool.query(
-      'INSERT INTO wms_cache (tenant_id, key, value) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+      "INSERT INTO wms_cache (tenant_id, key, data, expires_at) VALUES ($1, $2, $3, now() + interval '1 hour') ON CONFLICT DO NOTHING",
       [tenantB.id, testKey, JSON.stringify({ test: true })]
     )
     await adminPool.query(

@@ -10,7 +10,7 @@ import {
   compactCanonicalCode, normalizeExpectedBoxes, matchExpectedBox,
   normalizeOptionalText, parsePositiveInt,
 } from '../utils/pickBoxes.js'
-import { runDbQuery, getPublicTableColumns, upsertOrderTrackingSnapshot } from '../utils/orderTracking.js'
+import { getPublicTableColumns, upsertOrderTrackingSnapshot } from '../utils/orderTracking.js'
 
 const SURTIDO_COUNT_QUERY = `SELECT COUNT(*) FROM pick_order_tracking WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`
 
@@ -177,22 +177,6 @@ function isValidSectionCode(code) {
 
 
 
-
-function buildPickOrderTrackingSelect(columns) {
-  const preferred = [
-    'id', 'tenant_id', 'outbound_order_no', 'third_order_no',
-    'receiver_name', 'logistics_track_no', 'logistics_channel', 'outbound_delivery_at', 'outbound_box_count',
-    'surtidor_id', 'surtidor_nombre', 'status', 'notes',
-    'assigned_at', 'assigned_by',
-    'sorting_started_at', 'sorting_completed_at',
-    'validation_started_at', 'validation_completed_at', 'validated_by',
-    'tiene_faltantes', 'tiene_anormalidades', 'tiene_reparacion', 'tiene_rastreo',
-    'created_at', 'updated_at',
-  ]
-  const selected = preferred.filter((column) => columns.has(column))
-  if (selected.length === 0) return 'ot.*'
-  return selected.map((column) => `ot.${column}`).join(', ')
-}
 
 export function buildOrderTrackingStatusSql() {
   return `CASE
@@ -1773,11 +1757,6 @@ router.put('/scan-event/:id',
       // Registros is the correction surface for validation history. Once the user has the
       // module-level update permission, allow code/metadata fixes even if the session is no
       // longer open — totals and effective status are recalculated immediately afterward.
-      const onlyUbicacionEdit = scanned_code === undefined && normalized_code === undefined &&
-        matched_sku === undefined && matched_box_type === undefined && scan_result === undefined &&
-        quantity === undefined && manual_reason_id === undefined && manual_reason_label === undefined &&
-        manual_notes === undefined && ubicacion_nota !== undefined
-
       let resolvedReasonId = manual_reason_id ?? event.manual_reason_id
       let resolvedReasonLabel = manual_reason_label ?? event.manual_reason_label
       if (resolvedReasonId) {
@@ -3273,7 +3252,6 @@ router.post('/order-tracking/bulk',
   async (req, res) => {
     try {
       const { obcs, surtidor_id, status, notes } = req.body
-      const trackingColumns = await getPublicTableColumns(req, 'pick_order_tracking')
       if (!Array.isArray(obcs) || obcs.length === 0) {
         return res.status(400).json({ success: false, error: 'Lista de órdenes (obcs) es requerida' })
       }
