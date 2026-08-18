@@ -81,6 +81,50 @@ async function syncOrderProgressById(req, folioOrderId) {
   )
 }
 
+// Orders that are cancelled (estado 'devolucion', regardless of folio_id) or that
+// belong to another non-cancelled folio (active or cerrado/confirmado) must not be
+// allowed into a different folio. excludeFolioId lets a folio re-check its own orders
+// without flagging itself.
+async function findOrderConflicts(queryFn, tenantId, orderNos, excludeFolioId = null) {
+  if (!orderNos || orderNos.length === 0) return []
+  const res = await queryFn(
+    `SELECT DISTINCT ON (fo.outbound_order_no)
+            fo.outbound_order_no,
+            CASE WHEN fo.estado = 'devolucion' THEN 'cancelled' ELSE 'folio' END AS reason,
+            f.folio_numero
+     FROM dispatch_folio_orders fo
+     LEFT JOIN dispatch_folios f ON f.id = fo.folio_id
+     WHERE fo.tenant_id = $1
+       AND fo.outbound_order_no = ANY($2::text[])
+       AND (
+         fo.estado = 'devolucion'
+         OR (
+           fo.folio_id IS NOT NULL
+           AND ($3::uuid IS NULL OR fo.folio_id != $3)
+           AND f.estado NOT IN ('cancelado')
+           AND f.deleted_at IS NULL
+         )
+       )
+     ORDER BY fo.outbound_order_no, fo.created_at DESC`,
+    [tenantId, orderNos, excludeFolioId]
+  )
+  return res.rows
+}
+
+function conflictErrorMessage(conflicts) {
+  const cancelled = conflicts.filter(c => c.reason === 'cancelled').map(c => c.outbound_order_no)
+  const inFolio = conflicts.filter(c => c.reason === 'folio')
+  const parts = []
+  if (cancelled.length > 0) {
+    parts.push(`Las órdenes ${cancelled.join(', ')} están canceladas y no pueden asignarse a un folio.`)
+  }
+  if (inFolio.length > 0) {
+    const byFolio = inFolio.map(c => `${c.outbound_order_no} (folio ${c.folio_numero})`).join(', ')
+    parts.push(`Las órdenes ${byFolio} ya están asignadas a otro folio activo o confirmado.`)
+  }
+  return parts.join(' ')
+}
+
 async function getFolioDetail(req, folioId) {
   const [folioRes, ordersRes] = await Promise.all([
     req.tQuery(
@@ -419,24 +463,13 @@ router.post('/',
 
         if (normalizedOrders.length > 0) {
           const orderNos = [...new Set(normalizedOrders.map(order => order.outbound_order_no))]
-          const conflictRes = await client.query(
-            `SELECT fo.outbound_order_no, f.folio_numero
-             FROM dispatch_folio_orders fo
-             JOIN dispatch_folios f ON f.id = fo.folio_id
-             WHERE fo.tenant_id = $1
-               AND fo.outbound_order_no = ANY($2::text[])
-               AND f.estado IN ('borrador','en_proceso')
-               AND f.deleted_at IS NULL`,
-            [req.tenantId, orderNos]
-          )
-          if (conflictRes.rows.length > 0) {
-            const activeFolio = conflictRes.rows[0].folio_numero
-            const blockedCodes = conflictRes.rows.map(row => row.outbound_order_no).join(', ')
-            const error = new Error(`Las órdenes ${blockedCodes} ya están asignadas al folio activo ${activeFolio}.`)
+          const conflicts = await findOrderConflicts(client.query.bind(client), req.tenantId, orderNos, folio.id)
+          if (conflicts.length > 0) {
+            const error = new Error(conflictErrorMessage(conflicts))
             error.status = 409
             error.code = 'ORDER_ALREADY_IN_ACTIVE_FOLIO'
-            error.folio_numero = activeFolio
-            error.codes = conflictRes.rows.map(row => row.outbound_order_no)
+            error.folio_numero = conflicts.find(c => c.folio_numero)?.folio_numero || null
+            error.codes = conflicts.map(row => row.outbound_order_no)
             throw error
           }
 
@@ -636,9 +669,16 @@ router.post('/:id/orders/bulk',
       if (!['borrador','en_proceso'].includes(folioRes.rows[0].estado)) {
         return res.status(409).json({ error: 'El folio no acepta más órdenes' })
       }
-      // Insert all orders — skip duplicates silently
-      for (const o of orders) {
-        if (!o.outbound_order_no) continue
+
+      // Cancelled orders, or orders already sitting in another active/confirmed folio,
+      // must be discarded from a por_destino bulk add instead of silently duplicated.
+      const candidateNos = [...new Set(orders.map(o => o.outbound_order_no).filter(Boolean))]
+      const conflicts = await findOrderConflicts(req.tQuery.bind(req), req.tenantId, candidateNos, req.params.id)
+      const blockedNos = new Set(conflicts.map(c => c.outbound_order_no))
+      const acceptedOrders = orders.filter(o => o.outbound_order_no && !blockedNos.has(o.outbound_order_no))
+
+      // Insert accepted orders — skip in-folio duplicates silently
+      for (const o of acceptedOrders) {
         const notes = typeof o.notas === 'string'
           ? o.notas
           : o.notas
@@ -661,9 +701,14 @@ router.post('/:id/orders/bulk',
       const detail = await getFolioDetail(req, req.params.id)
       auditLog(req, 'DESPACHO_FOLIO_ORDER_ADD', 'dispatch_folio', req.params.id, {
         bulk: true,
-        orders_added: orders.filter(o => o.outbound_order_no).length,
+        orders_added: acceptedOrders.length,
+        orders_skipped: conflicts.map(c => ({ outbound_order_no: c.outbound_order_no, reason: c.reason })),
       })
-      res.status(201).json(detail)
+      res.status(201).json({
+        ...detail,
+        orders_added: acceptedOrders.length,
+        orders_skipped: conflicts.map(c => c.outbound_order_no),
+      })
     } catch (error) {
       console.error('Bulk add orders error:', error)
       res.status(500).json({ error: 'Error agregando órdenes al folio' })
@@ -726,6 +771,24 @@ router.post('/:id/scans',
           error.status = 409
           error.code = 'DUPLICATE_IN_FOLIO'
           throw error
+        }
+
+        // A cancelled order is never valid for dispatch, even when the box isn't
+        // duplicated anywhere. Splitting a still-active order across folios stays
+        // allowed (see totales/CTE comment above) — only the cancelled state blocks.
+        if (normalizedOrderNo) {
+          const cancelledRes = await client.query(
+            `SELECT 1 FROM dispatch_folio_orders
+             WHERE tenant_id = $1 AND outbound_order_no = $2 AND estado = 'devolucion'
+             LIMIT 1`,
+            [req.tenantId, normalizedOrderNo]
+          )
+          if (cancelledRes.rows.length > 0) {
+            const error = new Error(`La orden ${normalizedOrderNo} está cancelada y no puede escanearse`)
+            error.status = 409
+            error.code = 'ORDER_CANCELLED'
+            throw error
+          }
         }
 
         const crossFolioRes = await client.query(
@@ -1007,17 +1070,10 @@ router.post('/:id/orders',
         return res.status(409).json({ error: 'Esta orden ya está registrada en este folio' })
       }
 
-      // Reject if order belongs to another non-cancelled folio
-      const otherFolioRes = await req.tQuery(
-        `SELECT f.folio_numero FROM dispatch_folio_orders fo
-         JOIN dispatch_folios f ON f.id = fo.folio_id
-         WHERE fo.tenant_id = $1 AND fo.outbound_order_no = $2
-           AND f.estado NOT IN ('cancelado') AND f.deleted_at IS NULL
-           AND f.id != $3`,
-        [req.tenantId, outbound_order_no, req.params.id]
-      )
-      if (otherFolioRes.rows.length > 0) {
-        return res.status(409).json({ error: `La orden ya está asignada al folio ${otherFolioRes.rows[0].folio_numero}` })
+      // Reject if the order is cancelled or belongs to another active/confirmed folio
+      const conflicts = await findOrderConflicts(req.tQuery.bind(req), req.tenantId, [outbound_order_no], req.params.id)
+      if (conflicts.length > 0) {
+        return res.status(409).json({ error: conflictErrorMessage(conflicts), code: 'ORDER_ALREADY_IN_ACTIVE_FOLIO' })
       }
 
       const result = await req.tQuery(
