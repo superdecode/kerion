@@ -17,6 +17,23 @@ import { upsertOrderTrackingSnapshot } from '../utils/orderTracking.js'
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const ALLOWED_RESULTS = new Set(['ok', 'duplicate', 'unexpected'])
 
+// Mismo formato que folio_numero en despacho (generateFolioNumero): prefijo +
+// fecha de confirmación + secuencia del día, para que el operador tenga algo
+// legible que anotar o leer en voz alta — fecha_lote es la fecha del pool que
+// se validó, no necesariamente hoy, así que el número usa la fecha real de
+// confirmación.
+async function generateLoteNumero(client, tenantId, tz) {
+  const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz })
+    .format(new Date())
+    .replace(/-/g, '')
+  const countRes = await client.query(
+    `SELECT COUNT(*) FROM pick_batches WHERE tenant_id = $1 AND lote_numero LIKE $2`,
+    [tenantId, `LT${dateStr}%`]
+  )
+  const seq = String(parseInt(countRes.rows[0].count, 10) + 1).padStart(2, '0')
+  return `LT${dateStr}${seq}`
+}
+
 export function validateCommitPayload(body) {
   if (!body || typeof body !== 'object') return { ok: false, error: 'Cuerpo inválido' }
   if (!ISO_DATE_RE.test(String(body.fecha_lote || ''))) {
@@ -197,12 +214,15 @@ export async function commitBatch(req, body) {
       (sum, o) => sum + o.events.filter(e => e.scan_result === 'ok').length, 0
     )
 
+    const tz = req.fullUser?.zona_horaria || 'America/Mexico_City'
+    const loteNumero = await generateLoteNumero(client, tenantId, tz)
+
     const batchRes = await client.query(
       `INSERT INTO pick_batches
-         (tenant_id, fecha_lote, operator_id, status, total_ordenes, total_cajas, total_tarimas, notes)
-       VALUES ($1, $2, $3, 'confirmado', $4, $5, $6, $7)
+         (tenant_id, lote_numero, fecha_lote, operator_id, status, total_ordenes, total_cajas, total_tarimas, notes)
+       VALUES ($1, $2, $3, $4, 'confirmado', $5, $6, $7, $8)
        RETURNING *`,
-      [tenantId, body.fecha_lote, operatorId, body.orders.length, totalCajas, body.tarimas.length,
+      [tenantId, loteNumero, body.fecha_lote, operatorId, body.orders.length, totalCajas, body.tarimas.length,
        normalizeOptionalText(body.notes)]
     )
     const batch = batchRes.rows[0]

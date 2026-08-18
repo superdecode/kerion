@@ -56,12 +56,17 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
   const canCreate = hasPermission('surtido.validacion', 'crear')
   const operadorNombre = user?.nombre_completo || user?.email || ''
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  // Un 503/red caída a mitad de carga no debe traducirse en "no hay órdenes
+  // hoy": el operador seguiría escaneando contra un pool vacío y cada caja
+  // real le saldría "no encontrada". Dos reintentos con backoff cubren un
+  // hipo transitorio del backend; si de verdad está caído, isError lo dice.
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['surtido-lote-pool', fecha],
     queryFn: () => getOutboundBatchByDate(fecha),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
-    retry: false,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   })
 
   const pool = useMemo(
@@ -191,8 +196,9 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
 
   const { mutate: doCommit, isPending: isCommitting } = useMutation({
     mutationFn: () => commitPickBatch(lote.commitPayload(notes)),
-    onSuccess: () => {
-      toast.success(t('surtido.lote.confirmar.exito'))
+    onSuccess: (res) => {
+      const loteNumero = res?.data?.batch?.lote_numero || ''
+      toast.success(t('surtido.lote.confirmar.exito').replace('{lote}', loteNumero))
       setConfirmarModal(null)
       setNotes('')
       lote.cancelDraft()
@@ -260,6 +266,26 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
       <div className="flex-1 flex flex-col items-center justify-center gap-3">
         <LoadingSpinner />
         <p className="text-xs text-warm-500">{t('surtido.lote.cargando')}</p>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-danger-50 flex items-center justify-center mb-4">
+          <AlertTriangle className="w-8 h-8 text-danger-400" />
+        </div>
+        <h2 className="text-base font-bold text-warm-800 mb-1">{t('surtido.lote.error.title')}</h2>
+        <p className="text-xs text-warm-500 max-w-sm leading-relaxed mb-4">{t('surtido.lote.error.desc')}</p>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="btn-secondary inline-flex items-center gap-2 text-sm disabled:opacity-40"
+        >
+          <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
+          {t('surtido.lote.vacio.refrescar')}
+        </button>
       </div>
     )
   }
