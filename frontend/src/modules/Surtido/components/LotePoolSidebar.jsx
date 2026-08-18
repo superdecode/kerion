@@ -220,10 +220,19 @@ export default function LotePoolSidebar({ pool, progress, visible, onToggle, ope
 
   // El botón para reabrir el panel colapsado vive en la cabecera de la
   // página (junto a Cancelar/Confirmar) — no aquí, para no duplicar controles.
+  // En pantallas <lg el panel deja de vivir "en flujo" (donde, al no tener
+  // altura acotada, quedaba recortado por el overflow-hidden del tab padre
+  // sin poder scrollear) y pasa a ser un bottom sheet fijo con su propio
+  // backdrop, igual que ValidarPorDestino en Despacho.
   if (!visible) return null
 
   return (
-    <aside className="w-full lg:w-[22rem] shrink-0 border-t lg:border-t-0 lg:border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 flex flex-col min-h-0">
+    <>
+      <div
+        className="lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+        onClick={onToggle}
+      />
+      <aside className="fixed inset-x-0 bottom-0 z-50 h-[78vh] rounded-t-3xl shadow-2xl lg:static lg:z-auto lg:h-auto lg:w-[22rem] lg:rounded-none lg:shadow-none w-full shrink-0 border-t lg:border-t-0 lg:border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 flex flex-col min-h-0 overflow-hidden">
       <div className="px-3.5 pt-3 pb-2.5 border-b border-warm-100 shrink-0">
         <div className="flex items-center gap-2 mb-2.5">
           <h4 className="min-w-0 flex-1 truncate text-[13px] font-bold text-warm-700">{t('surtido.lote.panel.title')}</h4>
@@ -234,6 +243,13 @@ export default function LotePoolSidebar({ pool, progress, visible, onToggle, ope
             className="hidden lg:flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-warm-400 hover:bg-warm-100 transition-colors"
           >
             <PanelRightClose size={14} />
+          </button>
+          <button
+            onClick={onToggle}
+            aria-label={t('common.close')}
+            className="lg:hidden flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 transition-colors active:scale-95"
+          >
+            <X size={15} />
           </button>
         </div>
 
@@ -289,6 +305,7 @@ export default function LotePoolSidebar({ pool, progress, visible, onToggle, ope
           ))
         )}
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

@@ -42,7 +42,12 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
   const [forzarModal, setForzarModal] = useState(null)
   const [confirmarModal, setConfirmarModal] = useState(null)
   const [notes, setNotes] = useState('')
-  const [sidebarVisible, setSidebarVisible] = useState(true)
+  // En desktop el panel de órdenes vive "en flujo" y arranca visible; en
+  // pantallas <lg pasa a ser un bottom sheet (ver LotePoolSidebar) que
+  // taparía el escaneo si arrancara abierto, así que ahí arranca cerrado.
+  const [sidebarVisible, setSidebarVisible] = useState(
+    () => typeof window === 'undefined' || window.matchMedia('(min-width: 1024px)').matches
+  )
   const [rechazosAbiertos, setRechazosAbiertos] = useState(false)
   const [ultimoResultado, setUltimoResultado] = useState(null)
   const resultTimerRef = useRef(null)
