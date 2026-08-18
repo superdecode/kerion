@@ -79,7 +79,7 @@ function OrderDetail({ progreso, operadorNombre, ubicacionPorTarima, snapshot, c
           <div className="flex flex-wrap gap-1">
             {progreso.pendingBoxes.map(box => (
               <span key={box.canonical} className="badge text-[10px] font-mono font-semibold bg-warm-100 text-warm-600">
-                {box.canonical}
+                {box.displayCode}
               </span>
             ))}
           </div>

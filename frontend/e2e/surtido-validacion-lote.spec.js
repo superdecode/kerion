@@ -188,6 +188,18 @@ test.describe('Surtido — validación por lote', () => {
     await expect(page.getByText(/ya fue validada en este lote/)).toBeVisible()
   })
 
+  test('las cajas pendientes muestran el custom box barcode, no el tipo de caja', async ({ page }) => {
+    await abrirLote(page)
+    // OBC-1001 trae boxType 'CAJA-B' y customizeCode 'AAA-2' para su segunda
+    // caja — validar la primera deja pendiente justo esa, y el badge debe
+    // mostrar 'AAA-2' (el código real de la caja), nunca 'CAJA-B' (el tipo).
+    await escanear(page, 'AAA-1')
+
+    await page.getByText('1/2').click()
+    await expect(page.getByText('AAA-2', { exact: true })).toBeVisible()
+    await expect(page.getByText('CAJA-B')).toHaveCount(0)
+  })
+
   test('rechaza un codigo ajeno explicando el motivo', async ({ page }) => {
     await abrirLote(page)
     await escanear(page, 'ZZZ-9')

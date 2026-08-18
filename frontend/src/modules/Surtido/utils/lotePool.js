@@ -56,15 +56,22 @@ function buildExpectedBoxes(packageList) {
     const canonical = compactCanonical(p.customizeCode || p.boxType || p.boxCode || '')
     if (!canonical || codes.length === 0) continue
     const quantity = Number(p.quantity ?? p.totalPackageQty ?? p.qty ?? 1) || 1
+    // El customizeCode ("Custom box barcode" del sheet) es el único código real
+    // por caja física. boxType es una categoría que varias cajas comparten
+    // (ver el caso ambiguo más abajo) — nunca se muestra como si identificara
+    // una caja. Sin customizeCode, displayCode queda vacío en vez de mostrar
+    // algo que parece un código de caja pero no lo es.
+    const displayCode = String(p.customizeCode || '').trim()
     const existing = byCanonical.get(canonical)
     if (existing) {
       // Filas repetidas de la misma caja son la única forma legítima de que un
       // código admita más de un escaneo. Se preserva esa cantidad de origen.
       existing.quantity += quantity
       existing.codes = [...new Set([...existing.codes, ...codes])]
+      if (!existing.displayCode && displayCode) existing.displayCode = displayCode
       continue
     }
-    byCanonical.set(canonical, { canonical, codes: [...new Set([canonical, ...codes])], quantity })
+    byCanonical.set(canonical, { canonical, codes: [...new Set([canonical, ...codes])], quantity, displayCode })
   }
   return [...byCanonical.values()]
 }

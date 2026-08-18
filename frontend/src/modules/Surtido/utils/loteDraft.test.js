@@ -265,7 +265,7 @@ describe('orderProgress', () => {
     const obc1 = progreso.get('OBC-1')
     expect(obc1.validated).toHaveLength(1)
     expect(obc1.complete).toBe(false)
-    expect(obc1.pendingBoxes).toEqual([{ canonical: 'AAA2', faltan: 2 }])
+    expect(obc1.pendingBoxes).toEqual([{ canonical: 'AAA2', displayCode: 'AAA-2', faltan: 2 }])
   })
 })
 

@@ -65,6 +65,25 @@ describe('buildLotePool', () => {
     expect(boxes[0].codes).toContain('AAA1')
   })
 
+  // El "Custom box barcode" (customizeCode) del sheet es el código único por
+  // caja física — lo que el panel debe mostrar como "caja pendiente". El
+  // boxType es una categoría compartida entre varias cajas (ver el caso
+  // 'CAJA' más abajo) y nunca debe usarse como si fuera el código de una caja.
+  it('displayCode es siempre el customizeCode, nunca el boxType', () => {
+    const boxes = pool.orders.find(o => o.outboundOrderNo === 'OBC-1').expectedBoxes
+    expect(boxes.map(b => b.displayCode)).toEqual(['AAA-1', 'AAA-2'])
+  })
+
+  it('sin customizeCode, displayCode queda vacio en vez de mostrar el boxType', () => {
+    const sinCustomCode = buildLotePool([
+      { outboundOrderNo: 'OBC-X', outboundTime: '2026-08-17 10:00:00', packageList: [{ boxType: 'TIPO-A', quantity: 1 }] },
+    ], '2026-08-17')
+    const box = sinCustomCode.orders[0].expectedBoxes[0]
+    expect(box.displayCode).toBe('')
+    // Sigue siendo reconocible al escanear el boxType — solo no se etiqueta con él.
+    expect(box.canonical).toBe('TIPOA')
+  })
+
   it('indexa el dia anterior y el posterior por separado', () => {
     expect(matchInPool(pool, 'CCC-1').status).toBe('adjacent')
   })

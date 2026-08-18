@@ -224,6 +224,9 @@ export function orderProgress(draft, pool) {
     const pendingBoxes = order.expectedBoxes
       .map(box => ({
         canonical: box.canonical,
+        // El código de caja real (customizeCode) — no el boxType, que es una
+        // categoría compartida entre varias cajas y no identifica ninguna.
+        displayCode: box.displayCode || box.canonical,
         faltan: box.quantity - okCount(draft, order.outboundOrderNo, box.canonical),
       }))
       .filter(box => box.faltan > 0)
