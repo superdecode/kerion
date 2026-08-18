@@ -4254,4 +4254,12 @@ export default {
     'inventario.escaneo.workLocationPlaceholder': '工作/来源位置',
     'inventario.escaneo.hidePanel': '隐藏面板',
     'inventario.escaneo.showPanel': '显示面板',
+
+    // i18n parity fill-in — keys that only existed in es.js
+    'common.updated': '已更新',
+    'common.saving': '保存中...',
+    'common.finalize': '完成',
+    'inventario.escaneo.scan_datetime': '扫描时间',
+    'desp.toast.folioCancelado': '发货单已取消',
+    'desp.toast.errorCancelarFolio': '取消发货单失败',
 }
