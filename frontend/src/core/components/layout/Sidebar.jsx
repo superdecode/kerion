@@ -371,7 +371,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav — flex-1 ensures it fills remaining height and scrolls */}
-      <nav data-tour="sidebar" className="flex-1 p-2 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <nav data-tour="sidebar" className="flex-1 p-2 overflow-y-auto overscroll-contain sidebar-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="space-y-0.5">
           {/* Dashboard */}
           {canSeeDashboard && (() => {

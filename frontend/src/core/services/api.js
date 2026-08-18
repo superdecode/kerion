@@ -161,6 +161,21 @@ api.interceptors.response.use(
       }
     }
 
+    // Auto-retry once on transient network failure (wifi roaming/AP handoff producing
+    // net::ERR_NETWORK_CHANGED, or a momentary DNS miss producing net::ERR_NAME_NOT_RESOLVED).
+    // These surface to axios as isNetworkFailure with no response at all. Only GET requests,
+    // only the first attempt — a real outage will still fail the retry and fall through below.
+    if (isNetworkFailure && method === 'get' && !error.config?._retriedNetwork) {
+      error.config._retriedNetwork = true
+      await new Promise(r => setTimeout(r, 1200))
+      try {
+        return await api.request(error.config)
+      } catch (retryErr) {
+        retryErr._retriedNetwork = true
+        captureApiError(retryErr)
+      }
+    }
+
     if ((isNetworkFailure || isServiceUnavailable) && !shouldSkipBackendCooldown(error.config)) {
       backendUnavailableUntil = Date.now() + BACKEND_COOLDOWN_MS
       _onBackendStatus?.(false)
