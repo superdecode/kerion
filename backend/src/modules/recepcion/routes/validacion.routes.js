@@ -26,21 +26,27 @@ async function getBulkScanEvents(tenantId, orderId, resultados) {
   const usersUrl = new URL(`${env.SUPABASE_URL}/rest/v1/usuarios`)
   usersUrl.searchParams.set('select', 'id,nombre_completo')
   usersUrl.searchParams.set('tenant_id', `eq.${tenantId}`)
-  const pageCount = BULK_SCAN_EVENTS_MAX_ROWS / BULK_SCAN_EVENTS_PAGE_SIZE
-  const requests = Array.from({ length: pageCount }, async (_, index) => {
-    const start = index * BULK_SCAN_EVENTS_PAGE_SIZE
+  const usersRequest = fetch(usersUrl, { headers, signal: AbortSignal.timeout(15000) })
+    .then(response => response.ok ? response.json() : [])
+
+  // Fetch sequentially and stop as soon as a page comes back short — most orders have far
+  // fewer than BULK_SCAN_EVENTS_MAX_ROWS events, so firing all pages in parallel up front
+  // (as this used to) meant every bulk request hammered Supabase's REST API with up to 50
+  // concurrent connections regardless of actual row count, which was exhausting the pool
+  // and causing intermittent 500s across unrelated concurrent recepcion requests.
+  const events = []
+  for (let start = 0; start < BULK_SCAN_EVENTS_MAX_ROWS; start += BULK_SCAN_EVENTS_PAGE_SIZE) {
     const response = await fetch(url, {
       headers: { ...headers, Range: `${start}-${start + BULK_SCAN_EVENTS_PAGE_SIZE - 1}` },
       signal: AbortSignal.timeout(15000),
     })
     if (!response.ok) throw new Error(`Supabase scan-events ${response.status}`)
-    return response.json()
-  })
-  const usersRequest = fetch(usersUrl, { headers, signal: AbortSignal.timeout(15000) })
-    .then(response => response.ok ? response.json() : [])
-  const [responses, users] = await Promise.all([Promise.all(requests), usersRequest])
+    const page = await response.json()
+    events.push(...page)
+    if (page.length < BULK_SCAN_EVENTS_PAGE_SIZE) break
+  }
 
-  const events = responses.flat()
+  const users = await usersRequest
   const userNames = new Map(users.map(user => [user.id, user.nombre_completo]))
 
   return events.map(event => ({

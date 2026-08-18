@@ -24,7 +24,8 @@ import { useAuthStore } from '../../../core/stores/authStore'
 import {
   getOutboundList, getOutboundDetail,
   getSurtidores, createSurtidor, updateSurtidor, deleteSurtidor,
-  getOrderTracking, upsertOrderTracking, bulkUpsertOrderTracking, getScanSessions, getScanSession,
+  getOrderTracking, upsertOrderTracking, bulkUpsertOrderTracking, getScanSessions,
+  getScanSessionsExportDetail,
   getManualEntryReasons, createManualEntryReason, updateManualEntryReason, deleteManualEntryReason,
   forceValidateOrder,
   bulkForceValidateOrders,
@@ -1848,12 +1849,29 @@ export default function Ordenes() {
       const obcSet = new Set(filteredValidacion.map(tr => tr.outbound_order_no).filter(Boolean))
       const sessionsData = await getScanSessions({ pageSize: 5000 })
       const sessions = getRecords(sessionsData).filter(s => obcSet.has(s.outbound_order_no))
-      const details = await Promise.all(sessions.map(s => getScanSession(s.id)))
+
+      // Batched in chunks instead of one getScanSession call per session — firing all of
+      // them via Promise.all exhausts the production DB pool (max: 4) once this list runs
+      // past a handful of rows. The endpoint itself caps a single call at 300 sessions.
+      const CHUNK_SIZE = 250
+      const ids = sessions.map(s => s.id)
+      const sessionById = new Map()
+      const eventsBySession = new Map()
+      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        const chunk = ids.slice(i, i + CHUNK_SIZE)
+        const { data } = await getScanSessionsExportDetail(chunk)
+        ;(data.sessions || []).forEach(s => sessionById.set(s.id, s))
+        ;(data.events || []).forEach(e => {
+          if (!eventsBySession.has(e.session_id)) eventsBySession.set(e.session_id, [])
+          eventsBySession.get(e.session_id).push(e)
+        })
+      }
+
       const HEADERS = ['OBC', 'Operador', 'Tiempo escaneo', 'Código caja', 'Ubicación', 'Resultado', 'Notas sesión']
       const rows = []
-      for (const detail of details) {
-        const sess = detail?.data?.session ?? {}
-        const events = detail?.data?.events ?? []
+      for (const s of sessions) {
+        const sess = sessionById.get(s.id) || s
+        const events = eventsBySession.get(s.id) || []
         for (const e of events) {
           rows.push([
             sess.outbound_order_no || '',
@@ -1867,7 +1885,9 @@ export default function Ordenes() {
         }
       }
       exportSheet(HEADERS, rows, 'Detalle Validación', `val_detalle_${getToday()}.xlsx`)
-    } catch { toast.error(t('toast.error')) }
+    } catch (err) {
+      toast.error(err.response?.data?.error || t('toast.error'))
+    }
     setExportingDetailed(false)
   }
 

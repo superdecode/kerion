@@ -53,6 +53,11 @@ export const getScanSession = (id) => {
 export const clearSessionEvents = (id) =>
   api.delete(`/wmshub/scan-session/${id}/events`).then(r => r.data)
 
+// Batched session+event detail for bulk exports in Registros — one request instead of
+// one getScanSession call per selected row (see export-detail route for why).
+export const getScanSessionsExportDetail = (ids) =>
+  api.post('/wmshub/scan-sessions/export-detail', { ids }, { timeout: 120000 }).then(r => r.data)
+
 // Surtidores
 export const getSurtidores = () =>
   api.get('/wmshub/surtidores').then(r => r.data)

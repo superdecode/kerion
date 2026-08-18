@@ -57,6 +57,7 @@ export default function AnormMejoras() {
   const canDelete = hasPermission('anormalidades.mejoras', 'eliminar')
 
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [estadoFilter, setEstadoFilter] = useState('')
   const [search, setSearch] = useState('')
   const [soloVencidas, setSoloVencidas] = useState(false)
@@ -88,7 +89,7 @@ export default function AnormMejoras() {
   })
 
   const queryParams = useMemo(() => {
-    const p = { page, limit: 20, search: search || undefined }
+    const p = { page, limit: pageSize, search: search || undefined }
     if (estadoFilter) p.estado = estadoFilter
     if (soloVencidas) p.vencidas = true
     if (soloVinculadas) p.vinculadas = true
@@ -99,7 +100,7 @@ export default function AnormMejoras() {
     if (selectedOrigenes.length) p.origen = selectedOrigenes.join(',')
     if (selectedResponsables.length) p.responsable_id = selectedResponsables.join(',')
     return p
-  }, [page, search, estadoFilter, soloVencidas, soloVinculadas, sinVinculos, fechaDesde, fechaHasta, selectedProcesos, selectedOrigenes, selectedResponsables])
+  }, [page, pageSize, search, estadoFilter, soloVencidas, soloVinculadas, sinVinculos, fechaDesde, fechaHasta, selectedProcesos, selectedOrigenes, selectedResponsables])
 
   const { data, isLoading } = useQuery({
     queryKey: ['anorm-mejoras', queryParams],
@@ -475,7 +476,13 @@ export default function AnormMejoras() {
                 </tbody>
               </table>
             </div>
-            <TablePagination page={page} limit={20} total={total} onPageChange={setPage} />
+            <TablePagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+            />
           </div>
         )}
       </div>

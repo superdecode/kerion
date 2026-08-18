@@ -2,11 +2,30 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 
+// Per-session dedupe only. Sampling lives server-side (public.routes.js): the
+// endpoint is public, so a stale cached bundle or a direct POST would bypass any
+// rate applied here and leave the recorded share of visits unknowable.
 function track(eventType, payload) {
+  const sessionKey = 'kirion_landing_track'
+  try {
+    const current = JSON.parse(sessionStorage.getItem(sessionKey) || '{}')
+    const signature = `${eventType}:${JSON.stringify(payload || {})}`
+    if (current[signature]) return
+    current[signature] = Date.now()
+    sessionStorage.setItem(sessionKey, JSON.stringify(current))
+  } catch (_) {}
+
+  const body = JSON.stringify({ event_type: eventType, payload: payload || {} })
+  if (navigator.sendBeacon) {
+    const blob = new Blob([body], { type: 'application/json' })
+    if (navigator.sendBeacon('/api/public/track', blob)) return
+  }
+
   fetch('/api/public/track', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ event_type: eventType, payload: payload || {} }),
+    body,
+    keepalive: true,
   }).catch(() => {})
 }
 import {

@@ -25,7 +25,7 @@ import { getTimeBounds } from '../utils/timeBounds'
 import {
   getInventorySessions, getInventorySession, deleteInventorySession,
   createInventoryScan, updateInventoryScan, deleteInventoryScan, checkInventoryDuplicates,
-  updateInventorySession,
+  updateInventorySession, getInventorySessionsExportDetail,
 } from '../services/inventarioService'
 import { generateCodeVariations } from '../../Shared/Wms/normalizeCode'
 import QuickCodeSearchModal from '../components/QuickCodeSearchModal'
@@ -78,6 +78,19 @@ const formatTarimaCode = (rawCode, sectionCode, index) => {
   const dayMatch = String(sectionCode || '').match(/^(?:SEC-)?(\d{8})M\d+$/)
   const dayKey = dayMatch ? dayMatch[1] : dateKeyFromTimestamp()
   return `PAL-${dayKey}-${String(index + 1).padStart(2, '0')}`
+}
+
+const buildTarimaCodeMap = (scans, sectionCode) => {
+  const groups = {}
+  scans.forEach((sc) => {
+    const key = normalizeTarimaGroupKey(sc.group_assignment, sectionCode)
+    if (!groups[key]) groups[key] = true
+  })
+  const map = {}
+  Object.keys(groups).forEach((rawCode, index) => {
+    map[rawCode] = formatTarimaCode(rawCode, sectionCode, index)
+  })
+  return map
 }
 
 const buildCodeVariantSet = (...codes) => {
@@ -280,12 +293,21 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
     scanBounds.start || sessionData.started_at || session?.started_at || sessionData.created_at || session?.created_at
   )
 
+  const contributions = data?.data?.contributions ?? []
+
   const duration = (() => {
-    if (!scanBounds.start || !scanBounds.end) return '—'
-    const ms = new Date(scanBounds.end) - new Date(scanBounds.start)
-    const min = Math.floor(ms / 60000)
-    const sec = Math.floor((ms % 60000) / 1000)
-    return `${min}m ${sec}s`
+    // active_seconds is the sum of each work stretch's own span. For a tarima that was
+    // appended to (same ubicación, later in the day, possibly another operator), deriving
+    // this from first/last scan instead would bill the idle gap between stretches to the
+    // tarima and distort productivity. Falls back to the scan span for pre-107 rows.
+    const active = sessionData.active_seconds ?? session?.active_seconds
+    const totalSec = active !== null && active !== undefined
+      ? Number(active)
+      : (scanBounds.start && scanBounds.end
+        ? Math.floor((new Date(scanBounds.end) - new Date(scanBounds.start)) / 1000)
+        : null)
+    if (totalSec === null || !Number.isFinite(totalSec)) return '—'
+    return `${Math.floor(totalSec / 60)}m ${totalSec % 60}s`
   })()
 
   const tarimas = useMemo(() => {
@@ -461,18 +483,20 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
         [t('inventario.escaneo.group_nowms'), totals.nowms],
         [t('common.total'), totals.total],
         [],
-        [t('inventario.registros.tarima'), t('inventario.escaneo.code_1'), t('inventario.escaneo.code_2'), t('inventario.escaneo.location'), t('common.status'), t('inventario.registros.scan_date')],
+        [t('inventario.registros.tarima'), t('inventario.escaneo.code_1'), t('inventario.escaneo.code_2'), t('inventario.registros.work_location'), t('inventario.registros.export_ubicacion_origen_wms'), t('inventario.registros.destination_location'), t('common.status'), t('inventario.registros.scan_date')],
         ...scans.map(sc => [
           tarimaCodeByRaw[normalizeTarimaGroupKey(sc.group_assignment, sectionCode)] || formatTarimaCode(sc.group_assignment, sectionCode, 0),
           sc.normalized_code || '',
           sc.code2 || '',
+          sessionData.origin_location || '',
           sc.cell_no || '',
+          sessionData.ubicacion_codigo || sessionData.ubicacion_code || '',
           sc.scan_status || '',
           sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
         ])
       ]
       const ws = XLSX.utils.aoa_to_sheet(info)
-      ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 14 }, { wch: 22 }]
+      ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 22 }]
       XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.excel_sheet'))
       XLSX.writeFile(wb, `inventario_${sectionCode}_${getToday()}.xlsx`)
       toast.success(t('inventario.registros.export_success'))
@@ -603,6 +627,37 @@ function DetailModal({ session, isOpen, onClose, initialTab = 'detallado', initi
               )
             })}
           </div>
+
+          {contributions.length > 1 && (
+            <div className="overflow-x-auto rounded-xl border border-accent-100">
+              <table className="w-full min-w-[420px] text-xs">
+                <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
+                  <tr>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.contributions')}</span></th>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.escaneo.contribution_operator')}</span></th>
+                    <th className={`${TH_CLASS} text-center`}><span className={TH_TEXT}>{t('inventario.escaneo.contribution_boxes')}</span></th>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.start_date')}</span></th>
+                    <th className={TH_CLASS}><span className={TH_TEXT}>{t('inventario.registros.end_date')}</span></th>
+                    <th className={`${TH_CLASS} text-right`}><span className={TH_TEXT}>{t('inventario.escaneo.contribution_time')}</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-warm-100">
+                  {contributions.map((c) => (
+                    <tr key={c.id}>
+                      <td className="px-3 py-2 font-mono text-xs text-warm-600">#{c.sequence}</td>
+                      <td className="px-3 py-2 text-xs text-warm-700 font-medium">{c.operator_nombre || '—'}</td>
+                      <td className="px-3 py-2 text-center font-mono text-xs text-warm-700">{c.scans_added}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-warm-600">{c.first_scan_at ? fmtTimeShort(c.first_scan_at) : '—'}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-warm-600">{c.last_scan_at ? fmtTimeShort(c.last_scan_at) : '—'}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-warm-700">
+                        {Math.floor((c.active_seconds || 0) / 60)}m {(c.active_seconds || 0) % 60}s
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {tarimas.length === 0 ? (
             <p className="text-sm text-warm-400 text-center py-10">{t('common.noData')}</p>
@@ -1083,7 +1138,7 @@ export default function InventarioRegistros() {
       return next
     })
   }
-  const DETAIL_EXPORT_HEADERS = [
+  const INV_DETAIL_HEADERS = [
     t('inventario.registros.section'),
     t('inventario.registros.type'),
     t('inventario.registros.operator'),
@@ -1091,72 +1146,62 @@ export default function InventarioRegistros() {
     t('inventario.escaneo.code_1'),
     t('inventario.escaneo.code_2'),
     t('inventario.registros.work_location'),
+    t('inventario.registros.export_ubicacion_origen_wms'),
     t('inventario.registros.destination_location'),
     t('common.status'),
     t('inventario.registros.scan_date'),
   ]
-  const DETAIL_EXPORT_COLS = [
-    { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 22 },
+  const INV_DETAIL_COLS = [
+    { wch: 22 }, { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 22 },
   ]
-  const buildTarimaCodeMap = (scans, sectionCode) => {
-    const groups = {}
-    scans.forEach((sc) => {
-      const key = normalizeTarimaGroupKey(sc.group_assignment, sectionCode)
-      if (!groups[key]) groups[key] = true
+  const buildInvDetailRows = (sessions, scansBySessionId) => {
+    const rows = []
+    sessions.forEach((s) => {
+      const sectionCode = formatSectionCode(s.tarima_code, s.started_at || s.completed_at || s.created_at)
+      const tipo = s.scan_type === 'clasificacion' ? t('inventario.escaneo.type_clasificacion') : t('inventario.escaneo.type_unificado')
+      const scans = scansBySessionId[s.id] || []
+      const tarimaCodeByRaw = buildTarimaCodeMap(scans, sectionCode)
+      scans.forEach((sc) => {
+        const key = normalizeTarimaGroupKey(sc.group_assignment, sectionCode)
+        rows.push([
+          sectionCode, tipo, s.operator_nombre || '',
+          tarimaCodeByRaw[key] || sectionCode,
+          sc.normalized_code || '', sc.code2 || '',
+          s.origin_location || '',
+          sc.cell_no || '',
+          s.ubicacion_codigo || s.ubicacion_code || '',
+          sc.scan_status || '',
+          sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
+        ])
+      })
     })
-    const codeByRaw = {}
-    Object.keys(groups).forEach((rawCode, index) => {
-      codeByRaw[rawCode] = formatTarimaCode(rawCode, sectionCode, index)
-    })
-    return codeByRaw
-  }
-  const buildDetailRowsForSession = (session, scans) => {
-    const sectionCode = formatSectionCode(session.tarima_code, session.started_at || session.created_at)
-    const typeLabel = session.scan_type === 'clasificacion'
-      ? t('inventario.escaneo.type_clasificacion')
-      : t('inventario.escaneo.type_unificado')
-    const origin = session.origin_location || ''
-    const destino = session.ubicacion_codigo || session.ubicacion_nombre || ''
-    const tarimaCodeByRaw = buildTarimaCodeMap(scans, sectionCode)
-    return scans.map(sc => [
-      sectionCode,
-      typeLabel,
-      session.operator_nombre || '',
-      tarimaCodeByRaw[normalizeTarimaGroupKey(sc.group_assignment, sectionCode)] || formatTarimaCode(sc.group_assignment, sectionCode, 0),
-      sc.normalized_code || '',
-      sc.code2 || '',
-      origin,
-      destino,
-      sc.scan_status || '',
-      sc.scanned_at ? fmtDateTime(sc.scanned_at) : '',
-    ])
+    return rows
   }
 
   const handleBulkExport = async () => {
     if (selectedIds.size === 0) return
     setExportingBulk(true)
     try {
-      const ids = [...selectedIds]
-      const rows = []
-      for (const id of ids) {
-        try {
-          const res = await getInventorySession(id)
-          const session = res?.data?.session ?? {}
-          const scans = res?.data?.scans ?? []
-          rows.push(...buildDetailRowsForSession(session, scans))
-        } catch (err) {
-          console.error(`Error al cargar la sesión ${id}`, err)
-        }
-      }
+      const ids = Array.from(selectedIds)
+      const { data } = await getInventorySessionsExportDetail(ids)
+      const scansBySessionId = {}
+      ;(data.scans || []).forEach((sc) => {
+        if (!scansBySessionId[sc.session_id]) scansBySessionId[sc.session_id] = []
+        scansBySessionId[sc.session_id].push(sc)
+      })
+      const rows = buildInvDetailRows(data.sessions || [], scansBySessionId)
       const wb = XLSX.utils.book_new()
-      const ws = XLSX.utils.aoa_to_sheet([DETAIL_EXPORT_HEADERS, ...rows])
-      ws['!cols'] = DETAIL_EXPORT_COLS
-      XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.excel_sheet'))
+      const ws = XLSX.utils.aoa_to_sheet([INV_DETAIL_HEADERS, ...rows])
+      ws['!cols'] = INV_DETAIL_COLS
+      XLSX.utils.book_append_sheet(wb, ws, t('inventario.registros.title'))
       XLSX.writeFile(wb, `inventario_registros_detalle_${getToday()}.xlsx`)
       toast.success(t('inventario.registros.export_success'))
       setSelectedIds(new Set())
-    } catch { toast.error(t('toast.error')) }
-    setExportingBulk(false)
+    } catch (err) {
+      toast.error(err.response?.data?.error || t('toast.error'))
+    } finally {
+      setExportingBulk(false)
+    }
   }
 
   const handleCopyCode = async (event, code) => {

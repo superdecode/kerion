@@ -14,6 +14,7 @@ import Modal from '../../../core/components/common/Modal'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
 import ValidationModeSelectorModal from '../components/ValidationModeSelectorModal'
+import CopyScansButton from '../components/CopyScansButton'
 import { useI18nStore } from '../../../core/stores/i18nStore'
 import { useToastStore } from '../../../core/stores/toastStore'
 import { useAuthStore } from '../../../core/stores/authStore'
@@ -1608,7 +1609,7 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
         refocus()
         return
       }
-      if (matchingLines.length === 0 && hasCompleteLineSet) {
+      if (matchingLines.length === 0 && hasCompleteLineSet && !isLinesError) {
         const crossOrder = await findPendingCrossOrder(code)
         if (crossOrder) {
           playSound('warning')
@@ -1995,11 +1996,19 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
               {/* Expandable code list */}
               {isExpanded && g.codes.length > 0 && (
                 <div className={`border-t ${isActive ? 'border-primary-100' : 'border-warm-100'} divide-y divide-warm-50`}>
-                  <div className="grid grid-cols-[2rem_1rem_minmax(0,1fr)_8.5rem] gap-2 bg-warm-50/80 px-3 py-1 text-[9px] font-bold uppercase tracking-wide text-warm-500">
+                  <div className="grid grid-cols-[2rem_1rem_minmax(0,1fr)_8.5rem_1.25rem] items-center gap-2 bg-warm-50/80 px-3 py-1 text-[9px] font-bold uppercase tracking-wide text-warm-500">
                     <span>#</span>
                     <span />
                     <span>{t('rec.scan.col.codigo')}</span>
                     <span className="text-right">{t('rec.scan.col.fecha_hora')}</span>
+                    <CopyScansButton
+                      rows={g.codes}
+                      formatDate={formatScanDateTime}
+                      headerCodigo={t('rec.scan.col.codigo')}
+                      headerFecha={t('rec.scan.col.fecha_hora')}
+                      tooltip={t('rec.scan.copy.tooltip')}
+                      copiedLabel={t('rec.scan.copy.copied')}
+                    />
                   </div>
                   {g.codes.map((c, ci) => (
                     <div key={c.id || ci} className="grid grid-cols-[2rem_1rem_minmax(0,1fr)_8.5rem] items-center gap-2 px-3 py-1.5 hover:bg-primary-50/30 transition-colors">
@@ -2272,7 +2281,18 @@ export default function ValidacionRecepcion({ orderId: propOrderId, initialOrder
                     <div className={`px-3 py-2 ${isActive ? 'bg-white/5' : 'bg-sky-50/45'}`}>
                       <div className={`mb-1.5 flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide ${isActive ? 'text-white/65' : 'text-sky-600'}`}>
                         <span>{t('rec.tarimas.panel.validated_scans')}</span>
-                        <span className="tabular-nums">{scanEvents.length}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="tabular-nums">{scanEvents.length}</span>
+                          <CopyScansButton
+                            rows={scanEvents}
+                            formatDate={formatScanDateTime}
+                            headerCodigo={t('rec.scan.col.codigo')}
+                            headerFecha={t('rec.scan.col.fecha_hora')}
+                            tooltip={t('rec.scan.copy.tooltip')}
+                            copiedLabel={t('rec.scan.copy.copied')}
+                            idleClassName={isActive ? 'text-white/70 hover:text-white hover:bg-white/15' : 'text-warm-400 hover:text-primary-600 hover:bg-primary-50'}
+                          />
+                        </span>
                       </div>
                       <div className="space-y-1">
                         <div className={`grid grid-cols-[2rem_1rem_minmax(0,1fr)_8.5rem] gap-2 px-2 py-1 text-[9px] font-bold uppercase tracking-wide ${isActive ? 'text-white/75' : 'text-warm-500'}`}>

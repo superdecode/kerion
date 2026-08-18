@@ -21,6 +21,12 @@ const trackLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+// Single sampling point for /track. The client only dedupes per session, so the
+// share recorded here is the whole story: page_visit lands 1 of every 5 hits.
+const TRACK_SAMPLE_RATES = {
+  page_visit: 0.2,
+}
+
 async function verifyTurnstile(token, ip) {
   if (env.NODE_ENV !== 'production') return true
   if (!env.TURNSTILE_SECRET) return true
@@ -109,6 +115,8 @@ router.post('/track', trackLimiter, async (req, res) => {
   try {
     const { event_type, payload } = req.body
     if (!event_type || typeof event_type !== 'string') return res.json({ ok: true })
+    const sampleRate = TRACK_SAMPLE_RATES[event_type] ?? 1
+    if (sampleRate < 1 && Math.random() > sampleRate) return res.json({ ok: true })
     const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
     const userAgent = req.headers['user-agent'] || null
     await query(

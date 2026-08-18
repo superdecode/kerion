@@ -1,11 +1,12 @@
 import { memo, useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query'
 import {
   ScanLine, Loader2, X, Check, CheckCircle2, XCircle, AlertCircle,
   Layers, MapPin, Trash2, Radio, Clock3, Search, MoveRight,
   PanelRightClose, PanelRightOpen, PartyPopper, ExternalLink, Plus, Copy, WifiOff,
 } from 'lucide-react'
+import ScanInputBar from '../../Shared/Wms/ScanInputBar'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import Modal from '../../../core/components/common/Modal'
 import LoadingSpinner from '../../../core/components/common/LoadingSpinner'
@@ -155,60 +156,6 @@ function CopyMetaPill({ label, value, tone = 'primary' }) {
   )
 }
 
-const ScanInputBar = memo(function ScanInputBar({ inputRef, onSubmit, placeholder, buttonLabel, disabled }) {
-  const [value, setValue] = useState('')
-
-  const submit = useCallback(() => {
-    const raw = value.trim()
-    if (!raw || disabled) return
-    setValue('')
-    onSubmit(raw)
-    requestAnimationFrame(() => inputRef.current?.focus())
-  }, [disabled, inputRef, onSubmit, value])
-
-  return (
-    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-      <div className="flex items-center gap-2 bg-white border-2 rounded-2xl px-4 h-11 flex-1 transition-colors border-primary-200 focus-within:border-primary-400">
-        <ScanLine className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-        <input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              submit()
-            }
-          }}
-          placeholder={placeholder}
-          className="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400"
-          autoComplete="off"
-          disabled={disabled}
-        />
-        {value && (
-          <button
-            type="button"
-            onClick={() => { setValue(''); inputRef.current?.focus() }}
-            className="text-warm-400 hover:text-warm-600"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={submit}
-        disabled={!value.trim() || disabled}
-        className="btn-primary text-sm flex items-center justify-center gap-1.5 h-11 px-4 rounded-2xl disabled:opacity-50 w-full sm:w-auto"
-      >
-        <ScanLine className="w-3.5 h-3.5" />
-        {buttonLabel}
-      </button>
-    </div>
-  )
-})
-
 const OrderSearchBox = memo(function OrderSearchBox({ onSearchChange, placeholder }) {
   const [value, setValue] = useState('')
   const timerRef = useRef(null)
@@ -264,7 +211,49 @@ export default function ValidarPorDestino({ folioId }) {
   const qc = useQueryClient()
 
   const scanRef = useRef(null)
+  const scanRefMobile = useRef(null)
   const pendingOnlineRef = useRef(new Set())
+
+  // Phones/PDAs use the pinned bottom bar, desktop the one inside the header.
+  // Only one of the two inputs is visible at a time, so focus has to follow the
+  // active breakpoint or the scanner gun types into a hidden field.
+  const [isCompact, setIsCompact] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches
+  )
+  const [isWide, setIsWide] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches
+  )
+
+  const focusScan = useCallback(() => {
+    const ref = isCompact ? scanRefMobile : scanRef
+    ref.current?.focus()
+  }, [isCompact])
+
+  // Resizing across a breakpoint swaps which scan field is rendered. Without this
+  // the caret stayed in the field that just got hidden and scans went nowhere.
+  useEffect(() => {
+    const compactMq = window.matchMedia('(max-width: 639px)')
+    const wideMq = window.matchMedia('(min-width: 1280px)')
+    const onCompact = (e) => setIsCompact(e.matches)
+    const onWide = (e) => setIsWide(e.matches)
+    compactMq.addEventListener('change', onCompact)
+    wideMq.addEventListener('change', onWide)
+    return () => {
+      compactMq.removeEventListener('change', onCompact)
+      wideMq.removeEventListener('change', onWide)
+    }
+  }, [])
+
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false)
+
+  // The orders bottom sheet only exists below xl; widening past it must hand the
+  // panel back to the side column instead of leaving an orphan overlay state.
+  useEffect(() => {
+    if (isWide && mobilePanelOpen) {
+      setMobilePanelOpen(false)
+      setShowPanel(true)
+    }
+  }, [isWide, mobilePanelOpen])
   const [currentTarimaNum, setCurrentTarimaNum] = useState(1)
   const [errorModal, setErrorModal] = useState(null)
   const [showConfirmCancel, setShowConfirmCancel] = useState(false)
@@ -295,12 +284,19 @@ export default function ValidarPorDestino({ folioId }) {
     staleTime: 30_000,
   })
 
+  // A background poll landing while a scan is being submitted can overwrite the
+  // optimistic entry added in doAddScan's onMutate with a server snapshot that
+  // doesn't include it yet, making a just-scanned code appear to vanish. Pause
+  // polling while a scan for this folio is in flight; onMutate's cancelQueries
+  // already handles a poll that was in flight when the mutation started.
+  const addScanPendingCount = useIsMutating({ mutationKey: ['despacho-add-scan', folioId] })
+
   const { data: scansData, isLoading: loadingScans } = useQuery({
     queryKey: ['despacho-folio-scans', folioId],
     queryFn: () => getFolioScans(folioId),
     enabled: !!folioId,
     staleTime: 10_000,
-    refetchInterval: 15_000,
+    refetchInterval: addScanPendingCount > 0 ? false : 15_000,
   })
 
   const folio = folioData?.folio
@@ -318,9 +314,13 @@ export default function ValidarPorDestino({ folioId }) {
   const editable = !!isActive && canWrite('despacho.folios')
   const currentTarimaRef = genTarimaRef(currentTarimaNum)
 
+  // focusScan is rebuilt when the compact breakpoint flips, so this also re-aims
+  // the caret at whichever scan field is now on screen after a resize.
   useEffect(() => {
-    if (editable) setTimeout(() => scanRef.current?.focus(), 100)
-  }, [editable, folioId])
+    if (!editable) return
+    const timer = setTimeout(() => focusScan(), 100)
+    return () => clearTimeout(timer)
+  }, [editable, folioId, focusScan])
 
   useEffect(() => {
     if (currentTarimaNum !== 1 || scans.length === 0) return
@@ -463,6 +463,22 @@ export default function ValidarPorDestino({ folioId }) {
     return { variants }
   }, [orders, outboundRecords])
 
+  // Duplicate index for the scan hot path. Rebuilding this per scan made every
+  // shot on a large folio walk the whole scan list and regenerate its variants.
+  const scannedCodeVariants = useMemo(() => {
+    const set = new Set()
+    const addCode = (rawCode) => {
+      const normalized = normalizeCodeFast(rawCode)
+      if (!normalized) return
+      generateCodeVariations(normalized, false).forEach((variant) => set.add(variant))
+    }
+    scans.forEach((scan) => addCode(scan.codigo_caja))
+    // Offline scans only live in local state until the queue drains — without
+    // them the same box could be enqueued twice while disconnected.
+    pendingOfflineScans.forEach((pending) => addCode(pending.code))
+    return set
+  }, [scans, pendingOfflineScans])
+
   const currentTarimaHasScans = useMemo(
     () => scans.some((scan) => (scan.tarima_ref || 'Sin tarima') === currentTarimaRef),
     [scans, currentTarimaRef]
@@ -471,14 +487,14 @@ export default function ValidarPorDestino({ folioId }) {
   const handleNextTarima = useCallback(() => {
     if (!currentTarimaHasScans) {
       addToast(t('desp.validar.destino.tarimaVacia'), 'warning')
-      setTimeout(() => scanRef.current?.focus(), 60)
+      setTimeout(() => focusScan(), 60)
       return
     }
 
     const next = currentTarimaNum + 1
     setCurrentTarimaNum(next)
     addToast(`${t('desp.validar.destino.tarimaLista')} ${genTarimaRef(next)}`, 'success')
-    setTimeout(() => scanRef.current?.focus(), 60)
+    setTimeout(() => focusScan(), 60)
   }, [addToast, currentTarimaHasScans, currentTarimaNum, t])
 
   const { mutate: doCerrar, isPending: cerrando } = useMutation({
@@ -498,6 +514,7 @@ export default function ValidarPorDestino({ folioId }) {
   })
 
   const { mutate: doAddScan } = useMutation({
+    mutationKey: ['despacho-add-scan', folioId],
     mutationFn: (body) => addFolioScan(folioId, body),
     onMutate: async (body) => {
       const queryKey = ['despacho-folio-scans', folioId]
@@ -572,7 +589,7 @@ export default function ValidarPorDestino({ folioId }) {
       } else {
         addToast(msg, 'error')
       }
-      setTimeout(() => scanRef.current?.focus(), 50)
+      setTimeout(() => focusScan(), 50)
     },
   })
 
@@ -593,7 +610,7 @@ export default function ValidarPorDestino({ folioId }) {
       qc.invalidateQueries({ queryKey: ['despacho-folio-scans', folioId] })
       setMoveModal({ open: false, scan: null, target: '' })
       addToast(t('desp.validar.destino.tarimaMovida'), 'success')
-      setTimeout(() => scanRef.current?.focus(), 60)
+      setTimeout(() => focusScan(), 60)
     },
     onError: (err) => addToast(err?.response?.data?.error || t('desp.validar.destino.tarimaMoverError'), 'error'),
   })
@@ -616,7 +633,7 @@ export default function ValidarPorDestino({ folioId }) {
       qc.invalidateQueries({ queryKey: ['despacho-folios'] })
       qc.invalidateQueries({ queryKey: ['despacho-ordenes-dispatch'] })
       addToast(t('desp.validar.destino.removeOrderSuccess'), 'success')
-      setTimeout(() => scanRef.current?.focus(), 80)
+      setTimeout(() => focusScan(), 80)
     },
     onError: (err) => addToast(err?.response?.data?.error || t('desp.validar.destino.removeOrderError'), 'error'),
   })
@@ -634,7 +651,7 @@ export default function ValidarPorDestino({ folioId }) {
       setLookupResult(null)
       setAddForm({ outbound_order_no: '', destinatario: '', bultos: '', bultos_esperados: null, outbound_date: null })
       addToast(`Orden ${pendingOrderNoRef.current || ''} agregada al folio`, 'success')
-      setTimeout(() => scanRef.current?.focus(), 80)
+      setTimeout(() => focusScan(), 80)
     },
     onError: (err) => addToast(err?.response?.data?.error || 'Error agregando orden al folio', 'error'),
   })
@@ -656,7 +673,7 @@ export default function ValidarPorDestino({ folioId }) {
     setShowAddOrder(false)
     setLookupResult(null)
     setAddForm({ outbound_order_no: '', destinatario: '', bultos: '', bultos_esperados: null, outbound_date: null })
-    setTimeout(() => scanRef.current?.focus(), 80)
+    setTimeout(() => focusScan(), 80)
   }, [addingOrder])
 
   const handleLookup = useCallback(async (code) => {
@@ -743,7 +760,7 @@ export default function ValidarPorDestino({ folioId }) {
     if (code) pendingOnlineRef.current.add(code)
     doAddScan(overLimitModal.payload)
     setOverLimitModal({ open: false, payload: null, scanned: 0, expected: 0 })
-    setTimeout(() => scanRef.current?.focus(), 100)
+    setTimeout(() => focusScan(), 100)
   }, [doAddScan, overLimitModal.payload])
 
   const handleScan = useCallback((rawInput) => {
@@ -751,17 +768,11 @@ export default function ValidarPorDestino({ folioId }) {
     if (!raw) return
     const variants = buildScanCodeVariants(raw)
     const code = variants[0] || ''
-    scanRef.current?.focus()
+    focusScan()
     if (!code) return
 
-    // Duplicate check (server scans + locally pending)
-    const scannedCodes = new Set()
-    scans.forEach((scan) => {
-      const normalized = normalizeCodeFast(scan.codigo_caja)
-      if (!normalized) return
-      generateCodeVariations(normalized, false).forEach((variant) => scannedCodes.add(variant))
-    })
-    if (hasCodeVariant(scannedCodes, variants) || pendingOnlineRef.current.has(code)) {
+    // Duplicate check (server scans + offline queue + locally pending)
+    if (hasCodeVariant(scannedCodeVariants, variants) || pendingOnlineRef.current.has(code)) {
       setErrorModal({ type: 'duplicate', code })
       return
     }
@@ -794,7 +805,7 @@ export default function ValidarPorDestino({ folioId }) {
       }
 
       setErrorModal({ type: 'nomatch', code, allowForce: true, message })
-      setTimeout(() => scanRef.current?.focus(), 100)
+      setTimeout(() => focusScan(), 100)
       return
     }
 
@@ -810,7 +821,7 @@ export default function ValidarPorDestino({ folioId }) {
     }
 
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: matchedOrderNo })
-  }, [scans, orderCodeLookup, externalCodeLookup, orderMetaByNo, folio?.destino, currentTarimaRef, isOffline, folioId, requestAddScan, addToast])
+  }, [scannedCodeVariants, orderCodeLookup, externalCodeLookup, orderMetaByNo, folio?.destino, currentTarimaRef, isOffline, folioId, requestAddScan, addToast])
 
   const openForceModal = useCallback((code) => {
     setErrorModal(null)
@@ -819,7 +830,7 @@ export default function ValidarPorDestino({ folioId }) {
 
   const closeForceModal = useCallback(() => {
     setForceModal({ open: false, code: '', orderNo: '' })
-    setTimeout(() => scanRef.current?.focus(), 100)
+    setTimeout(() => focusScan(), 100)
   }, [])
 
   const submitForceScan = useCallback(() => {
@@ -828,7 +839,7 @@ export default function ValidarPorDestino({ folioId }) {
     if (!code || !orderNo) return
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: orderNo })
     setForceModal({ open: false, code: '', orderNo: '' })
-    setTimeout(() => scanRef.current?.focus(), 100)
+    setTimeout(() => focusScan(), 100)
   }, [forceModal.code, forceModal.orderNo, currentTarimaRef, requestAddScan])
 
   const submitForceScanNoOrder = useCallback(() => {
@@ -836,7 +847,7 @@ export default function ValidarPorDestino({ folioId }) {
     if (!code) return
     requestAddScan({ codigo_caja: code, tarima_ref: currentTarimaRef, matched_order_no: null })
     setForceModal({ open: false, code: '', orderNo: '' })
-    setTimeout(() => scanRef.current?.focus(), 100)
+    setTimeout(() => focusScan(), 100)
   }, [forceModal.code, currentTarimaRef, requestAddScan])
 
   const submitMoveScan = useCallback(() => {
@@ -965,7 +976,7 @@ export default function ValidarPorDestino({ folioId }) {
 
   const closeErrorModal = () => {
     setErrorModal(null)
-    setTimeout(() => scanRef.current?.focus(), 100)
+    setTimeout(() => focusScan(), 100)
   }
 
   return (
@@ -982,16 +993,16 @@ export default function ValidarPorDestino({ folioId }) {
       )}
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
-      <div className="shrink-0 bg-white border-b border-warm-100 px-4 sm:px-5 pt-4 pb-3 space-y-3">
+      <div className="shrink-0 bg-white border-b border-warm-100 px-3 sm:px-5 pt-3 sm:pt-4 pb-3 space-y-2.5 sm:space-y-3">
 
         {/* Row 1: folio identity + action buttons */}
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:gap-3">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary-100 text-primary-600 shrink-0">
               <MapPin className="w-3.5 h-3.5" />
             </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400 leading-none mb-0.5">
+            <div className="min-w-0 flex-1">
+              <p className="hidden sm:block text-[10px] font-semibold uppercase tracking-[0.18em] text-warm-400 leading-none mb-0.5">
                 {t('desp.validar.destino.subtitulo')}
               </p>
               <div className="flex items-center gap-2 flex-wrap">
@@ -999,7 +1010,7 @@ export default function ValidarPorDestino({ folioId }) {
                   {folio?.folio_numero || folio?.folio || '—'}
                 </span>
                 {folio?.destino && (
-                  <span className="text-[11px] text-warm-500 font-medium truncate max-w-[200px]">
+                  <span className="text-[11px] text-warm-500 font-medium truncate max-w-[140px] sm:max-w-[200px]">
                     {folio.destino}
                   </span>
                 )}
@@ -1008,27 +1019,40 @@ export default function ValidarPorDestino({ folioId }) {
                 </span>
               </div>
             </div>
+            {/* Mobile: orders panel opens as a bottom sheet */}
+            <button
+              type="button"
+              onClick={() => setMobilePanelOpen(true)}
+              className="xl:hidden shrink-0 inline-flex h-9 items-center gap-1.5 rounded-xl border border-primary-200 bg-primary-50 px-2.5 text-[11px] font-semibold text-primary-700 transition-colors active:scale-95"
+            >
+              <PanelRightOpen className="h-3.5 w-3.5" />
+              {orders.length}
+            </button>
           </div>
 
           {/* Action buttons — right side of row 1 */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center shrink-0 w-full lg:w-auto lg:justify-end">
-            <button
-              type="button"
-              onClick={() => setShowPanel(v => !v)}
-              title={showPanel ? t('desp.validar.destino.ocultarPanel') : t('desp.validar.destino.mostrarPanel')}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-600 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600 shrink-0 ${
-                showPanel ? 'xl:hidden' : 'sm:order-last'
-              }`}
-            >
-              {showPanel ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-            </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0 w-full lg:w-auto lg:justify-end">
+            {/* Only offered while the panel is collapsed — when it is open its own
+                edge button closes it. Rendered conditionally instead of stacking
+                `xl:inline-flex` and `xl:hidden`, where the winner depended on
+                Tailwind's output order rather than on the class list. */}
+            {!showPanel && (
+              <button
+                type="button"
+                onClick={() => setShowPanel(true)}
+                title={t('desp.validar.destino.mostrarPanel')}
+                className="hidden xl:inline-flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-600 shadow-sm transition-all hover:bg-warm-50 hover:text-primary-600 shrink-0"
+              >
+                <PanelRightOpen size={14} />
+              </button>
+            )}
             {editable && (
               <button
                 type="button"
                 onClick={handleNextTarima}
                 disabled={!currentTarimaHasScans}
                 title={!currentTarimaHasScans ? t('desp.validar.destino.tarimaVacia') : ''}
-                className="h-9 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl border border-accent-300 bg-accent-50 text-accent-700 text-xs font-semibold hover:bg-accent-100 transition-colors w-full sm:w-auto disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-accent-50"
+                className="h-9 inline-flex flex-1 items-center justify-center gap-1.5 px-3 rounded-xl border border-accent-300 bg-accent-50 text-accent-700 text-xs font-semibold hover:bg-accent-100 transition-colors sm:flex-none disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-accent-50"
               >
                 <Layers className="w-3 h-3" />
                 {t('desp.validar.destino.sigTarima')} ({genTarimaRef(currentTarimaNum + 1)})
@@ -1036,50 +1060,53 @@ export default function ValidarPorDestino({ folioId }) {
             )}
             {folio?.estado === 'en_proceso' && canWrite('despacho.folios') && (
               <button onClick={() => setShowConfirmCerrar(true)} disabled={cerrando}
-                className="btn-success text-xs flex items-center justify-center gap-1 h-9 px-3 w-full sm:w-auto">
+                className="btn-success text-xs flex flex-1 items-center justify-center gap-1 h-9 px-3 sm:flex-none">
                 {cerrando ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
                 {t('desp.validar.destino.cerrarFolio')}
               </button>
             )}
             {canUpdate && isActive && (
               <button onClick={() => setShowConfirmCancel(true)}
-                className="btn-danger text-xs flex items-center justify-center gap-1 h-9 px-3 w-full sm:w-auto">
-                <XCircle className="w-3 h-3" />{t('desp.validar.orden.cancelar')}
+                className="btn-danger text-xs flex items-center justify-center gap-1 h-9 px-3">
+                <XCircle className="w-3 h-3" />
+                <span className="hidden sm:inline">{t('desp.validar.orden.cancelar')}</span>
               </button>
             )}
           </div>
         </div>
 
         {/* Row 2: KPI metrics strip */}
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
           {[
             { label: t('desp.validar.destino.ordenes'), value: orders.length, accent: 'bg-primary-500', tone: 'text-warm-900' },
             { label: t('desp.validar.destino.esperadas'), value: totalEsperadas || '—', accent: 'bg-warm-400', tone: 'text-warm-900' },
             { label: t('desp.validar.destino.escaneadas'), value: totalScaneadas, accent: 'bg-success-500', tone: totalScaneadas > 0 ? 'text-success-600' : 'text-warm-400' },
             { label: t('desp.validar.destino.pendientes'), value: pendientes, accent: pendientes > 0 ? 'bg-danger-500' : 'bg-success-500', tone: pendientes > 0 ? 'text-danger-500' : 'text-success-600' },
           ].map(({ label, value, accent, tone }) => (
-            <div key={label} className="flex-1 min-w-0 rounded-xl border border-warm-200 bg-warm-50 px-3 py-2">
-              <div className="flex items-center gap-1.5 mb-1">
+            <div key={label} className="min-w-0 rounded-xl border border-warm-200 bg-warm-50 px-2 py-1.5 sm:px-3 sm:py-2">
+              <div className="flex items-center gap-1.5 mb-0.5 sm:mb-1">
                 <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${accent}`} />
-                <span className="text-[10px] font-semibold text-warm-400 uppercase tracking-wider leading-none truncate">{label}</span>
+                <span className="text-[9px] sm:text-[10px] font-semibold text-warm-400 uppercase tracking-wider leading-none truncate">{label}</span>
               </div>
-              <span className={`font-mono font-black tabular-nums text-2xl leading-none ${tone}`}>{value}</span>
+              <span className={`font-mono font-black tabular-nums text-lg sm:text-2xl leading-none ${tone}`}>{value}</span>
             </div>
           ))}
           {loadingScans && <Loader2 className="w-3.5 h-3.5 animate-spin text-warm-400 self-center" />}
         </div>
 
-        {/* Row 3: scan input */}
-        <ScanInputBar
-          inputRef={scanRef}
-          onSubmit={handleScan}
-          placeholder={t('desp.validar.orden.scanPlaceholder')}
-          buttonLabel={t('desp.validar.orden.validarBtn')}
-          disabled={!editable}
-        />
+        {/* Row 3: scan input — desktop only; phones/PDAs use the pinned bottom bar */}
+        <div className="hidden sm:block">
+          <ScanInputBar
+            inputRef={scanRef}
+            onSubmit={handleScan}
+            placeholder={t('desp.validar.orden.scanPlaceholder')}
+            buttonLabel={t('desp.validar.orden.validarBtn')}
+            disabled={!editable}
+          />
+        </div>
 
         {/* Row 4: scan hint */}
-        <p className="text-[11px] text-warm-400 flex items-center gap-1.5">
+        <p className="hidden sm:flex text-[11px] text-warm-400 items-center gap-1.5">
           <Clock3 className="w-3 h-3" />
           {t('desp.validar.destino.scanHint')}
           <span className="mx-1 text-warm-300">·</span>
@@ -1158,22 +1185,23 @@ export default function ValidarPorDestino({ folioId }) {
                           <span className="text-[10px] text-warm-400">{fmtDateTime(s.validated_at)}</span>
                         </div>
                         {editable && !s.__optimistic && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          // Touch devices have no hover — the actions stay visible below sm
+                          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button
                               type="button"
                               onClick={() => setMoveModal({ open: true, scan: s, target: s.tarima_ref || currentTarimaRef })}
-                              className="p-1 rounded-lg text-warm-300 hover:text-accent-600 hover:bg-accent-50 transition-all"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-warm-400 hover:text-accent-600 hover:bg-accent-50 transition-all sm:h-auto sm:w-auto sm:p-1 sm:text-warm-300"
                               title={t('desp.validar.destino.moverTarima')}
                             >
-                              <MoveRight className="w-3 h-3" />
+                              <MoveRight className="w-4 h-4 sm:w-3 sm:h-3" />
                             </button>
                             <button
                               type="button"
                               onClick={() => doDeleteScan(s.id)}
-                              className="p-1 rounded-lg text-warm-300 hover:text-danger-500 hover:bg-danger-50 transition-all"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg text-warm-400 hover:text-danger-500 hover:bg-danger-50 transition-all sm:h-auto sm:w-auto sm:p-1 sm:text-warm-300"
                               title={t('common.delete')}
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Trash2 className="w-4 h-4 sm:w-3 sm:h-3" />
                             </button>
                           </div>
                         )}
@@ -1186,12 +1214,40 @@ export default function ValidarPorDestino({ folioId }) {
           </div>
       </div>{/* ── SCAN STREAM end ── */}
 
+      {/* ── MOBILE SCAN BAR — pinned for phones and PDAs ───────────────── */}
+      <div
+        className="sm:hidden shrink-0 border-t border-warm-100 bg-white px-3 pt-2.5"
+        style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom, 0px))' }}
+      >
+        <ScanInputBar
+          inputRef={scanRefMobile}
+          onSubmit={handleScan}
+          placeholder={t('desp.validar.orden.scanPlaceholder')}
+          buttonLabel={t('desp.validar.orden.validarBtn')}
+          disabled={!editable}
+          variant="mobile"
+          hint={`${t('desp.validar.mobile.scanHint')} · ${t('desp.validar.destino.tarimaActiva')}: ${currentTarimaRef}`}
+        />
+      </div>
+
       </div>{/* ── LEFT COLUMN end ── */}
 
-      {/* Right: orders side panel */}
-      <div className={`shrink-0 relative transition-all ${showPanel ? 'w-full xl:w-[29rem] 2xl:w-[33rem]' : 'w-0 xl:w-0'}`}>
-        {showPanel && (
-        <div className="w-full h-full flex flex-col border-t xl:border-t-0 xl:border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] overflow-hidden">
+      {/* Mobile backdrop for the orders bottom sheet */}
+      {mobilePanelOpen && (
+        <div
+          className="xl:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+          onClick={() => { setMobilePanelOpen(false); setTimeout(() => focusScan(), 80) }}
+        />
+      )}
+
+      {/* Right: orders panel — side column from xl, bottom sheet on phones/PDAs */}
+      <div className={`shrink-0 relative transition-all ${
+        mobilePanelOpen
+          ? 'fixed inset-x-0 bottom-0 z-50 h-[82vh] xl:static xl:h-auto xl:z-auto'
+          : 'hidden xl:block'
+      } ${showPanel ? 'xl:w-[29rem] 2xl:w-[33rem]' : 'xl:w-0'}`}>
+        {(showPanel || mobilePanelOpen) && (
+        <div className="w-full h-full flex flex-col rounded-t-3xl xl:rounded-none border-t xl:border-t-0 xl:border-l border-warm-100 bg-gradient-to-b from-white via-white to-primary-50/20 shadow-2xl xl:shadow-[-16px_0_34px_-28px_rgba(37,99,235,0.38)] overflow-hidden">
             <button
               type="button"
               onClick={() => setShowPanel(false)}
@@ -1201,10 +1257,18 @@ export default function ValidarPorDestino({ folioId }) {
               <PanelRightClose size={15} />
             </button>
             {/* Panel header */}
-            <div className="px-5 py-4 border-b border-warm-100 bg-warm-50/50 shrink-0">
+            <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-warm-100 bg-warm-50/50 shrink-0">
               <div className="flex items-center gap-2.5 mb-3 min-w-0">
                 <h4 className="min-w-0 flex-1 truncate text-[15px] font-bold text-warm-700">{t('desp.validar.destino.ordenesDestino')}</h4>
                 <span className="badge shrink-0 bg-primary-100 text-primary-700 text-xs font-semibold">{orders.length}</span>
+                <button
+                  type="button"
+                  onClick={() => { setMobilePanelOpen(false); setTimeout(() => focusScan(), 80) }}
+                  aria-label={t('common.close')}
+                  className="xl:hidden order-last shrink-0 flex h-9 w-9 items-center justify-center rounded-xl border border-warm-200 bg-white text-warm-500 transition-colors active:scale-95"
+                >
+                  <X className="h-4 w-4" />
+                </button>
                 {editable && (
                   <button
                     type="button"
@@ -1224,7 +1288,7 @@ export default function ValidarPorDestino({ folioId }) {
               />
 
               {/* Status filters */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {[
                   { k: 'all', l: t('desp.validar.destino.filtroTodas') },
                   { k: 'pending', l: t('desp.validar.destino.filtroPend') },
@@ -1456,7 +1520,7 @@ export default function ValidarPorDestino({ folioId }) {
         onClose={() => {
           if (removingDestinationOrder) return
           setRemoveOrderModal({ open: false, order: null })
-          setTimeout(() => scanRef.current?.focus(), 80)
+          setTimeout(() => focusScan(), 80)
         }}
         title={t('desp.validar.destino.removeOrderTitle')}
         icon={Trash2}
@@ -1467,7 +1531,7 @@ export default function ValidarPorDestino({ folioId }) {
               type="button"
               onClick={() => {
                 setRemoveOrderModal({ open: false, order: null })
-                setTimeout(() => scanRef.current?.focus(), 80)
+                setTimeout(() => focusScan(), 80)
               }}
               disabled={removingDestinationOrder}
               className="btn-secondary text-sm"
@@ -1637,7 +1701,7 @@ export default function ValidarPorDestino({ folioId }) {
         isOpen={overLimitModal.open}
         onClose={() => {
           setOverLimitModal({ open: false, payload: null, scanned: 0, expected: 0 })
-          setTimeout(() => scanRef.current?.focus(), 100)
+          setTimeout(() => focusScan(), 100)
         }}
         title={t('desp.validar.destino.overLimitTitle')}
         icon={AlertCircle}
@@ -1648,7 +1712,7 @@ export default function ValidarPorDestino({ folioId }) {
               type="button"
               onClick={() => {
                 setOverLimitModal({ open: false, payload: null, scanned: 0, expected: 0 })
-                setTimeout(() => scanRef.current?.focus(), 100)
+                setTimeout(() => focusScan(), 100)
               }}
               className="btn-secondary text-sm"
             >

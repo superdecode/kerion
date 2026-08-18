@@ -178,6 +178,7 @@ router.get('/',
                 COUNT(fo.id) AS total_ordenes,
                 COALESCE(SUM(fo.bultos), 0) AS total_cajas,
                 COALESCE(array_agg(DISTINCT fo.outbound_order_no) FILTER (WHERE fo.outbound_order_no IS NOT NULL), '{}') AS outbound_order_nos,
+                COALESCE(array_agg(DISTINCT fo.destinatario) FILTER (WHERE fo.destinatario IS NOT NULL AND fo.destinatario <> ''), '{}') AS destinatarios,
                 (
                   SELECT COALESCE(array_agg(DISTINCT dos.codigo_caja), '{}')
                   FROM dispatch_order_scans dos

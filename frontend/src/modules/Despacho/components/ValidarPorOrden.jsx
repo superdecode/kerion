@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useCallback, useEffect, useMemo, Fragment } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -22,6 +22,7 @@ import {
   addOrderScan, deleteLastOrderScan,
 } from '../services/despachoService'
 import { getOutboundDetail } from '../../WmsHub/services/googleSheetsService'
+import ScanInputBar from '../../Shared/Wms/ScanInputBar'
 import { useOfflineStore } from '../../../core/stores/offlineStore'
 import OfflineBlockedModal from '../../../core/components/common/OfflineBlockedModal'
 
@@ -42,65 +43,6 @@ function buildLookupCodeSet(rawCodes = []) {
   })
   return codes
 }
-
-const ScanEntryInput = memo(function ScanEntryInput({
-  inputRef,
-  onSubmit,
-  placeholder,
-  disabled = false,
-  loading = false,
-  buttonLabel = 'OK',
-  buttonClassName = 'btn-primary text-xs flex items-center gap-1.5 h-10 px-4',
-  inputClassName = 'flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-400',
-  containerClassName = 'flex items-center gap-1.5 bg-white border-2 rounded-xl px-3 h-10 flex-1 transition-colors border-primary-200 focus-within:border-primary-400',
-}) {
-  const submit = useCallback(() => {
-    const input = inputRef?.current
-    const raw = input?.value?.trim() || ''
-    if (!raw || disabled) return
-    if (input) input.value = ''
-    onSubmit(raw)
-    window.setTimeout(() => inputRef?.current?.focus(), 0)
-  }, [disabled, inputRef, onSubmit])
-
-  const clear = useCallback(() => {
-    if (inputRef?.current) inputRef.current.value = ''
-    inputRef?.current?.focus()
-  }, [inputRef])
-
-  return (
-    <>
-      <div className={containerClassName}>
-        <ScanLine className="w-3.5 h-3.5 text-primary-400 shrink-0" />
-        <input
-          ref={inputRef}
-          type="text"
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              submit()
-            }
-          }}
-          placeholder={placeholder}
-          disabled={disabled}
-          className={inputClassName}
-          autoComplete="off"
-        />
-        {loading && <Loader2 className="w-3 h-3 animate-spin text-primary-300 shrink-0" />}
-        {!loading && (
-          <button type="button" onClick={clear} className="text-warm-400 hover:text-warm-600">
-            <X className="w-3 h-3" />
-          </button>
-        )}
-      </div>
-      <button type="button" onClick={submit} disabled={disabled}
-        className={buttonClassName}>
-        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanLine className="w-3.5 h-3.5" />}
-        {buttonLabel}
-      </button>
-    </>
-  )
-})
 
 // ── Validation panel (per order) ─────────────────────────────────────────────
 function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onClose, validarPorTarimas, detailCache }) {
@@ -164,13 +106,21 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
   }, [order.outbound_order_no])
 
   useEffect(() => {
-    if (canEdit && !completed) {
-      setTimeout(() => scanRef.current?.focus(), 50)
-    }
+    if (!canEdit || completed) return
+    // The panel expands inside the orders table, so on a phone the scan field can
+    // open below the fold. Center it before focusing so the operator sees where
+    // the PDA is typing.
+    const timer = setTimeout(() => {
+      scanRef.current?.focus()
+      scanRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 50)
+    return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.id, canEdit, completed])
 
-  const validCodes = useCallback(() => {
+  // Built once per order detail instead of on every shot: a PDA burst on a large
+  // order was regenerating the whole variant set per scan.
+  const validCodes = useMemo(() => {
     if (!orderDetail) return new Set()
     const rawCodes = []
     ;(orderDetail.packageList ?? orderDetail.outboundBoxList ?? []).forEach((p) => {
@@ -251,7 +201,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       scanRef.current?.focus()
       return
     }
-    const codes = validCodes()
+    const codes = validCodes
     if (codes.size > 0 && !codes.has(code)) {
       setForceModal({ open: true, code })
       return
@@ -272,14 +222,16 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
 
   const pct = expected && expected > 0 ? Math.round((scans.length / expected) * 100) : null
 
-  const scansByTarima = validarPorTarimas
-    ? scans.reduce((acc, s) => {
-        const key = s.tarima_ref || '__none'
-        if (!acc[key]) acc[key] = []
-        acc[key].push(s)
-        return acc
-      }, {})
-    : null
+  const scansByTarima = useMemo(() => (
+    validarPorTarimas
+      ? scans.reduce((acc, s) => {
+          const key = s.tarima_ref || '__none'
+          if (!acc[key]) acc[key] = []
+          acc[key].push(s)
+          return acc
+        }, {})
+      : null
+  ), [scans, validarPorTarimas])
 
   const handleForceAccept = () => {
     const code = forceModal.code
@@ -349,8 +301,8 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
         </p>
       </div>
     </Modal>
-      <div className="bg-primary-50/60 border-t border-primary-100 px-5 py-4">
-        <div className="flex items-center justify-between mb-3">
+      <div className="bg-primary-50/60 border-t border-primary-100 px-3 sm:px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-primary-600" />
           <span className="text-xs font-semibold text-primary-700">Validación · {order.outbound_order_no}</span>
@@ -388,20 +340,17 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
       </div>
 
       {canEdit && (
-        <div className="flex items-center gap-2 mb-3">
-          <ScanEntryInput
+        <div className="mb-3 space-y-2">
+          <ScanInputBar
             inputRef={scanRef}
             onSubmit={handleScan}
             placeholder={detailLoading ? 'Cargando datos WMS...' : t('desp.validar.orden.scanPlaceholderPanel')}
             loading={scanning}
             buttonLabel={t('desp.validar.orden.validarBtn')}
-            containerClassName={`flex items-center gap-1.5 bg-white border-2 rounded-xl px-3 h-10 flex-1 transition-colors ${
-              scanning ? 'border-primary-300' : 'border-primary-200 focus-within:border-primary-400'
-            }`}
           />
           {scans.length > 0 && (
             <button onClick={() => doDeleteLast()} disabled={deletingLast}
-              className="btn-ghost text-xs flex items-center gap-1.5 h-10 px-3 text-danger-600 hover:bg-danger-50 border border-danger-200">
+              className="btn-ghost text-xs flex w-full items-center justify-center gap-1.5 h-10 px-3 text-danger-600 hover:bg-danger-50 border border-danger-200 sm:w-auto">
               {deletingLast ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
               {t('desp.validar.orden.borrarUltimo')}
             </button>
@@ -462,7 +411,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
                       <span className="w-5 text-right text-[10px] font-black tabular-nums text-accent-600 shrink-0">{scanIndex + 1}</span>
                       <Check className="w-3 h-3 text-success-500 shrink-0" />
                       <span className="font-mono font-semibold text-warm-800 flex-1">{s.codigo_caja}</span>
-                      <span className="text-warm-400">{s.validated_by_nombre || '—'}</span>
+                      <span className="hidden sm:inline text-warm-400">{s.validated_by_nombre || '—'}</span>
                       <span className="text-warm-400 tabular-nums">{fmtDateTime(s.validated_at)}</span>
                     </div>
                   ))}
@@ -481,7 +430,7 @@ function ValidationPanel({ order, folioId, onUpdate, canEdit, onAutoConfirm, onC
                 <span className="w-5 text-right text-[10px] font-black tabular-nums text-primary-500 shrink-0">{i + 1}</span>
                 <Check className="w-3 h-3 text-success-500 shrink-0" />
                 <span className="font-mono font-semibold text-warm-800 flex-1">{s.codigo_caja}</span>
-                <span className="text-warm-400">{s.validated_by_nombre || '—'}</span>
+                <span className="hidden sm:inline text-warm-400">{s.validated_by_nombre || '—'}</span>
                 <span className="text-warm-400 tabular-nums">{fmtDateTime(s.validated_at)}</span>
               </div>
             ))}
@@ -762,7 +711,7 @@ export default function ValidarPorOrden({ folioId }) {
     <div className="space-y-4">
       {/* Orders block */}
       <div className="bg-white rounded-2xl border border-warm-100 shadow-sm overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-warm-100 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3 border-b border-warm-100 flex-wrap">
           <div className="flex items-center gap-2.5 flex-1 min-w-0 flex-wrap">
             <h3 className="text-sm font-semibold text-warm-800 shrink-0">{t('desp.validar.orden.ordenesAsignadas')}</h3>
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-50 text-primary-700 text-xs font-bold shrink-0">
@@ -779,27 +728,27 @@ export default function ValidarPorOrden({ folioId }) {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex w-full items-center gap-2 shrink-0 sm:w-auto">
             {editable && (
               <button
                 onClick={showAddOrder ? () => { setShowAddOrder(false); setLookupResult(null) } : openAddOrder}
-                className="btn-primary text-xs flex items-center gap-1.5 h-8">
+                className="btn-primary text-xs flex flex-1 items-center justify-center gap-1.5 h-9 sm:h-8 sm:flex-none">
                 {showAddOrder ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
                 {showAddOrder ? t('desp.validar.orden.cerrar') : t('desp.validar.orden.agregarOrden')}
               </button>
             )}
             {folio?.estado === 'en_proceso' && canWrite('despacho.folios') && (
               <button onClick={() => setShowConfirmCerrar(true)} disabled={cerrando}
-                className="btn-success text-xs flex items-center gap-1.5 h-8">
+                className="btn-success text-xs flex flex-1 items-center justify-center gap-1.5 h-9 sm:h-8 sm:flex-none">
                 {cerrando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                 {t('desp.validar.orden.cerrarFolio')}
               </button>
             )}
             {canCancelFolio && (
               <button onClick={() => setShowConfirmCancel(true)} disabled={cancelando}
-                className="btn-danger text-xs flex items-center gap-1.5 h-8">
+                className="btn-danger text-xs flex items-center justify-center gap-1.5 h-9 px-3 sm:h-8">
                 <XCircle className="w-3.5 h-3.5" />
-                {t('desp.validar.orden.cancelar')}
+                <span className="hidden sm:inline">{t('desp.validar.orden.cancelar')}</span>
               </button>
             )}
           </div>
@@ -815,14 +764,13 @@ export default function ValidarPorOrden({ folioId }) {
             >
               <div className="bg-primary-50/60 px-6 py-5 border-b border-primary-100">
                 <p className="text-xs font-semibold text-primary-700 mb-3">{t('desp.validar.orden.buscarOrden')}</p>
-                <div className="flex items-center gap-2 mb-4">
-                  <ScanEntryInput
+                <div className="mb-4">
+                  <ScanInputBar
                     inputRef={lookupRef}
                     onSubmit={handleLookup}
                     placeholder={t('desp.validar.orden.scanPlaceholderLookup')}
                     loading={lookupLoading}
                     buttonLabel={t('desp.validar.orden.buscar')}
-                    containerClassName="flex items-center gap-1.5 bg-white border-2 border-primary-200 rounded-xl px-3 h-10 flex-1 focus-within:border-primary-400 transition-colors"
                   />
                 </div>
 
@@ -975,20 +923,18 @@ export default function ValidarPorOrden({ folioId }) {
                                 />
                               </div>
                             )}
-                            <div className="flex items-center gap-2">
-                              <ScanEntryInput
+                            <div className="space-y-2">
+                              <ScanInputBar
                                 inputRef={inlineScanRef}
                                 onSubmit={handleInlineScan}
                                 placeholder={t('desp.validar.orden.scanPlaceholder')}
                                 buttonLabel="OK"
-                                buttonClassName="btn-primary text-xs h-9 px-3 flex items-center gap-1"
-                                containerClassName="flex items-center gap-1.5 bg-warm-50 border-2 border-primary-200 rounded-xl px-3 h-9 flex-1 focus-within:border-primary-400 focus-within:bg-white transition-all"
-                                inputClassName="flex-1 min-w-0 text-sm outline-none bg-transparent font-mono placeholder:font-sans placeholder:text-warm-300"
                               />
                               {localScans.length > 0 && (
                                 <button onClick={() => setLocalScans(prev => prev.slice(0, -1))}
-                                  className="h-9 px-2.5 rounded-xl border border-danger-200 text-danger-500 hover:bg-danger-50 transition-colors">
+                                  className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-danger-200 text-xs font-semibold text-danger-500 hover:bg-danger-50 transition-colors sm:w-auto sm:px-3">
                                   <Trash2 className="w-3.5 h-3.5" />
+                                  {t('desp.validar.orden.borrarUltimo')}
                                 </button>
                               )}
                             </div>
@@ -1072,17 +1018,18 @@ export default function ValidarPorOrden({ folioId }) {
           )}
         </AnimatePresence>
 
-        {/* Orders table */}
+        {/* Orders table — secondary columns collapse below sm so a PDA sees the essentials */}
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-warm-50 sticky top-0 z-[5] border-b border-warm-100">
             <tr>
               <th className="table-header w-10"></th>
               <th className="table-header">{t('desp.validar.orden.col.orden')}</th>
-              <th className="table-header">{t('desp.validar.orden.col.destinatario')}</th>
+              <th className="table-header hidden sm:table-cell">{t('desp.validar.orden.col.destinatario')}</th>
               <th className="table-header text-center">{t('desp.validar.orden.col.esperadas')}</th>
-              <th className="table-header text-center">{t('desp.validar.orden.col.validadas')}</th>
+              <th className="table-header text-center hidden sm:table-cell">{t('desp.validar.orden.col.validadas')}</th>
               <th className="table-header text-center">{t('desp.validar.orden.col.despachadas')}</th>
-              <th className="table-header">{t('desp.validar.orden.col.estado')}</th>
+              <th className="table-header hidden sm:table-cell">{t('desp.validar.orden.col.estado')}</th>
               {editable && <th className="table-header w-10"></th>}
             </tr>
           </thead>
@@ -1120,7 +1067,7 @@ export default function ValidarPorOrden({ folioId }) {
                       <span className="font-mono font-semibold text-primary-700 text-xs">{order.outbound_order_no}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3.5">
+                  <td className="px-4 py-3.5 hidden sm:table-cell">
                     {order.destinatario ? (
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-3 h-3 text-warm-300 shrink-0" />
@@ -1131,7 +1078,7 @@ export default function ValidarPorOrden({ folioId }) {
                   <td className="px-4 py-3.5 text-center">
                     <span className="text-xs text-warm-500 tabular-nums">{order.bultos_esperados ?? '—'}</span>
                   </td>
-                  <td className="px-4 py-3.5 text-center">
+                  <td className="px-4 py-3.5 text-center hidden sm:table-cell">
                     <span className={`text-xs font-semibold tabular-nums ${(order.surtido_validadas ?? 0) > 0 ? 'text-success-600' : 'text-warm-300'}`}>
                       {order.surtido_validadas ?? 0}
                     </span>
@@ -1139,7 +1086,7 @@ export default function ValidarPorOrden({ folioId }) {
                   <td className="px-4 py-3.5 text-center">
                     <span className="text-xs font-semibold text-warm-800 tabular-nums">{order.bultos}</span>
                   </td>
-                  <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                  <td className="px-4 py-3.5 hidden sm:table-cell" onClick={e => e.stopPropagation()}>
                     {editable ? (
                       <select value={order.estado}
                         onChange={e => doUpdateOrder({ orderId: order.id, body: { estado: e.target.value } })}
@@ -1159,18 +1106,18 @@ export default function ValidarPorOrden({ folioId }) {
                       <div className="flex items-center gap-1 justify-end">
                         <button
                           onClick={() => setValidatingOrderId(id => id === order.id ? null : order.id)}
-                          className={`p-1.5 rounded-lg transition-all ${
+                          className={`flex h-9 w-9 items-center justify-center rounded-lg transition-all sm:h-auto sm:w-auto sm:p-1.5 ${
                             validatingOrderId === order.id
                               ? 'bg-primary-100 text-primary-600'
-                              : 'text-warm-300 hover:text-primary-600 hover:bg-primary-50'
+                              : 'text-warm-400 hover:text-primary-600 hover:bg-primary-50 sm:text-warm-300'
                           }`}>
-                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <ShieldCheck className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                         </button>
                         {canDelete('despacho.folios') && (
                           <button
                             onClick={() => doRemoveOrder({ orderId: order.id })}
-                            className="p-1.5 rounded-lg text-warm-200 hover:text-danger-500 hover:bg-danger-50 transition-all">
-                            <Trash2 className="w-3.5 h-3.5" />
+                            className="flex h-9 w-9 items-center justify-center rounded-lg text-warm-400 hover:text-danger-500 hover:bg-danger-50 transition-all sm:h-auto sm:w-auto sm:p-1.5 sm:text-warm-200">
+                            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                           </button>
                         )}
                       </div>
@@ -1204,6 +1151,7 @@ export default function ValidarPorOrden({ folioId }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Cerrar folio confirm modal */}

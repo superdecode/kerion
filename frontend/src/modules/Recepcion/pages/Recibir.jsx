@@ -95,6 +95,7 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
   page,
   pageSize,
   setPage,
+  setPageSize,
   t,
 }) {
   const navigate = useNavigate()
@@ -246,7 +247,13 @@ const DesktopOrdersPanel = memo(function DesktopOrdersPanel({
           </div>
         )}
 
-        <TablePagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+        />
       </div>
     </div>
   )
@@ -268,7 +275,7 @@ export default function Recibir() {
   const [estados, setEstados] = useState([])
   const [clienteFilter, setClienteFilter] = useState([])
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(50)
+  const [pageSize, setPageSize] = useState(50)
   const [showImport, setShowImport] = useState(false)
   const [showListaSelector, setShowListaSelector] = useState(false)
   const [deleteRow, setDeleteRow] = useState(null)
@@ -567,6 +574,7 @@ export default function Recibir() {
           page={page}
           pageSize={pageSize}
           setPage={setPage}
+          setPageSize={setPageSize}
           t={t}
         />
       </div>
