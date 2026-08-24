@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MoveRight, Trash2, X, Radio, ChevronDown, CheckCircle2 } from 'lucide-react'
 import { useI18nStore } from '../../../core/stores/i18nStore'
-import { fmtDateTimeMini } from '../../../core/utils/dateFormat'
+import { fmtDateTimeMini, fmtTimeShort } from '../../../core/utils/dateFormat'
 
 // Lista de cajas escaneadas de una tarima (activa o cerrada), con fecha,
 // hora y OBC asignado — el mismo detalle que ya se ve por orden en el panel
