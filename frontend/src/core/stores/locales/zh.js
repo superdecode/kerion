@@ -2234,7 +2234,7 @@ export default {
     'surtido.lote.confirmar.warning':        '将在系统中生成验货记录。此操作在此页面无法撤销。',
     'surtido.lote.confirmar.notas':          '批次备注（可选）',
     'surtido.lote.confirmar.tarimaAbierta':  '确认前请先填写库位并关闭当前托盘。',
-    'surtido.lote.confirmar.offline':        '离线状态无法确认批次。已扫描的内容仍已保存，网络恢复后请重试。',
+    'surtido.lote.confirmar.encolado':       '离线状态：批次已保存，网络恢复后将自动发送。',
     'surtido.lote.confirmar.exito':          '批次 {lote} 已确认',
     'surtido.lote.confirmar.error':          '批次确认失败。草稿仍已保存，请重试。',
     'surtido.lote.cancelar':                 '取消',

@@ -3712,7 +3712,7 @@ export default function SurtidoValidacion() {
             className="h-8 px-2.5 md:px-4 rounded-lg bg-success-600 text-white hover:bg-success-700 transition-all inline-flex items-center gap-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={activeSession.onConfirm}
             disabled={!activeSession.canConfirm}
-            title={activeSession.isOffline ? t('surtido.lote.confirmar.offline') : t('surtido.lote.confirmar')}
+            title={activeSession.isOffline ? t('surtido.lote.confirmar.encolado') : t('surtido.lote.confirmar')}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span className="hidden md:inline">{t('surtido.lote.confirmar')}</span>

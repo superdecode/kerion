@@ -2165,7 +2165,7 @@ export default {
     'surtido.lote.confirmar.warning':        'Se crearán los registros de validación en el sistema. Esta acción no se puede deshacer desde aquí.',
     'surtido.lote.confirmar.notas':          'Notas del lote (opcional)',
     'surtido.lote.confirmar.tarimaAbierta':  'Cierra la tarima activa con su ubicación antes de confirmar.',
-    'surtido.lote.confirmar.offline':        'Sin conexión no se puede confirmar el lote. Lo escaneado sigue guardado; reintenta cuando vuelva la red.',
+    'surtido.lote.confirmar.encolado':       'Sin conexión: el lote quedó guardado y se enviará solo en cuanto vuelva internet.',
     'surtido.lote.confirmar.exito':          'Lote {lote} confirmado',
     'surtido.lote.confirmar.error':          'No se pudo confirmar el lote. El borrador sigue guardado; vuelve a intentarlo.',
     'surtido.lote.cancelar':                 'Cancelar',

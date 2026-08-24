@@ -194,6 +194,19 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
     }
   }
 
+  // Encola el commit en la cola offline genérica (misma que usan
+  // recepcion/despacho/inventario): sobrevive a un refresh o apagón porque
+  // vive en localStorage, y se reenvía sola en cuanto ConnectionBanner
+  // detecta que volvió la red. Solo entonces se limpia el borrador local —
+  // el payload ya quedó respaldado en la cola, así que no se pierde nada.
+  function encolarCommit() {
+    useOfflineStore.getState().enqueueModule({ type: 'lote_commit', payload: lote.commitPayload(notes) })
+    toast.success(t('surtido.lote.confirmar.encolado'))
+    setConfirmarModal(null)
+    setNotes('')
+    lote.cancelDraft()
+  }
+
   const { mutate: doCommit, isPending: isCommitting } = useMutation({
     mutationFn: () => commitPickBatch(lote.commitPayload(notes)),
     onSuccess: (res) => {
@@ -205,10 +218,17 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
       qc.invalidateQueries({ queryKey: ['surtido-scan-sessions'] })
       qc.invalidateQueries({ queryKey: ['wms-order-tracking'] })
     },
-    // El borrador NO se borra: es el único punto donde el operador podría
-    // perder trabajo, así que queda intacto para reintentar.
+    // El borrador NO se borra en un error del servidor (ej. ya validado por
+    // otro operador): el operador tiene que revisar y decidir. Pero si la
+    // petición nunca llegó al servidor (red caída a media confirmación,
+    // err.response viene vacío), no tiene sentido bloquear al operador — se
+    // encola para reenvío automático, igual que si hubiera confirmado offline.
     onError: (err) => {
-      const data = err?.response?.data
+      if (!err?.response) {
+        encolarCommit()
+        return
+      }
+      const data = err.response.data
       if (data?.code === 'ORDERS_ALREADY_VALIDATED') {
         const obcsEnConflicto = (data.details?.orders ?? []).map(o => o.outbound_order_no).join(', ')
         toast.error(`${t('surtido.lote.confirmar.yaValidadas')} ${obcsEnConflicto}`)
@@ -220,13 +240,9 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
     },
   })
 
-  // Sin red no se confirma, pero el operador NO queda bloqueado: el borrador
-  // sigue local e intacto y puede seguir escaneando hasta que vuelva la red.
+  // Sin red no se bloquea al operador: puede confirmar igual y el lote se
+  // encola para enviarse solo en cuanto vuelva la conexión (ver encolarCommit).
   function abrirConfirmacion() {
-    if (isOffline) {
-      toast.warning(t('surtido.lote.confirmar.offline'))
-      return
-    }
     setConfirmarModal('confirmar')
   }
 
@@ -250,7 +266,9 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
       // nada: sirve para abandonar la operación completa en cualquier momento.
       canCancel: canCreate,
       onCancel: () => setConfirmarModal('cancelar'),
-      canConfirm: canCreate && lote.summary.cajasValidadas > 0 && !isOffline,
+      // Offline ya no bloquea: abrirConfirmacion encola el envío para cuando
+      // vuelva la red (ver encolarCommit).
+      canConfirm: canCreate && lote.summary.cajasValidadas > 0,
       onConfirm: abrirConfirmacion,
       panelCount: pool.orders.length,
       panelVisible: sidebarVisible,
@@ -411,6 +429,10 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
             // huérfanos apuntando a un lote que ya no existe.
             if (onCloseTab) onCloseTab()
             else lote.cancelDraft()
+            return
+          }
+          if (isOffline) {
+            encolarCommit()
             return
           }
           doCommit()
