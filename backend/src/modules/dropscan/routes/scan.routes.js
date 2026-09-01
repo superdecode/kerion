@@ -253,7 +253,7 @@ router.get('/sessions/active',
       let ultimas_guias = []
       if (tarima) {
         const guiasRes = await req.tQuery(
-          `SELECT id, codigo_guia, posicion, timestamp_escaneo
+          `SELECT id, codigo_guia, posicion, timestamp_escaneo, peso_kg
            FROM guias WHERE tarima_id = $1 AND tenant_id = $2
            ORDER BY posicion DESC`,
           [tarima.id, req.tenantId]
@@ -305,7 +305,7 @@ router.get('/sessions/all-active',
 
       const guiasRes = validTarimaIds.length > 0
         ? await req.tQuery(
-            `SELECT id, codigo_guia, posicion, timestamp_escaneo, tarima_id
+            `SELECT id, codigo_guia, posicion, timestamp_escaneo, peso_kg, tarima_id
              FROM guias WHERE tarima_id = ANY($1::int[]) AND tenant_id = $2
              ORDER BY posicion DESC`,
             [validTarimaIds, req.tenantId]
@@ -830,13 +830,16 @@ router.patch('/sessions/:sessionId/guia/:guiaId/peso',
         return res.status(400).json({ error: 'peso_kg debe estar entre 0.001 y 9999.999' })
       }
 
-      // Verify session belongs to this operator
+      // Verify the session exists for this operator (even if it already ended —
+      // the weight belongs to the guía, not to the session's lifetime, so a
+      // session that auto-closed between the scan and the weight submit must
+      // not block the update; that coupling was silently dropping weights).
       const sesionRes = await req.tQuery(
-        'SELECT id FROM sesiones_escaneo WHERE id = $1 AND operador_id = $2 AND activa = true AND tenant_id = $3',
+        'SELECT id FROM sesiones_escaneo WHERE id = $1 AND operador_id = $2 AND tenant_id = $3',
         [sessionId, req.user.id, req.tenantId]
       )
       if (sesionRes.rows.length === 0) {
-        return res.status(404).json({ error: 'Sesión no encontrada o inactiva' })
+        return res.status(404).json({ error: 'Sesión no encontrada' })
       }
 
       const result = await req.tQuery(

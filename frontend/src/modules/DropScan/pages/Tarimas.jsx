@@ -84,6 +84,7 @@ export default function Tarimas() {
   const [sortDir, setSortDir] = useState('desc')
   const [detailTab, setDetailTab] = useState('guias')
   const [newGuiaCode, setNewGuiaCode] = useState('')
+  const [editingPesoGuia, setEditingPesoGuia] = useState(null) // { id, value }
   const { canDelete, canView, hasPermission, user } = useAuthStore()
   const backendOnline = useAuthStore(s => s.backendOnline)
   const canViewDetails = canView('dropscan.tarimas')           // ver+
@@ -260,6 +261,16 @@ export default function Tarimas() {
     mutationFn: ({ tarimaId, guiaId }) => ds.deleteGuiaFromTarima(tarimaId, guiaId),
     onSuccess: () => {
       toast.success(t('dropscan.toast.guiaDeleted'))
+      qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail', selectedTarima] })
+      qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.error || t('toast.error'))
+  })
+
+  const updateGuiaPesoMutation = useMutation({
+    mutationFn: ({ tarimaId, guiaId, peso_kg }) => ds.updateGuiaPesoInTarima(tarimaId, guiaId, peso_kg),
+    onSuccess: () => {
+      toast.success(t('dropscan.toast.pesoUpdated'))
       qc.invalidateQueries({ queryKey: ['dropscan-tarima-detail', selectedTarima] })
       qc.invalidateQueries({ queryKey: ['dropscan-tarimas'] })
     },
@@ -1012,7 +1023,51 @@ export default function Tarimas() {
                               <td className="px-3 py-2 text-warm-500">{g.operador_nombre}</td>
                               <td className="px-3 py-2 text-warm-400">{fmtTime(g.timestamp_escaneo)}</td>
                               <td className="px-3 py-2 text-right font-mono text-warm-600">
-                                {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
+                                {editMode && !detail?.folio_asignado && editingPesoGuia?.id === g.id ? (
+                                  <form
+                                    className="flex items-center justify-end gap-1"
+                                    onSubmit={(e) => {
+                                      e.preventDefault()
+                                      const val = parseFloat(editingPesoGuia.value)
+                                      if (isNaN(val) || val < 0.001 || val > 9999.999) {
+                                        toast.warning(t('scan.peso.invalid'))
+                                        return
+                                      }
+                                      updateGuiaPesoMutation.mutate(
+                                        { tarimaId: detail.id, guiaId: g.id, peso_kg: val },
+                                        { onSuccess: () => setEditingPesoGuia(null) }
+                                      )
+                                    }}
+                                  >
+                                    <input
+                                      autoFocus
+                                      type="number"
+                                      step="0.001"
+                                      min="0.001"
+                                      max="9999.999"
+                                      value={editingPesoGuia.value}
+                                      onChange={(e) => setEditingPesoGuia(s => ({ ...s, value: e.target.value }))}
+                                      onBlur={() => setEditingPesoGuia(null)}
+                                      className="w-20 px-1.5 py-1 rounded border border-primary-300 text-right text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
+                                    />
+                                    <button
+                                      type="submit"
+                                      onMouseDown={(e) => e.preventDefault()}
+                                      disabled={updateGuiaPesoMutation.isPending}
+                                      className="p-1 rounded hover:bg-success-50 text-success-500 disabled:opacity-40">
+                                      <CheckCircle className="w-3.5 h-3.5" />
+                                    </button>
+                                  </form>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={!editMode || !!detail?.folio_asignado}
+                                    onClick={() => setEditingPesoGuia({ id: g.id, value: g.peso_kg != null ? Number(g.peso_kg) : '' })}
+                                    className={`${editMode && !detail?.folio_asignado ? 'hover:text-primary-600 hover:underline cursor-pointer' : 'cursor-default'}`}
+                                  >
+                                    {g.peso_kg != null ? Number(g.peso_kg).toFixed(3) : <span className="text-warm-300">—</span>}
+                                  </button>
+                                )}
                               </td>
                               {editMode && !detail?.folio_asignado && (
                                 <td className="px-2 py-1.5">

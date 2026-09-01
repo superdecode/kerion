@@ -363,6 +363,28 @@ export default function Escaneo() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [empresasData, canalesData])
 
+  /* Reopen the weight prompt for a guide restored without a weight — covers the
+     case where the capture was interrupted (refresh, tab close, crash) before
+     the operator submitted it, so the weight is never silently lost for good. */
+  const pesoReconciledTabs = useRef(new Set())
+  useEffect(() => {
+    if (!pesoHabilitado || pesoState) return
+    for (const tab of tabs) {
+      if (pesoReconciledTabs.current.has(tab.tabId)) continue
+      const lastGuia = tab.guias?.[0]
+      if (!lastGuia) continue
+      pesoReconciledTabs.current.add(tab.tabId)
+      if (lastGuia.peso_kg == null && !lastGuia.offline) {
+        setPesoState({
+          tabId: tab.tabId, guiaId: lastGuia.id, guiaCodigo: lastGuia.codigo_guia,
+          guiaPos: lastGuia.posicion, value: '', alert: null,
+        })
+        setTimeout(() => pesoInputRef.current?.focus(), 80)
+        break
+      }
+    }
+  }, [tabs, pesoHabilitado, pesoState])
+
   /* resume scan from Tarimas navigation */
   useEffect(() => {
     const resume = location.state?.resumeScan
@@ -765,7 +787,14 @@ export default function Escaneo() {
         lastScan: t.lastScan ? { ...t.lastScan, peso_kg: pesoKg } : t.lastScan,
       }))
       if (soundEnabled) playSound('peso')
-    } catch { /* non-fatal — scan already registered */ }
+    } catch (err) {
+      // Weight must never be lost silently — keep the capture open so the
+      // operator can retry instead of moving on with an unsaved weight.
+      if (soundEnabled) playSound('error')
+      toast.error(err.response?.data?.error || t('scan.peso.saveError') || 'No se pudo guardar el peso, reintenta')
+      setPesoState(s => (s ? { ...s, alert: null } : s))
+      return
+    }
 
     const pendingCompletion = pesoState.pendingCompletion
     setPesoState(null)

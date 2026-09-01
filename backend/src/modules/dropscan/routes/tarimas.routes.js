@@ -549,6 +549,54 @@ router.post('/:tarimaId/guias',
   }
 )
 
+// PATCH /api/dropscan/tarimas/:tarimaId/guias/:guiaId/peso
+// Correct/complete a guide's weight after the fact — independent of scan session
+// state, so weights lost to a silent capture failure can be fixed later.
+router.patch('/:tarimaId/guias/:guiaId/peso',
+  authenticateToken, loadFullUser,
+  requirePermission('dropscan.tarimas', 'editar'),
+  async (req, res) => {
+    try {
+      const { tarimaId, guiaId } = req.params
+      const { peso_kg } = req.body
+
+      const pesoVal = parseFloat(peso_kg)
+      if (isNaN(pesoVal) || pesoVal < 0.001 || pesoVal > 9999.999) {
+        return res.status(400).json({ error: 'peso_kg debe estar entre 0.001 y 9999.999' })
+      }
+
+      const tarimaRes = await req.tQuery(
+        `SELECT id,
+                (SELECT fe.folio_numero FROM folios_entrega_tarimas fet
+                 JOIN folios_entrega fe ON fe.id = fet.folio_id
+                 WHERE fet.tarima_id = $1 AND fet.eliminado_en IS NULL AND fe.estado = 'ACTIVO'
+                 LIMIT 1) AS folio_asignado
+         FROM tarimas WHERE id = $1 AND tenant_id = $2`,
+        [tarimaId, req.tenantId]
+      )
+      if (tarimaRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Tarima no encontrada' })
+      }
+      if (tarimaRes.rows[0].folio_asignado) {
+        return res.status(409).json({ error: 'FOLIO_BLOQUEADO', message: `Tarima bloqueada por folio ${tarimaRes.rows[0].folio_asignado}` })
+      }
+
+      const result = await req.tQuery(
+        'UPDATE guias SET peso_kg = $1 WHERE id = $2 AND tarima_id = $3 AND tenant_id = $4 RETURNING id, peso_kg',
+        [pesoVal, guiaId, tarimaId, req.tenantId]
+      )
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Guía no encontrada' })
+      }
+
+      res.json({ success: true, peso_kg: result.rows[0].peso_kg })
+    } catch (error) {
+      console.error('Update guia peso (correction) error:', error)
+      res.status(500).json({ error: 'Error guardando peso' })
+    }
+  }
+)
+
 // DELETE /api/dropscan/tarimas/:tarimaId/guias/:guiaId
 router.delete('/:tarimaId/guias/:guiaId',
   authenticateToken, loadFullUser,

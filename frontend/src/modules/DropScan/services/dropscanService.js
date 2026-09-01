@@ -74,6 +74,9 @@ export const addGuiaToTarima = (tarimaId, codigo_guia, peso_kg = null) =>
 export const deleteGuiaFromTarima = (tarimaId, guiaId) =>
   api.delete(`/DropScan/tarimas/${tarimaId}/guias/${guiaId}`).then(r => r.data)
 
+export const updateGuiaPesoInTarima = (tarimaId, guiaId, peso_kg) =>
+  api.patch(`/DropScan/tarimas/${tarimaId}/guias/${guiaId}/peso`, { peso_kg }).then(r => r.data)
+
 // Dashboard & Metrics
 export const getDashboard = (fecha_inicio, fecha_fin) => {
   const params = {}
