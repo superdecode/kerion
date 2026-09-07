@@ -67,6 +67,12 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
     refetchOnWindowFocus: false,
     retry: 2,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
+    // Default networkMode 'online' pauses the query (isLoading stays true forever)
+    // while navigator.onLine is false, so getOutboundBatchByDate's own persisted-cache
+    // fallback (loadSheet's readOutboundRowsCache) never runs — the lote tab is stuck
+    // on "Cargando lote..." with no way out. Same fix already applied to every other
+    // offline-critical query in Validacion.jsx (por-orden flow); this one was missed.
+    networkMode: 'always',
   })
 
   const pool = useMemo(
@@ -84,6 +90,12 @@ export default function ValidarPorLote({ tabId, fecha, isActive, onSessionChange
     staleTime: 30_000,
     refetchOnWindowFocus: false,
     retry: false,
+    // No offline fallback here (getOrdersValidationState always hits the network) — but
+    // pausing under 'online' silently leaves validatedOrders empty with no error surfaced.
+    // 'always' lets it fail fast and consistently with the other queries on this screen;
+    // the operator still isn't blocked (an empty validatedOrders set just means nothing
+    // looks locked yet, same as if this had never resolved).
+    networkMode: 'always',
   })
   const validatedOrders = useMemo(
     () => new Set((estadoData?.data ?? []).filter(o => o.locked).map(o => o.outbound_order_no)),
